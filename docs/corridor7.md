@@ -1,9 +1,11 @@
-# Corridor 7 support (experimental)
+# Corridor 7 single-player support
 
 ECWolf can detect the supplied Steam/CD release of **Corridor 7: Alien
-Invasion**, read its original files directly, and run all 60 maps. ECWolf does
-not include commercial Corridor 7 data; provide files from a legally owned
-installation.
+Invasion**, read its original files directly, and play its 40-floor
+single-player campaign plus all six bonus floors through final victory. The
+remaining archived maps also load, but multiplayer is outside this support
+target. ECWolf does not include commercial Corridor 7 data; provide files from
+a legally owned installation.
 
 Keep these files together in one game-data directory:
 
@@ -49,7 +51,7 @@ For a repeatable development smoke test:
 tools/test_corridor7.sh /path/to/ecwolf-build /path/to/CORR7CD
 ```
 
-For a representative campaign/secret/network-map validation:
+For a representative campaign/bonus/archive-map validation:
 
 ```sh
 tools/validate_corridor7_maps.sh /path/to/ecwolf-build /path/to/CORR7CD
@@ -59,7 +61,7 @@ Append an output directory and `--all` to load-check every map in the archive.
 
 ## Implemented support
 
-- Bounds-checked, self-contained TED5 map loading for all 60 maps.
+- Bounds-checked, self-contained TED5 map loading for all 60 archived maps.
 - Direct GFXTILES, VGAGRAPH, AUDIOHED/AUDIOT, executable-palette, wall,
   sprite, font, HUD, menu-cursor, sound-effect, and music resource exposure.
 - Ordinary and special wall pages, Corridor 7 lighting defaults, solid and
@@ -69,24 +71,34 @@ Append an output directory and `--all` to load-check every map in the archive.
 - The executable's complete plane-1 dispatch table, including static objects,
   pickups, difficulty/direction actor variants, bosses, ignored markers, and
   the original sprite families.
-- A Corridor 7 player, nine defined weapon/animation families, three verified late-weapon
-  pickups, ammunition/health/armor items, monster combat, score, sounds, and
-  native first-person weapon scaling.
+- A Corridor 7 player, the released eight-weapon arsenal (including the
+  Ithaca shotgun's secondary animation), proximity mines, all weapon pickups,
+  ammunition/charge/health/armor items, monster combat, score, event sounds,
+  and native first-person weapon scaling.
 - The original status bar art and number glyphs, aliens-remaining counter,
   episode and four rank choices, the documented 10/75/100/100-percent alien
-  objective gate, MAP01-MAP40 progression and victory, six routed secret
-  maps, intermission flow, and ECWolf save/load.
+  objective gate, body armor, visor modes and charge, MAP01-MAP40 progression
+  and victory, six routed bonus maps, the released per-floor hit/miss award,
+  high scores, and ECWolf save/load.
+- The executable's released campaign music selector, including its randomized
+  late/bonus-floor behavior, with all 34 AdLib music chunks exposed directly
+  from the original archive.
+- Released per-rank enemy health tables, directional/pain/death sprite
+  families, bosses and projectiles, alien energy regeneration/capacity, and
+  the level-30/40 exit-vortex behavior.
 
 ## Known deviations
 
 This is a source-port compatibility implementation, not a cycle-accurate DOS
-reimplementation. Actor health, speed, attack damage, projectile choice,
-animation timing, and weapon balance are reconstructed approximations where
-the released executable and design documents did not establish exact values.
-Masked walls use ECWolf's solid-wall renderer rather than Corridor 7's exact
-transparent column composition. The original map-to-song schedule, bespoke
-briefing/victory screens, palette cycling, demo compatibility, and original
-network protocol are not reproduced; exposed music currently uses a common
-default track. Network maps can be loaded, but multiplayer was not part of the
-single-player validation pass. Support is currently limited to the supplied
-250,776-byte CD/Steam executable family.
+reimplementation. Released enemy health, weapon resource costs, music routing,
+map dispatch, and campaign rules are reproduced; several movement, attack,
+pain-chance, damage, and frame-timing constants remain evidence-based
+reconstructions where the executable did not yield an unambiguous value.
+Masked screens preserve collision and sight behavior but use ECWolf's wall
+renderer rather than the DOS renderer's exact transparent-column composition.
+The port uses a native ECWolf results/victory presentation rather than every
+DOS briefing and palette-cycle effect. Plane 2 contains editor grouping values
+on two released maps and has no observed runtime effect. Original demos,
+network protocol, multiplayer rules, and other executable editions are
+deferred. Support is limited to the supplied 250,776-byte CD/Steam executable
+family.

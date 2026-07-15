@@ -36,3 +36,4 @@
 #include "actors/blake/blakeooze.txt"
 #include "actors/blake/blakeplayer.txt"
 #include "actors/blake/blakeweapons.txt"
+#include "actors/corridor7/statics.txt"

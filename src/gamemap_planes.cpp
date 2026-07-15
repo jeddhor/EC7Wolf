@@ -1033,6 +1033,27 @@ void GameMap::ReadPlanesData()
 			{
 				WORD tileStart = xlat.GetTilePalette(tilePalette);
 				xlat.GetZonePalette(zonePalette);
+				for(unsigned int i = 0;i < size;++i)
+					oldplane[i] = LittleShort(oldplane[i]);
+
+				// Corridor 7-style maps encode a door's color but not its axis.
+				// Create stable per-axis palette entries before MapSpot pointers
+				// are assigned, then select one from neighboring floor topology.
+				const unsigned int originalTileCount = tilePalette.Size();
+				TArray<unsigned int> horizontalDoorTiles;
+				horizontalDoorTiles.Resize(originalTileCount);
+				for(unsigned int i = 0;i < originalTileCount;++i)
+				{
+					horizontalDoorTiles[i] = UINT_MAX;
+					if(!tilePalette[i].autoOrient)
+						continue;
+					MapTile horizontal = tilePalette[i];
+					tilePalette[i].offsetVertical = true;
+					tilePalette[i].offsetHorizontal = false;
+					horizontal.offsetVertical = false;
+					horizontal.offsetHorizontal = true;
+					horizontalDoorTiles[i] = tilePalette.Push(horizontal);
+				}
 
 				TArray<WORD> fillSpots;
 				TMap<WORD, Xlat::ModZone> changeTriggerSpots;
@@ -1040,10 +1061,23 @@ void GameMap::ReadPlanesData()
 
 				for(unsigned int i = 0;i < size;++i)
 				{
-					oldplane[i] = LittleShort(oldplane[i]);
-
 					if(xlat.IsValidTile(oldplane[i]))
-						mapPlane.map[i].SetTile(&tilePalette[oldplane[i]-tileStart]);
+					{
+						unsigned int tileIndex = oldplane[i]-tileStart;
+						if(tileIndex < originalTileCount && tilePalette[tileIndex].autoOrient)
+						{
+							const unsigned int x = i%header.width;
+							const unsigned int y = i/header.width;
+							const bool openNorth = y > 0 && !xlat.IsValidTile(oldplane[i-header.width]);
+							const bool openSouth = y+1 < header.height && !xlat.IsValidTile(oldplane[i+header.width]);
+							const bool openWest = x > 0 && !xlat.IsValidTile(oldplane[i-1]);
+							const bool openEast = x+1 < header.width && !xlat.IsValidTile(oldplane[i+1]);
+							const bool horizontal = (openNorth + openSouth) > (openWest + openEast);
+							if(horizontal)
+								tileIndex = horizontalDoorTiles[tileIndex];
+						}
+						mapPlane.map[i].SetTile(&tilePalette[tileIndex]);
+					}
 					else
 						mapPlane.map[i].SetTile(NULL);
 
@@ -1067,6 +1101,19 @@ void GameMap::ReadPlanesData()
 					MapTrigger templateTrigger;
 					if(xlat.TranslateTileTrigger(oldplane[i], templateTrigger))
 					{
+						if(mapPlane.map[i].tile && mapPlane.map[i].tile->autoOrient)
+						{
+							const bool horizontal = mapPlane.map[i].tile->offsetHorizontal;
+							templateTrigger.arg[3] = horizontal;
+							templateTrigger.activate[0] = templateTrigger.activate[1] =
+								templateTrigger.activate[2] = templateTrigger.activate[3] = false;
+							if(horizontal)
+								templateTrigger.activate[MapTrigger::North] =
+								templateTrigger.activate[MapTrigger::South] = true;
+							else
+								templateTrigger.activate[MapTrigger::East] =
+								templateTrigger.activate[MapTrigger::West] = true;
+						}
 						templateTrigger.x = i%header.width;
 						templateTrigger.y = i/header.width;
 						templateTrigger.z = 0;

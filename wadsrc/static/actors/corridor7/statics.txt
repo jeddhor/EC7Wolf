@@ -1,0 +1,535 @@
+/* Corridor 7 static-object table. Map words 23..75 address sprite pages
+ * 0..52 directly; this was verified against the original executable with
+ * synthetic TED5 maps. Gameplay properties are specialized below as they are
+ * confirmed, while the base classes preserve every released-map object. */
+
+actor C7Static000
+{
+	states
+	{
+		Spawn:
+			C000 A -1
+			stop
+	}
+}
+
+actor C7Static001
+{
+	states
+	{
+		Spawn:
+			C001 A -1
+			stop
+	}
+}
+
+actor C7Static002 : Key
+{
+	states
+	{
+		Spawn:
+			C002 A -1
+			stop
+	}
+}
+
+actor C7Static003 : Key
+{
+	states
+	{
+		Spawn:
+			C003 A -1
+			stop
+	}
+}
+
+actor C7Static004 : Key
+{
+	states
+	{
+		Spawn:
+			C004 A -1
+			stop
+	}
+}
+
+actor C7Static005
+{
+	states
+	{
+		Spawn:
+			C005 A -1
+			stop
+	}
+}
+
+actor C7Static006
+{
+	states
+	{
+		Spawn:
+			C006 A -1
+			stop
+	}
+}
+
+actor C7Static007
+{
+	states
+	{
+		Spawn:
+			C007 A -1
+			stop
+	}
+}
+
+actor C7Static008
+{
+	states
+	{
+		Spawn:
+			C008 A -1
+			stop
+	}
+}
+
+actor C7Static009
+{
+	states
+	{
+		Spawn:
+			C009 A -1
+			stop
+	}
+}
+
+actor C7Static010
+{
+	states
+	{
+		Spawn:
+			C010 A -1
+			stop
+	}
+}
+
+actor C7Static011
+{
+	states
+	{
+		Spawn:
+			C011 A -1
+			stop
+	}
+}
+
+actor C7Static012
+{
+	states
+	{
+		Spawn:
+			C012 A -1
+			stop
+	}
+}
+
+actor C7Static013
+{
+	states
+	{
+		Spawn:
+			C013 A -1
+			stop
+	}
+}
+
+actor C7Static014
+{
+	states
+	{
+		Spawn:
+			C014 A -1
+			stop
+	}
+}
+
+actor C7Static015
+{
+	states
+	{
+		Spawn:
+			C015 A -1
+			stop
+	}
+}
+
+actor C7Static016
+{
+	states
+	{
+		Spawn:
+			C016 A -1
+			stop
+	}
+}
+
+actor C7Static017
+{
+	states
+	{
+		Spawn:
+			C017 A -1
+			stop
+	}
+}
+
+actor C7Static018
+{
+	states
+	{
+		Spawn:
+			C018 A -1
+			stop
+	}
+}
+
+actor C7Static019
+{
+	states
+	{
+		Spawn:
+			C019 A -1
+			stop
+	}
+}
+
+actor C7Static020
+{
+	states
+	{
+		Spawn:
+			C020 A -1
+			stop
+	}
+}
+
+actor C7Static021
+{
+	states
+	{
+		Spawn:
+			C021 A -1
+			stop
+	}
+}
+
+actor C7Static022
+{
+	states
+	{
+		Spawn:
+			C022 A -1
+			stop
+	}
+}
+
+actor C7Static023
+{
+	states
+	{
+		Spawn:
+			C023 A -1
+			stop
+	}
+}
+
+actor C7Static024
+{
+	states
+	{
+		Spawn:
+			C024 A -1
+			stop
+	}
+}
+
+actor C7Static025
+{
+	states
+	{
+		Spawn:
+			C025 A -1
+			stop
+	}
+}
+
+actor C7Static026
+{
+	states
+	{
+		Spawn:
+			C026 A -1
+			stop
+	}
+}
+
+actor C7Static027
+{
+	states
+	{
+		Spawn:
+			C027 A -1
+			stop
+	}
+}
+
+actor C7Static028
+{
+	states
+	{
+		Spawn:
+			C028 A -1
+			stop
+	}
+}
+
+actor C7Static029
+{
+	states
+	{
+		Spawn:
+			C029 A -1
+			stop
+	}
+}
+
+actor C7Static030
+{
+	states
+	{
+		Spawn:
+			C030 A -1
+			stop
+	}
+}
+
+actor C7Static031
+{
+	states
+	{
+		Spawn:
+			C031 A -1
+			stop
+	}
+}
+
+actor C7Static032
+{
+	states
+	{
+		Spawn:
+			C032 A -1
+			stop
+	}
+}
+
+actor C7Static033
+{
+	states
+	{
+		Spawn:
+			C033 A -1
+			stop
+	}
+}
+
+actor C7Static034
+{
+	states
+	{
+		Spawn:
+			C034 A -1
+			stop
+	}
+}
+
+actor C7Static035
+{
+	states
+	{
+		Spawn:
+			C035 A -1
+			stop
+	}
+}
+
+actor C7Static036
+{
+	states
+	{
+		Spawn:
+			C036 A -1
+			stop
+	}
+}
+
+actor C7Static037
+{
+	states
+	{
+		Spawn:
+			C037 A -1
+			stop
+	}
+}
+
+actor C7Static038
+{
+	states
+	{
+		Spawn:
+			C038 A -1
+			stop
+	}
+}
+
+actor C7Static039
+{
+	states
+	{
+		Spawn:
+			C039 A -1
+			stop
+	}
+}
+
+actor C7Static040
+{
+	states
+	{
+		Spawn:
+			C040 A -1
+			stop
+	}
+}
+
+actor C7Static041
+{
+	states
+	{
+		Spawn:
+			C041 A -1
+			stop
+	}
+}
+
+actor C7Static042
+{
+	states
+	{
+		Spawn:
+			C042 A -1
+			stop
+	}
+}
+
+actor C7Static043
+{
+	states
+	{
+		Spawn:
+			C043 A -1
+			stop
+	}
+}
+
+actor C7Static044
+{
+	states
+	{
+		Spawn:
+			C044 A -1
+			stop
+	}
+}
+
+actor C7Static045
+{
+	states
+	{
+		Spawn:
+			C045 A -1
+			stop
+	}
+}
+
+actor C7Static046
+{
+	states
+	{
+		Spawn:
+			C046 A -1
+			stop
+	}
+}
+
+actor C7Static047
+{
+	states
+	{
+		Spawn:
+			C047 A -1
+			stop
+	}
+}
+
+actor C7Static048
+{
+	states
+	{
+		Spawn:
+			C048 A -1
+			stop
+	}
+}
+
+actor C7Static049
+{
+	states
+	{
+		Spawn:
+			C049 A -1
+			stop
+	}
+}
+
+actor C7Static050
+{
+	states
+	{
+		Spawn:
+			C050 A -1
+			stop
+	}
+}
+
+actor C7Static051
+{
+	states
+	{
+		Spawn:
+			C051 A -1
+			stop
+	}
+}
+
+actor C7Static052
+{
+	states
+	{
+		Spawn:
+			C052 A -1
+			stop
+	}
+}
+

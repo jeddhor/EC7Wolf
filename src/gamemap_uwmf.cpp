@@ -139,6 +139,11 @@ void TextMapParser::ParseTile(Scanner &sc, MapTile &tile)
 		sc.MustGetToken(TK_BoolConst);
 		tile.offsetHorizontal = sc->boolean;
 	}
+	else CheckKey("autoorient")
+	{
+		sc.MustGetToken(TK_BoolConst);
+		tile.autoOrient = sc->boolean;
+	}
 
 	EndParseBlock
 }

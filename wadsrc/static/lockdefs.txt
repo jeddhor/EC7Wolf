@@ -75,3 +75,15 @@ Lock 101 Blake
 	YellowAccessKey
 	BlueAccessKey
 }
+
+// Corridor 7 access cards. The released executable names only red and blue
+// access requirements; the green card remains available for scripted gates.
+Lock 1 Corridor7
+{
+	C7Static003
+}
+
+Lock 2 Corridor7
+{
+	C7Static002
+}

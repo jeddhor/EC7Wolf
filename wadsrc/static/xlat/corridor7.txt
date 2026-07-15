@@ -5,6 +5,38 @@
 
 tiles
 {
+	// Corridor 7 infers the axis for these three door colors from the map
+	// topology. autoorient below also narrows each trigger to its usable sides.
+	trigger 251
+	{
+		action = "Door_Open";
+		arg1 = 16;
+		arg2 = 300;
+		playeruse = true;
+		monsteruse = true;
+		repeatable = true;
+	}
+	trigger 252
+	{
+		action = "Door_Open";
+		arg1 = 16;
+		arg2 = 300;
+		arg3 = 1;
+		playeruse = true;
+		monsteruse = true;
+		repeatable = true;
+	}
+	trigger 253
+	{
+		action = "Door_Open";
+		arg1 = 16;
+		arg2 = 300;
+		arg3 = 2;
+		playeruse = true;
+		monsteruse = true;
+		repeatable = true;
+	}
+
 	tile 1
 	{
 		texturenorth = "C7W0160";
@@ -1757,24 +1789,27 @@ tiles
 	}
 	tile 251
 	{
-		texturenorth = "C7W0160";
-		texturesouth = "C7W0160";
-		textureeast = "C7W0161";
-		texturewest = "C7W0161";
+		texturenorth = "C7W0250";
+		texturesouth = "C7W0250";
+		textureeast = "C7W0250";
+		texturewest = "C7W0250";
+		autoorient = true;
 	}
 	tile 252
 	{
-		texturenorth = "C7W0160";
-		texturesouth = "C7W0160";
-		textureeast = "C7W0161";
-		texturewest = "C7W0161";
+		texturenorth = "C7W0251";
+		texturesouth = "C7W0251";
+		textureeast = "C7W0251";
+		texturewest = "C7W0251";
+		autoorient = true;
 	}
 	tile 253
 	{
-		texturenorth = "C7W0160";
-		texturesouth = "C7W0160";
-		textureeast = "C7W0161";
-		texturewest = "C7W0161";
+		texturenorth = "C7W0252";
+		texturesouth = "C7W0252";
+		textureeast = "C7W0252";
+		texturewest = "C7W0252";
+		autoorient = true;
 	}
 	tile 254
 	{
@@ -1831,4 +1866,61 @@ things
 
 	// Four consecutive values encode the player's starting direction.
 	{19, $Player1Start, 4, 0, 0}
+
+	// Released Corridor 7 static objects directly select GFXTILES sprite
+	// pages 0..52. Keep these as distinct classes so collision and pickup
+	// behavior can be specialized without changing the map-number contract.
+	{23, C7Static000, 0, 0, 0}
+	{24, C7Static001, 0, 0, 0}
+	{25, C7Static002, 0, 0, 0}
+	{26, C7Static003, 0, 0, 0}
+	{27, C7Static004, 0, 0, 0}
+	{28, C7Static005, 0, 0, 0}
+	{29, C7Static006, 0, 0, 0}
+	{30, C7Static007, 0, 0, 0}
+	{31, C7Static008, 0, 0, 0}
+	{32, C7Static009, 0, 0, 0}
+	{33, C7Static010, 0, 0, 0}
+	{34, C7Static011, 0, 0, 0}
+	{35, C7Static012, 0, 0, 0}
+	{36, C7Static013, 0, 0, 0}
+	{37, C7Static014, 0, 0, 0}
+	{38, C7Static015, 0, 0, 0}
+	{39, C7Static016, 0, 0, 0}
+	{40, C7Static017, 0, 0, 0}
+	{41, C7Static018, 0, 0, 0}
+	{42, C7Static019, 0, 0, 0}
+	{43, C7Static020, 0, 0, 0}
+	{44, C7Static021, 0, 0, 0}
+	{45, C7Static022, 0, 0, 0}
+	{46, C7Static023, 0, 0, 0}
+	{47, C7Static024, 0, 0, 0}
+	{48, C7Static025, 0, 0, 0}
+	{49, C7Static026, 0, 0, 0}
+	{50, C7Static027, 0, 0, 0}
+	{51, C7Static028, 0, 0, 0}
+	{52, C7Static029, 0, 0, 0}
+	{53, C7Static030, 0, 0, 0}
+	{54, C7Static031, 0, 0, 0}
+	{55, C7Static032, 0, 0, 0}
+	{56, C7Static033, 0, 0, 0}
+	{57, C7Static034, 0, 0, 0}
+	{58, C7Static035, 0, 0, 0}
+	{59, C7Static036, 0, 0, 0}
+	{60, C7Static037, 0, 0, 0}
+	{61, C7Static038, 0, 0, 0}
+	{62, C7Static039, 0, 0, 0}
+	{63, C7Static040, 0, 0, 0}
+	{64, C7Static041, 0, 0, 0}
+	{65, C7Static042, 0, 0, 0}
+	{66, C7Static043, 0, 0, 0}
+	{67, C7Static044, 0, 0, 0}
+	{68, C7Static045, 0, 0, 0}
+	{69, C7Static046, 0, 0, 0}
+	{70, C7Static047, 0, 0, 0}
+	{71, C7Static048, 0, 0, 0}
+	{72, C7Static049, 0, 0, 0}
+	{73, C7Static050, 0, 0, 0}
+	{74, C7Static051, 0, 0, 0}
+	{75, C7Static052, 0, 0, 0}
 }

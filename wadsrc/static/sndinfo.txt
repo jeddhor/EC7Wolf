@@ -567,7 +567,13 @@ misc/health_pkup		{ NULL C7AL0033 C7PC0033 }
 misc/medkit_pkup		{ NULL C7AL0034 C7PC0034 }
 misc/k_pkup				{ NULL C7AL0012 C7PC0012 }
 c7/weapon/fire			{ NULL C7AL0024 C7PC0024 }
+c7/weapon/bayonet		{ NULL C7AL0023 C7PC0023 }
+c7/weapon/machinegun		{ NULL C7AL0026 C7PC0026 }
+c7/weapon/shotgun		{ NULL C7AL0032 C7PC0032 }
 c7/mine/arm			{ NULL C7AL0018 C7PC0018 }
+c7/player/death			{ NULL C7AL0009 C7PC0009 }
+c7/player/pain			{ NULL C7AL0016 C7PC0016 }
+c7/teleport			{ NULL C7AL0040 C7PC0040 }
 c7/monster/sight		{ NULL C7AL0021 C7PC0021 }
 c7/monster/attack		{ NULL C7AL0058 C7PC0058 }
 c7/monster/death		{ NULL C7AL0022 C7PC0022 }

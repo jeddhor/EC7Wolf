@@ -55,6 +55,8 @@ actor C7Player : PlayerPawn
 	player.startitem "C7VisorCharge", 100
 	player.startitem "C7VisorMode", 1
 	player.startitem "C7EnergyCapacity", 100
+	painsound "c7/player/pain"
+	deathsound "c7/player/death"
 	player.weaponslot 1, "C7Bayonet"
 	player.weaponslot 2, "C7Shotgun"
 	player.weaponslot 3, "C7M16"
@@ -112,6 +114,7 @@ actor C7Bayonet : C7Weapon
 {
 	// The shipped game calls this the self-powered security Taser.
 	weapon.ammouse1 0
+	attacksound "c7/weapon/bayonet"
 	+WEAPON.NOAUTOFIRE
 	states
 	{
@@ -160,6 +163,7 @@ actor C7M343 : C7Weapon
 	weapon.ammotype1 "C7Bullets"
 	weapon.ammouse1 1
 	weapon.ammogive1 100
+	attacksound "c7/weapon/machinegun"
 	states
 	{
 		Ready:
@@ -232,6 +236,7 @@ actor C7Shotgun : C7Weapon
 	weapon.ammotype1 "C7Bullets"
 	weapon.ammouse1 5
 	weapon.ammogive1 100
+	attacksound "c7/weapon/shotgun"
 	+WEAPON.NOAUTOFIRE
 	states
 	{

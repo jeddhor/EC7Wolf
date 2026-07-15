@@ -21,6 +21,7 @@ PLAYERPAWN = (ROOT / "src/g_shared/a_playerpawn.cpp").read_text()
 WL_AGENT = (ROOT / "src/wl_agent.cpp").read_text()
 WL_INTER = (ROOT / "src/wl_inter.cpp").read_text()
 WOLF_SBAR = (ROOT / "src/g_wolf/wolf_sbar.cpp").read_text()
+SNDINFO = (ROOT / "wadsrc/static/sndinfo.txt").read_text()
 
 
 def require(pattern: str, text: str, description: str) -> None:
@@ -79,6 +80,8 @@ require(r'!levelInfo->BonusLevel\s*&&\s*gamestate\.killtotal', LNSPEC, "bonus el
 require(r'health<=0\s*&&\s*IWad::CheckGameFilter\("Corridor7"\)\s*&&\s*levelInfo->BonusLevel', WL_AGENT, "bonus health expiration is intercepted before death")
 require(r'health\s*=\s*mo->health\s*=\s*mo->SpawnHealth\(\).*?playstate\s*=\s*ex_completed', WL_AGENT, "bonus completion revives and advances the travelling pawn")
 require(r'levelShotsFired.*?levelShotsHit', WL_AGENT, "save-backed Corridor 7 hit/miss statistics")
+require(r'c7/teleport\s+\{\s+NULL\s+C7AL0040\s+C7PC0040\s+\}', SNDINFO, "Corridor 7 vortex completion sound")
+require(r'painsound\s+"c7/player/pain".*?deathsound\s+"c7/player/death"', PLAYER, "Corridor 7 player pain and death audio")
 require(r'accuracy\s*\*\s*\(shots\s*/\s*100\s*\+\s*1\)\s*\*\s*10', WL_INTER, "released hit/miss bonus equation")
 require(r'MISSION HIT/MISS RATIO.*?Shots fired:.*?Shots hit:.*?Accuracy', WL_INTER, "Corridor 7 floor tally")
 require(r'CONGRATULATIONS!.*?destroyed the vortex.*?Total floors secured', WL_INTER, "Corridor 7 victory presentation")

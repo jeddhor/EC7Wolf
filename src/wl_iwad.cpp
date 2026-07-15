@@ -325,7 +325,7 @@ static void LookForGameData(FResourceFile *res, TArray<WadStuff> &iwads, const c
 		{"audiohed", NULL}, {"audiot", NULL},
 		{"gamemaps", "maptemp", NULL}, {"maphead", NULL},
 		{"vgadict", NULL}, {"vgahead", NULL}, {"vgagraph", NULL},
-		{"vswap", NULL}
+		{"vswap", "gfxtiles", NULL}
 	};
 	TArray<BaseFile> foundFiles;
 
@@ -376,6 +376,15 @@ static void LookForGameData(FResourceFile *res, TArray<WadStuff> &iwads, const c
 				{
 					base->filename[baseName].Format("%s" PATH_SEPARATOR "%s", directory, files[i].GetChars());
 					base->isValid |= 1<<baseName;
+					if(baseName == FILE_GAMEMAPS && name.CompareNoCase("maptemp") == 0)
+					{
+						FileReader mapReader;
+						char signature[12];
+						if(mapReader.Open(base->filename[baseName]) &&
+							mapReader.Read(signature, sizeof(signature)) == sizeof(signature) &&
+							memcmp(signature, "TED5v1.0.\0\0\0", sizeof(signature)) == 0)
+							base->isValid |= 1<<FILE_MAPHEAD;
+					}
 
 					baseName = BASEFILES;
 					break;

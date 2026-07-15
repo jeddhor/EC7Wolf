@@ -321,6 +321,7 @@ void FWadCollection::FindEmbeddedWolfData(FResourceFile *res, const char* filena
 		"maptemp.",
 		"vgagraph.",
 		"vswap.",
+		"gfxtiles.",
 		NULL
 	};
 	unsigned int count = 0;

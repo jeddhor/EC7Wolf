@@ -33,12 +33,43 @@
 */
 
 #include "wl_def.h"
+#include "filesys.h"
 #include "m_swap.h"
 #include "resourcefile.h"
 #include "w_wad.h"
 #include "lumpremap.h"
 #include "zstring.h"
 #include "wl_main.h"
+
+struct FCorridor7PaletteLump : public FResourceLump
+{
+	FString Filename;
+	long Position;
+
+	FCorridor7PaletteLump(const FString &filename, long position) : Filename(filename), Position(position)
+	{
+		LumpSize = 768;
+		LumpNameSetup("C7PAL");
+		Namespace = ns_global;
+	}
+
+	int FillCache()
+	{
+		FileReader reader;
+		if(!reader.Open(Filename))
+			return 0;
+		reader.Seek(Position, SEEK_SET);
+		Cache = new char[LumpSize];
+		if(reader.Read(Cache, LumpSize) != LumpSize)
+		{
+			delete[] Cache;
+			Cache = NULL;
+			return 0;
+		}
+		RefCount = 1;
+		return 1;
+	}
+};
 
 // Some sounds in the VSwap file are multiparty so we need mean to concationate
 // them.
@@ -165,10 +196,10 @@ const char FVSwapSound::WAV_HEADER[44] = {
 class FVSwap : public FResourceFile
 {
 	public:
-		FVSwap(const char* filename, FileReader *file) : FResourceFile(filename, file), spriteStart(0), soundStart(0), Lumps(NULL), SoundLumps(NULL), vswapFile(filename)
+		FVSwap(const char* filename, FileReader *file) : FResourceFile(filename, file), spriteStart(0), soundStart(0), Lumps(NULL), SoundLumps(NULL), PaletteLump(NULL), vswapFile(filename)
 		{
-			int lastSlash = vswapFile.LastIndexOfAny("/\\:");
-			extension = vswapFile.Mid(lastSlash+7);
+			int lastDot = vswapFile.LastIndexOf('.');
+			extension = lastDot >= 0 ? vswapFile.Mid(lastDot+1) : "";
 		}
 		~FVSwap()
 		{
@@ -180,6 +211,7 @@ class FVSwap : public FResourceFile
 					delete SoundLumps[i];
 				delete[] SoundLumps;
 			}
+			delete PaletteLump;
 		}
 
 		bool Open(bool quiet)
@@ -209,6 +241,52 @@ class FVSwap : public FResourceFile
 					Lumps[i].Flags |= LUMPF_DONTFLIPFLAT;
 				Lumps[i].Position = ReadLittleLong(&data[i*4]);
 				Lumps[i].LumpSize = ReadLittleShort(&data[i*2 + 4*numChunks]);
+			}
+
+			// Corridor 7 stores walls and sprites in GFXTILES using the VSWAP
+			// directory format, but has no digitized-sound pages or sound map.
+			if(soundStart >= numChunks)
+			{
+				NumLumps = numChunks;
+				FString baseName(vswapFile);
+				int slash = baseName.LastIndexOfAny("/\\:");
+				baseName = baseName.Mid(slash+1);
+				int dot = baseName.LastIndexOf('.');
+				if(dot >= 0) baseName = baseName.Left(dot);
+				if(baseName.CompareNoCase("gfxtiles") == 0)
+				{
+					FString directoryName = slash >= 0 ? vswapFile.Left(slash) : ".";
+					File directory(directoryName);
+					FString executableName = directory.getInsensitiveFile("corr7cd.exe", false);
+					if(executableName.IsNotEmpty())
+					{
+						FString executablePath = directoryName + PATH_SEPARATOR + executableName;
+						FileReader executable;
+						static const long STEAM_CD_EXECUTABLE_SIZE = 250776;
+						static const long STEAM_CD_PALETTE_OFFSET = 0x2FFC0;
+						if(executable.Open(executablePath) && executable.GetLength() == STEAM_CD_EXECUTABLE_SIZE)
+						{
+							BYTE palette[768];
+							executable.Seek(STEAM_CD_PALETTE_OFFSET, SEEK_SET);
+							if(executable.Read(palette, sizeof(palette)) == sizeof(palette))
+							{
+								bool valid = true;
+								for(unsigned int i = 0; i < sizeof(palette); ++i)
+									if(palette[i] > 63) { valid = false; break; }
+								if(valid)
+								{
+									PaletteLump = new FCorridor7PaletteLump(executablePath, STEAM_CD_PALETTE_OFFSET);
+									PaletteLump->Owner = this;
+									++NumLumps;
+								}
+							}
+						}
+					}
+				}
+				delete[] data;
+				if(!quiet) Printf(", %d lumps (graphics only)\n", NumLumps);
+				LumpRemapper::AddFile(extension, this, LumpRemapper::VSWAP);
+				return true;
 			}
 
 			// Now for sounds we need to get the last Chunk and read the sound information.
@@ -255,6 +333,8 @@ class FVSwap : public FResourceFile
 
 		FResourceLump *GetLump(int no)
 		{
+			if(PaletteLump != NULL && no == static_cast<int>(NumLumps)-1)
+				return PaletteLump;
 			if(no < soundStart)
 				return &Lumps[no];
 			return SoundLumps[no-soundStart];
@@ -266,6 +346,7 @@ class FVSwap : public FResourceFile
 
 		FUncompressedLump* Lumps;
 		FVSwapSound* *SoundLumps;
+		FCorridor7PaletteLump *PaletteLump;
 
 		FString	extension;
 		FString	vswapFile;
@@ -276,11 +357,14 @@ FResourceFile *CheckVSwap(const char *filename, FileReader *file, bool quiet)
 	FString fname(filename);
 	int lastSlash = fname.LastIndexOfAny("/\\:");
 	if(lastSlash != -1)
-		fname = fname.Mid(lastSlash+1, 5);
+		fname = fname.Mid(lastSlash+1);
 	else
-		fname = fname.Left(5);
+		fname = fname;
+	int dot = fname.LastIndexOf('.');
+	if(dot >= 0)
+		fname = fname.Left(dot);
 
-	if(fname.Len() == 5 && fname.CompareNoCase("vswap") == 0) // file must be vswap.something
+	if(fname.CompareNoCase("vswap") == 0 || fname.CompareNoCase("gfxtiles") == 0)
 	{
 		FResourceFile *rf = new FVSwap(filename, file);
 		if(rf->Open(quiet)) return rf;

@@ -44,6 +44,7 @@
 #include "wl_main.h"
 #include "wl_net.h"
 #include "wl_play.h"
+#include "wl_draw.h"
 
 #include <climits>
 
@@ -227,6 +228,18 @@ void APlayerPawn::GiveStartingInventory()
 	}
 	while(item.Next());
 
+	// The lowest released rank begins with a full 200-point armor meter.
+	if(IWad::CheckGameFilter("Corridor7") &&
+		SkillInfo::GetSkillIndex(*gamestate.difficulty) == 0)
+	{
+		const ClassDef *armorClass = ClassDef::FindClass("C7BodyArmor");
+		AInventory *armor = static_cast<AInventory *>(AActor::Spawn(armorClass, 0, 0, 0, 0));
+		armor->RemoveFromWorld();
+		armor->amount = 200;
+		if(!armor->CallTryPickup(this))
+			armor->Destroy();
+	}
+
 	SetupWeaponSlots();
 
 #if 0
@@ -293,6 +306,42 @@ void APlayerPawn::Tick()
 		AInventory *invulnerability = FindInventory(ClassDef::FindClass("C7Invulnerability"));
 		if(invulnerability && invulnerability->amount > 0 && --invulnerability->amount == 0)
 			invulnerability->Destroy();
+
+		TicCmd_t &c7cmd = control[player->GetPlayerNum()];
+		AInventory *visor = FindInventory(ClassDef::FindClass("C7VisorCharge"));
+		AInventory *visorMode = FindInventory(ClassDef::FindClass("C7VisorMode"));
+		if(visor && visorMode && c7cmd.buttonstate[bt_zoom] && !c7cmd.buttonheld[bt_zoom])
+		{
+			visorMode->amount = visor->amount > 0 ? visorMode->amount % 3 + 1 : 1;
+		}
+		if(visor && visorMode && visorMode->amount > 1 && gamestate.TimeCount % TICRATE == 0)
+		{
+			if(--visor->amount <= 0)
+			{
+				visor->amount = 0;
+				visorMode->amount = 1;
+			}
+		}
+		player->extralight = visorMode && visorMode->amount == 2 ? 20 : 0;
+
+		if(c7cmd.buttonstate[bt_reload] && !c7cmd.buttonheld[bt_reload])
+		{
+			AInventory *mines = FindInventory(ClassDef::FindClass("C7Mines"));
+			const ClassDef *mineClass = ClassDef::FindClass("C7ProximityMine");
+			if(mines && mines->amount > 0 && mineClass)
+			{
+				const unsigned fineangle = angle >> ANGLETOFINESHIFT;
+				const fixed distance = 40 * FRACUNIT;
+				AActor *mine = AActor::Spawn(mineClass,
+					x + FixedMul(distance, finecosine[fineangle]),
+					y - FixedMul(distance, finesine[fineangle]), 0,
+					SPAWN_AllowReplacement);
+				mine->target = this;
+				mine->angle = angle;
+				if(--mines->amount == 0)
+					mines->Destroy();
+			}
+		}
 	}
 
 	TickPSprites();

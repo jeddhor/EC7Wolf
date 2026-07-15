@@ -12,6 +12,8 @@
 #include "scanner.h"
 #include "w_wad.h"
 #include "m_random.h"
+#include "colormatcher.h"
+#include "v_video.h"
 #include "thingdef/thingdef.h"
 #include "g_mapinfo.h"
 #include "a_inventory.h"
@@ -112,6 +114,7 @@ public:
 private:
 	static void LatchNumber (int x, int y, unsigned width, int32_t number, bool zerofill, bool cap=false);
 	static void LatchString (int x, int y, unsigned width, const FString &str);
+	static void DrawC7Gauge(int x, int y, unsigned int amount, unsigned int maximum, int red, int green, int blue);
 	static void StatusDrawFace(FTexture *pic);
 	static void StatusDrawPic(unsigned x, unsigned y, const char* pic);
 
@@ -337,6 +340,19 @@ void WolfStatusBar::LatchString (int x, int y, unsigned width, const FString &st
 	}
 }
 
+void WolfStatusBar::DrawC7Gauge(int x, int y, unsigned int amount, unsigned int maximum,
+	int red, int green, int blue)
+{
+	if(maximum == 0 || amount == 0)
+		return;
+	const unsigned int width = MIN(25U, (25U * MIN(amount, maximum) + maximum - 1) / maximum);
+	int realX = x, realY = y, realWidth = width, realHeight = 4;
+	screen->VirtualToRealCoordsInt(realX, realY, realWidth, realHeight, 320, 200, true, true);
+	const int color = ColorMatcher.Pick(red, green, blue);
+	screen->Clear(realX, realY, realX + realWidth, realY + realHeight,
+		color, GPalette.BaseColors[color]);
+}
+
 
 /*
 ===============
@@ -556,25 +572,33 @@ void WolfStatusBar::DrawStatusBar()
 		level.Format("%2s", levelInfo->FloorNumber.GetChars());
 		LatchString(16, 18, 2, level);
 		LatchNumber(48, 18, 6, players[ConsolePlayer].score, false, true);
-		LatchNumber(104, 18, 3, players[ConsolePlayer].health, false, true);
-
-		unsigned int ammo = 0;
+		unsigned int ammo = 0, ammoMaximum = 1;
 		if(players[ConsolePlayer].ReadyWeapon &&
 			players[ConsolePlayer].ReadyWeapon->ammo[AWeapon::PrimaryFire])
 		{
-			ammo = players[ConsolePlayer].ReadyWeapon->ammo[AWeapon::PrimaryFire]->amount;
+			AAmmo *readyAmmo = players[ConsolePlayer].ReadyWeapon->ammo[AWeapon::PrimaryFire];
+			ammo = readyAmmo->amount;
+			ammoMaximum = readyAmmo->maxamount;
 		}
-		LatchNumber(200, 18, 3, ammo, false, true);
 		LatchNumber(288, 18, 3, MAX(0, gamestate.killtotal-gamestate.killcount), false, true);
 
 		if(players[ConsolePlayer].mo)
 		{
-			unsigned int cards = 0;
-			if(players[ConsolePlayer].mo->FindInventory(ClassDef::FindClass("C7Static002")))
-				++cards;
-			if(players[ConsolePlayer].mo->FindInventory(ClassDef::FindClass("C7Static001")))
-				++cards;
-			LatchNumber(248, 18, 1, cards, false, true);
+			AActor *pawn = players[ConsolePlayer].mo;
+			AInventory *armor = pawn->FindInventory(ClassDef::FindClass("C7BodyArmor"));
+			AInventory *mines = pawn->FindInventory(ClassDef::FindClass("C7Mines"));
+			AInventory *visor = pawn->FindInventory(ClassDef::FindClass("C7VisorCharge"));
+
+			DrawC7Gauge(96, 172, MAX(0, players[ConsolePlayer].health), 100, 160, 190, 70);
+			DrawC7Gauge(96, 188, armor ? armor->amount : 0, 200, 145, 170, 160);
+			DrawC7Gauge(199, 172, ammo, ammoMaximum, 190, 200, 70);
+			DrawC7Gauge(199, 188, mines ? mines->amount : 0, 25, 170, 175, 145);
+			DrawC7Gauge(149, 188, visor ? visor->amount : 0, 100, 205, 205, 55);
+
+			if(pawn->FindInventory(ClassDef::FindClass("C7Static001")))
+				VWB_DrawGraphic(TexMan("C002A0"), 246, 174);
+			if(pawn->FindInventory(ClassDef::FindClass("C7Static002")))
+				VWB_DrawGraphic(TexMan("C003A0"), 258, 174);
 		}
 		return;
 	}

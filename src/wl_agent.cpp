@@ -1409,6 +1409,25 @@ ACTION_FUNCTION(A_C7GunAttack)
 	return true;
 }
 
+// Armed Corridor 7 mines use a square proximity check, matching the tile-based
+// distance convention used throughout the original engine. They also remain
+// shootable, so plasma and other weapon impacts can detonate them early.
+ACTION_FUNCTION(A_C7MineThink)
+{
+	for(AActor::Iterator check = AActor::GetIterator(); check.Next();)
+	{
+		if(check == self || check == self->target ||
+			!(check->flags & FL_SHOOTABLE) || !(check->flags & FL_ISMONSTER))
+			continue;
+		if(MAX(abs(check->x - self->x), abs(check->y - self->y)) <= 96 * FRACUNIT)
+		{
+			DamageActor(self, self->target, self->health);
+			return true;
+		}
+	}
+	return false;
+}
+
 ACTION_FUNCTION(A_FireCustomMissile)
 {
 	ACTION_PARAM_STRING(missiletype, 0);

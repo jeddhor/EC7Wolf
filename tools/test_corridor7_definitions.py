@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 XLAT = (ROOT / "wadsrc/static/xlat/corridor7.txt").read_text()
 PLAYER = (ROOT / "wadsrc/static/actors/corridor7/player.txt").read_text()
 STATICS = (ROOT / "wadsrc/static/actors/corridor7/statics.txt").read_text()
+MONSTERS = (ROOT / "wadsrc/static/actors/corridor7/monsters.txt").read_text()
 
 
 def require(pattern: str, text: str, description: str) -> None:
@@ -31,6 +32,7 @@ for object_id, actor in {
     83: "C7Invulnerability",
     84: "C7Static061",
     85: "C7MinePack",
+    93: "C7VisorBattery",
     318: "C7Shotgun",
     319: "C7AssaultCannon",
     320: "C7Disintegrator",
@@ -66,5 +68,25 @@ for slot, actor in enumerate(expected_slots, 1):
 
 if "C7Spinner" in PLAYER or "C7Needler" in PLAYER or "C7Stunner" in PLAYER:
     raise SystemExit("Corridor 7 definition check failed: fictitious weapon remains")
+
+for actor, health in {
+    "C7OrganicEye": "25, 25, 25, 100",
+    "C7ProbeEye": "25, 50, 100, 150",
+    "C7Technician": "50, 50, 150, 300",
+    "C7Ugly": "25, 25, 50, 100",
+    "C7Grunt": "50, 50, 150, 300",
+    "C7Morph": "50, 50, 200, 500",
+    "C7SpaceMarine": "50, 50, 200, 300",
+    "C7EniramBoss": "1000, 1500, 2000, 4000",
+    "C7PurpleBoss": "1000, 1500, 2000, 4000",
+    "C7IronFoot": "500, 500, 1000, 1500",
+    "C7SkullBoss": "1000, 1500, 3000, 5000",
+    "C7HornedBoss": "5000, 6000, 7000, 9000",
+}.items():
+    require(
+        rf"actor\s+{actor}\s*:.*?\{{.*?health\s+{re.escape(health)}",
+        MONSTERS,
+        f"{actor} health table",
+    )
 
 print("Corridor 7 definition checks passed")

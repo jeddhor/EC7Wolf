@@ -19,6 +19,21 @@ actor C7Mines : Ammo
 	inventory.maxamount 25
 }
 
+actor C7VisorCharge : Ammo
+{
+	inventory.pickupsound "misc/ammo_pkup"
+	inventory.amount 100
+	inventory.maxamount 65535
+}
+
+// One-based mode: normal, night vision, infrared. Keeping this as inventory
+// makes the selected visor mode survive save/load without engine globals.
+actor C7VisorMode : Inventory
+{
+	inventory.amount 1
+	inventory.maxamount 3
+}
+
 actor C7Player : PlayerPawn
 {
 	health 100
@@ -29,6 +44,8 @@ actor C7Player : PlayerPawn
 	player.startitem "C7Bayonet"
 	player.startitem "C7M16"
 	player.startitem "C7Bullets", 100
+	player.startitem "C7VisorCharge", 100
+	player.startitem "C7VisorMode", 1
 	player.weaponslot 1, "C7Bayonet"
 	player.weaponslot 2, "C7Shotgun"
 	player.weaponslot 3, "C7M16"
@@ -303,16 +320,18 @@ actor C7PlasmaBolt
 actor C7Adrenaline : Health
 {
 	inventory.pickupsound "misc/medkit_pkup"
-	inventory.amount 100
-	inventory.maxamount 200
+	// The released game adds 300 health, up to its 400-point boosted cap.
+	inventory.amount 300
+	inventory.maxamount 400
 	states { Spawn: C058 A -1 stop }
 }
 
 actor C7BodyArmor : Inventory
 {
 	inventory.pickupsound "misc/health_pkup"
-	inventory.amount 100
-	inventory.maxamount 200
+	// Suits add 200 and stack; the HUD displays a full bar at 200.
+	inventory.amount 200
+	inventory.maxamount 65535
 	states { Spawn: C060 A -1 stop }
 }
 
@@ -337,6 +356,39 @@ actor C7MinePack : C7Mines
 {
 	inventory.amount 25
 	states { Spawn: C063 A -1 stop }
+}
+
+actor C7ProximityMine
+{
+	health 1
+	radius 8
+	+SHOOTABLE
+	+NOBLOCKMAP
+	states
+	{
+		Spawn:
+			C063 A 12 A_PlaySound("c7/mine/arm")
+			C063 A 12 A_PlaySound("c7/mine/arm")
+			C063 A 12 A_PlaySound("c7/mine/arm")
+		Armed:
+			C063 A 1 A_C7MineThink
+			loop
+		Death:
+			C068 A 3 bright A_Explode(random(102, 500), 128, 1, true)
+			C069 A 3 bright
+			C070 A 3 bright
+			C071 A 3 bright
+			C072 A 3 bright
+			C073 A 3 bright
+			C074 A 3 bright
+			stop
+	}
+}
+
+actor C7VisorBattery : C7VisorCharge
+{
+	inventory.amount 100
+	states { Spawn: C071 A -1 stop }
 }
 
 actor C7ScoreBonus : ScoreItem

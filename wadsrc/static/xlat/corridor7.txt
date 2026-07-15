@@ -2055,7 +2055,7 @@ things
 	ignore 90;
 	ignore 91;
 	ignore 92;
-	ignore 93;
+	{93, C7VisorBattery, 0, 0, 0}
 	ignore 94;
 	ignore 95;
 	ignore 96;
@@ -2117,7 +2117,7 @@ things
 	{184, C7OrganicEye, 4, PATHING, 3}
 	{188, C7ProbeEye, 4, 0, 3}
 	{192, C7ProbeEye, 4, PATHING, 3}
-	{196, C7SpaceMarine, 0, 0, 3}
+	{196, C7EniramBoss, 0, 0, 3}
 	{198, C7MorphChair, 4, 0, 3}
 	{202, C7MorphFile, 4, 0, 3}
 	{206, C7MorphPlant, 4, 0, 3}
@@ -2159,7 +2159,7 @@ things
 	{328, C7HungryPuddle, 4, 0, 1}
 	{332, C7HungryPuddle, 4, PATHING, 1}
 	{336, C7HornedBoss, 4, 0, 1}
-	{342, C7SpaceSeal, 4, PATHING, 2}
+	{342, C7SpaceSeal, 4, 0, 2}
 	{346, C7HungryPuddle, 4, 0, 2}
 	{350, C7HungryPuddle, 4, PATHING, 2}
 	{354, C7HornedBoss, 4, 0, 2}

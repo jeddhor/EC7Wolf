@@ -85,8 +85,7 @@ static bool C7VisorCanSeeActor(AActor *actor)
 		return true;
 
 	const ClassDef *eniram = ClassDef::FindClass("C7SpaceMarine");
-	const ClassDef *nerraw = ClassDef::FindClass("C7Inviso");
-	if((!eniram || !actor->IsA(eniram)) && (!nerraw || !actor->IsA(nerraw)))
+	if(!eniram || !actor->IsA(eniram))
 		return true;
 	if(actor->MissileState && actor->InStateSequence(actor->MissileState))
 		return true;

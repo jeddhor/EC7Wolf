@@ -2146,7 +2146,7 @@ things
 	{288, C7Grunt, 4, 0, 2}
 	{292, C7Grunt, 4, PATHING, 2}
 	{296, C7SpaceMarine, 4, 0, 2}
-	{300, C7Inviso, 4, 0, 2}
+	{300, C7Semaj, 4, 0, 2}
 	{306, C7Grunt, 4, 0, 3}
 	{310, C7Grunt, 4, PATHING, 3}
 	{314, C7SpaceMarine, 4, 0, 3}

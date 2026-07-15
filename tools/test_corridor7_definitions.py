@@ -10,6 +10,7 @@ XLAT = (ROOT / "wadsrc/static/xlat/corridor7.txt").read_text()
 PLAYER = (ROOT / "wadsrc/static/actors/corridor7/player.txt").read_text()
 STATICS = (ROOT / "wadsrc/static/actors/corridor7/statics.txt").read_text()
 MONSTERS = (ROOT / "wadsrc/static/actors/corridor7/monsters.txt").read_text()
+CO7MAP = (ROOT / "wadsrc/static/co7map.txt").read_text()
 WL_PLAY = (ROOT / "src/wl_play.cpp").read_text()
 LNSPEC = (ROOT / "src/lnspec.cpp").read_text()
 
@@ -54,6 +55,15 @@ require(r"actor\s+C7EnergyCapacity\s*:\s*Ammo.*?inventory\.amount\s+100", PLAYER
 require(r"ConsumeC7AlienCharge\(self,\s*33,\s*4\)", (ROOT / "src/wl_agent.cpp").read_text(), "plasma 33/4 charge model")
 require(r"clearance\[4\]\s*=\s*\{\s*10,\s*75,\s*100,\s*100\s*\}", LNSPEC, "rank clearance quotas")
 require(r"29,\s*18,\s*20,\s*9,\s*2,\s*14,\s*7,\s*8", WL_PLAY, "released music selector table")
+require(r'^\s*\{300,\s*C7Semaj,', XLAT, "object 300 Semaj mapping")
+require(r'"AILOA1".*?"AILOA8"', CO7MAP, "Ailoprobe directional sprite set")
+require(r'"EITKA1".*?"EITKA8"', CO7MAP, "Eitak directional sprite set")
+require(r"actor\s+C7Semaj\s*:.*?A_MeleeAttack", MONSTERS, "Semaj melee-only attack")
+require(r'actor\s+C7SkullBoss\s*:.*?A_CustomMissile\("C7BossEnergyBolt"\)', MONSTERS, "Solrac energy projectile")
+require(r'"Drop Mine".*?"Visor Mode"', WL_PLAY, "configuration-safe Corridor 7 control labels")
+
+if "Reload / Drop Mine" in WL_PLAY or "Zoom / Visor Mode" in WL_PLAY:
+    raise SystemExit("Corridor 7 definition check failed: control name would corrupt the saved config")
 
 expected_slots = [
     "C7Bayonet",

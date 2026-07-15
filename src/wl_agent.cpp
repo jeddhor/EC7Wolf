@@ -306,6 +306,26 @@ void player_t::TakeDamage (int points, AActor *attacker)
 	if (gamestate.victoryflag)
 		return;
 	points = (points*gamestate.difficulty->DamageFactor)>>FRACBITS;
+
+	// Corridor 7 applies its timed invulnerability and body armor after the
+	// rank damage multiplier. Armor absorbs the same half of the hit that is
+	// removed from health, matching the released DOS executable.
+	if (IWad::CheckGameFilter("Corridor7") && !godmode)
+	{
+		AInventory *invulnerability = mo->FindInventory(ClassDef::FindClass("C7Invulnerability"));
+		if (invulnerability && invulnerability->amount > 0)
+			return;
+
+		AInventory *armor = mo->FindInventory(ClassDef::FindClass("C7BodyArmor"));
+		if (armor && armor->amount > 0)
+		{
+			points >>= 1;
+			if (armor->amount > (unsigned int)points)
+				armor->amount -= points;
+			else
+				armor->amount = 0;
+		}
+	}
 	NetDPrintf("%s %d points\n", __FUNCTION__, points);
 
 	if (!godmode)
@@ -1316,6 +1336,76 @@ ACTION_FUNCTION(A_GunAttack)
 			return false;
 	}
 	DamageActor (closest, self, damage);
+	return true;
+}
+
+// Corridor 7's released hitscan routine has weapon-specific falloff rather
+// than Wolf3D's shared gun formula. The weapon number is the original index:
+// 1 shotgun, 2 M-16, 3 M-343, 4 dual blaster, 6 assault cannon, and
+// 7 disintegrator. Plasma (5) is a projectile and is defined in DECORATE.
+static FRandom pr_c7bullet("Corridor7Bullet");
+ACTION_FUNCTION(A_C7GunAttack)
+{
+	player_t *player = self->player;
+	ACTION_PARAM_INT(weapon, 0);
+
+	if(!player || !player->ReadyWeapon->DepleteAmmo())
+		return false;
+
+	PlaySoundLocActor(player->ReadyWeapon->attacksound, self,
+		self == players[ConsolePlayer].camera ? SD_WEAPONS : SD_GENERIC);
+	if(self->MeleeState)
+		self->SetState(self->MeleeState);
+	if(!(player->ReadyWeapon->weaponFlags & WF_NOALERT))
+		madenoise = true;
+
+	// The disintegrator damages every visible target in its broad firing band.
+	// The DOS single-player path passes a fixed 1000-point hit to each target.
+	if(weapon == 7)
+	{
+		bool hit = false;
+		for(AActor::Iterator check = AActor::GetIterator(); check.Next();)
+		{
+			if(check == self || !(check->flags & FL_SHOOTABLE) ||
+				(check->player && !Net::FriendlyFire()))
+				continue;
+			if(self->CheckVisibility(check, ANGLE_45))
+			{
+				DamageActor(check, self, 1000);
+				hit = true;
+			}
+		}
+		return hit;
+	}
+
+	AActor *closest = player->FindTarget();
+	if(!closest)
+		return false;
+
+	int dist = MAX(abs(closest->x - self->x), abs(closest->y - self->y)) / FRACUNIT;
+	int damage;
+	if(dist < 2 || weapon == 3 || weapon == 6)
+	{
+		damage = pr_c7bullet() / 4;
+		if(weapon == 1)
+			damage += 100;
+	}
+	else if(dist < 4 || weapon == 4)
+	{
+		damage = pr_c7bullet() / 6;
+		if(weapon == 1)
+			damage += 50;
+	}
+	else
+	{
+		if(pr_c7bullet() / 12 < dist && weapon != 1)
+			return false;
+		damage = pr_c7bullet() / 6;
+		if(weapon == 1)
+			damage += 25;
+	}
+
+	DamageActor(closest, self, damage);
 	return true;
 }
 

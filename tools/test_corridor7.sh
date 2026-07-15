@@ -15,6 +15,7 @@ data_dir=$(cd "$2" && pwd)
 log_file=${3:-"$build_dir/corridor7-smoke.log"}
 ecwolf="$build_dir/ecwolf"
 
+python3 "$(dirname "$0")/test_corridor7_definitions.py"
 cmake --build "$build_dir"
 
 if [ ! -x "$ecwolf" ]; then

@@ -1986,8 +1986,8 @@ things
 	{25, C7Static002, 0, 0, 0}
 	{26, C7Static003, 0, 0, 0}
 	{27, C7Static004, 0, 0, 0}
-	{28, C7ScoreBonus, 0, 0, 0}
-	{29, C7MedicPack, 0, 0, 0}
+	{28, C7Static005, 0, 0, 0}
+	{29, C7M343, 0, 0, 0}
 	{30, C7Static007, 0, 0, 0}
 	{31, C7Static008, 0, 0, 0}
 	{32, C7Static009, 0, 0, 0}
@@ -2009,9 +2009,9 @@ things
 	{48, C7Static025, 0, 0, 0}
 	{49, C7Static026, 0, 0, 0}
 	{50, C7Static027, 0, 0, 0}
-	{51, C7BodyArmor, 0, 0, 0}
-	{52, C7BodyArmor, 0, 0, 0}
-	{53, C7HeavyArmor, 0, 0, 0}
+	{51, C7DualBlaster, 0, 0, 0}
+	{52, C7FloorPlan, 0, 0, 0}
+	{53, C7PlasmaRifle, 0, 0, 0}
 	{54, C7Static031, 0, 0, 0}
 	{55, C7Static032, 0, 0, 0}
 	{56, C7Static033, 0, 0, 0}
@@ -2037,13 +2037,13 @@ things
 	{76, C7Static053, 0, 0, 0}
 	{77, C7Static054, 0, 0, 0}
 	{78, C7Static055, 0, 0, 0}
-	{79, C7AmmoClip, 0, 0, 0}
-	{80, C7ChargePack, 0, 0, 0}
-	{81, C7Adrenaline, 0, 0, 0}
-	{82, C7AmmoPack, 0, 0, 0}
-	{83, C7LargeChargePack, 0, 0, 0}
-	{84, C7ScoreBonus, 0, 0, 0}
-	{85, C7FloorPlan, 0, 0, 0}
+	{79, C7AmmoPack, 0, 0, 0}
+	{80, C7Adrenaline, 0, 0, 0}
+	{81, C7ChargePack, 0, 0, 0}
+	{82, C7BodyArmor, 0, 0, 0}
+	{83, C7Invulnerability, 0, 0, 0}
+	{84, C7Static061, 0, 0, 0}
+	{85, C7MinePack, 0, 0, 0}
 	// 86..88 occur exclusively inside wall cells and configure masked-wall
 	// behavior in the DOS engine; they are not collectible/static sprites.
 	ignore 86;

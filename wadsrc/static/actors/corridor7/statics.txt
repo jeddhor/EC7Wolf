@@ -32,7 +32,7 @@ actor C7Static002 : Key
 	}
 }
 
-actor C7Static003 : Key
+actor C7Static003
 {
 	states
 	{

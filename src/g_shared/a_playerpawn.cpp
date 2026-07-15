@@ -40,6 +40,7 @@
 #include "thingdef/thingdef.h"
 #include "wl_agent.h"
 #include "wl_game.h"
+#include "wl_iwad.h"
 #include "wl_main.h"
 #include "wl_net.h"
 #include "wl_play.h"
@@ -286,6 +287,13 @@ void APlayerPawn::Tick()
 	Super::Tick();
 	if(!player)
 		return;
+
+	if(IWad::CheckGameFilter("Corridor7"))
+	{
+		AInventory *invulnerability = FindInventory(ClassDef::FindClass("C7Invulnerability"));
+		if(invulnerability && invulnerability->amount > 0 && --invulnerability->amount == 0)
+			invulnerability->Destroy();
+	}
 
 	TickPSprites();
 

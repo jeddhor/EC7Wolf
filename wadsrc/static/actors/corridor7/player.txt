@@ -1,22 +1,22 @@
 actor C7Bullets : Ammo
 {
 	inventory.pickupsound "misc/ammo_pkup"
-	inventory.amount 25
-	inventory.maxamount 250
+	inventory.amount 100
+	inventory.maxamount 200
 }
 
 actor C7Energy : Ammo
 {
 	inventory.pickupsound "misc/ammo_pkup"
-	inventory.amount 20
-	inventory.maxamount 200
+	inventory.amount 100
+	inventory.maxamount 100
 }
 
 actor C7Mines : Ammo
 {
 	inventory.pickupsound "misc/ammo_pkup"
-	inventory.amount 3
-	inventory.maxamount 30
+	inventory.amount 25
+	inventory.maxamount 25
 }
 
 actor C7Player : PlayerPawn
@@ -26,18 +26,17 @@ actor C7Player : PlayerPawn
 	player.movebob 0
 	player.viewheight 32
 	player.displayname "Corridor 7 Marine"
-	player.startitem "C7Stunner"
-	player.startitem "C7M343"
-	player.startitem "C7Bullets", 50
-	player.weaponslot 1, "C7Stunner"
-	player.weaponslot 2, "C7M343"
-	player.weaponslot 3, "C7Needler"
-	player.weaponslot 4, "C7DualBlaster"
-	player.weaponslot 5, "C7Disintegrator"
-	player.weaponslot 6, "C7Shotgun"
-	player.weaponslot 7, "C7PlasmaRifle"
-	player.weaponslot 8, "C7AssaultCannon"
-	player.weaponslot 9, "C7Spinner"
+	player.startitem "C7Bayonet"
+	player.startitem "C7M16"
+	player.startitem "C7Bullets", 100
+	player.weaponslot 1, "C7Bayonet"
+	player.weaponslot 2, "C7Shotgun"
+	player.weaponslot 3, "C7M16"
+	player.weaponslot 4, "C7M343"
+	player.weaponslot 5, "C7DualBlaster"
+	player.weaponslot 6, "C7PlasmaRifle"
+	player.weaponslot 7, "C7AssaultCannon"
+	player.weaponslot 8, "C7Disintegrator"
 	player.damagescreencolor "FF 00 00"
 	states
 	{
@@ -83,7 +82,7 @@ actor C7Weapon : Weapon
 	}
 }
 
-actor C7Stunner : C7Weapon
+actor C7Bayonet : C7Weapon
 {
 	weapon.ammouse1 0
 	+WEAPON.NOAUTOFIRE
@@ -93,12 +92,38 @@ actor C7Stunner : C7Weapon
 			C746 A 1 A_WeaponReady
 			loop
 		Fire:
-			C747 A 3
-			C748 A 3 bright A_CustomPunch(random(5, 20), true, CPF_ALWAYSPLAYSOUND)
-			C749 A 3
+			C746 A 6
+			C747 A 6
+			C748 A 6 bright A_CustomPunch(random(5, 20), true, CPF_ALWAYSPLAYSOUND)
+			C749 A 6
+			C750 A 6
 			goto Ready
 		Spawn:
 			C453 A -1
+			stop
+	}
+}
+
+actor C7M16 : C7Weapon
+{
+	weapon.ammotype1 "C7Bullets"
+	weapon.ammouse1 1
+	weapon.ammogive1 100
+	states
+	{
+		Ready:
+			C754 A 1 A_WeaponReady
+			loop
+		Fire:
+			C754 A 6
+			C755 A 6
+		Hold:
+			C756 A 6 bright A_C7GunAttack(2)
+			C757 A 6 A_ReFire
+			C758 A 6
+			goto Ready
+		Spawn:
+			C454 A -1
 			stop
 	}
 }
@@ -107,42 +132,22 @@ actor C7M343 : C7Weapon
 {
 	weapon.ammotype1 "C7Bullets"
 	weapon.ammouse1 1
-	weapon.ammogive1 25
-	states
-	{
-		Ready:
-			C754 A 1 A_WeaponReady
-			loop
-		Fire:
-			C755 A 2
-		Hold:
-			C756 A 2 bright A_GunAttack(GAF_MACDAMAGE, "*", 1.0, 64)
-			C757 A 2 A_ReFire
-			goto Ready
-		Spawn:
-			C454 A -1
-			stop
-	}
-}
-
-actor C7Needler : C7Weapon
-{
-	weapon.ammotype1 "C7Bullets"
-	weapon.ammouse1 1
-	weapon.ammogive1 25
+	weapon.ammogive1 100
 	states
 	{
 		Ready:
 			C762 A 1 A_WeaponReady
 			loop
 		Fire:
-			C763 A 3
+			C762 A 6
+			C763 A 6
 		Hold:
-			C764 A 2 bright A_GunAttack(GAF_MACDAMAGE, "*", 1.0, 80)
-			C765 A 2 A_ReFire
+			C764 A 6 bright A_C7GunAttack(3)
+			C765 A 6 A_ReFire
+			C766 A 6
 			goto Ready
 		Spawn:
-			C455 A -1
+			C007 A -1
 			stop
 	}
 }
@@ -150,22 +155,23 @@ actor C7Needler : C7Weapon
 actor C7DualBlaster : C7Weapon
 {
 	weapon.ammotype1 "C7Energy"
-	weapon.ammouse1 1
-	weapon.ammogive1 20
+	weapon.ammouse1 5
+	weapon.ammogive1 100
 	states
 	{
 		Ready:
 			C770 A 1 A_WeaponReady
 			loop
 		Fire:
-			C771 A 3
+			C770 A 6
+			C771 A 6
 		Hold:
-			C772 A 2 bright A_GunAttack(GAF_MACDAMAGE, "*", 1.0, 96)
-			C773 A 0 bright A_GunAttack(GAF_MACDAMAGE, "*", 1.0, 96)
-			C774 A 3 A_ReFire
+			C772 A 6 bright A_C7GunAttack(4)
+			C773 A 6 bright
+			C774 A 6 A_ReFire
 			goto Ready
 		Spawn:
-			C456 A -1
+			C029 A -1
 			stop
 	}
 }
@@ -173,8 +179,8 @@ actor C7DualBlaster : C7Weapon
 actor C7Disintegrator : C7Weapon
 {
 	weapon.ammotype1 "C7Energy"
-	weapon.ammouse1 2
-	weapon.ammogive1 20
+	weapon.ammouse1 50
+	weapon.ammogive1 100
 	+WEAPON.NOAUTOFIRE
 	states
 	{
@@ -182,9 +188,11 @@ actor C7Disintegrator : C7Weapon
 			C802 A 1 A_WeaponReady
 			loop
 		Fire:
-			C803 A 3
-			C804 A 4 bright A_GunAttack(GAF_MACDAMAGE, "*", 1.0, 180)
-			C805 A 3
+			C802 A 6
+			C803 A 6
+			C804 A 6 bright A_C7GunAttack(7)
+			C805 A 6
+			C806 A 6
 			goto Ready
 		Spawn:
 			C452 A -1
@@ -195,8 +203,8 @@ actor C7Disintegrator : C7Weapon
 actor C7Shotgun : C7Weapon
 {
 	weapon.ammotype1 "C7Bullets"
-	weapon.ammouse1 2
-	weapon.ammogive1 20
+	weapon.ammouse1 5
+	weapon.ammogive1 100
 	+WEAPON.NOAUTOFIRE
 	states
 	{
@@ -204,10 +212,16 @@ actor C7Shotgun : C7Weapon
 			C786 A 1 A_WeaponReady
 			loop
 		Fire:
-			C787 A 4
-			C788 A 4 bright A_GunAttack(GAF_MACDAMAGE, "*", 0.8, 220)
-			C789 A 4
-			C790 A 4
+			C786 A 6
+			C787 A 6
+			C788 A 6 bright A_C7GunAttack(1)
+			C789 A 6
+			C790 A 6
+			C810 A 12
+			C811 A 12
+			C812 A 12
+			C813 A 12
+			C814 A 6
 			goto Ready
 		Spawn:
 			C450 A -1
@@ -218,21 +232,23 @@ actor C7Shotgun : C7Weapon
 actor C7PlasmaRifle : C7Weapon
 {
 	weapon.ammotype1 "C7Energy"
-	weapon.ammouse1 2
-	weapon.ammogive1 20
+	weapon.ammouse1 33
+	weapon.ammogive1 100
 	states
 	{
 		Ready:
 			C778 A 1 A_WeaponReady
 			loop
 		Fire:
-			C779 A 3
+			C778 A 6
+			C779 A 6
 		Hold:
-			C780 A 3 bright A_GunAttack(GAF_MACDAMAGE, "*", 1.0, 150)
-			C781 A 3 A_ReFire
+			C780 A 20 bright A_FireCustomMissile("C7PlasmaBolt")
+			C781 A 6 A_ReFire
+			C782 A 6
 			goto Ready
 		Spawn:
-			C450 A -1
+			C031 A -1
 			stop
 	}
 }
@@ -240,43 +256,23 @@ actor C7PlasmaRifle : C7Weapon
 actor C7AssaultCannon : C7Weapon
 {
 	weapon.ammotype1 "C7Energy"
-	weapon.ammouse1 1
-	weapon.ammogive1 20
+	weapon.ammouse1 10
+	weapon.ammogive1 100
 	states
 	{
 		Ready:
 			C794 A 1 A_WeaponReady
 			loop
 		Fire:
-			C795 A 2
+			C794 A 6
+			C795 A 6
 		Hold:
-			C796 A 2 bright A_GunAttack(GAF_MACDAMAGE, "*", 1.0, 120)
-			C797 A 2 A_ReFire
+			C796 A 6 bright A_C7GunAttack(6)
+			C797 A 6 A_ReFire
+			C798 A 6
 			goto Ready
 		Spawn:
 			C451 A -1
-			stop
-	}
-}
-
-actor C7Spinner : C7Weapon
-{
-	weapon.ammotype1 "C7Energy"
-	weapon.ammouse1 3
-	weapon.ammogive1 20
-	+WEAPON.NOAUTOFIRE
-	states
-	{
-		Ready:
-			C810 A 1 A_WeaponReady
-			loop
-		Fire:
-			C811 A 3
-			C812 A 4 bright A_GunAttack(GAF_MACDAMAGE, "*", 1.0, 255)
-			C813 A 5
-			goto Ready
-		Spawn:
-			C452 A -1
 			stop
 	}
 }
@@ -288,25 +284,36 @@ actor C7MedicPack : Health
 	states { Spawn: C007 A -1 stop }
 }
 
+// The released plasma projectile uses reserved/invisible sprite pages 578-579;
+// the blue discharge is already painted into the C780 weapon frame.
+actor C7PlasmaBolt
+{
+	radius 4
+	speed 8
+	damage 100
+	PROJECTILE
+	states
+	{
+		Spawn:
+			TNT1 A -1 bright
+			stop
+	}
+}
+
 actor C7Adrenaline : Health
 {
 	inventory.pickupsound "misc/medkit_pkup"
-	inventory.amount 99
-	states { Spawn: C059 A -1 stop }
+	inventory.amount 100
+	inventory.maxamount 200
+	states { Spawn: C058 A -1 stop }
 }
 
-actor C7BodyArmor : Health
+actor C7BodyArmor : Inventory
 {
 	inventory.pickupsound "misc/health_pkup"
-	inventory.amount 35
-	states { Spawn: C030 A -1 stop }
-}
-
-actor C7HeavyArmor : Health
-{
-	inventory.pickupsound "misc/health_pkup"
-	inventory.amount 65
-	states { Spawn: C031 A -1 stop }
+	inventory.amount 100
+	inventory.maxamount 200
+	states { Spawn: C060 A -1 stop }
 }
 
 actor C7AmmoClip : C7Bullets
@@ -316,24 +323,20 @@ actor C7AmmoClip : C7Bullets
 
 actor C7AmmoPack : C7Bullets
 {
-	inventory.amount 50
-	states { Spawn: C060 A -1 stop }
+	inventory.amount 100
+	states { Spawn: C057 A -1 stop }
 }
 
 actor C7ChargePack : C7Energy
 {
-	states { Spawn: C058 A -1 stop }
-}
-
-actor C7LargeChargePack : C7Energy
-{
-	inventory.amount 50
-	states { Spawn: C061 A -1 stop }
+	inventory.amount 100
+	states { Spawn: C059 A -1 stop }
 }
 
 actor C7MinePack : C7Mines
 {
-	states { Spawn: C067 A -1 stop }
+	inventory.amount 25
+	states { Spawn: C063 A -1 stop }
 }
 
 actor C7ScoreBonus : ScoreItem
@@ -342,9 +345,14 @@ actor C7ScoreBonus : ScoreItem
 	states { Spawn: C006 A -1 stop }
 }
 
-actor C7FloorPlan : Inventory
+actor C7Invulnerability : Inventory
 {
-	inventory.amount 1
-	inventory.maxamount 1
-	states { Spawn: C063 A -1 stop }
+	inventory.amount 2100
+	inventory.maxamount 2100
+	states { Spawn: C061 A -1 stop }
+}
+
+actor C7FloorPlan : MapRevealer
+{
+	states { Spawn: C030 A -1 stop }
 }

@@ -23,6 +23,19 @@ Launch through the normal IWAD picker or directly from the data directory:
 ecwolf --data CO7 --nowait --tedlevel MAP01 --skill 2
 ```
 
+To create a self-contained local release directory containing an optimized
+ECWolf build and a copy of a legally owned installation:
+
+```sh
+tools/package_corridor7_release.sh /path/to/ecwolf-build \
+    /path/to/CORR7CD /path/to/builds/release
+/path/to/builds/release/run-corridor7.sh
+```
+
+The release directory contains commercial game data and must not be committed
+or redistributed. The launcher keeps its configuration and saved games in the
+release directory.
+
 For a repeatable development smoke test:
 
 ```sh

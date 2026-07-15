@@ -41,6 +41,10 @@ for required in CORR7CD.EXE MAPTEMP.CO7 GFXTILES.CO7 \
 	fi
 done
 
+# The revision-header target is always run and can update its header after
+# Ninja has already evaluated dependencies. A second incremental pass ensures
+# that a newly committed revision is compiled into the packaged executable.
+cmake --build "$build_dir"
 cmake --build "$build_dir"
 
 rm -rf "$staging_dir"

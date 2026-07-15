@@ -1,19 +1,8 @@
-/* Corridor 7 static-object table. Map words 23..75 address sprite pages
- * 0..52 directly; this was verified against the original executable with
- * synthetic TED5 maps. Gameplay properties are specialized below as they are
- * confirmed, while the base classes preserve every released-map object. */
+/* Corridor 7 static-object table recovered from the shipped executable.
+ * Map words 23..105 select these 83 entries. The first word in each original
+ * table row is the sprite page; item type 1 is a blocking decoration. */
 
 actor C7Static000
-{
-	states
-	{
-		Spawn:
-			C000 A -1
-			stop
-	}
-}
-
-actor C7Static001
 {
 	states
 	{
@@ -23,7 +12,7 @@ actor C7Static001
 	}
 }
 
-actor C7Static002 : Key
+actor C7Static001 : Key
 {
 	states
 	{
@@ -33,7 +22,7 @@ actor C7Static002 : Key
 	}
 }
 
-actor C7Static003 : Key
+actor C7Static002 : Key
 {
 	states
 	{
@@ -43,7 +32,7 @@ actor C7Static003 : Key
 	}
 }
 
-actor C7Static004 : Key
+actor C7Static003 : Key
 {
 	states
 	{
@@ -53,8 +42,10 @@ actor C7Static004 : Key
 	}
 }
 
-actor C7Static005
+actor C7Static004
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -63,7 +54,7 @@ actor C7Static005
 	}
 }
 
-actor C7Static006
+actor C7Static005
 {
 	states
 	{
@@ -73,7 +64,7 @@ actor C7Static006
 	}
 }
 
-actor C7Static007
+actor C7Static006
 {
 	states
 	{
@@ -83,8 +74,10 @@ actor C7Static007
 	}
 }
 
-actor C7Static008
+actor C7Static007
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -93,8 +86,10 @@ actor C7Static008
 	}
 }
 
-actor C7Static009
+actor C7Static008
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -103,12 +98,26 @@ actor C7Static009
 	}
 }
 
-actor C7Static010
+actor C7Static009
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
 			C010 A -1
+			stop
+	}
+}
+
+actor C7Static010
+{
+	radius 32
+	+SOLID
+	states
+	{
+		Spawn:
+			C011 A -1
 			stop
 	}
 }
@@ -118,27 +127,31 @@ actor C7Static011
 	states
 	{
 		Spawn:
-			C011 A -1
+			C012 A -1
 			stop
 	}
 }
 
 actor C7Static012
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
-			C012 A -1
+			C013 A -1
 			stop
 	}
 }
 
 actor C7Static013
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
-			C013 A -1
+			C014 A -1
 			stop
 	}
 }
@@ -148,23 +161,15 @@ actor C7Static014
 	states
 	{
 		Spawn:
-			C014 A -1
+			C015 A -1
 			stop
 	}
 }
 
 actor C7Static015
 {
-	states
-	{
-		Spawn:
-			C015 A -1
-			stop
-	}
-}
-
-actor C7Static016
-{
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -173,8 +178,10 @@ actor C7Static016
 	}
 }
 
-actor C7Static017
+actor C7Static016
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -183,8 +190,10 @@ actor C7Static017
 	}
 }
 
-actor C7Static018
+actor C7Static017
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -193,8 +202,10 @@ actor C7Static018
 	}
 }
 
-actor C7Static019
+actor C7Static018
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -203,8 +214,10 @@ actor C7Static019
 	}
 }
 
-actor C7Static020
+actor C7Static019
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -213,8 +226,10 @@ actor C7Static020
 	}
 }
 
-actor C7Static021
+actor C7Static020
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -223,8 +238,10 @@ actor C7Static021
 	}
 }
 
-actor C7Static022
+actor C7Static021
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -233,8 +250,10 @@ actor C7Static022
 	}
 }
 
-actor C7Static023
+actor C7Static022
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -243,8 +262,10 @@ actor C7Static023
 	}
 }
 
-actor C7Static024
+actor C7Static023
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -253,8 +274,10 @@ actor C7Static024
 	}
 }
 
-actor C7Static025
+actor C7Static024
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -263,8 +286,10 @@ actor C7Static025
 	}
 }
 
-actor C7Static026
+actor C7Static025
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -273,12 +298,26 @@ actor C7Static026
 	}
 }
 
-actor C7Static027
+actor C7Static026
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
 			C027 A -1
+			stop
+	}
+}
+
+actor C7Static027
+{
+	radius 32
+	+SOLID
+	states
+	{
+		Spawn:
+			C028 A -1
 			stop
 	}
 }
@@ -288,7 +327,7 @@ actor C7Static028
 	states
 	{
 		Spawn:
-			C028 A -1
+			C029 A -1
 			stop
 	}
 }
@@ -298,7 +337,7 @@ actor C7Static029
 	states
 	{
 		Spawn:
-			C029 A -1
+			C030 A -1
 			stop
 	}
 }
@@ -308,23 +347,15 @@ actor C7Static030
 	states
 	{
 		Spawn:
-			C030 A -1
+			C031 A -1
 			stop
 	}
 }
 
 actor C7Static031
 {
-	states
-	{
-		Spawn:
-			C031 A -1
-			stop
-	}
-}
-
-actor C7Static032
-{
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -333,8 +364,10 @@ actor C7Static032
 	}
 }
 
-actor C7Static033
+actor C7Static032
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -343,8 +376,10 @@ actor C7Static033
 	}
 }
 
-actor C7Static034
+actor C7Static033
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -353,8 +388,10 @@ actor C7Static034
 	}
 }
 
-actor C7Static035
+actor C7Static034
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -363,8 +400,10 @@ actor C7Static035
 	}
 }
 
-actor C7Static036
+actor C7Static035
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -373,8 +412,10 @@ actor C7Static036
 	}
 }
 
-actor C7Static037
+actor C7Static036
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -383,8 +424,10 @@ actor C7Static037
 	}
 }
 
-actor C7Static038
+actor C7Static037
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
@@ -393,12 +436,26 @@ actor C7Static038
 	}
 }
 
-actor C7Static039
+actor C7Static038
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
 			C039 A -1
+			stop
+	}
+}
+
+actor C7Static039
+{
+	radius 32
+	+SOLID
+	states
+	{
+		Spawn:
+			C040 A -1
 			stop
 	}
 }
@@ -408,27 +465,31 @@ actor C7Static040
 	states
 	{
 		Spawn:
-			C040 A -1
+			C041 A -1
 			stop
 	}
 }
 
 actor C7Static041
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
-			C041 A -1
+			C042 A -1
 			stop
 	}
 }
 
 actor C7Static042
 {
+	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
-			C042 A -1
+			C043 A -1
 			stop
 	}
 }
@@ -438,7 +499,7 @@ actor C7Static043
 	states
 	{
 		Spawn:
-			C043 A -1
+			C044 A -1
 			stop
 	}
 }
@@ -448,7 +509,7 @@ actor C7Static044
 	states
 	{
 		Spawn:
-			C044 A -1
+			C045 A -1
 			stop
 	}
 }
@@ -458,7 +519,7 @@ actor C7Static045
 	states
 	{
 		Spawn:
-			C045 A -1
+			C046 A -1
 			stop
 	}
 }
@@ -468,7 +529,7 @@ actor C7Static046
 	states
 	{
 		Spawn:
-			C046 A -1
+			C047 A -1
 			stop
 	}
 }
@@ -478,7 +539,7 @@ actor C7Static047
 	states
 	{
 		Spawn:
-			C047 A -1
+			C048 A -1
 			stop
 	}
 }
@@ -488,7 +549,7 @@ actor C7Static048
 	states
 	{
 		Spawn:
-			C048 A -1
+			C049 A -1
 			stop
 	}
 }
@@ -498,7 +559,7 @@ actor C7Static049
 	states
 	{
 		Spawn:
-			C049 A -1
+			C050 A -1
 			stop
 	}
 }
@@ -508,7 +569,7 @@ actor C7Static050
 	states
 	{
 		Spawn:
-			C050 A -1
+			C051 A -1
 			stop
 	}
 }
@@ -518,7 +579,7 @@ actor C7Static051
 	states
 	{
 		Spawn:
-			C051 A -1
+			C052 A -1
 			stop
 	}
 }
@@ -528,8 +589,313 @@ actor C7Static052
 	states
 	{
 		Spawn:
-			C052 A -1
+			C053 A -1
 			stop
 	}
 }
 
+actor C7Static053
+{
+	radius 32
+	+SOLID
+	states
+	{
+		Spawn:
+			C054 A -1
+			stop
+	}
+}
+
+actor C7Static054
+{
+	radius 32
+	+SOLID
+	states
+	{
+		Spawn:
+			C055 A -1
+			stop
+	}
+}
+
+actor C7Static055
+{
+	radius 32
+	+SOLID
+	states
+	{
+		Spawn:
+			C056 A -1
+			stop
+	}
+}
+
+actor C7Static056
+{
+	states
+	{
+		Spawn:
+			C057 A -1
+			stop
+	}
+}
+
+actor C7Static057
+{
+	states
+	{
+		Spawn:
+			C058 A -1
+			stop
+	}
+}
+
+actor C7Static058
+{
+	states
+	{
+		Spawn:
+			C059 A -1
+			stop
+	}
+}
+
+actor C7Static059
+{
+	states
+	{
+		Spawn:
+			C060 A -1
+			stop
+	}
+}
+
+actor C7Static060
+{
+	states
+	{
+		Spawn:
+			C061 A -1
+			stop
+	}
+}
+
+actor C7Static061
+{
+	states
+	{
+		Spawn:
+			C062 A -1
+			stop
+	}
+}
+
+actor C7Static062
+{
+	states
+	{
+		Spawn:
+			C063 A -1
+			stop
+	}
+}
+
+actor C7Static063
+{
+	states
+	{
+		Spawn:
+			C064 A -1
+			stop
+	}
+}
+
+actor C7Static064
+{
+	states
+	{
+		Spawn:
+			C065 A -1
+			stop
+	}
+}
+
+actor C7Static065
+{
+	states
+	{
+		Spawn:
+			C066 A -1
+			stop
+	}
+}
+
+actor C7Static066
+{
+	states
+	{
+		Spawn:
+			C067 A -1
+			stop
+	}
+}
+
+actor C7Static067
+{
+	states
+	{
+		Spawn:
+			C068 A -1
+			stop
+	}
+}
+
+actor C7Static068
+{
+	states
+	{
+		Spawn:
+			C069 A -1
+			stop
+	}
+}
+
+actor C7Static069
+{
+	states
+	{
+		Spawn:
+			C070 A -1
+			stop
+	}
+}
+
+actor C7Static070
+{
+	states
+	{
+		Spawn:
+			C071 A -1
+			stop
+	}
+}
+
+actor C7Static071
+{
+	states
+	{
+		Spawn:
+			C072 A -1
+			stop
+	}
+}
+
+actor C7Static072
+{
+	states
+	{
+		Spawn:
+			C073 A -1
+			stop
+	}
+}
+
+actor C7Static073
+{
+	states
+	{
+		Spawn:
+			C074 A -1
+			stop
+	}
+}
+
+actor C7Static074
+{
+	states
+	{
+		Spawn:
+			C453 A -1
+			stop
+	}
+}
+
+actor C7Static075
+{
+	states
+	{
+		Spawn:
+			C454 A -1
+			stop
+	}
+}
+
+actor C7Static076
+{
+	states
+	{
+		Spawn:
+			C455 A -1
+			stop
+	}
+}
+
+actor C7Static077
+{
+	states
+	{
+		Spawn:
+			C456 A -1
+			stop
+	}
+}
+
+actor C7Static078
+{
+	states
+	{
+		Spawn:
+			C457 A -1
+			stop
+	}
+}
+
+actor C7Static079
+{
+	states
+	{
+		Spawn:
+			C458 A -1
+			stop
+	}
+}
+
+actor C7Static080
+{
+	states
+	{
+		Spawn:
+			C450 A -1
+			stop
+	}
+}
+
+actor C7Static081
+{
+	states
+	{
+		Spawn:
+			C451 A -1
+			stop
+	}
+}
+
+actor C7Static082
+{
+	states
+	{
+		Spawn:
+			C452 A -1
+			stop
+	}
+}

@@ -1,11 +1,11 @@
-/* Initial Corridor 7 map translation.
+/* Corridor 7 map translation.
  * Confirmed: the 48 ordinary wall pairs begin at GFXTILES page 160.
  * Unknown special tiles use pages 160/161 as visible, collision-safe
- * placeholders. Tile 254/page 253 is verified against the level 1 start. */
+ * placeholders. */
 
 tiles
 {
-	// Corridor 7 infers the axis for these three door colors from the map
+	// Corridor 7 infers the axis for these four door colors from the map
 	// topology. autoorient below also narrows each trigger to its usable sides.
 	trigger 251
 	{
@@ -32,6 +32,15 @@ tiles
 		arg1 = 16;
 		arg2 = 300;
 		arg3 = 2;
+		playeruse = true;
+		monsteruse = true;
+		repeatable = true;
+	}
+	trigger 254
+	{
+		action = "Door_Open";
+		arg1 = 16;
+		arg2 = 300;
 		playeruse = true;
 		monsteruse = true;
 		repeatable = true;
@@ -1817,6 +1826,7 @@ tiles
 		texturesouth = "C7W0253";
 		textureeast = "C7W0253";
 		texturewest = "C7W0253";
+		autoorient = true;
 	}
 	tile 255
 	{
@@ -1867,8 +1877,8 @@ things
 	// Four consecutive values encode the player's starting direction.
 	{19, $Player1Start, 4, 0, 0}
 
-	// Released Corridor 7 static objects directly select GFXTILES sprite
-	// pages 0..52. Keep these as distinct classes so collision and pickup
+	// Released Corridor 7 static objects index the executable's 83-row table.
+	// Keep these as distinct classes so collision and pickup
 	// behavior can be specialized without changing the map-number contract.
 	{23, C7Static000, 0, 0, 0}
 	{24, C7Static001, 0, 0, 0}
@@ -1923,4 +1933,34 @@ things
 	{73, C7Static050, 0, 0, 0}
 	{74, C7Static051, 0, 0, 0}
 	{75, C7Static052, 0, 0, 0}
+	{76, C7Static053, 0, 0, 0}
+	{77, C7Static054, 0, 0, 0}
+	{78, C7Static055, 0, 0, 0}
+	{79, C7Static056, 0, 0, 0}
+	{80, C7Static057, 0, 0, 0}
+	{81, C7Static058, 0, 0, 0}
+	{82, C7Static059, 0, 0, 0}
+	{83, C7Static060, 0, 0, 0}
+	{84, C7Static061, 0, 0, 0}
+	{85, C7Static062, 0, 0, 0}
+	{86, C7Static063, 0, 0, 0}
+	{87, C7Static064, 0, 0, 0}
+	{88, C7Static065, 0, 0, 0}
+	{89, C7Static066, 0, 0, 0}
+	{90, C7Static067, 0, 0, 0}
+	{91, C7Static068, 0, 0, 0}
+	{92, C7Static069, 0, 0, 0}
+	{93, C7Static070, 0, 0, 0}
+	{94, C7Static071, 0, 0, 0}
+	{95, C7Static072, 0, 0, 0}
+	{96, C7Static073, 0, 0, 0}
+	{97, C7Static074, 0, 0, 0}
+	{98, C7Static075, 0, 0, 0}
+	{99, C7Static076, 0, 0, 0}
+	{100, C7Static077, 0, 0, 0}
+	{101, C7Static078, 0, 0, 0}
+	{102, C7Static079, 0, 0, 0}
+	{103, C7Static080, 0, 0, 0}
+	{104, C7Static081, 0, 0, 0}
+	{105, C7Static082, 0, 0, 0}
 }

@@ -80,10 +80,10 @@ Lock 101 Blake
 // access requirements; the green card remains available for scripted gates.
 Lock 1 Corridor7
 {
-	C7Static003
+	C7Static002
 }
 
 Lock 2 Corridor7
 {
-	C7Static002
+	C7Static001
 }

@@ -31,7 +31,7 @@ external palette is read at runtime and is never embedded in ECWolf.
 ## Current limitations
 
 Map loading, the ordinary wall set, the gameplay palette, player spawn,
-movement, the complete 23–75 static-object sprite table, topology-oriented
+movement, the complete 23–105 static-object sprite table, topology-oriented
 yellow doors, and red/blue access-card doors work. Special/masked walls still
 use safe fallbacks except for the verified level-1 “A” wall appearance. Most
 static pickup effects, enemies, exits, weapons, Corridor 7’s HUD/menus, sound

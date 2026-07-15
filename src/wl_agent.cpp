@@ -334,6 +334,22 @@ void player_t::TakeDamage (int points, AActor *attacker)
 	if (godmode != 2 && GetPlayerNum() == ConsolePlayer)
 		StartDamageFlash (points);
 
+	// Bonus floors are point runs, not lives. When the player's health expires,
+	// the DOS game awards the run and advances to the next campaign floor. End
+	// the level while the travelling pawn is still alive so score, weapons,
+	// access cards, and bonus pickups survive the transition.
+	if (health<=0 && IWad::CheckGameFilter("Corridor7") && levelInfo->BonusLevel)
+	{
+		health = mo->health = mo->SpawnHealth();
+		killerobj = NULL;
+		playstate = ex_completed;
+		if (points > 0)
+			PlaySoundLocActor("player/pain", mo);
+		StatusBar->UpdateFace(points);
+		StatusBar->DrawStatusBar();
+		return;
+	}
+
 	if (health<=0)
 	{
 		mo->target = attacker;

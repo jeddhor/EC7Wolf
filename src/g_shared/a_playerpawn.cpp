@@ -37,7 +37,6 @@
 #include "c_cvars.h"
 #include "g_mapinfo.h"
 #include "g_shared/a_keys.h"
-#include "id_ca.h"
 #include "thingdef/thingdef.h"
 #include "wl_agent.h"
 #include "wl_game.h"
@@ -144,11 +143,7 @@ void APlayerPawn::DeathTick()
 			if(Net::InitVars.mode == Net::MODE_SinglePlayer)
 			{
 				player->state = player_t::PST_ENTER;
-				// Corridor 7 bonus floors award the run and continue to the next
-				// campaign floor when health expires; the player cannot lose a life
-				// or restart the bonus map (README.1ST, "Bonus Level" rules).
-				playstate = IWad::CheckGameFilter("Corridor7") && levelInfo->BonusLevel ?
-					ex_completed : ex_died;
+				playstate = ex_died;
 			}
 			else
 			{

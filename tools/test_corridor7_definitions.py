@@ -18,6 +18,7 @@ WL_STATE = (ROOT / "src/wl_state.cpp").read_text()
 GAMEMAP_PLANES = (ROOT / "src/gamemap_planes.cpp").read_text()
 MAPINFO = (ROOT / "wadsrc/static/mapinfo/corridor7.txt").read_text()
 PLAYERPAWN = (ROOT / "src/g_shared/a_playerpawn.cpp").read_text()
+WL_AGENT = (ROOT / "src/wl_agent.cpp").read_text()
 
 
 def require(pattern: str, text: str, description: str) -> None:
@@ -72,7 +73,8 @@ require(r'trigger\s+106\s*\{.*?action\s*=\s*"Door_Open".*?arg2\s*=\s*-1', XLAT, 
 require(r'oldplane\[i\]\s*==\s*107.*?sideSolid\[0\].*?false', GAMEMAP_PLANES, "marker-107 walls start permanently open")
 require(r'templateTrigger\.arg\[4\]\s*=\s*horizontal', GAMEMAP_PLANES, "door orientation must not overwrite lock IDs")
 require(r'!levelInfo->BonusLevel\s*&&\s*gamestate\.killtotal', LNSPEC, "bonus elevators bypass campaign clearance")
-require(r'levelInfo->BonusLevel\s*\?.*?ex_completed\s*:\s*ex_died', PLAYERPAWN, "bonus-floor death advances instead of restarting")
+require(r'health<=0\s*&&\s*IWad::CheckGameFilter\("Corridor7"\)\s*&&\s*levelInfo->BonusLevel', WL_AGENT, "bonus health expiration is intercepted before death")
+require(r'health\s*=\s*mo->health\s*=\s*mo->SpawnHealth\(\).*?playstate\s*=\s*ex_completed', WL_AGENT, "bonus completion revives and advances the travelling pawn")
 if len(re.findall(r'bonuslevel\s*=\s*true', MAPINFO, re.IGNORECASE)) != 6:
     raise SystemExit("Corridor 7 definition check failed: all six bonus maps must use bonus-level rules")
 require(r"29,\s*18,\s*20,\s*9,\s*2,\s*14,\s*7,\s*8", WL_PLAY, "released music selector table")

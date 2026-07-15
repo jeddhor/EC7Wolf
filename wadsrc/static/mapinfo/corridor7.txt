@@ -51,6 +51,7 @@ skill hard
 defaultmap
 {
 	music = "C7MUS00"
+	victorynext = "EndTitle"
 	bordertexture = "#000000"
 	defaultfloor = "#383838"
 	defaultceiling = "#202020"
@@ -73,6 +74,7 @@ cluster 1
 map "MAP01" "Corridor 7 Level 1"
 {
 	next = "MAP02"
+	secretnext = "MAP41"
 	floornumber = 1
 	cluster = 1
 }
@@ -101,6 +103,7 @@ map "MAP04" "Corridor 7 Level 4"
 map "MAP05" "Corridor 7 Level 5"
 {
 	next = "MAP06"
+	secretnext = "MAP42"
 	floornumber = 5
 	cluster = 1
 }
@@ -136,6 +139,7 @@ map "MAP09" "Corridor 7 Level 9"
 map "MAP10" "Corridor 7 Level 10"
 {
 	next = "MAP11"
+	secretnext = "MAP43"
 	floornumber = 10
 	cluster = 1
 }
@@ -171,6 +175,7 @@ map "MAP14" "Corridor 7 Level 14"
 map "MAP15" "Corridor 7 Level 15"
 {
 	next = "MAP16"
+	secretnext = "MAP44"
 	floornumber = 15
 	cluster = 1
 }
@@ -206,6 +211,7 @@ map "MAP19" "Corridor 7 Level 19"
 map "MAP20" "Corridor 7 Level 20"
 {
 	next = "MAP21"
+	secretnext = "MAP45"
 	floornumber = 20
 	cluster = 1
 }
@@ -241,6 +247,7 @@ map "MAP24" "Corridor 7 Level 24"
 map "MAP25" "Corridor 7 Level 25"
 {
 	next = "MAP26"
+	secretnext = "MAP46"
 	floornumber = 25
 	cluster = 1
 }
@@ -352,43 +359,43 @@ map "MAP40" "Corridor 7 Level 40"
 
 map "MAP41" "Corridor 7 Secret 31"
 {
-	next = "MAP01"
-	floornumber = 41
+	next = "MAP02"
+	floornumber = 31
 	cluster = 1
 }
 
 map "MAP42" "Corridor 7 Secret 32"
 {
-	next = "MAP01"
-	floornumber = 42
+	next = "MAP06"
+	floornumber = 32
 	cluster = 1
 }
 
 map "MAP43" "Corridor 7 Secret 33"
 {
-	next = "MAP01"
-	floornumber = 43
+	next = "MAP11"
+	floornumber = 33
 	cluster = 1
 }
 
 map "MAP44" "Corridor 7 Secret 34"
 {
-	next = "MAP01"
-	floornumber = 44
+	next = "MAP16"
+	floornumber = 34
 	cluster = 1
 }
 
 map "MAP45" "Corridor 7 Secret 35"
 {
-	next = "MAP01"
-	floornumber = 45
+	next = "MAP21"
+	floornumber = 35
 	cluster = 1
 }
 
 map "MAP46" "Corridor 7 Secret 36"
 {
-	next = "MAP01"
-	floornumber = 46
+	next = "MAP26"
+	floornumber = 36
 	cluster = 1
 }
 

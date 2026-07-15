@@ -45,7 +45,7 @@ Append an output directory and `--all` to load-check every map in the archive.
 - Ordinary and special wall pages, Corridor 7 lighting defaults, solid and
   passable masked-wall behavior, four door types with automatic orientation,
   red/blue access cards, push walls, paired intralevel transporters, floor
-  exits, ordinary elevators, and the level-30/40 exit vortex.
+  exits, ordinary and marker-99 bonus elevators, and the level-30/40 exit vortex.
 - The executable's complete plane-1 dispatch table, including static objects,
   pickups, difficulty/direction actor variants, bosses, ignored markers, and
   the original sprite families.
@@ -54,8 +54,8 @@ Append an output directory and `--all` to load-check every map in the archive.
   native first-person weapon scaling.
 - The original status bar art and number glyphs, aliens-remaining counter,
   episode and four rank choices, the documented 10/75/100/100-percent alien
-  objective gate, MAP01-MAP40 progression, six secret maps, intermission flow,
-  and ECWolf save/load.
+  objective gate, MAP01-MAP40 progression and victory, six routed secret
+  maps, intermission flow, and ECWolf save/load.
 
 ## Known deviations
 

@@ -2061,6 +2061,8 @@ things
 	ignore 96;
 	ignore 97;
 	ignore 98;
+	// Value 99 has no standalone object action. On a tile-63 cell the native
+	// map setup promotes that wall's elevator trigger to a bonus exit.
 	ignore 99;
 	ignore 100;
 	ignore 101;

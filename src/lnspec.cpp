@@ -961,7 +961,12 @@ FUNC(Exit_Normal)
 		control[activator->player->GetPlayerNum()].buttonheld[bt_use] = true;
 	}
 
-	playstate = ex_completed;
+	if(IWad::CheckGameFilter("Corridor7") && args[0] == 0 && strcmp(gamestate.mapname, "MAP40") == 0)
+		playstate = ex_victorious;
+	else if(IWad::CheckGameFilter("Corridor7") && args[0] == 2)
+		playstate = ex_secretlevel;
+	else
+		playstate = ex_completed;
 	SD_WaitSoundDone();
 	return 1;
 }

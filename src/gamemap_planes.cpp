@@ -1353,6 +1353,22 @@ void GameMap::ReadPlanesData()
 					uint32_t flags = 0;
 					uint32_t tsFlags = 0;
 
+					// Corridor 7 marks a bonus elevator by placing the otherwise
+					// inert object value 99 on its tile-63 wall cell. Promote that
+					// cell's normal elevator trigger to the secret-exit variant.
+					if(oldplane[i] == 99)
+					{
+						for(int j = triggers.Size()-1;j >= 0;--j)
+						{
+							if(triggers[j].x == i%header.width && triggers[j].y == i/header.width &&
+								triggers[j].action == Specials::Exit_Normal && triggers[j].arg[0] == 1)
+							{
+								triggers[j].arg[0] = 2;
+								break;
+							}
+						}
+					}
+
 					if(xlat.IsIgnoredThing(oldplane[i]))
 						continue;
 					if((tsFlags = xlat.TranslateThing(thing, trigger, flags, oldplane[i])) == 0)

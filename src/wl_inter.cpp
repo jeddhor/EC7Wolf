@@ -555,6 +555,37 @@ static void DetermineIntermissionMode()
 	}
 }
 
+static void InterDoCorridor7()
+{
+	const uint32_t shots = players[ConsolePlayer].levelShotsFired;
+	const uint32_t hits = MIN(players[ConsolePlayer].levelShotsHit, shots);
+	const uint32_t accuracy = shots ? (hits * 100) / shots : 0;
+	// Recovered from the released hit/miss tally: each started block of one
+	// hundred shots multiplies the accuracy award by another ten points.
+	InterState.bonus = accuracy * (shots / 100 + 1) * 10;
+	InterGiveBonus(InterState.bonus);
+
+	VWB_DrawFill(TexMan(levelInfo->GetBorderTexture()), 0, 0, screenWidth, screenHeight);
+	Write(12, 2, levelInfo->BonusLevel ? "BONUS LEVEL HIT/MISS RATIO" : "MISSION HIT/MISS RATIO");
+
+	FString line;
+	line.Format("FLOOR %s SECURED", levelInfo->FloorNumber.GetChars());
+	Write(14, 5, line);
+	line.Format("Shots fired: %u", shots);
+	Write(11, 8, line);
+	line.Format("Shots hit:   %u", hits);
+	Write(11, 10, line);
+	line.Format("Accuracy = %u%%", accuracy);
+	Write(11, 12, line);
+	line.Format("Bonus = %u points", InterState.bonus);
+	Write(11, 15, line);
+	line.Format("Score = %d points", players[ConsolePlayer].score);
+	Write(11, 17, line);
+
+	VW_UpdateScreen();
+	VW_FadeIn();
+}
+
 /*
 ==================
 =
@@ -590,7 +621,8 @@ void LevelCompleted (void)
 	if ((unsigned)gamestate.TimeCount < levelInfo->Par * TICRATE)
 		InterState.timeleft = (int) (levelInfo->Par - gamestate.TimeCount/TICRATE);
 
-	if(levelInfo->LevelBonus == -1 || levelInfo->ForceTally)
+	if((levelInfo->LevelBonus == -1 || levelInfo->ForceTally) &&
+		!(IWad::CheckGameFilter("Corridor7") && levelInfo->BonusLevel))
 	{
 		//
 		// SAVE RATIO INFORMATION FOR ENDGAME
@@ -614,6 +646,13 @@ void LevelCompleted (void)
 
 	IN_ClearKeysDown ();
 	IN_StartAck (ACK_Any);
+
+	if(IWad::CheckGameFilter("Corridor7"))
+	{
+		InterDoCorridor7();
+		InterWaitForAck();
+		return;
+	}
 
 	BJ_Breathe(true);
 
@@ -657,6 +696,29 @@ void Victory (bool fromIntermission)
 
 	StartCPMusic (gameinfo.VictoryMusic);
 	VWB_DrawFill(TexMan(levelInfo->GetBorderTexture()), 0, 0, screenWidth, screenHeight);
+	if(IWad::CheckGameFilter("Corridor7"))
+	{
+		int alienRatio = LevelRatios.numLevels ? LevelRatios.killratio / LevelRatios.numLevels : 100;
+		int secretRatio = LevelRatios.numLevels ? LevelRatios.secretsratio / LevelRatios.numLevels : 0;
+		Write(12, 3, "CONGRATULATIONS!");
+		Write(7, 6, "You have destroyed the vortex");
+		FString line;
+		line.Format("Total floors secured  %u", LevelRatios.numLevels);
+		Write(8, 10, line);
+		line.Format("Alien kill ratio      %d%%", alienRatio);
+		Write(8, 12, line);
+		line.Format("Secret room ratio     %d%%", secretRatio);
+		Write(8, 14, line);
+		line.Format("Total score           %d", players[ConsolePlayer].score);
+		Write(8, 16, line);
+		Write(8, 18, alienRatio >= 100 ? "Overall rating        SECURED" : "Overall rating        SURVIVOR");
+		VW_UpdateScreen();
+		VW_FadeIn();
+		IN_Ack(ACK_Any);
+		EndText(levelInfo->Cluster);
+		VW_FadeOut();
+		return;
+	}
 	if(!fromIntermission)
 		DrawPlayScreen(true);
 
@@ -843,6 +905,33 @@ void DrawHighScores (void)
 	FFont *font = V_GetFont(gameinfo.HighScoresFont);
 
 	ClearMScreen ();
+	if(IWad::CheckGameFilter("Corridor7"))
+	{
+		PrintX = 112;
+		PrintY = 24;
+		US_Print(font, "HIGH SCORES", CR_WHITE);
+		PrintX = 24;
+		PrintY = 56;
+		US_Print(font, "NAME", CR_WHITE);
+		PrintX = 176;
+		US_Print(font, "FLOOR", CR_WHITE);
+		PrintX = 240;
+		US_Print(font, "SCORE", CR_WHITE);
+		for(i = 0, s = Scores; i < MaxScores; ++i, ++s)
+		{
+			PrintY = 76 + ((font->GetHeight() + 3) * i);
+			PrintX = 24;
+			US_Print(font, s->name, gameinfo.FontColors[GameInfo::HIGHSCORES]);
+			PrintX = 184;
+			US_Print(font, s->completed.GetChars(), gameinfo.FontColors[GameInfo::HIGHSCORES]);
+			buffer.Format("%d", s->score);
+			VW_MeasurePropString(font, buffer, w, h);
+			PrintX = 296 - w;
+			US_Print(font, buffer, gameinfo.FontColors[GameInfo::HIGHSCORES]);
+		}
+		VW_UpdateScreen();
+		return;
+	}
 
 	FTexture *highscores = TexMan("HGHSCORE");
 	DrawStripes (10);

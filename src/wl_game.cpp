@@ -305,7 +305,10 @@ void SetupGameLevel (void)
 			= gamestate.killcount
 			= gamestate.treasurecount = 0;
 		for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+		{
 			players[i].killerobj = NULL;
+			players[i].levelShotsFired = players[i].levelShotsHit = 0;
+		}
 	}
 
 	gamestate.faceframe.SetInvalid();

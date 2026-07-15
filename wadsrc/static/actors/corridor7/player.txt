@@ -359,10 +359,20 @@ actor C7AmmoPack : C7Bullets
 	states { Spawn: C057 A -1 stop }
 }
 
-actor C7ChargePack : C7Energy
+actor C7ChargePack : CustomInventory
 {
-	inventory.amount 100
-	states { Spawn: C059 A -1 stop }
+	inventory.pickupsound "misc/ammo_pkup"
+	+INVENTORY.ALWAYSPICKUP
+	states
+	{
+		Spawn:
+			C059 A -1
+			stop
+		Pickup:
+			TNT1 A 0 A_GiveInventory("C7Energy", 100)
+			TNT1 A 0 A_GiveInventory("C7EnergyCapacity", 100)
+			stop
+	}
 }
 
 actor C7MinePack : C7Mines

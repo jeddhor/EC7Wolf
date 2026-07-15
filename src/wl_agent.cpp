@@ -706,7 +706,7 @@ void APlayerPawn::Cmd_Use()
 =============================================================================
 */
 
-player_t::player_t() : FOV(90), DesiredFOV(90), bob(0), attackheld(false)
+player_t::player_t() : levelShotsFired(0), levelShotsHit(0), FOV(90), DesiredFOV(90), bob(0), attackheld(false)
 {
 }
 
@@ -1031,6 +1031,13 @@ void player_t::Serialize(FArchive &arc)
 	else
 		RespawnEligible = -1;
 
+	// Per-floor Corridor 7 hit/miss statistics. The date gate preserves save
+	// compatibility with builds made before these fields were added.
+	if(GameSave::SaveVersion >= 1784147000ULL)
+		arc << levelShotsFired << levelShotsHit;
+	else
+		levelShotsFired = levelShotsHit = 0;
+
 	if(arc.IsLoading())
 	{
 		mo->SetupWeaponSlots();
@@ -1228,6 +1235,8 @@ ACTION_FUNCTION(A_CustomPunch)
 	ACTION_PARAM_FIXED(lifesteal, 5);
 
 	player_t *player = self->player;
+	if(player && IWad::CheckGameFilter("Corridor7"))
+		++player->levelShotsFired;
 
 	if(flags & CPF_ALWAYSPLAYSOUND)
 		PlaySoundLocActor(player->ReadyWeapon->attacksound, self, self == players[ConsolePlayer].camera ? SD_WEAPONS : SD_GENERIC);
@@ -1269,6 +1278,8 @@ ACTION_FUNCTION(A_CustomPunch)
 		damage *= pr_cwpunch()%8 + 1;
 
 	// hit something
+	if(IWad::CheckGameFilter("Corridor7"))
+		++player->levelShotsHit;
 	if(!(flags & CPF_ALWAYSPLAYSOUND))
 		PlaySoundLocActor(player->ReadyWeapon->attacksound, self, self == players[ConsolePlayer].camera ? SD_WEAPONS : SD_GENERIC);
 	DamageActor(closest, self, damage);
@@ -1381,6 +1392,7 @@ ACTION_FUNCTION(A_C7GunAttack)
 
 	if(!player || !player->ReadyWeapon->DepleteAmmo())
 		return false;
+	++player->levelShotsFired;
 	if(weapon == 4)
 		ConsumeC7AlienCharge(self, 5, 1);
 	else if(weapon == 6)
@@ -1411,6 +1423,8 @@ ACTION_FUNCTION(A_C7GunAttack)
 				hit = true;
 			}
 		}
+		if(hit)
+			++player->levelShotsHit;
 		return hit;
 	}
 
@@ -1447,6 +1461,8 @@ ACTION_FUNCTION(A_C7GunAttack)
 		DamageActor(closest, self, damage);
 		hit = true;
 	}
+	if(hit)
+		++player->levelShotsHit;
 	return hit;
 }
 
@@ -1495,7 +1511,10 @@ ACTION_FUNCTION(A_FireCustomMissile)
 	if(useammo && !self->player->ReadyWeapon->DepleteAmmo())
 		return false;
 	if(useammo && IWad::CheckGameFilter("Corridor7") && missiletype.CompareNoCase("C7PlasmaBolt") == 0)
+	{
 		ConsumeC7AlienCharge(self, 33, 4);
+		++self->player->levelShotsFired;
+	}
 
 	if(!(self->player->ReadyWeapon->weaponFlags & WF_NOALERT))
 		madenoise = true;

@@ -599,7 +599,9 @@ void WolfStatusBar::DrawStatusBar()
 			AInventory *mines = pawn->FindInventory(ClassDef::FindClass("C7Mines"));
 			AInventory *visor = pawn->FindInventory(ClassDef::FindClass("C7VisorCharge"));
 
-			DrawC7Gauge(96, 172, MAX(0, players[ConsolePlayer].health), 100, 160, 190, 70);
+			// Adrenaline can raise Corridor 7 health to 400; the released meter
+			// represents that complete boosted range rather than clipping at 100.
+			DrawC7Gauge(96, 172, MAX(0, players[ConsolePlayer].health), 400, 160, 190, 70);
 			DrawC7Gauge(96, 188, armor ? armor->amount : 0, 200, 145, 170, 160);
 			DrawC7Gauge(199, 172, ammo, ammoMaximum, 190, 200, 70);
 			DrawC7Gauge(199, 188, mines ? mines->amount : 0, 25, 170, 175, 145);

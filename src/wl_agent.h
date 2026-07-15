@@ -110,6 +110,7 @@ extern class player_t
 		TUniquePtr<FFader> ScreenFader;
 
 		int32_t		oldscore,score,nextextra;
+		uint32_t	levelShotsFired, levelShotsHit;
 		int32_t		health;
 		int32_t		frags;
 		short		lives;

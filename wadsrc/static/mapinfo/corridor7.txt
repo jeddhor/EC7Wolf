@@ -11,6 +11,12 @@ gameinfo
 	titletime = 6
 	titlemusic = "C7MUS00"
 	menumusic = "C7MUS00"
+	intermissionmusic = "C7MUS00"
+	victorymusic = "C7MUS00"
+	scoresmusic = "C7MUS00"
+	highscoresfont = "SmallFont"
+	highscoresfontcolor = "White"
+	trackhighscores = true
 	menufade = "00 00 00"
 	menucolors = "00 50 70", "00 A0 D0", "00 30 50", "00 10 18", "00 80 A0", "00 00 00"
 	menuwindowcolors = "00 30 48", "00 C0 E0", "00 08 10", "80 70 00", "FF E0 00", "20 18 00"
@@ -445,6 +451,7 @@ map "MAP40" "Corridor 7 Level 40"
 {
 	next = "MAP01"
 	floornumber = 40
+	forcetally = true
 	cluster = 1
 }
 

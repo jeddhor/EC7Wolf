@@ -7,6 +7,7 @@
 #include "m_random.h"
 #include "wl_act.h"
 #include "wl_def.h"
+#include "wl_iwad.h"
 #include "wl_menu.h"
 #include "id_ca.h"
 #include "id_sd.h"
@@ -187,6 +188,12 @@ bool ProjectileTryMove (AActor *ob)
 static FRandom pr_explodemissile("ExplodeMissile");
 void T_ExplodeProjectile(AActor *self, AActor *target)
 {
+	if(target && (target->flags & FL_SHOOTABLE) && self->target && self->target->player &&
+		IWad::CheckGameFilter("Corridor7") &&
+		self->IsA(ClassDef::FindClass("C7PlasmaBolt")))
+	{
+		++self->target->player->levelShotsHit;
+	}
 	PlaySoundLocActor(self->deathsound, self);
 
 	const Frame *deathstate = NULL;

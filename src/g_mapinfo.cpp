@@ -273,7 +273,7 @@ private:
 static LevelInfo defaultMap;
 static TArray<LevelInfo> levelInfos;
 
-LevelInfo::LevelInfo() : ResetHealth(false), ResetInventory(false),
+LevelInfo::LevelInfo() : ResetHealth(false), ResetInventory(false), BonusLevel(false),
 	UseMapInfoName(false)
 {
 	MapName[0] = 0;
@@ -548,6 +548,8 @@ protected:
 			mapInfo.ResetHealth = true;
 		else if(key.CompareNoCase("ResetInventory") == 0)
 			mapInfo.ResetInventory = true;
+		else if(key.CompareNoCase("BonusLevel") == 0)
+			ParseBoolAssignment(mapInfo.BonusLevel);
 		else if(key.CompareNoCase("SecretDeathSounds") == 0)
 			ParseBoolAssignment(mapInfo.SecretDeathSounds);
 		else if(key.CompareNoCase("SpawnWithWeaponRaised") == 0)

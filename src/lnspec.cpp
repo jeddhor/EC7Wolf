@@ -110,6 +110,30 @@ FUNC(NOP)
 	return 0;
 }
 
+// Corridor 7's object-plane values 98, 101, and 102 mark walls that
+// disintegrate when used. Preserve the neighboring area connectivity when the
+// wall cell becomes floor so actors, sound, and saves all see the opened route.
+FUNC(Wall_Remove)
+{
+	if(!spot || !spot->tile)
+		return 0;
+
+	const MapZone *zone = NULL;
+	for(unsigned int side = 0;side < 4;++side)
+	{
+		MapSpot adjacent = spot->GetAdjacent(static_cast<MapTile::Side>(side));
+		if(!adjacent || !adjacent->zone)
+			continue;
+		if(zone == NULL)
+			zone = adjacent->zone;
+		else if(adjacent->zone != zone)
+			map->LinkZones(zone, adjacent->zone, true);
+	}
+	spot->zone = zone;
+	spot->SetTile(NULL);
+	return 1;
+}
+
 class EVDoor : public Thinker
 {
 	DECLARE_CLASS(EVDoor, Thinker)
@@ -944,7 +968,7 @@ FUNC(Exit_Normal)
 	// Clearance percentages apply to the ordinary elevator only. The CD
 	// campaign's level-30 and level-40 vortexes are explicitly reachable
 	// without killing Solrac or Tebazile.
-	if(IWad::CheckGameFilter("Corridor7") && args[0] == 1 && gamestate.killtotal > 0)
+	if(IWad::CheckGameFilter("Corridor7") && args[0] == 1 && !levelInfo->BonusLevel && gamestate.killtotal > 0)
 	{
 		static const unsigned int clearance[4] = { 10, 75, 100, 100 };
 		const unsigned int skill = MIN<unsigned int>(gamestate.difficulty->SpawnFilter, 3);

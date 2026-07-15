@@ -45,6 +45,7 @@
 #include "tmemory.h"
 #include "w_wad.h"
 #include "wl_game.h"
+#include "wl_iwad.h"
 #include "wl_shade.h"
 
 static const char* const FeatureFlagNames[] = {
@@ -1116,7 +1117,10 @@ void GameMap::ReadPlanesData()
 						if(mapPlane.map[i].tile && mapPlane.map[i].tile->autoOrient)
 						{
 							const bool horizontal = mapPlane.map[i].tile->offsetHorizontal;
-							templateTrigger.arg[3] = horizontal;
+							// Door_Open arg 3 is the lock ID; orientation belongs in
+							// arg 4. Keeping these separate is essential for Corridor
+							// 7's red and blue access-card doors.
+							templateTrigger.arg[4] = horizontal;
 							templateTrigger.activate[0] = templateTrigger.activate[1] =
 								templateTrigger.activate[2] = templateTrigger.activate[3] = false;
 							if(horizontal)
@@ -1276,6 +1280,14 @@ void GameMap::ReadPlanesData()
 				{
 					oldplane[i] = LittleShort(oldplane[i]);
 
+					// Marker 107 is the native sliding-wall setup's permanently
+					// open state. Keep its wall art visible but allow actors through;
+					// markers 98/101/102 are separately activated disintegrating
+					// walls and marker 106 is a manually toggled sliding wall.
+					if(IWad::CheckGameFilter("Corridor7") && oldplane[i] == 107 && mapPlane.map[i].tile)
+						mapPlane.map[i].sideSolid[0] = mapPlane.map[i].sideSolid[1] =
+							mapPlane.map[i].sideSolid[2] = mapPlane.map[i].sideSolid[3] = false;
+
 					if(oldplane[i] == 0)
 					{
 						// In case of malformed maps we need to always check this.
@@ -1380,6 +1392,21 @@ void GameMap::ReadPlanesData()
 							trigger.x = i%header.width;
 							trigger.y = i/header.width;
 							trigger.z = 0;
+
+							// Corridor 7 sliding-wall marker 106 uses the same in-place
+							// slide representation as a door, but its axis is inferred from
+							// surrounding floor just like the game's color-only doors.
+							if(IWad::CheckGameFilter("Corridor7") && oldplane[i] == 106 &&
+								trigger.action == Specials::Door_Open)
+							{
+								const unsigned int x = i%header.width;
+								const unsigned int y = i/header.width;
+								const bool openNorth = y > 0 && !mapPlane.map[i-header.width].tile;
+								const bool openSouth = y+1 < header.height && !mapPlane.map[i+header.width].tile;
+								const bool openWest = x > 0 && !mapPlane.map[i-1].tile;
+								const bool openEast = x+1 < header.width && !mapPlane.map[i+1].tile;
+								trigger.arg[4] = (openNorth + openSouth) > (openWest + openEast);
+							}
 
 							triggers.Push(trigger);
 						}

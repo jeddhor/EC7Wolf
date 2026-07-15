@@ -1,7 +1,7 @@
 /* Corridor 7 map translation.
  * The 48 ordinary wall pairs begin at GFXTILES page 160. Extended wall IDs
  * 49..250 select the page bearing the same number; 105 and 107 are the two
- * released traversable masked-wall types. */
+ * released sight-transparent screen-wall types. */
 
 tiles
 {
@@ -1946,22 +1946,37 @@ tiles
 
 things
 {
-	// Both released sliding-wall markers activate the wall in their cell.
+	// Marker 106 is a manually toggled sliding wall. A negative open delay
+	// makes Door_Open stay open; using it again closes it, matching the native
+	// sliding-wall state machine. Marker 107 is initialized open by the loader.
 	trigger 106
 	{
-		action = "Pushwall_Move";
-		arg1 = 16;
-		arg2 = 2;
-		arg3 = 2;
+		action = "Door_Open";
+		arg1 = 8;
+		arg2 = -1;
+		playeruse = true;
+		repeatable = true;
+	}
+	ignore 107;
+
+	// These internal wall markers route through Corridor 7's disintegration
+	// routine. Value 98 also contributes to the native secret-room total.
+	trigger 98
+	{
+		action = "Wall_Remove";
+		playeruse = true;
+		repeatable = false;
+		secret = true;
+	}
+	trigger 101
+	{
+		action = "Wall_Remove";
 		playeruse = true;
 		repeatable = false;
 	}
-	trigger 107
+	trigger 102
 	{
-		action = "Pushwall_Move";
-		arg1 = 16;
-		arg2 = 2;
-		arg3 = 2;
+		action = "Wall_Remove";
 		playeruse = true;
 		repeatable = false;
 	}
@@ -2054,13 +2069,12 @@ things
 	ignore 95;
 	ignore 96;
 	ignore 97;
-	ignore 98;
+	// 98 is declared as a disintegrating secret wall above.
 	// Value 99 has no standalone object action. On a tile-63 cell the native
 	// map setup promotes that wall's elevator trigger to a bonus exit.
 	ignore 99;
 	ignore 100;
-	ignore 101;
-	ignore 102;
+	// 101 and 102 are declared as disintegrating walls above.
 	ignore 103;
 	ignore 104;
 	ignore 105;

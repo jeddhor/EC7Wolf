@@ -196,6 +196,7 @@ public:
 	bool			ForceTally;
 	bool			ResetHealth;
 	bool			ResetInventory;
+	bool			BonusLevel;
 
 	TArray<const ClassDef *>	EnsureInventory;
 

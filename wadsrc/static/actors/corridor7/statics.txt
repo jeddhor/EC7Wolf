@@ -14,6 +14,7 @@ actor C7Static000
 
 actor C7Static001 : Key
 {
+	inventory.interhubamount 1
 	states
 	{
 		Spawn:
@@ -24,6 +25,7 @@ actor C7Static001 : Key
 
 actor C7Static002 : Key
 {
+	inventory.interhubamount 1
 	states
 	{
 		Spawn:

@@ -450,6 +450,7 @@ map "MAP40" "Corridor 7 Level 40"
 
 map "MAP41" "Corridor 7 Secret 31"
 {
+	bonuslevel = true
 	next = "MAP02"
 	floornumber = 31
 	cluster = 1
@@ -457,6 +458,7 @@ map "MAP41" "Corridor 7 Secret 31"
 
 map "MAP42" "Corridor 7 Secret 32"
 {
+	bonuslevel = true
 	next = "MAP06"
 	floornumber = 32
 	cluster = 1
@@ -464,6 +466,7 @@ map "MAP42" "Corridor 7 Secret 32"
 
 map "MAP43" "Corridor 7 Secret 33"
 {
+	bonuslevel = true
 	next = "MAP11"
 	floornumber = 33
 	cluster = 1
@@ -471,6 +474,7 @@ map "MAP43" "Corridor 7 Secret 33"
 
 map "MAP44" "Corridor 7 Secret 34"
 {
+	bonuslevel = true
 	next = "MAP16"
 	floornumber = 34
 	cluster = 1
@@ -478,6 +482,7 @@ map "MAP44" "Corridor 7 Secret 34"
 
 map "MAP45" "Corridor 7 Secret 35"
 {
+	bonuslevel = true
 	next = "MAP21"
 	floornumber = 35
 	cluster = 1
@@ -485,6 +490,7 @@ map "MAP45" "Corridor 7 Secret 35"
 
 map "MAP46" "Corridor 7 Secret 36"
 {
+	bonuslevel = true
 	next = "MAP26"
 	floornumber = 36
 	cluster = 1

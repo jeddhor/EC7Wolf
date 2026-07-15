@@ -567,6 +567,14 @@ void WolfStatusBar::DrawStatusBar()
 	if(corridor7)
 	{
 		VWB_DrawGraphic(TexMan("STBAR"), 0, 160);
+		const unsigned int clearance[4] = { 10, 75, 100, 100 };
+		const unsigned int skill = MIN<unsigned int>(MAX<unsigned int>(gamestate.difficulty->SpawnFilter, 1) - 1, 3);
+		const unsigned int destroyed = gamestate.killtotal ?
+			(gamestate.killcount * 100) / gamestate.killtotal : 100;
+		const char *objective = destroyed >= clearance[skill] ?
+			"FLOOR SECURED" : "Eliminate Aliens To Secure Floor";
+		screen->DrawText(SmallFont, CR_YELLOW, 4, 4, objective,
+			DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
 
 		FString level;
 		level.Format("%2s", levelInfo->FloorNumber.GetChars());
@@ -579,6 +587,8 @@ void WolfStatusBar::DrawStatusBar()
 			AAmmo *readyAmmo = players[ConsolePlayer].ReadyWeapon->ammo[AWeapon::PrimaryFire];
 			ammo = readyAmmo->amount;
 			ammoMaximum = readyAmmo->maxamount;
+			if(readyAmmo->IsA(ClassDef::FindClass("C7Energy")))
+				ammoMaximum = 100;
 		}
 		LatchNumber(288, 18, 3, MAX(0, gamestate.killtotal-gamestate.killcount), false, true);
 

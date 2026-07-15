@@ -10,6 +10,8 @@ XLAT = (ROOT / "wadsrc/static/xlat/corridor7.txt").read_text()
 PLAYER = (ROOT / "wadsrc/static/actors/corridor7/player.txt").read_text()
 STATICS = (ROOT / "wadsrc/static/actors/corridor7/statics.txt").read_text()
 MONSTERS = (ROOT / "wadsrc/static/actors/corridor7/monsters.txt").read_text()
+WL_PLAY = (ROOT / "src/wl_play.cpp").read_text()
+LNSPEC = (ROOT / "src/lnspec.cpp").read_text()
 
 
 def require(pattern: str, text: str, description: str) -> None:
@@ -48,6 +50,10 @@ require(r'player\.startitem\s+"C7Bayonet"', PLAYER, "Bayonet starting weapon")
 require(r'player\.startitem\s+"C7M16"', PLAYER, "M-16 starting weapon")
 require(r'player\.startitem\s+"C7Bullets",\s*100', PLAYER, "100 starting bullets")
 require(r"actor\s+C7Bullets\s*:\s*Ammo.*?inventory\.maxamount\s+200", PLAYER, "200 bullet maximum")
+require(r"actor\s+C7EnergyCapacity\s*:\s*Ammo.*?inventory\.amount\s+100", PLAYER, "alien energy capacity")
+require(r"ConsumeC7AlienCharge\(self,\s*33,\s*4\)", (ROOT / "src/wl_agent.cpp").read_text(), "plasma 33/4 charge model")
+require(r"clearance\[4\]\s*=\s*\{\s*10,\s*75,\s*100,\s*100\s*\}", LNSPEC, "rank clearance quotas")
+require(r"29,\s*18,\s*20,\s*9,\s*2,\s*14,\s*7,\s*8", WL_PLAY, "released music selector table")
 
 expected_slots = [
     "C7Bayonet",

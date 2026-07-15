@@ -13,6 +13,7 @@
 #include "wl_shade.h"
 #include "language.h"
 #include "lumpremap.h"
+#include "m_random.h"
 #include "thinker.h"
 #include "actor.h"
 #include "textures/textures.h"
@@ -27,6 +28,8 @@
 #include "g_mapinfo.h"
 #include "a_inventory.h"
 #include "am_map.h"
+#include "thingdef/thingdef.h"
+#include "wl_iwad.h"
 
 /*
 =============================================================================
@@ -806,6 +809,30 @@ int StopMusic (void)
 	return SD_MusicOff();
 }
 
+static FString currentLevelMusic;
+static FRandom pr_c7music("Corridor7Music");
+
+static FString SelectLevelMusic()
+{
+	if(!IWad::CheckGameFilter("Corridor7"))
+		return levelInfo->GetMusic(map);
+
+	// Exact 36-entry selector table at 4557:0bd0 in CORR7CD.EXE. Levels
+	// 1-30 index it directly; the released CD code deliberately randomizes
+	// the selection for later and bonus floors.
+	static const byte schedule[36] = {
+		29, 18, 20, 9, 2, 14, 7, 8, 27, 22, 13, 4,
+		31, 25, 15, 5, 12, 33, 24, 6, 20, 27, 28, 26,
+		29, 32, 2, 25, 11, 10, 16, 1, 3, 23, 26, 30
+	};
+	const int floor = atoi(levelInfo->FloorNumber.GetChars());
+	const int selection = floor >= 1 && floor <= 30 ?
+		schedule[floor - 1] : schedule[pr_c7music(36)];
+	FString music;
+	music.Format("C7MUS%02d", selection);
+	return music;
+}
+
 //==========================================================================
 
 
@@ -820,14 +847,15 @@ int StopMusic (void)
 void StartMusic ()
 {
 	SD_MusicOff ();
-	SD_StartMusic(levelInfo->GetMusic(map));
+	currentLevelMusic = SelectLevelMusic();
+	SD_StartMusic(currentLevelMusic);
 }
 
 void ContinueMusic (int offs)
 {
 	SD_MusicOff ();
 	if(!(Paused & 1))
-		SD_ContinueMusic(levelInfo->GetMusic(map), offs);
+		SD_ContinueMusic(currentLevelMusic.IsEmpty() ? levelInfo->GetMusic(map) : currentLevelMusic, offs);
 }
 
 /*
@@ -902,6 +930,13 @@ void StartDamageFlash (int damage)
 void UpdatePaletteShifts (void)
 {
 	int red, white;
+	int c7VisorMode = 1;
+	if(IWad::CheckGameFilter("Corridor7") && players[ConsolePlayer].mo)
+	{
+		AInventory *mode = players[ConsolePlayer].mo->FindInventory(ClassDef::FindClass("C7VisorMode"));
+		if(mode)
+			c7VisorMode = mode->amount;
+	}
 
 	if (bonuscount)
 	{
@@ -940,6 +975,16 @@ void UpdatePaletteShifts (void)
 	{
 		// [BL] More of a yellow if you ask me.
 		V_SetBlend(0xFF, 0xF8, 0x00, white*(38/NUMWHITESHIFTS));
+		palshifted = true;
+	}
+	else if(c7VisorMode == 2)
+	{
+		V_SetBlend(0x20, 0xFF, 0x50, 44);
+		palshifted = true;
+	}
+	else if(c7VisorMode == 3)
+	{
+		V_SetBlend(0xFF, 0x30, 0x10, 34);
 		palshifted = true;
 	}
 	else if (palshifted)

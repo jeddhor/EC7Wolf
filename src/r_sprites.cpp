@@ -45,6 +45,7 @@
 #include "wl_agent.h"
 #include "wl_draw.h"
 #include "wl_main.h"
+#include "wl_iwad.h"
 #include "wl_play.h"
 #include "wl_shade.h"
 #include "zstring.h"
@@ -77,6 +78,23 @@ struct Sprite
 
 static TArray<Sprite> spriteFrames;
 static TArray<SpriteInfo> loadedSprites;
+
+static bool C7VisorCanSeeActor(AActor *actor)
+{
+	if(!IWad::CheckGameFilter("Corridor7"))
+		return true;
+
+	const ClassDef *eniram = ClassDef::FindClass("C7SpaceMarine");
+	const ClassDef *nerraw = ClassDef::FindClass("C7Inviso");
+	if((!eniram || !actor->IsA(eniram)) && (!nerraw || !actor->IsA(nerraw)))
+		return true;
+	if(actor->MissileState && actor->InStateSequence(actor->MissileState))
+		return true;
+
+	AActor *camera = players[ConsolePlayer].camera;
+	AInventory *mode = camera ? camera->FindInventory(ClassDef::FindClass("C7VisorMode")) : NULL;
+	return mode && mode->amount == 3;
+}
 
 bool R_CheckSpriteValid(unsigned int spr)
 {
@@ -382,6 +400,8 @@ extern fixed viewz;
 
 void ScaleSprite(AActor *actor, int xcenter, const Frame *frame, unsigned height)
 {
+	if(!C7VisorCanSeeActor(actor))
+		return;
 	// height is a 13.3 fixed point number indicating the number of screen
 	// pixels that the sprite should occupy.
 	if(height < 8)
@@ -550,6 +570,8 @@ void Scale3DShaper(int, int, FTexture *, uint32_t, fixed, fixed, fixed, fixed, b
 // This function from Wolf4SDL more or less verbatim at the moment.
 void Scale3DSprite(AActor *actor, const Frame *frame, unsigned height)
 {
+	if(!C7VisorCanSeeActor(actor))
+		return;
 	bool flip = false;
 	const Sprite &spr = spriteFrames[loadedSprites[actor->sprite].frames+frame->frame];
 	FTexture *tex;

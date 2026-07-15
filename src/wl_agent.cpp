@@ -1344,6 +1344,20 @@ ACTION_FUNCTION(A_GunAttack)
 // 1 shotgun, 2 M-16, 3 M-343, 4 dual blaster, 6 assault cannon, and
 // 7 disintegrator. Plasma (5) is a projectile and is defined in DECORATE.
 static FRandom pr_c7bullet("Corridor7Bullet");
+
+static void ConsumeC7AlienCharge(AActor *self, int currentCost, int capacityCost)
+{
+	AInventory *energy = self->FindInventory(ClassDef::FindClass("C7Energy"));
+	AInventory *capacity = self->FindInventory(ClassDef::FindClass("C7EnergyCapacity"));
+	// DepleteAmmo already consumed the first point.
+	if(energy)
+		energy->amount = energy->amount > static_cast<unsigned>(currentCost - 1) ?
+			energy->amount - (currentCost - 1) : 0;
+	if(capacity)
+		capacity->amount = capacity->amount > static_cast<unsigned>(capacityCost) ?
+			capacity->amount - capacityCost : 0;
+}
+
 ACTION_FUNCTION(A_C7GunAttack)
 {
 	player_t *player = self->player;
@@ -1351,6 +1365,12 @@ ACTION_FUNCTION(A_C7GunAttack)
 
 	if(!player || !player->ReadyWeapon->DepleteAmmo())
 		return false;
+	if(weapon == 4)
+		ConsumeC7AlienCharge(self, 5, 1);
+	else if(weapon == 6)
+		ConsumeC7AlienCharge(self, 10, 1);
+	else if(weapon == 7)
+		ConsumeC7AlienCharge(self, 50, 45);
 
 	PlaySoundLocActor(player->ReadyWeapon->attacksound, self,
 		self == players[ConsolePlayer].camera ? SD_WEAPONS : SD_GENERIC);
@@ -1383,30 +1403,35 @@ ACTION_FUNCTION(A_C7GunAttack)
 		return false;
 
 	int dist = MAX(abs(closest->x - self->x), abs(closest->y - self->y)) / FRACUNIT;
-	int damage;
-	if(dist < 2 || weapon == 3 || weapon == 6)
+	const int projectiles = weapon == 3 ? 3 : (weapon == 6 ? 4 : 1);
+	bool hit = false;
+	for(int projectile = 0; projectile < projectiles; ++projectile)
 	{
-		damage = pr_c7bullet() / 4;
-		if(weapon == 1)
-			damage += 100;
+		int damage;
+		if(dist < 2 || weapon == 3 || weapon == 6)
+		{
+			damage = (pr_c7bullet.GenRand32() & 1023) / 4;
+			if(weapon == 1)
+				damage += 100;
+		}
+		else if(dist < 4 || weapon == 4)
+		{
+			damage = (pr_c7bullet.GenRand32() & 1023) / 6;
+			if(weapon == 1)
+				damage += 50;
+		}
+		else
+		{
+			if(static_cast<int>((pr_c7bullet.GenRand32() & 1023) / 12) < dist && weapon != 1)
+				continue;
+			damage = (pr_c7bullet.GenRand32() & 1023) / 6;
+			if(weapon == 1)
+				damage += 25;
+		}
+		DamageActor(closest, self, damage);
+		hit = true;
 	}
-	else if(dist < 4 || weapon == 4)
-	{
-		damage = pr_c7bullet() / 6;
-		if(weapon == 1)
-			damage += 50;
-	}
-	else
-	{
-		if(pr_c7bullet() / 12 < dist && weapon != 1)
-			return false;
-		damage = pr_c7bullet() / 6;
-		if(weapon == 1)
-			damage += 25;
-	}
-
-	DamageActor(closest, self, damage);
-	return true;
+	return hit;
 }
 
 // Armed Corridor 7 mines use a square proximity check, matching the tile-based
@@ -1428,6 +1453,20 @@ ACTION_FUNCTION(A_C7MineThink)
 	return false;
 }
 
+ACTION_FUNCTION(A_C7TebazileMorph)
+{
+	const int maximum = MAX(1, self->SpawnHealth());
+	const int fifth = (MAX(0, self->health) * 5) / maximum;
+	const char *label = fifth >= 4 ? "See" :
+		(fifth >= 3 ? "PhaseEniram" :
+		(fifth >= 2 ? "PhaseTymok" :
+		(fifth >= 1 ? "PhaseSolrac" : "PhaseFinal")));
+	const Frame *desired = self->FindState(FName(label));
+	if(desired && desired != caller)
+		self->SetState(desired);
+	return true;
+}
+
 ACTION_FUNCTION(A_FireCustomMissile)
 {
 	ACTION_PARAM_STRING(missiletype, 0);
@@ -1439,6 +1478,8 @@ ACTION_FUNCTION(A_FireCustomMissile)
 
 	if(useammo && !self->player->ReadyWeapon->DepleteAmmo())
 		return false;
+	if(useammo && IWad::CheckGameFilter("Corridor7") && missiletype.CompareNoCase("C7PlasmaBolt") == 0)
+		ConsumeC7AlienCharge(self, 33, 4);
 
 	if(!(self->player->ReadyWeapon->weaponFlags & WF_NOALERT))
 		madenoise = true;

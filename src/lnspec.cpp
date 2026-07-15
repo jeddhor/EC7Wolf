@@ -944,7 +944,7 @@ FUNC(Exit_Normal)
 	if(IWad::CheckGameFilter("Corridor7") && gamestate.killtotal > 0)
 	{
 		static const unsigned int clearance[4] = { 10, 75, 100, 100 };
-		const unsigned int skill = MIN<unsigned int>(gamestate.difficulty->SpawnFilter, 3);
+		const unsigned int skill = MIN<unsigned int>(MAX<unsigned int>(gamestate.difficulty->SpawnFilter, 1) - 1, 3);
 		const unsigned int destroyed = (gamestate.killcount*100)/gamestate.killtotal;
 		if(destroyed < clearance[skill])
 		{

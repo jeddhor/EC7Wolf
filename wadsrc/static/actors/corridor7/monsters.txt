@@ -540,16 +540,65 @@ actor C7HornedBoss : C7Boss
 			C814 A -1 NOP A_Look
 			stop
 		See:
-			C814 A 6 NOP A_Chase
-			C815 A 6 NOP A_Chase
-			C817 A 6 NOP A_Chase
-			C819 A 6 NOP A_Chase
+			TNT1 A 0 A_C7TebazileMorph
+			C814 A 6 NOP A_Chase("*", "NaturalAttack")
+			C815 A 6 NOP A_Chase("*", "NaturalAttack")
+			C817 A 6 NOP A_Chase("*", "NaturalAttack")
+			C819 A 6 NOP A_Chase("*", "NaturalAttack")
 			loop
-		Missile:
+		NaturalAttack:
 			C820 A 5 A_FaceTarget
 			C821 A 4 bright A_WolfAttack
 			C822 A 4 bright A_WolfAttack
 			goto See
+		PhaseEniram:
+			TNT1 A 0 A_C7TebazileMorph
+			C653 A 5 NOP A_Chase("*", "EniramAttack")
+			C654 A 5 NOP A_Chase("*", "EniramAttack")
+			C655 A 5 NOP A_Chase("*", "EniramAttack")
+			C656 A 5 NOP A_Chase("*", "EniramAttack")
+			loop
+		EniramAttack:
+			C672 A 5 A_FaceTarget
+			C676 A 4 bright A_WolfAttack
+			C679 A 4 bright A_WolfAttack
+			goto PhaseEniram
+		PhaseTymok:
+			TNT1 A 0 A_C7TebazileMorph
+			C726 A 6 NOP A_Chase("*", "TymokAttack")
+			C727 A 6 NOP A_Chase("*", "TymokAttack")
+			C728 A 6 NOP A_Chase("*", "TymokAttack")
+			C729 A 6 NOP A_Chase("*", "TymokAttack")
+			loop
+		TymokAttack:
+			C730 A 5 A_FaceTarget
+			C731 A 4 bright A_WolfAttack
+			C732 A 4 bright A_WolfAttack
+			C733 A 4 bright A_WolfAttack
+			goto PhaseTymok
+		PhaseSolrac:
+			TNT1 A 0 A_C7TebazileMorph
+			C638 A 6 NOP A_Chase("*", "SolracAttack")
+			C639 A 6 NOP A_Chase("*", "SolracAttack")
+			C640 A 6 NOP A_Chase("*", "SolracAttack")
+			C641 A 6 NOP A_Chase("*", "SolracAttack")
+			loop
+		SolracAttack:
+			C642 A 5 A_FaceTarget
+			C643 A 4 bright A_WolfAttack
+			goto PhaseSolrac
+		PhaseFinal:
+			TNT1 A 0 A_C7TebazileMorph
+			C814 A 6 NOP A_Chase("*", "FinalAttack")
+			C815 A 6 NOP A_Chase("*", "FinalAttack")
+			C817 A 6 NOP A_Chase("*", "FinalAttack")
+			C819 A 6 NOP A_Chase("*", "FinalAttack")
+			loop
+		FinalAttack:
+			C820 A 5 A_FaceTarget
+			C821 A 4 bright A_WolfAttack
+			C822 A 4 bright A_WolfAttack
+			goto PhaseFinal
 		Death:
 			C823 A 0 A_Fall
 			C824 A 8 A_Scream

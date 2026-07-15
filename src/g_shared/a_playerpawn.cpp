@@ -324,6 +324,23 @@ void APlayerPawn::Tick()
 		}
 		player->extralight = visorMode && visorMode->amount == 2 ? 20 : 0;
 
+		AInventory *energy = FindInventory(ClassDef::FindClass("C7Energy"));
+		AInventory *capacity = FindInventory(ClassDef::FindClass("C7EnergyCapacity"));
+		if(energy && capacity)
+		{
+			if(energy->amount > capacity->amount)
+				energy->amount = capacity->amount;
+			const ClassDef *dual = ClassDef::FindClass("C7DualBlaster");
+			const ClassDef *plasma = ClassDef::FindClass("C7PlasmaRifle");
+			const ClassDef *assault = ClassDef::FindClass("C7AssaultCannon");
+			const ClassDef *disintegrator = ClassDef::FindClass("C7Disintegrator");
+			AWeapon *ready = player->ReadyWeapon;
+			if(ready && (ready->IsA(dual) || ready->IsA(plasma) ||
+				ready->IsA(assault) || ready->IsA(disintegrator)) &&
+				energy->amount < capacity->amount)
+				energy->amount = MIN(energy->amount + 2, capacity->amount);
+		}
+
 		if(c7cmd.buttonstate[bt_reload] && !c7cmd.buttonheld[bt_reload])
 		{
 			AInventory *mines = FindInventory(ClassDef::FindClass("C7Mines"));

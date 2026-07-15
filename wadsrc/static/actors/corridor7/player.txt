@@ -9,6 +9,14 @@ actor C7Energy : Ammo
 {
 	inventory.pickupsound "misc/ammo_pkup"
 	inventory.amount 100
+	inventory.maxamount 999
+}
+
+// Alien weapons drain both the displayed charge and this slowly shrinking
+// capacity. Charge regenerates by two while an alien weapon is selected.
+actor C7EnergyCapacity : Ammo
+{
+	inventory.amount 100
 	inventory.maxamount 100
 }
 
@@ -46,6 +54,7 @@ actor C7Player : PlayerPawn
 	player.startitem "C7Bullets", 100
 	player.startitem "C7VisorCharge", 100
 	player.startitem "C7VisorMode", 1
+	player.startitem "C7EnergyCapacity", 100
 	player.weaponslot 1, "C7Bayonet"
 	player.weaponslot 2, "C7Shotgun"
 	player.weaponslot 3, "C7M16"
@@ -101,6 +110,7 @@ actor C7Weapon : Weapon
 
 actor C7Bayonet : C7Weapon
 {
+	// The shipped game calls this the self-powered security Taser.
 	weapon.ammouse1 0
 	+WEAPON.NOAUTOFIRE
 	states
@@ -111,7 +121,7 @@ actor C7Bayonet : C7Weapon
 		Fire:
 			C746 A 6
 			C747 A 6
-			C748 A 6 bright A_CustomPunch(random(5, 20), true, CPF_ALWAYSPLAYSOUND)
+			C748 A 6 bright A_CustomPunch(random(0, 255), true, CPF_ALWAYSPLAYSOUND)
 			C749 A 6
 			C750 A 6
 			goto Ready
@@ -172,7 +182,7 @@ actor C7M343 : C7Weapon
 actor C7DualBlaster : C7Weapon
 {
 	weapon.ammotype1 "C7Energy"
-	weapon.ammouse1 5
+	weapon.ammouse1 1
 	weapon.ammogive1 100
 	states
 	{
@@ -196,7 +206,7 @@ actor C7DualBlaster : C7Weapon
 actor C7Disintegrator : C7Weapon
 {
 	weapon.ammotype1 "C7Energy"
-	weapon.ammouse1 50
+	weapon.ammouse1 1
 	weapon.ammogive1 100
 	+WEAPON.NOAUTOFIRE
 	states
@@ -249,7 +259,7 @@ actor C7Shotgun : C7Weapon
 actor C7PlasmaRifle : C7Weapon
 {
 	weapon.ammotype1 "C7Energy"
-	weapon.ammouse1 33
+	weapon.ammouse1 1
 	weapon.ammogive1 100
 	states
 	{
@@ -273,7 +283,7 @@ actor C7PlasmaRifle : C7Weapon
 actor C7AssaultCannon : C7Weapon
 {
 	weapon.ammotype1 "C7Energy"
-	weapon.ammouse1 10
+	weapon.ammouse1 1
 	weapon.ammogive1 100
 	states
 	{
@@ -307,12 +317,15 @@ actor C7PlasmaBolt
 {
 	radius 4
 	speed 8
-	damage 100
+	damage 0
 	PROJECTILE
 	states
 	{
 		Spawn:
 			TNT1 A -1 bright
+			stop
+		Death:
+			TNT1 A 0 bright A_Explode(random(25, 280), 64, 1, true)
 			stop
 	}
 }
@@ -363,7 +376,6 @@ actor C7ProximityMine
 	health 1
 	radius 8
 	+SHOOTABLE
-	+NOBLOCKMAP
 	states
 	{
 		Spawn:

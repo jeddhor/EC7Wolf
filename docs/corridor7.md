@@ -36,6 +36,13 @@ The release directory contains commercial game data and must not be committed
 or redistributed. The launcher keeps its configuration and saved games in the
 release directory.
 
+The packaged startup path (title/credits, menu, and starting MAP01) can be
+tested with:
+
+```sh
+tools/test_corridor7_release_startup.sh /path/to/builds/release
+```
+
 For a repeatable development smoke test:
 
 ```sh

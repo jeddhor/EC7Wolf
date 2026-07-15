@@ -707,14 +707,18 @@ void Menu::drawMenu() const
 
 void Menu::draw() const
 {
-	static FTexture * const mcontrol = TexMan("M_MCONTL");
+	static FTextureID mcontrolID = TexMan.CheckForTexture("M_MCONTL", FTexture::TEX_Any);
 	ClearMScreen();
 	if(headPicture && !headPictureIsAlternate)
 	{
 		DrawStripes(10);
 		VWB_DrawGraphic(headPicture, 160-headPicture->GetScaledWidth()/2, 0, MENU_TOP);
 	}
-	VWB_DrawGraphic(mcontrol, 160-mcontrol->GetScaledWidth()/2, 200-mcontrol->GetScaledHeight(), MENU_BOTTOM);
+	if(mcontrolID.isValid())
+	{
+		FTexture *mcontrol = TexMan(mcontrolID);
+		VWB_DrawGraphic(mcontrol, 160-mcontrol->GetScaledWidth()/2, 200-mcontrol->GetScaledHeight(), MENU_BOTTOM);
+	}
 
 	WindowX = 0;
 	WindowW = 320;

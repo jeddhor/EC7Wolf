@@ -3,9 +3,11 @@
 set -eu
 
 release_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-mkdir -p "$release_dir/savegames"
+config_file=${ECWOLF_CONFIG:-"$release_dir/ecwolf.cfg"}
+save_dir=${ECWOLF_SAVEDIR:-"$release_dir/savegames"}
+mkdir -p "$save_dir"
 cd "$release_dir"
 
 exec "$release_dir/ecwolf" --data CO7 \
-	--config "$release_dir/ecwolf.cfg" \
-	--savedir "$release_dir/savegames" "$@"
+	--config "$config_file" \
+	--savedir "$save_dir" "$@"

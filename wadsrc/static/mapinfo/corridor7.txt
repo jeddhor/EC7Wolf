@@ -8,9 +8,100 @@ gameinfo
 	playerclasses = "C7Player"
 	signon = "C7G0005"
 	titlepage = "C7G0005"
+	titletime = 6
+	titlemusic = "C7MUS00"
+	menumusic = "C7MUS00"
+	menufade = "00 00 00"
+	menucolors = "00 50 70", "00 A0 D0", "00 30 50", "00 10 18", "00 80 A0", "00 00 00"
+	menuwindowcolors = "00 30 48", "00 C0 E0", "00 08 10", "80 70 00", "FF E0 00", "20 18 00"
+	messagecolors = "00 30 48", "00 C0 E0", "00 08 10"
+	menufontcolor_title = "Gold"
+	menufontcolor_label = "Grey"
+	menufontcolor_selection = "White"
+	menufontcolor_disabled = "DarkGrey"
+	menufontcolor_invalid = "DarkGreen"
+	menufontcolor_invalidselection = "Green"
+	menufontcolor_highlight = "Yellow"
+	menufontcolor_highlightselection = "Gold"
+	messagefontcolor = "White"
+	dialogcolor = "White"
+	drawreadthis = false
+	quitmessages = "Quit Corridor 7?"
 	doorsoundsequence = "DoorNormal"
 	pushwallsoundsequence = "PushwallNormal"
 	deathtransition = "Fizzle"
+}
+
+// Without a demo loop DemoLoop() repeatedly executes an empty intermission,
+// leaving a black, unresponsive window. Cycle through the original title and
+// credit screens; acknowledging any page opens the control panel.
+intermission DemoLoop
+{
+	Fader
+	{
+		Background = TitlePage
+		Time = 15
+		FadeType = FadeIn
+	}
+	Image
+	{
+		Time = TitleTime
+	}
+	Fader
+	{
+		Time = 15
+		FadeType = FadeOut
+	}
+	Fader
+	{
+		Background = "C7G0007"
+		Time = 15
+		FadeType = FadeIn
+	}
+	Image
+	{
+		Time = 4
+	}
+	Fader
+	{
+		Background = "C7G0008"
+		Time = 15
+		FadeType = FadeIn
+	}
+	Image
+	{
+		Time = 4
+	}
+	Fader
+	{
+		Background = "C7G0009"
+		Time = 15
+		FadeType = FadeIn
+	}
+	Image
+	{
+		Time = 4
+	}
+	Fader
+	{
+		Background = "C7G0010"
+		Time = 15
+		FadeType = FadeIn
+	}
+	Image
+	{
+		Time = 4
+	}
+	Fader
+	{
+		Background = "C7G0011"
+		Time = 15
+		FadeType = FadeIn
+	}
+	Image
+	{
+		Time = 4
+	}
 }
 
 automap

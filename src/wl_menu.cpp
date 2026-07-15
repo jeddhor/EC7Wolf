@@ -381,6 +381,9 @@ void CreateMenus()
 	// Actually initialize the menus
 	GameSave::InitMenus();
 
+	// Keep menus legible for games whose data does not provide the Wolf3D
+	// picture headings. setHeadPicture replaces this text when it finds one.
+	mainMenu.setHeadText("Main Menu", true);
 	mainMenu.setHeadPicture("M_OPTION");
 
 	const bool useEpisodeMenu = EpisodeInfo::GetNumEpisodes() > 1;
@@ -441,6 +444,7 @@ void CreateMenus()
 	}
 	skills.setCurrentPosition(2);
 
+	optionsMenu.setHeadText(language["STR_OPTIONS"], true);
 	optionsMenu.setHeadPicture("M_OPTION");
 	optionsMenu.addItem(new MenuSwitcherMenuItem(language["STR_CL"], controlBase));
 	optionsMenu.addItem(new MenuSwitcherMenuItem(language["STR_SD"], soundBase));
@@ -489,6 +493,7 @@ void CreateMenus()
 	soundBase.addItem(new MultipleChoiceMenuItem(SetMusic, musicOptions, 3, musicMode));
 	soundBase.addItem(new SliderMenuItem(MusicVolume, 150, MAX_VOLUME, language["STR_SOFT"], language["STR_LOUD"], SD_UpdateMusicVolume));
 
+	controlBase.setHeadText(language["STR_CL"], true);
 	controlBase.setHeadPicture("M_CONTRL");
 	controlBase.addItem(new BooleanMenuItem(language["STR_ALWAYSRUN"], alwaysrun, EnterControlBase));
 	controlBase.addItem(new BooleanMenuItem(language["STR_MOUSEEN"], mouseenabled, EnterControlBase));
@@ -544,6 +549,7 @@ void CreateMenus()
 	mouseSensitivity.addItem(new SliderMenuItem(panyadjustment, 173, 20, language["STR_SLOW"], language["STR_FAST"]));
 
 
+	controls.setHeadText(language["STR_CUSTOM"], true);
 	controls.setHeadPicture("M_CUSTOM");
 	controls.showControlHeaders(true);
 	for(int i = 0;controlScheme[i].button != bt_nobutton;i++)

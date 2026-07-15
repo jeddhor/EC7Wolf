@@ -1,0 +1,489 @@
+gameinfo
+{
+	gamepalette = "C7PAL"
+	// No Corridor 7 colormap file is present; an absent name makes ECWolf
+	// build one from C7PAL instead of applying Wolf3D's palette-specific map.
+	gamecolormap = "C7CMAP"
+	translator = "xlat/corridor7.txt"
+	playerclasses = "BJPlayer"
+	signon = "WLFSGNON"
+	titlepage = "WLFSGNON"
+	doorsoundsequence = "DoorNormal"
+	pushwallsoundsequence = "PushwallNormal"
+	deathtransition = "Fizzle"
+}
+
+automap
+{
+	fontcolor = "White"
+	background = "20 20 20"
+	doorcolor = "FF 40 20"
+	floorcolor = "20 20 20"
+	wallcolor = "40 C0 C0"
+	yourcolor = "FF FF 00"
+}
+
+skill baby
+{
+	name = "Corporal"
+	spawnfilter = 1
+	damagefactor = 0.25
+}
+
+skill easy
+{
+	name = "2nd Lieutenant"
+	spawnfilter = 2
+}
+
+skill normal
+{
+	name = "Captain"
+	spawnfilter = 3
+}
+
+skill hard
+{
+	name = "Major"
+	spawnfilter = 4
+}
+
+defaultmap
+{
+	defaultfloor = "#383838"
+	defaultceiling = "#202020"
+	// Corridor 7 has a steep falloff: the level 1 start is dark at range but
+	// its nearby sliding wall is fully illuminated.
+	DefaultLighting = 256
+	DefaultVisibility = 7.0
+}
+
+episode "MAP01"
+{
+	name = "Corridor 7: Alien Invasion"
+	key = "C"
+}
+
+cluster 1
+{
+}
+
+map "MAP01" "Corridor 7 Level 1"
+{
+	next = "MAP02"
+	floornumber = 1
+	cluster = 1
+}
+
+map "MAP02" "Corridor 7 Level 2"
+{
+	next = "MAP03"
+	floornumber = 2
+	cluster = 1
+}
+
+map "MAP03" "Corridor 7 Level 3"
+{
+	next = "MAP04"
+	floornumber = 3
+	cluster = 1
+}
+
+map "MAP04" "Corridor 7 Level 4"
+{
+	next = "MAP05"
+	floornumber = 4
+	cluster = 1
+}
+
+map "MAP05" "Corridor 7 Level 5"
+{
+	next = "MAP06"
+	floornumber = 5
+	cluster = 1
+}
+
+map "MAP06" "Corridor 7 Level 6"
+{
+	next = "MAP07"
+	floornumber = 6
+	cluster = 1
+}
+
+map "MAP07" "Corridor 7 Level 7"
+{
+	next = "MAP08"
+	floornumber = 7
+	cluster = 1
+}
+
+map "MAP08" "Corridor 7 Level 8"
+{
+	next = "MAP09"
+	floornumber = 8
+	cluster = 1
+}
+
+map "MAP09" "Corridor 7 Level 9"
+{
+	next = "MAP10"
+	floornumber = 9
+	cluster = 1
+}
+
+map "MAP10" "Corridor 7 Level 10"
+{
+	next = "MAP11"
+	floornumber = 10
+	cluster = 1
+}
+
+map "MAP11" "Corridor 7 Level 11"
+{
+	next = "MAP12"
+	floornumber = 11
+	cluster = 1
+}
+
+map "MAP12" "Corridor 7 Level 12"
+{
+	next = "MAP13"
+	floornumber = 12
+	cluster = 1
+}
+
+map "MAP13" "Corridor 7 Level 13"
+{
+	next = "MAP14"
+	floornumber = 13
+	cluster = 1
+}
+
+map "MAP14" "Corridor 7 Level 14"
+{
+	next = "MAP15"
+	floornumber = 14
+	cluster = 1
+}
+
+map "MAP15" "Corridor 7 Level 15"
+{
+	next = "MAP16"
+	floornumber = 15
+	cluster = 1
+}
+
+map "MAP16" "Corridor 7 Level 16"
+{
+	next = "MAP17"
+	floornumber = 16
+	cluster = 1
+}
+
+map "MAP17" "Corridor 7 Level 17"
+{
+	next = "MAP18"
+	floornumber = 17
+	cluster = 1
+}
+
+map "MAP18" "Corridor 7 Level 18"
+{
+	next = "MAP19"
+	floornumber = 18
+	cluster = 1
+}
+
+map "MAP19" "Corridor 7 Level 19"
+{
+	next = "MAP20"
+	floornumber = 19
+	cluster = 1
+}
+
+map "MAP20" "Corridor 7 Level 20"
+{
+	next = "MAP21"
+	floornumber = 20
+	cluster = 1
+}
+
+map "MAP21" "Corridor 7 Level 21"
+{
+	next = "MAP22"
+	floornumber = 21
+	cluster = 1
+}
+
+map "MAP22" "Corridor 7 Level 22"
+{
+	next = "MAP23"
+	floornumber = 22
+	cluster = 1
+}
+
+map "MAP23" "Corridor 7 Level 23"
+{
+	next = "MAP24"
+	floornumber = 23
+	cluster = 1
+}
+
+map "MAP24" "Corridor 7 Level 24"
+{
+	next = "MAP25"
+	floornumber = 24
+	cluster = 1
+}
+
+map "MAP25" "Corridor 7 Level 25"
+{
+	next = "MAP26"
+	floornumber = 25
+	cluster = 1
+}
+
+map "MAP26" "Corridor 7 Level 26"
+{
+	next = "MAP27"
+	floornumber = 26
+	cluster = 1
+}
+
+map "MAP27" "Corridor 7 Level 27"
+{
+	next = "MAP28"
+	floornumber = 27
+	cluster = 1
+}
+
+map "MAP28" "Corridor 7 Level 28"
+{
+	next = "MAP29"
+	floornumber = 28
+	cluster = 1
+}
+
+map "MAP29" "Corridor 7 Level 29"
+{
+	next = "MAP30"
+	floornumber = 29
+	cluster = 1
+}
+
+map "MAP30" "Corridor 7 Level 30"
+{
+	next = "MAP31"
+	floornumber = 30
+	cluster = 1
+}
+
+map "MAP31" "Corridor 7 Level 31"
+{
+	next = "MAP32"
+	floornumber = 31
+	cluster = 1
+}
+
+map "MAP32" "Corridor 7 Level 32"
+{
+	next = "MAP33"
+	floornumber = 32
+	cluster = 1
+}
+
+map "MAP33" "Corridor 7 Level 33"
+{
+	next = "MAP34"
+	floornumber = 33
+	cluster = 1
+}
+
+map "MAP34" "Corridor 7 Level 34"
+{
+	next = "MAP35"
+	floornumber = 34
+	cluster = 1
+}
+
+map "MAP35" "Corridor 7 Level 35"
+{
+	next = "MAP36"
+	floornumber = 35
+	cluster = 1
+}
+
+map "MAP36" "Corridor 7 Level 36"
+{
+	next = "MAP37"
+	floornumber = 36
+	cluster = 1
+}
+
+map "MAP37" "Corridor 7 Level 37"
+{
+	next = "MAP38"
+	floornumber = 37
+	cluster = 1
+}
+
+map "MAP38" "Corridor 7 Level 38"
+{
+	next = "MAP39"
+	floornumber = 38
+	cluster = 1
+}
+
+map "MAP39" "Corridor 7 Level 39"
+{
+	next = "MAP40"
+	floornumber = 39
+	cluster = 1
+}
+
+map "MAP40" "Corridor 7 Level 40"
+{
+	next = "MAP01"
+	floornumber = 40
+	cluster = 1
+}
+
+map "MAP41" "Corridor 7 Secret 31"
+{
+	next = "MAP01"
+	floornumber = 41
+	cluster = 1
+}
+
+map "MAP42" "Corridor 7 Secret 32"
+{
+	next = "MAP01"
+	floornumber = 42
+	cluster = 1
+}
+
+map "MAP43" "Corridor 7 Secret 33"
+{
+	next = "MAP01"
+	floornumber = 43
+	cluster = 1
+}
+
+map "MAP44" "Corridor 7 Secret 34"
+{
+	next = "MAP01"
+	floornumber = 44
+	cluster = 1
+}
+
+map "MAP45" "Corridor 7 Secret 35"
+{
+	next = "MAP01"
+	floornumber = 45
+	cluster = 1
+}
+
+map "MAP46" "Corridor 7 Secret 36"
+{
+	next = "MAP01"
+	floornumber = 46
+	cluster = 1
+}
+
+map "MAP47" "Unused Corridor 7 Level"
+{
+	next = "MAP01"
+	floornumber = 47
+	cluster = 1
+}
+
+map "MAP48" "Unused Corridor 7 Level"
+{
+	next = "MAP01"
+	floornumber = 48
+	cluster = 1
+}
+
+map "MAP49" "Unused Corridor 7 Level"
+{
+	next = "MAP01"
+	floornumber = 49
+	cluster = 1
+}
+
+map "MAP50" "Unused Corridor 7 Level"
+{
+	next = "MAP01"
+	floornumber = 50
+	cluster = 1
+}
+
+map "MAP51" "Corridor 7 Network Level 1"
+{
+	next = "MAP01"
+	floornumber = 51
+	cluster = 1
+}
+
+map "MAP52" "Corridor 7 Network Level 2"
+{
+	next = "MAP01"
+	floornumber = 52
+	cluster = 1
+}
+
+map "MAP53" "Corridor 7 Network Level 3"
+{
+	next = "MAP01"
+	floornumber = 53
+	cluster = 1
+}
+
+map "MAP54" "Corridor 7 Network Level 4"
+{
+	next = "MAP01"
+	floornumber = 54
+	cluster = 1
+}
+
+map "MAP55" "Corridor 7 Network Level 5"
+{
+	next = "MAP01"
+	floornumber = 55
+	cluster = 1
+}
+
+map "MAP56" "Corridor 7 Network Level 6"
+{
+	next = "MAP01"
+	floornumber = 56
+	cluster = 1
+}
+
+map "MAP57" "Corridor 7 Network Level 7"
+{
+	next = "MAP01"
+	floornumber = 57
+	cluster = 1
+}
+
+map "MAP58" "Corridor 7 Network Level 8"
+{
+	next = "MAP01"
+	floornumber = 58
+	cluster = 1
+}
+
+map "MAP59" "Corridor 7 Network Level 9"
+{
+	next = "MAP01"
+	floornumber = 59
+	cluster = 1
+}
+
+map "MAP60" "Corridor 7 Network Level 10"
+{
+	next = "MAP01"
+	floornumber = 60
+	cluster = 1
+}

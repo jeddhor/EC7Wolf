@@ -1,5 +1,14 @@
 IWad
 {
+	Name = "Corridor 7: Alien Invasion (CD)"
+	Autoname = "Corridor7.CD"
+	Mapinfo = "mapinfo/corridor7.txt"
+	MustContain = "MAP60", "C7W0255", "C857A0", "C7PAL"
+	Game = "Corridor7"
+}
+
+IWad
+{
 	Name = "Super 3D Noah's Ark"
 	Autoname = "Noah"
 	Mapinfo = "mapinfo/noah.txt"

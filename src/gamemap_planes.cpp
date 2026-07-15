@@ -335,6 +335,11 @@ public:
 		return tsFlags;
 	}
 
+	bool IsIgnoredThing(unsigned short oldnum) const
+	{
+		return ignoredThings.CheckKey(oldnum) != NULL;
+	}
+
 	int TranslateZone(unsigned short tile)
 	{
 		MapZone *zone = zonePalette.CheckKey(tile);
@@ -527,7 +532,13 @@ protected:
 			// Property
 			if(sc.CheckToken(TK_Identifier))
 			{
-				if(sc->str.CompareNoCase("trigger") == 0)
+				if(sc->str.CompareNoCase("ignore") == 0)
+				{
+					sc.MustGetToken(TK_IntConst);
+					ignoredThings[sc->number] = true;
+					sc.MustGetToken(';');
+				}
+				else if(sc->str.CompareNoCase("trigger") == 0)
 				{
 					sc.MustGetToken(TK_IntConst);
 					ThingSpecialXlat &thing = thingSpecialTable[sc->number];
@@ -650,6 +661,7 @@ private:
 			flatTable[i][1].SetInvalid();
 		}
 		thingTable.Clear();
+		ignoredThings.Clear();
 		thingSpecialTable.Clear();
 		tilePalette.Clear();
 		tileTriggers.Clear();
@@ -662,6 +674,7 @@ private:
 	int lump;
 
 	TArray<ThingXlat> thingTable;
+	TMap<WORD, bool> ignoredThings;
 	TMap<WORD, ThingSpecialXlat> thingSpecialTable;
 	TMap<WORD, MapTile> tilePalette;
 	TMap<WORD, MapTrigger> tileTriggers;
@@ -1281,6 +1294,8 @@ void GameMap::ReadPlanesData()
 					uint32_t flags = 0;
 					uint32_t tsFlags = 0;
 
+					if(xlat.IsIgnoredThing(oldplane[i]))
+						continue;
 					if((tsFlags = xlat.TranslateThing(thing, trigger, flags, oldplane[i])) == 0)
 						printf("Unknown old type %d @ (%d,%d)\n", oldplane[i], i%header.width, i/header.width);
 					else

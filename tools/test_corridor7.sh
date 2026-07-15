@@ -63,7 +63,7 @@ if ! grep -q 'MAP01 - Corridor 7 Level 1' "$log_file"; then
 	exit 1
 fi
 
-if grep -Eqi 'invalid TED5|parser error|fatal error|segmentation fault|assertion.*failed' "$log_file"; then
+if grep -Eqi 'Unknown old type|invalid TED5|parser error|fatal error|segmentation fault|assertion.*failed' "$log_file"; then
 	printf 'A parser/runtime failure was logged; see %s\n' "$log_file" >&2
 	exit 1
 fi

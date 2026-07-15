@@ -1,10 +1,11 @@
 # Corridor 7 support (experimental)
 
-This branch can detect the supplied Steam/CD installation of **Corridor 7:
-Alien Invasion**, read its original files directly, and enter its maps. ECWolf
-does not include commercial Corridor 7 data; you must provide your own files.
+ECWolf can detect the supplied Steam/CD release of **Corridor 7: Alien
+Invasion**, read its original files directly, and run all 60 maps. ECWolf does
+not include commercial Corridor 7 data; provide files from a legally owned
+installation.
 
-Place these files together in a game-data directory and point ECWolf at it:
+Keep these files together in one game-data directory:
 
 - `CORR7CD.EXE`
 - `MAPTEMP.CO7`
@@ -12,28 +13,60 @@ Place these files together in a game-data directory and point ECWolf at it:
 - `VGADICT.CO7`, `VGAHEAD.CO7`, `VGAGRAPH.CO7`
 - `AUDIOHED.CO7`, `AUDIOT.CO7`
 
-For a direct development launch from that directory:
+The recognized CD executable is 250,776 bytes. ECWolf reads its gameplay
+palette at runtime; the palette and other commercial resources are not
+embedded or redistributed.
+
+Launch through the normal IWAD picker or directly from the data directory:
 
 ```sh
 ecwolf --data CO7 --nowait --tedlevel MAP01 --skill 2
 ```
 
-From the supplied development workspace, the repeatable build/detection/map
-smoke test is:
+For a repeatable development smoke test:
 
 ```sh
 tools/test_corridor7.sh /path/to/ecwolf-build /path/to/CORR7CD
 ```
 
-The currently recognized edition uses the 250,776-byte `CORR7CD.EXE`; its
-external palette is read at runtime and is never embedded in ECWolf.
+For a representative campaign/secret/network-map validation:
 
-## Current limitations
+```sh
+tools/validate_corridor7_maps.sh /path/to/ecwolf-build /path/to/CORR7CD
+```
 
-Map loading, the ordinary wall set, the gameplay palette, player spawn,
-movement, the complete 23–105 static-object sprite table, topology-oriented
-yellow doors, and red/blue access-card doors work. Special/masked walls still
-use safe fallbacks except for the verified level-1 “A” wall appearance. Most
-static pickup effects, enemies, exits, weapons, Corridor 7’s HUD/menus, sound
-ID mapping, music, objectives, and level progression are not implemented yet.
-Unknown non-empty object IDs are logged with map coordinates.
+Append an output directory and `--all` to load-check every map in the archive.
+
+## Implemented support
+
+- Bounds-checked, self-contained TED5 map loading for all 60 maps.
+- Direct GFXTILES, VGAGRAPH, AUDIOHED/AUDIOT, executable-palette, wall,
+  sprite, font, HUD, menu-cursor, sound-effect, and music resource exposure.
+- Ordinary and special wall pages, Corridor 7 lighting defaults, solid and
+  passable masked-wall behavior, four door types with automatic orientation,
+  red/blue access cards, push walls, paired intralevel transporters, floor
+  exits, ordinary elevators, and the level-30/40 exit vortex.
+- The executable's complete plane-1 dispatch table, including static objects,
+  pickups, difficulty/direction actor variants, bosses, ignored markers, and
+  the original sprite families.
+- A Corridor 7 player, nine defined weapon/animation families, three verified late-weapon
+  pickups, ammunition/health/armor items, monster combat, score, sounds, and
+  native first-person weapon scaling.
+- The original status bar art and number glyphs, aliens-remaining counter,
+  episode and four rank choices, the documented 10/75/100/100-percent alien
+  objective gate, MAP01-MAP40 progression, six secret maps, intermission flow,
+  and ECWolf save/load.
+
+## Known deviations
+
+This is a source-port compatibility implementation, not a cycle-accurate DOS
+reimplementation. Actor health, speed, attack damage, projectile choice,
+animation timing, and weapon balance are reconstructed approximations where
+the released executable and design documents did not establish exact values.
+Masked walls use ECWolf's solid-wall renderer rather than Corridor 7's exact
+transparent column composition. The original map-to-song schedule, bespoke
+briefing/victory screens, palette cycling, demo compatibility, and original
+network protocol are not reproduced; exposed music currently uses a common
+default track. Network maps can be loaded, but multiplayer was not part of the
+single-player validation pass. Support is currently limited to the supplied
+250,776-byte CD/Steam executable family.

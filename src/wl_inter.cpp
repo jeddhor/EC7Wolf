@@ -16,6 +16,7 @@
 #include "wl_net.h"
 #include "wl_text.h"
 #include "g_mapinfo.h"
+#include "wl_iwad.h"
 #include "colormatcher.h"
 
 LRstruct LevelRatios;
@@ -131,6 +132,14 @@ static FTextureID GraphicalTexID[NUM_WI];
 //
 void BJ_Breathe (bool drawOnly=false)
 {
+	// Corridor 7 has no BJ breathing-face resources. Its exact status bar is
+	// retained underneath the generic score-counting intermission instead.
+	if(IWad::CheckGameFilter("Corridor7"))
+	{
+		if(!drawOnly) SDL_Delay(5);
+		return;
+	}
+
 	static int which = 0, max = 10;
 	static FTexture* const pics[2] = { TexMan("L_GUY1"), TexMan("L_GUY2") };
 	unsigned int height = InterState.graphical ? 8 : 16;
@@ -785,7 +794,9 @@ void PreloadGraphics (bool showPsych)
 		DrawPlayScreen(true);
 		ingame = oldingame;
 
-		VWB_DrawGraphic(TexMan("GETPSYCH"), 48, 56);
+		FTextureID getPsyched = TexMan.CheckForTexture("GETPSYCH", FTexture::TEX_Any);
+		if(getPsyched.isValid())
+			VWB_DrawGraphic(TexMan(getPsyched), 48, 56);
 
 		WindowX = (screenWidth - scaleFactorX*224)/2;
 		WindowY = (screenHeight - scaleFactorY*(StatusBar->GetHeight(false)+48))/2;

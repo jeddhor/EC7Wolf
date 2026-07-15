@@ -1,0 +1,581 @@
+/* Corridor 7 enemy families. The released maps retain the Wolf/Blake
+ * stand/path/difficulty numbering bands, while the artwork lives in the
+ * GFXTILES sprite pages named by co7map.txt. */
+
+actor C7Monster : WolfensteinMonster
+{
+	points 1000
+	health 15, 30, 55, 80
+	speed 1, 3
+	sighttime 1, 5
+	attacksound "c7/monster/attack"
+	seesound "c7/monster/sight"
+	deathsound "c7/monster/death"
+}
+
+actor C7OrganicEye : C7Monster
+{
+	points 750
+	health 8, 18, 35, 50
+	states
+	{
+		Spawn:
+			C075 A -1 NOP A_Look
+			stop
+		Path:
+			C075 A 8 NOP A_Chase
+			C076 A 8 NOP A_Chase
+			C077 A 8 NOP A_Chase
+			C078 A 8 NOP A_Chase
+			loop
+		See:
+			C079 A 6 NOP A_Chase
+			C080 A 6 NOP A_Chase
+			C081 A 6 NOP A_Chase
+			C082 A 6 NOP A_Chase
+			loop
+		Missile:
+			C103 A 8 A_FaceTarget
+			C104 A 8 bright A_WolfAttack
+			goto See
+		Pain:
+			C098 A 5
+			goto See
+		Death:
+			C112 A 0 A_Fall
+			C113 A 7 A_Scream
+			C114 A 7
+			C115 A 7
+			C116 A -1
+			stop
+	}
+}
+
+actor C7ProbeEye : C7Monster
+{
+	points 1250
+	health 12, 28, 60, 85
+	states
+	{
+		Spawn:
+			C240 A -1 NOP A_Look
+			stop
+		Path:
+			C240 A 7 NOP A_Chase
+			C241 A 7 NOP A_Chase
+			C242 A 7 NOP A_Chase
+			C243 A 7 NOP A_Chase
+			loop
+		See:
+			C248 A 5 NOP A_Chase
+			C249 A 5 NOP A_Chase
+			C250 A 5 NOP A_Chase
+			C251 A 5 NOP A_Chase
+			loop
+		Missile:
+			C264 A 7 A_FaceTarget
+			C265 A 7 bright A_WolfAttack
+			goto See
+		Pain:
+			C270 A 5
+			goto See
+		Death:
+			C272 A 0 A_Fall
+			C273 A 6 A_Scream
+			C274 A 6
+			C275 A 6
+			C276 A 6
+			C277 A -1
+			stop
+	}
+}
+
+actor C7Technician : C7Monster
+{
+	points 1750
+	health 18, 36, 75, 100
+	states
+	{
+		Spawn:
+			C143 A -1 NOP A_Look
+			stop
+		Path:
+			C143 A 8 NOP A_Chase
+			C152 A 8 NOP A_Chase
+			C160 A 8 NOP A_Chase
+			C168 A 8 NOP A_Chase
+			loop
+		See:
+			C143 A 5 NOP A_Chase
+			C152 A 5 NOP A_Chase
+			C160 A 5 NOP A_Chase
+			C168 A 5 NOP A_Chase
+			loop
+		Missile:
+			C175 A 6 A_FaceTarget
+			C176 A 5 bright A_WolfAttack
+			goto See
+		Pain:
+			C177 A 5
+			goto See
+		Death:
+			C178 A 0 A_Fall
+			C179 A 6 A_Scream
+			C180 A 6
+			C181 A -1
+			stop
+	}
+}
+
+actor C7MorphChair : C7Technician
+{
+	states { Spawn: C125 A 10 NOP A_Look loop }
+}
+
+actor C7MorphFile : C7Technician
+{
+	states { Spawn: C129 A 10 NOP A_Look loop }
+}
+
+actor C7MorphPlant : C7Technician
+{
+	states { Spawn: C134 A 10 NOP A_Look loop }
+}
+
+actor C7MorphBarrel : C7Technician
+{
+	states { Spawn: C139 A 10 NOP A_Look loop }
+}
+
+actor C7Ugly : C7Monster
+{
+	points 2250
+	health 24, 48, 95, 130
+	states
+	{
+		Spawn:
+			C185 A -1 NOP A_Look
+			stop
+		Path:
+			C185 A 7 NOP A_Chase
+			C193 A 7 NOP A_Chase
+			C201 A 7 NOP A_Chase
+			C209 A 7 NOP A_Chase
+			loop
+		See:
+			C185 A 5 NOP A_Chase
+			C193 A 5 NOP A_Chase
+			C201 A 5 NOP A_Chase
+			C209 A 5 NOP A_Chase
+			loop
+		Missile:
+			C225 A 7 A_FaceTarget
+			C226 A 7 bright A_WolfAttack
+			C227 A 5 bright A_WolfAttack
+			goto See
+		Pain:
+			C233 A 5
+			goto See
+		Death:
+			C228 A 0 A_Fall
+			C229 A 6 A_Scream
+			C230 A 6
+			C231 A 6
+			C232 A -1
+			stop
+	}
+}
+
+actor C7Grunt : C7Monster
+{
+	points 3500
+	health 40, 75, 140, 190
+	states
+	{
+		Spawn:
+			C344 A -1 NOP A_Look
+			stop
+		Path:
+			C344 A 7 NOP A_Chase
+			C345 A 7 NOP A_Chase
+			C346 A 7 NOP A_Chase
+			C347 A 7 NOP A_Chase
+			loop
+		See:
+			C352 A 5 NOP A_Chase
+			C353 A 5 NOP A_Chase
+			C354 A 5 NOP A_Chase
+			C355 A 5 NOP A_Chase
+			loop
+		Missile:
+			C390 A 5 A_FaceTarget
+			C391 A 5 bright A_WolfAttack
+			C392 A 5 bright A_WolfAttack
+			goto See
+		Pain:
+			C424 A 5
+			goto See
+		Death:
+			C430 A 0 A_Fall
+			C431 A 6 A_Scream
+			C432 A 6
+			C433 A 6
+			C434 A 6
+			C435 A -1
+			stop
+	}
+}
+
+actor C7Morph : C7Monster
+{
+	points 3000
+	health 30, 60, 120, 160
+	states
+	{
+		Spawn:
+			C288 A -1 NOP A_Look
+			stop
+		See:
+			C304 A 6 NOP A_Chase
+			C305 A 6 NOP A_Chase
+			C306 A 6 NOP A_Chase
+			C307 A 6 NOP A_Chase
+			loop
+		Missile:
+			C320 A 6 A_FaceTarget
+			C321 A 6 bright A_WolfAttack
+			goto See
+		Pain:
+			C330 A 5
+			goto See
+		Death:
+			C336 A 0 A_Fall
+			C337 A 6 A_Scream
+			C338 A 6
+			C339 A 6
+			C340 A -1
+			stop
+	}
+}
+
+actor C7RedHelmet : C7Monster
+{
+	points 4000
+	health 45, 90, 175, 225
+	states
+	{
+		Spawn:
+			C459 A -1 NOP A_Look
+			stop
+		See:
+			C467 A 5 NOP A_Chase
+			C468 A 5 NOP A_Chase
+			C469 A 5 NOP A_Chase
+			C470 A 5 NOP A_Chase
+			loop
+		Missile:
+			C520 A 5 A_FaceTarget
+			C521 A 4 bright A_WolfAttack
+			C522 A 4 bright A_WolfAttack
+			goto See
+		Pain:
+			C544 A 5
+			goto See
+		Death:
+			C560 A 0 A_Fall
+			C561 A 6 A_Scream
+			C562 A 6
+			C563 A 6
+			C564 A -1
+			stop
+	}
+}
+
+actor C7SpaceSeal : C7Monster
+{
+	points 5000
+	health 55, 110, 210, 280
+	states
+	{
+		Spawn:
+			C576 A -1 NOP A_Look
+			stop
+		See:
+			C584 A 5 NOP A_Chase
+			C585 A 5 NOP A_Chase
+			C586 A 5 NOP A_Chase
+			C587 A 5 NOP A_Chase
+			loop
+		Missile:
+			C608 A 5 A_FaceTarget
+			C609 A 4 bright A_WolfAttack
+			C610 A 4 bright A_WolfAttack
+			goto See
+		Pain:
+			C616 A 5
+			goto See
+		Death:
+			C618 A 0 A_Fall
+			C619 A 6 A_Scream
+			C620 A 6
+			C621 A 6
+			C622 A -1
+			stop
+	}
+}
+
+actor C7SpaceMarine : C7Monster
+{
+	points 6000
+	health 70, 140, 260, 340
+	states
+	{
+		Spawn:
+			C653 A -1 NOP A_Look
+			stop
+		See:
+			C653 A 5 NOP A_Chase
+			C654 A 5 NOP A_Chase
+			C655 A 5 NOP A_Chase
+			C656 A 5 NOP A_Chase
+			loop
+		Missile:
+			C672 A 5 A_FaceTarget
+			C676 A 4 bright A_WolfAttack
+			C679 A 4 bright A_WolfAttack
+			goto See
+		Pain:
+			C684 A 5
+			goto See
+		Death:
+			C685 A 0 A_Fall
+			C686 A 7 A_Scream
+			C687 A 7
+			C688 A 7
+			C689 A -1
+			stop
+	}
+}
+
+actor C7Boss : C7Monster
+{
+	points 10000
+	health 100, 200, 400, 600
+	speed 1, 2
+	states
+	{
+		Spawn:
+			C624 A -1 NOP A_Look
+			stop
+		See:
+			C624 A 6 NOP A_Chase
+			C625 A 6 NOP A_Chase
+			C626 A 6 NOP A_Chase
+			C627 A 6 NOP A_Chase
+			loop
+		Missile:
+			C628 A 5 A_FaceTarget
+			C629 A 4 bright A_WolfAttack
+			C630 A 4 bright A_WolfAttack
+			goto See
+		Pain:
+			C630 A 5
+			goto See
+		Death:
+			C631 A 0 A_Fall
+			C632 A 7 A_Scream
+			C633 A -1
+			stop
+	}
+}
+
+actor C7HungryPuddle : C7Boss
+{
+}
+
+actor C7Inviso : C7Boss
+{
+	points 12000
+	states
+	{
+		Spawn:
+			C638 A -1 NOP A_Look
+			stop
+		See:
+			C638 A 6 NOP A_Chase
+			C639 A 6 NOP A_Chase
+			C640 A 6 NOP A_Chase
+			C641 A 6 NOP A_Chase
+			loop
+		Missile:
+			C642 A 5 A_FaceTarget
+			C643 A 4 bright A_WolfAttack
+			goto See
+		Death:
+			C646 A 0 A_Fall
+			C647 A 7 A_Scream
+			C648 A 7
+			C649 A 7
+			C650 A 7
+			C651 A 7
+			C652 A -1
+			stop
+	}
+}
+
+actor C7SkullBoss : C7Inviso
+{
+}
+
+actor C7PurpleBoss : C7Boss
+{
+	points 15000
+	health 150, 300, 600, 800
+	states
+	{
+		Spawn:
+			C726 A -1 NOP A_Look
+			stop
+		See:
+			C726 A 6 NOP A_Chase
+			C727 A 6 NOP A_Chase
+			C728 A 6 NOP A_Chase
+			C729 A 6 NOP A_Chase
+			loop
+		Missile:
+			C730 A 5 A_FaceTarget
+			C731 A 4 bright A_WolfAttack
+			C732 A 4 bright A_WolfAttack
+			C733 A 4 bright A_WolfAttack
+			goto See
+		Death:
+			C734 A 0 A_Fall
+			C735 A 8 A_Scream
+			C736 A 8
+			C737 A -1
+			stop
+	}
+}
+
+actor C7IronFoot : C7Boss
+{
+	health 175, 350, 700, 900
+	states
+	{
+		Spawn:
+			C690 A -1 NOP A_Look
+			stop
+		See:
+			C690 A 7 NOP A_Chase
+			C691 A 7 NOP A_Chase
+			C692 A 7 NOP A_Chase
+			C693 A 7 NOP A_Chase
+			loop
+		Missile:
+			C694 A 6 A_FaceTarget
+			C695 A 5 bright A_WolfAttack
+			C696 A 5 bright A_WolfAttack
+			goto See
+		Death:
+			C699 A 0 A_Fall
+			C700 A 8 A_Scream
+			C701 A 8
+			C702 A 8
+			C703 A 8
+			C704 A 8
+			C705 A -1
+			stop
+	}
+}
+
+actor C7HornedBoss : C7Boss
+{
+	health 225, 450, 850, 1100
+	states
+	{
+		Spawn:
+			C814 A -1 NOP A_Look
+			stop
+		See:
+			C814 A 6 NOP A_Chase
+			C815 A 6 NOP A_Chase
+			C817 A 6 NOP A_Chase
+			C819 A 6 NOP A_Chase
+			loop
+		Missile:
+			C820 A 5 A_FaceTarget
+			C821 A 4 bright A_WolfAttack
+			C822 A 4 bright A_WolfAttack
+			goto See
+		Death:
+			C823 A 0 A_Fall
+			C824 A 8 A_Scream
+			C825 A 8
+			C826 A 8
+			C827 A -1
+			stop
+	}
+}
+
+actor C7Vortex
+{
+	states
+	{
+		Spawn:
+			C710 A 5
+			C711 A 5
+			C712 A 5
+			C713 A 5
+			C714 A 5
+			C715 A 5
+			C716 A 5
+			C717 A 5
+			loop
+	}
+}
+
+actor C7TransporterField
+{
+	states
+	{
+		Spawn:
+			C453 A 5
+			C454 A 5
+			C455 A 5
+			C456 A 5
+			C457 A 5
+			loop
+	}
+}
+
+actor C7TransporterExit
+{
+	states { Spawn: C458 A -1 stop }
+}
+
+actor C7ExitVortex : Inventory
+{
+	inventory.pickupsound "c7/teleport"
+	states
+	{
+		Spawn:
+			C740 A 5
+			C741 A 5
+			C742 A 5
+			C743 A 5
+			loop
+		Pickup:
+			TNT1 A 0 Exit_Normal
+			stop
+	}
+}
+
+actor C7Inert
+{
+	states
+	{
+		Spawn:
+			C444 A -1
+			stop
+	}
+}

@@ -553,3 +553,21 @@ crawlerbeast/sight		{ DSGENSIT ALGENSIT PCGENSIT }
 crawlerbeast/death		{ DSLCNDTH ALLCNDTH PCLCNDTH }
 
 liquidalien/death		{ DSLIQDTH ALLIQDTH PCLIQDTH }
+
+// Corridor 7's released AUDIOHED/AUDIOT archive has 100 PC-speaker sounds,
+// 100 AdLib sounds, and no digitized sample payloads. NULL preserves the
+// digital/AdLib/PC-speaker positions expected by the sound loader.
+$ifcorridor7
+doors/open				{ NULL C7AL0018 C7PC0018 }
+doors/close				{ NULL C7AL0019 C7PC0019 }
+world/hitwall			{ NULL C7AL0000 C7PC0000 }
+world/pushwall			{ NULL C7AL0046 C7PC0046 }
+misc/ammo_pkup			{ NULL C7AL0031 C7PC0031 }
+misc/health_pkup		{ NULL C7AL0033 C7PC0033 }
+misc/medkit_pkup		{ NULL C7AL0034 C7PC0034 }
+misc/k_pkup				{ NULL C7AL0012 C7PC0012 }
+c7/weapon/fire			{ NULL C7AL0024 C7PC0024 }
+c7/monster/sight		{ NULL C7AL0021 C7PC0021 }
+c7/monster/attack		{ NULL C7AL0058 C7PC0058 }
+c7/monster/death		{ NULL C7AL0022 C7PC0022 }
+$endif

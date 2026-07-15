@@ -1001,6 +1001,7 @@ void GameMap::ReadPlanesData()
 	TArray<WORD> ambushSpots;
 	TArray<MapTrigger> triggers;
 	TMap<WORD, TArray<MapSpot> > elevatorSpots;
+	TMap<WORD, TArray<MapSpot> > corridor7WarpSpots;
 
 	// Read and store the info plane so we can reference it
 	TUniquePtr<WORD[]> infoplane(new WORD[size]);
@@ -1080,6 +1081,17 @@ void GameMap::ReadPlanesData()
 					}
 					else
 						mapPlane.map[i].SetTile(NULL);
+
+					// Corridor 7 pairs 0x117..0x11e warp-floor cells by
+					// value. Their trigger arguments are linked after all map
+					// spots have stable addresses.
+					MapTrigger corridor7WarpTrigger;
+					if(oldplane[i] >= 0x117 && oldplane[i] <= 0x11e &&
+						xlat.TranslateTileTrigger(oldplane[i], corridor7WarpTrigger) &&
+						corridor7WarpTrigger.action == Specials::Teleport_Relative)
+					{
+						corridor7WarpSpots[oldplane[i]].Push(&mapPlane.map[i]);
+					}
 
 					Xlat::ModZone zone;
 					if(xlat.GetModZone(oldplane[i], zone))
@@ -1421,6 +1433,44 @@ void GameMap::ReadPlanesData()
 	}
 
 	SetupLinks();
+
+	// Give each Corridor 7 warp endpoint a tag that resolves exclusively to
+	// its counterpart. Teleport_Relative then preserves the player's offset
+	// within the source tile while moving to the paired endpoint.
+	TMap<WORD, TArray<MapSpot> >::ConstIterator warpIter(corridor7WarpSpots);
+	TMap<WORD, TArray<MapSpot> >::ConstPair *warpPair;
+	while(warpIter.NextPair(warpPair))
+	{
+		const TArray<MapSpot> &locations = warpPair->Value;
+		if(locations.Size() != 2)
+		{
+			Printf("Warning: Corridor 7 warp %X has %u endpoints; expected 2.\n",
+				warpPair->Key, locations.Size());
+			continue;
+		}
+
+		for(unsigned int endpoint = 0;endpoint < 2;++endpoint)
+		{
+			MapSpot source = locations[endpoint];
+			MapSpot destination = locations[endpoint^1];
+			const unsigned int tag = 0xC700 + ((warpPair->Key-0x117)<<1) + endpoint;
+			SetSpotTag(destination, tag);
+
+			bool linked = false;
+			for(unsigned int i = 0;i < triggers.Size();++i)
+			{
+				if(triggers[i].x == source->GetX() && triggers[i].y == source->GetY())
+				{
+					triggers[i].arg[0] = tag;
+					linked = true;
+					break;
+				}
+			}
+			if(!linked)
+				Printf("Warning: Corridor 7 warp %X endpoint (%u,%u) has no trigger.\n",
+					warpPair->Key, source->GetX(), source->GetY());
+		}
+	}
 
 	// Scan for music selection in info plane in y = 0
 	// No need for a feature flag here since we only use it if we can find a

@@ -58,9 +58,16 @@ static struct StatusBarConfig_t
 class WolfStatusBar : public DBaseStatusBar
 {
 public:
-	WolfStatusBar() : facecount(0), mac(false)
+	WolfStatusBar() : facecount(0), mac(false), corridor7(false)
 	{
-		if(IWad::CheckGameFilter("Noah"))
+		if(IWad::CheckGameFilter("Corridor7"))
+		{
+			// Corridor 7's released HUD is composed from VGA chunks instead of
+			// Wolf3D's STBACK/face set. Keep the gameplay information available
+			// without looking up unrelated Wolf textures.
+			corridor7 = true;
+		}
+		else if(IWad::CheckGameFilter("Noah"))
 		{
 			// Change default configuration
 			StatusBarConfig.Floor.X = 16;
@@ -121,6 +128,7 @@ private:
 
 	int facecount;
 	bool mac;
+	bool corridor7;
 };
 
 DBaseStatusBar *CreateStatusBar_Wolf3D() { return new WolfStatusBar(); }
@@ -527,6 +535,11 @@ void WolfStatusBar::RefreshBackground(bool noborder)
 
 	if(viewsize == 21 && ingame)
 		return;
+	if(corridor7)
+	{
+		VWB_DrawGraphic(TexMan("STBAR"), 0, 160);
+		return;
+	}
 
 	VWB_DrawGraphic(TexMan("STBACK"), 0, 160);
 }
@@ -535,6 +548,36 @@ void WolfStatusBar::DrawStatusBar()
 {
 	if(viewsize == 21 && ingame)
 		return;
+	if(corridor7)
+	{
+		VWB_DrawGraphic(TexMan("STBAR"), 0, 160);
+
+		FString level;
+		level.Format("%2s", levelInfo->FloorNumber.GetChars());
+		LatchString(16, 18, 2, level);
+		LatchNumber(48, 18, 6, players[ConsolePlayer].score, false, true);
+		LatchNumber(104, 18, 3, players[ConsolePlayer].health, false, true);
+
+		unsigned int ammo = 0;
+		if(players[ConsolePlayer].ReadyWeapon &&
+			players[ConsolePlayer].ReadyWeapon->ammo[AWeapon::PrimaryFire])
+		{
+			ammo = players[ConsolePlayer].ReadyWeapon->ammo[AWeapon::PrimaryFire]->amount;
+		}
+		LatchNumber(200, 18, 3, ammo, false, true);
+		LatchNumber(288, 18, 3, MAX(0, gamestate.killtotal-gamestate.killcount), false, true);
+
+		if(players[ConsolePlayer].mo)
+		{
+			unsigned int cards = 0;
+			if(players[ConsolePlayer].mo->FindInventory(ClassDef::FindClass("C7Static002")))
+				++cards;
+			if(players[ConsolePlayer].mo->FindInventory(ClassDef::FindClass("C7Static001")))
+				++cards;
+			LatchNumber(248, 18, 1, cards, false, true);
+		}
+		return;
+	}
 
 	VWB_DrawGraphic(TexMan("STBAR"), 0, 160);
 	DrawFace ();

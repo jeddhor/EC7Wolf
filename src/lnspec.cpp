@@ -47,6 +47,7 @@
 #include "wl_game.h"
 #include "wl_loadsave.h"
 #include "wl_play.h"
+#include "wl_iwad.h"
 #include "g_mapinfo.h"
 #include "g_shared/a_keys.h"
 #include "thingdef/thingdef.h"
@@ -932,6 +933,27 @@ FUNC(Pushwall_MoveNoStop)
 
 FUNC(Exit_Normal)
 {
+	// Corridor 7's ordinary wall elevator (tile 63) is intentionally inert on
+	// the two vortex floors. Those maps finish by touching object 268 instead.
+	if(IWad::CheckGameFilter("Corridor7") && args[0] == 1 &&
+		(strcmp(gamestate.mapname, "MAP30") == 0 || strcmp(gamestate.mapname, "MAP40") == 0))
+	{
+		return 0;
+	}
+
+	if(IWad::CheckGameFilter("Corridor7") && gamestate.killtotal > 0)
+	{
+		static const unsigned int clearance[4] = { 10, 75, 100, 100 };
+		const unsigned int skill = MIN<unsigned int>(gamestate.difficulty->SpawnFilter, 3);
+		const unsigned int destroyed = (gamestate.killcount*100)/gamestate.killtotal;
+		if(destroyed < clearance[skill])
+		{
+			Printf("Elevator clearance denied: %u%% of aliens destroyed; %u%% required.\n",
+				destroyed, clearance[skill]);
+			return 0;
+		}
+	}
+
 	if(activator->player)
 	{
 		if(control[activator->player->GetPlayerNum()].buttonheld[bt_use])
@@ -1157,8 +1179,12 @@ FUNC(Teleport_Relative)
 		Printf("Error: Attempted to relative teleport without a reference point.\n");
 		return 0;
 	}
-
 	if(activator->player && control[activator->player->GetPlayerNum()].buttonheld[bt_use])
+		return 0;
+	// A relative teleport can place the player directly on another crossing
+	// trigger. The movement freeze doubles as a short re-entry guard, matching
+	// the original engines' intralevel-warp latch.
+	if(activator->player && activator->sighttime)
 		return 0;
 
 	// Collect destination points so we can randomly decide

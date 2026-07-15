@@ -5,9 +5,9 @@ gameinfo
 	// build one from C7PAL instead of applying Wolf3D's palette-specific map.
 	gamecolormap = "C7CMAP"
 	translator = "xlat/corridor7.txt"
-	playerclasses = "BJPlayer"
-	signon = "WLFSGNON"
-	titlepage = "WLFSGNON"
+	playerclasses = "C7Player"
+	signon = "C7G0005"
+	titlepage = "C7G0005"
 	doorsoundsequence = "DoorNormal"
 	pushwallsoundsequence = "PushwallNormal"
 	deathtransition = "Fizzle"
@@ -50,6 +50,8 @@ skill hard
 
 defaultmap
 {
+	music = "C7MUS00"
+	bordertexture = "#000000"
 	defaultfloor = "#383838"
 	defaultceiling = "#202020"
 	// Corridor 7 has a steep falloff: the level 1 start is dark at range but

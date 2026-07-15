@@ -114,7 +114,7 @@ class GameMap
 		struct Tile
 		{
 			Tile() : offsetVertical(false), offsetHorizontal(false), autoOrient(false),
-				mapped(0), dontOverlay(false)
+				sightTransparent(false), mapped(0), dontOverlay(false)
 			{
 				texture[0].SetInvalid();
 				texture[1].SetInvalid();
@@ -133,6 +133,8 @@ class GameMap
 			// Some games store one door ID and derive its axis from adjacent
 			// floor cells instead of using separate horizontal/vertical IDs.
 			bool			autoOrient;
+			// Blocks movement and rendering, but not actor sight/hitscan checks.
+			bool			sightTransparent;
 			FName			soundSequence;
 
 			unsigned int	mapped; // filter level for always visible

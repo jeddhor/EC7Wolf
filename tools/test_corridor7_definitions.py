@@ -13,6 +13,8 @@ MONSTERS = (ROOT / "wadsrc/static/actors/corridor7/monsters.txt").read_text()
 CO7MAP = (ROOT / "wadsrc/static/co7map.txt").read_text()
 WL_PLAY = (ROOT / "src/wl_play.cpp").read_text()
 LNSPEC = (ROOT / "src/lnspec.cpp").read_text()
+GAMEMAP_H = (ROOT / "src/gamemap.h").read_text()
+WL_STATE = (ROOT / "src/wl_state.cpp").read_text()
 
 
 def require(pattern: str, text: str, description: str) -> None:
@@ -54,6 +56,12 @@ require(r"actor\s+C7Bullets\s*:\s*Ammo.*?inventory\.maxamount\s+200", PLAYER, "2
 require(r"actor\s+C7EnergyCapacity\s*:\s*Ammo.*?inventory\.amount\s+100", PLAYER, "alien energy capacity")
 require(r"ConsumeC7AlienCharge\(self,\s*33,\s*4\)", (ROOT / "src/wl_agent.cpp").read_text(), "plasma 33/4 charge model")
 require(r"clearance\[4\]\s*=\s*\{\s*10,\s*75,\s*100,\s*100\s*\}", LNSPEC, "rank clearance quotas")
+require(r'args\[0\]\s*==\s*1\s*&&\s*gamestate\.killtotal', LNSPEC, "clearance applies only to elevator exits")
+require(r'skill\s*=\s*MIN<unsigned int>\(gamestate\.difficulty->SpawnFilter,\s*3\)', LNSPEC, "zero-based rank clearance index")
+require(r'tile\s+105\s*\{.*?sighttransparent\s*=\s*true', XLAT, "wall 105 is sight-transparent but solid")
+require(r'tile\s+107\s*\{.*?sighttransparent\s*=\s*true', XLAT, "wall 107 is sight-transparent but solid")
+require(r'bool\s+sightTransparent', GAMEMAP_H, "sight-transparent solid wall property")
+require(r'else if \(!spot->tile->sightTransparent\)', WL_STATE, "sight checks pass through Corridor 7 screens")
 require(r"29,\s*18,\s*20,\s*9,\s*2,\s*14,\s*7,\s*8", WL_PLAY, "released music selector table")
 require(r'^\s*\{300,\s*C7Semaj,', XLAT, "object 300 Semaj mapping")
 require(r'"AILOA1".*?"AILOA8"', CO7MAP, "Ailoprobe directional sprite set")

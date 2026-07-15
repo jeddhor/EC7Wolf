@@ -144,6 +144,11 @@ void TextMapParser::ParseTile(Scanner &sc, MapTile &tile)
 		sc.MustGetToken(TK_BoolConst);
 		tile.autoOrient = sc->boolean;
 	}
+	else CheckKey("sighttransparent")
+	{
+		sc.MustGetToken(TK_BoolConst);
+		tile.sightTransparent = sc->boolean;
+	}
 
 	EndParseBlock
 }

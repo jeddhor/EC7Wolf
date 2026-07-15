@@ -853,10 +853,7 @@ tiles
 		texturesouth = "C7W0105";
 		textureeast = "C7W0105";
 		texturewest = "C7W0105";
-		blockingnorth = false;
-		blockingsouth = false;
-		blockingeast = false;
-		blockingwest = false;
+		sighttransparent = true;
 	}
 	tile 106
 	{
@@ -871,10 +868,7 @@ tiles
 		texturesouth = "C7W0107";
 		textureeast = "C7W0107";
 		texturewest = "C7W0107";
-		blockingnorth = false;
-		blockingsouth = false;
-		blockingeast = false;
-		blockingwest = false;
+		sighttransparent = true;
 	}
 	tile 108
 	{

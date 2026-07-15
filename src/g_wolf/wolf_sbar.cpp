@@ -568,7 +568,7 @@ void WolfStatusBar::DrawStatusBar()
 	{
 		VWB_DrawGraphic(TexMan("STBAR"), 0, 160);
 		const unsigned int clearance[4] = { 10, 75, 100, 100 };
-		const unsigned int skill = MIN<unsigned int>(MAX<unsigned int>(gamestate.difficulty->SpawnFilter, 1) - 1, 3);
+		const unsigned int skill = MIN<unsigned int>(gamestate.difficulty->SpawnFilter, 3);
 		const unsigned int destroyed = gamestate.killtotal ?
 			(gamestate.killcount * 100) / gamestate.killtotal : 100;
 		const char *objective = destroyed >= clearance[skill] ?

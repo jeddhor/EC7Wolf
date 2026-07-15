@@ -842,7 +842,8 @@ static inline bool CheckAdjacentTileBlockage(int x, int y, int lastx, int lasty)
 
 	MapSpot adjacentSpot1 = map->GetSpot(adjacentX, y, 0);
 	MapSpot adjacentSpot2 = map->GetSpot(x, adjacentY, 0);
-	if (adjacentSpot1->tile && adjacentSpot2->tile)
+	if (adjacentSpot1->tile && !adjacentSpot1->tile->sightTransparent &&
+		adjacentSpot2->tile && !adjacentSpot2->tile->sightTransparent)
 		return true;
 
 	return false;
@@ -927,7 +928,7 @@ bool CheckLine (const AActor *ob, const AActor *ob2)
 				if (CheckAdjacentTileBlockage(x, y, lastx, lasty))
 					return false;
 			}
-			else 
+			else if (!spot->tile->sightTransparent)
 			{
 				if (spot->slideAmount[direction] == 0)
 					return false;
@@ -993,7 +994,7 @@ bool CheckLine (const AActor *ob, const AActor *ob2)
 				if (CheckAdjacentTileBlockage(x, y, lastx, lasty))
 					return false;
 			}
-			else 
+			else if (!spot->tile->sightTransparent)
 			{
 				if (spot->slideAmount[direction] == 0)
 					return false;

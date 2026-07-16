@@ -105,6 +105,7 @@ public:
 	}
 
 	void DrawStatusBar();
+	void DrawTopOverlay();
 	unsigned int GetHeight(bool top) { return top ? 0 : STATUSLINES+!mac; }
 	void NewGame() { facecount = 0; }
 	void RefreshBackground(bool noborder);
@@ -580,15 +581,6 @@ void WolfStatusBar::DrawStatusBar()
 	if(corridor7)
 	{
 		VWB_DrawGraphic(TexMan("STBAR"), 0, 160);
-		const unsigned int clearance[4] = { 10, 75, 100, 100 };
-		const unsigned int skill = MIN<unsigned int>(gamestate.difficulty->SpawnFilter, 3);
-		const unsigned int destroyed = gamestate.killtotal ?
-			(gamestate.killcount * 100) / gamestate.killtotal : 100;
-		const char *objective = destroyed >= clearance[skill] ?
-			"FLOOR SECURED" : "Eliminate Aliens To Secure Floor";
-		screen->DrawText(SmallFont, CR_YELLOW, 4, 4, objective,
-			DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
-
 		FString level;
 		level.Format("%2s", levelInfo->FloorNumber.GetChars());
 		LatchString(10, 16, 2, level);
@@ -652,6 +644,19 @@ void WolfStatusBar::DrawStatusBar()
 	DrawWeapon ();
 	DrawScore ();
 	DrawItems ();
+}
+
+void WolfStatusBar::DrawTopOverlay()
+{
+	// The mission prompt is a short level-introduction overlay, not permanent
+	// status-bar content. Drawing it every rendered frame also prevents the
+	// alternating-frame flicker caused by the status bar's update cadence.
+	if(corridor7 && gamestate.TimeCount < 5*TICRATE)
+	{
+		screen->DrawText(SmallFont, CR_YELLOW, 4, 4,
+			"Eliminate Aliens To Secure Floor",
+			DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
+	}
 }
 
 //===========================================================================

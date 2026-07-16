@@ -69,8 +69,9 @@ Append an output directory and `--all` to load-check every map in the archive.
   Corridor 7 wall and plane depth ramps, exact six-bit VGA palette expansion,
   solid and passable masked-wall behavior, collision-safe index-255-to-0
   normalization with freshly traced geometry behind transparent wall and door
-  pixels, native red/blue palette cycling, four-frame in-place force-field and
-  animated-wall openings, four sliding door types with automatic orientation,
+  pixels, all four native 208..239 wall/force-field palette cycles, four-frame
+  in-place force-field and animated-wall openings, four sliding door types with
+  automatic orientation,
   red/blue access cards, push walls, paired intralevel transporters, floor
   exits, ordinary and marker-99 bonus elevators, and the level-30/40 exit vortex.
 - The executable's complete plane-1 dispatch table, including static objects,
@@ -82,6 +83,8 @@ Append an output directory and `--all` to load-check every map in the archive.
   and native first-person weapon scaling.
 - The original status bar art, number placement, segmented color gauges,
   aliens-remaining counter, M-16 start selection and native weapon anchoring,
+  a stable timed level-introduction objective prompt, the clean opening splash
+  and paced fading credit sequence,
   episode and four rank choices, the documented 10/75/100/100-percent alien
   objective gate, body armor, visor modes and charge, MAP01-MAP40 progression
   and victory, six routed bonus maps, the released per-floor hit/miss award,
@@ -103,9 +106,9 @@ reconstructions where the executable did not yield an unambiguous value.
 Masked screens preserve collision and sight behavior while transparent columns
 are composited with walls and actors at their actual depth. Plane-1 masked-wall
 configuration markers 86..88 are preserved distinctly, but their exact DOS
-state differences remain unresolved. The port uses a native ECWolf results/victory
-presentation rather than every
-DOS briefing and palette-cycle effect. Plane 2 contains editor grouping values
+state differences remain unresolved. The port uses a native ECWolf
+results/victory presentation rather than every DOS briefing. Plane 2 contains
+editor grouping values
 on two released maps and has no observed runtime effect. Original demos,
 network protocol, multiplayer rules, and other executable editions are
 deferred. Support is limited to the supplied 250,776-byte CD/Steam executable

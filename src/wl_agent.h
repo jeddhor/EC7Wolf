@@ -29,6 +29,7 @@ public:
 	virtual ~DBaseStatusBar() {}
 
 	virtual void DrawStatusBar()=0;
+	virtual void DrawTopOverlay() {}
 	virtual unsigned int GetHeight(bool top)=0;
 	virtual void NewGame() {}
 	virtual void Tick() {}

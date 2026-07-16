@@ -369,6 +369,14 @@ static bool DrawStartupConsole(FString statusStr)
 	else
 		screen->Clear(0, 0, SCREENWIDTH, SCREENHEIGHT, GPalette.BlackIndex, 0);
 
+	// Corridor 7's signon lump is its intended opening splash. Keep it clean
+	// instead of drawing ECWolf's generic initialization text over the image.
+	if(hasSignon && IWad::CheckGameFilter("Corridor7"))
+	{
+		VH_UpdateScreen();
+		return false;
+	}
+
 	word width, height;
 
 	static const char* const engineVersion = GAMENAME " " DOTVERSIONSTR_NOREV;

@@ -28,6 +28,7 @@ FLOOR_CEILING = (ROOT / "src/wl_floorceiling.cpp").read_text()
 VSWAP = (ROOT / "src/resourcefiles/file_vswap.cpp").read_text()
 WOLF_SHAPE = (ROOT / "src/textures/wolfshapetexture.cpp").read_text()
 WL_DRAW = (ROOT / "src/wl_draw.cpp").read_text()
+WL_MAIN = (ROOT / "src/wl_main.cpp").read_text()
 
 
 def require(pattern: str, text: str, description: str) -> None:
@@ -104,7 +105,13 @@ require(r'trigger\s+106\s*\{.*?action\s*=\s*"Wall_AnimateRemove".*?repeatable\s*
 require(r'oldplane\[i\]\s*==\s*106.*?Wall_AnimateRemove.*?maskedWallType\s*=\s*1.*?corridor7WallMarker\s*=\s*106', GAMEMAP_PLANES, "marker-106 animated walls use masked in-place geometry")
 require(r'oldplane\[i\]\s*==\s*107.*?sideSolid\[0\].*?false.*?maskedWallType\s*=\s*1', GAMEMAP_PLANES, "marker-107 walls start permanently open and masked")
 require(r'class\s+C7AnimatedWall.*?\+\+frame\s*>\s*3.*?corridor7WallID-1\+frame.*?frame\s*==\s*3.*?OpenWallCell\(spot,\s*false\)', LNSPEC, "Corridor 7 animated walls retain their final aperture")
-require(r'color\s*>=\s*208\s*&&\s*color\s*<=\s*223.*?TimeCount\s*>>\s*3', WL_DRAW, "Corridor 7 red/blue VGA palette ramps cycle every eight tics")
+require(r'color\s*>=\s*208\s*&&\s*color\s*<=\s*239.*?color\s*&\s*~7.*?TimeCount\s*>>\s*3', WL_DRAW, "all four Corridor 7 VGA palette ramps cycle every eight tics")
+require(r'IsMaskedWallPassSide.*?IsMaskedWallSide.*?horizontalRun.*?verticalRun', WL_DRAW, "connected glass passes rays without rendering perpendicular end caps")
+require(r'void\s+WolfStatusBar::DrawTopOverlay.*?TimeCount\s*<\s*5\*TICRATE.*?Eliminate Aliens To Secure Floor', WOLF_SBAR, "Corridor 7 objective is a timed top overlay")
+require(r'ThreeDRefresh\s*\(\s*\).*?DrawTopOverlay\s*\(\s*\)', WL_PLAY, "top overlay redraws every rendered frame")
+require(r'hasSignon\s*&&\s*IWad::CheckGameFilter\("Corridor7"\).*?VH_UpdateScreen\(\).*?return\s+false', WL_MAIN, "Corridor 7 startup keeps its splash free of ECWolf initialization text")
+if len(re.findall(r'Time\s*=\s*-4', MAPINFO)) != 5 or len(re.findall(r'FadeType\s*=\s*FadeOut', MAPINFO)) < 6:
+    raise SystemExit("Corridor 7 definition check failed: credits must hold for four seconds and fade between slides")
 require(r'templateTrigger\.arg\[4\]\s*=\s*horizontal', GAMEMAP_PLANES, "door orientation must not overwrite lock IDs")
 require(r'!levelInfo->BonusLevel\s*&&\s*gamestate\.killtotal', LNSPEC, "bonus elevators bypass campaign clearance")
 require(r'health<=0\s*&&\s*IWad::CheckGameFilter\("Corridor7"\)\s*&&\s*levelInfo->BonusLevel', WL_AGENT, "bonus health expiration is intercepted before death")

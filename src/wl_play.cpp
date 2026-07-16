@@ -1023,6 +1023,7 @@ void PlayFrame()
 	UpdatePaletteShifts ();
 
 	ThreeDRefresh ();
+	StatusBar->DrawTopOverlay();
 
 	if(automap && !gamestate.victoryflag)
 		BasicOverhead();

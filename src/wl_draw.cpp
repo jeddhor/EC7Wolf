@@ -262,12 +262,12 @@ static inline BYTE Corridor7CycleColor(BYTE color)
 	if(!IWad::CheckGameFilter("Corridor7"))
 		return color;
 
-	// The DOS game rotates the red and blue eight-color ramps every eight
-	// tics. Force fields use 217..223, with 216 providing the dark step that
-	// makes the bright diagonal band travel across the screen.
-	if(color >= 208 && color <= 223)
+	// The DOS game independently rotates all four eight-color ramps from
+	// 208..239. Besides the red and blue force-field bands, 224..239 drive
+	// the blinking and travelling lights embedded in many wall textures.
+	if(color >= 208 && color <= 239)
 	{
-		const int base = color < 216 ? 208 : 216;
+		const int base = color & ~7;
 		const int phase = (gamestate.TimeCount >> 3) & 7;
 		return base + ((color-base-phase) & 7);
 	}
@@ -611,7 +611,14 @@ typedef struct
 visobj_t vislist[MAXVISABLE];
 visobj_t *visptr,*visstep,*farthest;
 
-static bool IsMaskedWallSide(MapSpot spot, MapTile::Side side)
+static bool IsConnectedMaskedWall(MapSpot spot, MapTile::Side direction)
+{
+	MapSpot other = spot->GetAdjacent(direction);
+	return other && other->tile &&
+		(other->maskedWallType || other->tile->renderMasked);
+}
+
+static bool IsMaskedWallPassSide(MapSpot spot, MapTile::Side side)
 {
 	if(!(spot->maskedWallType || spot->tile->renderMasked))
 		return false;
@@ -620,11 +627,35 @@ static bool IsMaskedWallSide(MapSpot spot, MapTile::Side side)
 	if(spot->tile->offsetHorizontal && side != MapTile::North && side != MapTile::South)
 		return false;
 
-	// A masked wall is a plane between open space and its wall cell, not a
-	// transparent cube. Drawing the camera-facing X and Y sides together was
-	// the source of the kaleidoscope/corner projection seen at close range.
 	MapSpot adjacent = spot->GetAdjacent(side);
 	return !adjacent || !adjacent->tile;
+}
+
+static bool IsMaskedWallSide(MapSpot spot, MapTile::Side side)
+{
+	if(!IsMaskedWallPassSide(spot, side))
+		return false;
+
+	// A connected row or column of glass is one continuous plane. Its end
+	// cells must not grow perpendicular end caps: those project almost edge-on
+	// at close range and produce the triangular hall-of-mirrors pattern seen in
+	// Corridor 7's MAP01 observation room.
+	const bool horizontalRun = IsConnectedMaskedWall(spot, MapTile::East) ||
+		IsConnectedMaskedWall(spot, MapTile::West);
+	const bool verticalRun = IsConnectedMaskedWall(spot, MapTile::North) ||
+		IsConnectedMaskedWall(spot, MapTile::South);
+	if(horizontalRun && !verticalRun &&
+		(side == MapTile::East || side == MapTile::West))
+	{
+		return false;
+	}
+	if(verticalRun && !horizontalRun &&
+		(side == MapTile::North || side == MapTile::South))
+	{
+		return false;
+	}
+
+	return true;
 }
 
 static void GetMaskedWallEndpoints(MapSpot spot, MapTile::Side side,
@@ -1162,7 +1193,7 @@ vertentry:
 			if(tilehit && tilehit->tile)
 			{
 				DetermineHitDir(true);
-				if(IsMaskedWallSide(tilehit, hitdir))
+				if(IsMaskedWallPassSide(tilehit, hitdir))
 					goto passvert;
 				if(tilehit->tile->offsetVertical)
 				{
@@ -1331,7 +1362,7 @@ horizentry:
 			if(tilehit && tilehit->tile)
 			{
 				DetermineHitDir(false);
-				if(IsMaskedWallSide(tilehit, hitdir))
+				if(IsMaskedWallPassSide(tilehit, hitdir))
 					goto passhoriz;
 				if(tilehit->tile->offsetHorizontal)
 				{

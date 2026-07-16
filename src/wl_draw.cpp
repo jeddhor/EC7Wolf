@@ -632,6 +632,8 @@ typedef struct
 	AActor *actor;
 	MapSpot spot;
 	MapTile::Side side;
+	int first;
+	int last;
 	int viewheight;
 	//short      viewx,
 	//		viewheight,
@@ -642,27 +644,20 @@ typedef struct
 
 visobj_t vislist[MAXVISABLE];
 visobj_t *visptr,*visstep,*farthest;
+static TArray<int> maskedWallDepth;
 
-static bool IsConnectedMaskedWall(MapSpot spot, MapTile::Side direction)
+struct MaskedWallHit
 {
-	MapSpot other = spot->GetAdjacent(direction);
-	if(!other || !other->tile ||
-		!(other->maskedWallType || other->tile->renderMasked))
-	{
-		return false;
-	}
+	MapSpot spot;
+	MapTile::Side side;
+	int first;
+	int last;
 
-	// Adjacent transparent artwork is not necessarily part of the same glass
-	// plane. MAP01 puts animated monitors and differently marked glass against
-	// observation-window endpoints; merging those leaves a perpendicular end
-	// face visible as a giant blue fan.
-	if(spot->corridor7WallID || other->corridor7WallID)
-	{
-		return spot->corridor7WallID == other->corridor7WallID &&
-			spot->corridor7WallMarker == other->corridor7WallMarker;
-	}
-	return true;
-}
+	MaskedWallHit(MapSpot spot, MapTile::Side side, int column)
+		: spot(spot), side(side), first(column), last(column) {}
+};
+
+static TArray<MaskedWallHit> maskedWallHits;
 
 static bool IsMaskedWallPassSide(MapSpot spot, MapTile::Side side)
 {
@@ -673,35 +668,35 @@ static bool IsMaskedWallPassSide(MapSpot spot, MapTile::Side side)
 	if(spot->tile->offsetHorizontal && side != MapTile::North && side != MapTile::South)
 		return false;
 
+	// Rendering must continue through a masked tile even when another wall tile
+	// touches the side the ray entered. Otherwise a line of adjacent glass panes
+	// stops at its second tile, and that tile's transparent texels expose the
+	// previous framebuffer instead of freshly traced scenery.
+	if(IWad::CheckGameFilter("Corridor7"))
+		return true;
+
 	MapSpot adjacent = spot->GetAdjacent(side);
 	return !adjacent || !adjacent->tile;
 }
 
-static bool IsMaskedWallSide(MapSpot spot, MapTile::Side side)
+static void RecordMaskedWallHit(MapSpot spot, MapTile::Side side, int column)
 {
-	if(!IsMaskedWallPassSide(spot, side))
-		return false;
-
-	// A connected row or column of glass is one continuous plane. Its end
-	// cells must not grow perpendicular end caps: those project almost edge-on
-	// at close range and produce the triangular hall-of-mirrors pattern seen in
-	// Corridor 7's MAP01 observation room.
-	const bool horizontalRun = IsConnectedMaskedWall(spot, MapTile::East) ||
-		IsConnectedMaskedWall(spot, MapTile::West);
-	const bool verticalRun = IsConnectedMaskedWall(spot, MapTile::North) ||
-		IsConnectedMaskedWall(spot, MapTile::South);
-	if(horizontalRun && !verticalRun &&
-		(side == MapTile::East || side == MapTile::West))
+	// Rays are traced from left to right, but each ray can cross several panes.
+	// Extend the most recent run for this exact surface instead of turning the
+	// tile-wide visibility bit into a full, guessed wall face.
+	for(int i = maskedWallHits.Size()-1;i >= 0;--i)
 	{
-		return false;
+		MaskedWallHit &hit = maskedWallHits[i];
+		if(hit.spot != spot || hit.side != side)
+			continue;
+		if(column <= hit.last+1)
+		{
+			hit.last = MAX(hit.last, column);
+			return;
+		}
+		break;
 	}
-	if(verticalRun && !horizontalRun &&
-		(side == MapTile::North || side == MapTile::South))
-	{
-		return false;
-	}
-
-	return true;
+	maskedWallHits.Push(MaskedWallHit(spot, side, column));
 }
 
 static void GetMaskedWallEndpoints(MapSpot spot, MapTile::Side side,
@@ -825,8 +820,13 @@ static void ScaleMaskedWallPost(const BYTE *source, const BYTE *opacity,
 	int yendoffs = yend*vbufPitch+screenx;
 	while(yoffs <= yendoffs)
 	{
-		if(opacity ? opacity[yw] != 0 : source[yw] != maskColor)
+		const bool opaque = opacity ? opacity[yw] != 0 : source[yw] != maskColor;
+		const unsigned int depthIndex = yend*viewwidth+screenx;
+		if(opaque && height >= maskedWallDepth[depthIndex])
+		{
 			vbuf[yendoffs] = curshades[Corridor7CycleColor(source[yw])];
+			maskedWallDepth[depthIndex] = height;
+		}
 		ywcount -= textureYScale;
 		if(ywcount <= 0)
 		{
@@ -840,10 +840,12 @@ static void ScaleMaskedWallPost(const BYTE *source, const BYTE *opacity,
 				yw = textureSpan-1;
 		}
 		yendoffs -= vbufPitch;
+		--yend;
 	}
 }
 
-static void DrawMaskedWall(MapSpot spot, MapTile::Side side)
+static void DrawMaskedWall(MapSpot spot, MapTile::Side side,
+	int hitFirst, int hitLast)
 {
 	FTexture *texture = GetWallTexture(spot, side);
 	if(!texture)
@@ -870,8 +872,10 @@ static void DrawMaskedWall(MapSpot spot, MapTile::Side side)
 		swapvalues(u1, u2);
 	}
 
-	const int first = MAX(screenx1, 0);
-	const int last = MIN(screenx2, viewwidth-1);
+	const int first = MAX(MAX(screenx1, hitFirst), 0);
+	const int last = MIN(MIN(screenx2, hitLast), viewwidth-1);
+	if(first > last)
+		return;
 	const int range = screenx2-screenx1;
 	const int textureWidth = texture->GetWidth();
 	const int textureHeight = texture->GetHeight();
@@ -912,17 +916,20 @@ static void DrawMaskedWall(MapSpot spot, MapTile::Side side)
 	}
 }
 
-static void AddMaskedWall(MapSpot spot, MapTile::Side side)
+static void AddMaskedWall(const MaskedWallHit &hit)
 {
-	if(visptr >= &vislist[MAXVISABLE-1] || !IsMaskedWallSide(spot, side))
+	if(visptr >= &vislist[MAXVISABLE-1] ||
+		!IsMaskedWallPassSide(hit.spot, hit.side))
 		return;
-	const int height = MaskedWallHeight(spot, side);
+	const int height = MaskedWallHeight(hit.spot, hit.side);
 	if(height <= 0)
 		return;
 	visptr->type = VIS_MaskedWall;
 	visptr->actor = NULL;
-	visptr->spot = spot;
-	visptr->side = side;
+	visptr->spot = hit.spot;
+	visptr->side = hit.side;
+	visptr->first = hit.first;
+	visptr->last = hit.last;
 	visptr->viewheight = height;
 	++visptr;
 }
@@ -932,28 +939,14 @@ void DrawScaleds (void)
 	int      i,least,numvisable,height;
 
 	visptr = &vislist[0];
-
-	const fixed camerax = players[ConsolePlayer].camera->x;
-	const fixed cameray = players[ConsolePlayer].camera->y;
-	for(unsigned int y = 0;y < mapheight;++y)
+	if(maskedWallHits.Size() > 0)
 	{
-		for(unsigned int x = 0;x < mapwidth;++x)
-		{
-			MapSpot spot = map->GetSpot(x, y, 0);
-			if(!spot->visible || !spot->tile)
-				continue;
-
-			const fixed left = x<<TILESHIFT;
-			const fixed top = y<<TILESHIFT;
-			if(camerax < left)
-				AddMaskedWall(spot, MapTile::West);
-			else if(camerax >= left+TILEGLOBAL)
-				AddMaskedWall(spot, MapTile::East);
-			if(cameray < top)
-				AddMaskedWall(spot, MapTile::North);
-			else if(cameray >= top+TILEGLOBAL)
-				AddMaskedWall(spot, MapTile::South);
-		}
+		const unsigned int maskedWallPixels = viewwidth*viewheight;
+		maskedWallDepth.Resize(maskedWallPixels);
+		memset(&maskedWallDepth[0], 0,
+			maskedWallPixels*sizeof(maskedWallDepth[0]));
+		for(unsigned int i = 0;i < maskedWallHits.Size();++i)
+			AddMaskedWall(maskedWallHits[i]);
 	}
 
 //
@@ -1028,7 +1021,8 @@ void DrawScaleds (void)
 		// draw farthest
 		//
 		if(farthest->type == VIS_MaskedWall)
-			DrawMaskedWall(farthest->spot, farthest->side);
+			DrawMaskedWall(farthest->spot, farthest->side,
+				farthest->first, farthest->last);
 		else if(farthest->actor->flags & FL_BILLBOARD)
 			Scale3DSprite(farthest->actor, farthest->actor->state, farthest->viewheight);
 		else
@@ -1240,7 +1234,10 @@ vertentry:
 			{
 				DetermineHitDir(true);
 				if(IsMaskedWallPassSide(tilehit, hitdir))
+				{
+					RecordMaskedWallHit(tilehit, hitdir, pixx);
 					goto passvert;
+				}
 				if(tilehit->tile->offsetVertical)
 				{
 					int32_t yintbuf=yintercept+(ystep>>1);
@@ -1409,7 +1406,10 @@ horizentry:
 			{
 				DetermineHitDir(false);
 				if(IsMaskedWallPassSide(tilehit, hitdir))
+				{
+					RecordMaskedWallHit(tilehit, hitdir, pixx);
 					goto passhoriz;
+				}
 				if(tilehit->tile->offsetHorizontal)
 				{
 					int32_t xintbuf=xintercept+(xstep>>1);
@@ -1572,6 +1572,7 @@ void WallRefresh (void)
 
 	min_wallheight = viewheight;
 	lastside = -1;                  // the first pixel is on a new wall
+	maskedWallHits.Clear();
 	viewshift = FixedMul(focallengthy, finetangent[(ANGLE_180+players[ConsolePlayer].camera->pitch)>>ANGLETOFINESHIFT]);
 
 	

@@ -106,7 +106,8 @@ require(r'oldplane\[i\]\s*==\s*106.*?Wall_AnimateRemove.*?maskedWallType\s*=\s*1
 require(r'oldplane\[i\]\s*==\s*107.*?sideSolid\[0\].*?false.*?maskedWallType\s*=\s*1', GAMEMAP_PLANES, "marker-107 walls start permanently open and masked")
 require(r'class\s+C7AnimatedWall.*?\+\+frame\s*>\s*3.*?corridor7WallID-1\+frame.*?frame\s*==\s*3.*?OpenWallCell\(spot,\s*false\)', LNSPEC, "Corridor 7 animated walls retain their final aperture")
 require(r'color\s*>=\s*208\s*&&\s*color\s*<=\s*239.*?color\s*&\s*~7.*?TimeCount\s*>>\s*3', WL_DRAW, "all four Corridor 7 VGA palette ramps cycle every eight tics")
-require(r'IsConnectedMaskedWall.*?corridor7WallID\s*==\s*other->corridor7WallID.*?corridor7WallMarker\s*==\s*other->corridor7WallMarker.*?IsMaskedWallPassSide.*?IsMaskedWallSide.*?horizontalRun.*?verticalRun', WL_DRAW, "only matching connected glass suppresses perpendicular end caps")
+require(r'IsMaskedWallPassSide.*?CheckGameFilter\("Corridor7"\).*?return\s+true.*?RecordMaskedWallHit.*?maskedWallHits\.Push.*?DrawMaskedWall.*?hitFirst.*?hitLast', WL_DRAW, "masked Corridor 7 rays cross adjacent glass and retain their exact surface spans")
+require(r'height\s*>=\s*maskedWallDepth\[depthIndex\].*?maskedWallDepth\[depthIndex\]\s*=\s*height', WL_DRAW, "overlapping masked walls use per-pixel depth compositing")
 require(r'GetWallTexture.*?corridor7WallMarker\s*>=\s*1.*?corridor7WallMarker\s*<=\s*3.*?textureName\.Format\("C7W%04u",\s*base\+i\).*?TimeCount/5.*?animation\[base\]\[frame\]', WL_DRAW, "markers 86..88 animate four wall pages at the DOS cadence")
 for wall_id, result_id, kind in ((9, 10, 1), (11, 12, 2), (30, 31, 3)):
     require(

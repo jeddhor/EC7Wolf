@@ -1432,11 +1432,10 @@ void GameMap::ReadPlanesData()
 						}
 					}
 
-					// Values 86..88 are Corridor 7 masked-wall configuration
-					// metadata, not
-					// spawned objects. Preserve the subtype on its wall cell
-					// without conflating it with marker 106's animated opening
-					// behavior or with index-255 transparency.
+					// Values 86..88 opt the wall cell into its four-page loop and
+					// select one of three phase offsets. They are metadata, not
+					// spawned objects, and are independent of marker 106's
+					// one-shot opening behavior and index-255 transparency.
 					if(IWad::CheckGameFilter("Corridor7") &&
 						oldplane[i] >= 86 && oldplane[i] <= 88 &&
 						mapPlane.map[i].tile)

@@ -200,9 +200,9 @@ class GameMap
 				Tile::Side		pushDirection;
 				unsigned int	pushAmount;
 				Map				*pushReceptor;
-				// Corridor 7 plane-1 values 86..88 select masked-wall
-				// subtypes without spawning a map object. maskedWallType is
-				// derived independently from index-255 wall art.
+				// Corridor 7 plane-1 values 86..88 select phase offsets for
+				// four-page animated walls without spawning a map object.
+				// maskedWallType is derived independently from index-255 art.
 				BYTE			maskedWallType;
 				BYTE			corridor7WallMarker;
 				WORD			corridor7WallID;

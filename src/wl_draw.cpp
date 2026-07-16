@@ -386,6 +386,38 @@ static int SlideTextureOffset(unsigned int style, int intercept, int amount)
 	}
 }
 
+// Corridor 7 uses plane-1 values 86..88 to opt individual wall cells into
+// four-page animations. The released maps deliberately reuse the same base
+// wall IDs without a marker, so these cannot be ordinary global ANIMDEFS.
+static FTexture *GetWallTexture(MapSpot spot, MapTile::Side side)
+{
+	FTextureID texture = spot->texture[side];
+	if(spot->corridor7WallMarker >= 1 && spot->corridor7WallMarker <= 3 &&
+		spot->corridor7WallID > 0 && spot->corridor7WallID <= 253)
+	{
+		static bool cached[253] = { false };
+		static FTextureID animation[253][4];
+		const unsigned int base = spot->corridor7WallID-1;
+		if(!cached[base])
+		{
+			for(unsigned int i = 0;i < 4;++i)
+			{
+				FString textureName;
+				textureName.Format("C7W%04u", base+i);
+				animation[base][i] = TexMan.CheckForTexture(textureName,
+					FTexture::TEX_Wall);
+			}
+			cached[base] = true;
+		}
+		const unsigned int frame =
+			((gamestate.TimeCount/5)+(spot->corridor7WallMarker-1))&3;
+		const FTextureID animated = animation[base][frame];
+		if(animated.isValid())
+			texture = animated;
+	}
+	return TexMan(texture);
+}
+
 /*
 ====================
 =
@@ -440,9 +472,9 @@ void HitVertWall (void)
 
 	MapSpot adj = tilehit->GetAdjacent(hitdir);
 	if (adj && adj->tile && adj->tile->offsetHorizontal && !adj->tile->offsetVertical) // check for adjacent doors
-		source = TexMan(adj->texture[hitdir]);
+		source = GetWallTexture(adj, hitdir);
 	else
-		source = TexMan(tilehit->texture[hitdir]);
+		source = GetWallTexture(tilehit, hitdir);
 
 	if(source)
 	{
@@ -521,9 +553,9 @@ void HitHorizWall (void)
 
 	MapSpot adj = tilehit->GetAdjacent(hitdir);
 	if (adj && adj->tile && adj->tile->offsetVertical && !adj->tile->offsetHorizontal) // check for adjacent doors
-		source = TexMan(adj->texture[hitdir]);
+		source = GetWallTexture(adj, hitdir);
 	else
-		source = TexMan(tilehit->texture[hitdir]);
+		source = GetWallTexture(tilehit, hitdir);
 
 	if(source)
 	{
@@ -614,8 +646,22 @@ visobj_t *visptr,*visstep,*farthest;
 static bool IsConnectedMaskedWall(MapSpot spot, MapTile::Side direction)
 {
 	MapSpot other = spot->GetAdjacent(direction);
-	return other && other->tile &&
-		(other->maskedWallType || other->tile->renderMasked);
+	if(!other || !other->tile ||
+		!(other->maskedWallType || other->tile->renderMasked))
+	{
+		return false;
+	}
+
+	// Adjacent transparent artwork is not necessarily part of the same glass
+	// plane. MAP01 puts animated monitors and differently marked glass against
+	// observation-window endpoints; merging those leaves a perpendicular end
+	// face visible as a giant blue fan.
+	if(spot->corridor7WallID || other->corridor7WallID)
+	{
+		return spot->corridor7WallID == other->corridor7WallID &&
+			spot->corridor7WallMarker == other->corridor7WallMarker;
+	}
+	return true;
 }
 
 static bool IsMaskedWallPassSide(MapSpot spot, MapTile::Side side)
@@ -799,7 +845,7 @@ static void ScaleMaskedWallPost(const BYTE *source, const BYTE *opacity,
 
 static void DrawMaskedWall(MapSpot spot, MapTile::Side side)
 {
-	FTexture *texture = TexMan(spot->texture[side]);
+	FTexture *texture = GetWallTexture(spot, side);
 	if(!texture)
 		return;
 

@@ -5,6 +5,30 @@
 
 tiles
 {
+	// Native one-shot computer terminals. Their result pages are the next wall
+	// ID for access panels and wall 31 for the intruder alarm.
+	trigger 9
+	{
+		action = "C7_WallSwitch";
+		arg0 = 10;
+		arg1 = 1;
+		playeruse = true;
+	}
+	trigger 11
+	{
+		action = "C7_WallSwitch";
+		arg0 = 12;
+		arg1 = 2;
+		playeruse = true;
+	}
+	trigger 30
+	{
+		action = "C7_WallSwitch";
+		arg0 = 31;
+		arg1 = 3;
+		playeruse = true;
+	}
+
 	// Wall 63 is Corridor 7's normal elevator switch. arg1 distinguishes it
 	// from floor/vortex exits so the two boss floors can disable the elevator.
 	trigger 63

@@ -1127,6 +1127,29 @@ static void FirstSighting (AActor *ob, const Frame *state)
 		ob->SetState(state);
 }
 
+void P_AlertCorridor7Monsters(AActor *target)
+{
+	if(!target)
+		return;
+
+	// The original intruder terminal sets a level-wide alert flag. Wake every
+	// live monster immediately so the result naturally survives save games
+	// after the one-shot switch has been consumed.
+	for(AActor::Iterator iterator = AActor::GetIterator();iterator.Next();)
+	{
+		AActor *actor = iterator.Item();
+		if(actor == target || actor->player || actor->health <= 0 ||
+			!(actor->flags & FL_SHOOTABLE) || !actor->SeeState ||
+			(actor->flags & FL_ATTACKMODE))
+		{
+			continue;
+		}
+		actor->target = target;
+		actor->flags &= ~FL_AMBUSH;
+		FirstSighting(actor, actor->SeeState);
+	}
+}
+
 
 
 /*

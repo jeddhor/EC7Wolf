@@ -47,6 +47,7 @@
 #include "wl_game.h"
 #include "wl_loadsave.h"
 #include "wl_play.h"
+#include "wl_state.h"
 #include "wl_iwad.h"
 #include "g_mapinfo.h"
 #include "g_shared/a_keys.h"
@@ -215,6 +216,40 @@ FUNC(Wall_AnimateRemove)
 	}
 
 	new C7AnimatedWall(spot);
+	return 1;
+}
+
+// Corridor 7's wall IDs 9, 11, and 30 are one-shot computer terminals. The
+// DOS use routine advances each wall ID to its result artwork and grants the
+// matching access permission (or sounds the intruder alarm).
+FUNC(C7_WallSwitch)
+{
+	if(!spot || !spot->tile || args[0] < 1)
+		return 0;
+
+	FString textureName;
+	textureName.Format("C7W%04u", args[0]-1);
+	const FTextureID texture = TexMan.CheckForTexture(textureName,
+		FTexture::TEX_Wall);
+	if(!texture.isValid())
+		return 0;
+
+	for(unsigned int side = 0;side < 4;++side)
+		spot->texture[side] = texture;
+
+	if(activator && (args[1] == 1 || args[1] == 2))
+	{
+		const char *keyClass = args[1] == 1 ? "C7Static001" : "C7Static002";
+		const ClassDef *key = ClassDef::FindClass(keyClass);
+		if(key && !activator->FindInventory(key))
+			activator->GiveInventory(key);
+	}
+	else if(args[1] == 3)
+	{
+		P_AlertCorridor7Monsters(activator);
+	}
+
+	PlaySoundLocMapSpot("switches/normbutn", spot);
 	return 1;
 }
 

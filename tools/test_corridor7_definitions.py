@@ -96,7 +96,7 @@ require(r'corridor7\s*&&\s*source\s*==\s*255.*?source\s*=\s*0.*?GPalette\.Remap\
 require(r'oldplane\[i\]\s*==\s*104\s*\|\|\s*oldplane\[i\]\s*==\s*105.*?corridor7WallID-1.*?maskedWallType\s*=\s*1', GAMEMAP_PLANES, "markers 104/105 select wall-ID-minus-one masked pages")
 require(r'corridor7SightTransparent\s*=\s*oldplane\[i\]\s*==\s*105', GAMEMAP_PLANES, "marker 105 alone is sight-transparent")
 require(r'else if \(!spot->tile->sightTransparent\s*&&\s*!spot->corridor7SightTransparent\)', WL_STATE, "sight checks distinguish markers 104 and 105")
-require(r'oldplane\[i\]\s*>=\s*86\s*&&\s*oldplane\[i\]\s*<=\s*88.*?corridor7WallMarker\s*=\s*oldplane\[i\]-85', GAMEMAP_PLANES, "masked-wall subtypes 86..88 are preserved")
+require(r'oldplane\[i\]\s*>=\s*86\s*&&\s*oldplane\[i\]\s*<=\s*88.*?corridor7WallMarker\s*=\s*oldplane\[i\]-85', GAMEMAP_PLANES, "animated-wall phase markers 86..88 are preserved")
 require(r'CheckGameFilter\("Corridor7"\).*?DrawWindow\(x,\s*y,\s*9,\s*9', M_CLASSES, "palette-safe Corridor 7 checkbox")
 require(r'trigger\s+98\s*\{.*?action\s*=\s*"Wall_Remove".*?secret\s*=\s*true', XLAT, "marker-98 secret walls disintegrate")
 require(r'trigger\s+101\s*\{.*?action\s*=\s*"Wall_Remove"', XLAT, "marker-101 walls disintegrate")
@@ -106,7 +106,16 @@ require(r'oldplane\[i\]\s*==\s*106.*?Wall_AnimateRemove.*?maskedWallType\s*=\s*1
 require(r'oldplane\[i\]\s*==\s*107.*?sideSolid\[0\].*?false.*?maskedWallType\s*=\s*1', GAMEMAP_PLANES, "marker-107 walls start permanently open and masked")
 require(r'class\s+C7AnimatedWall.*?\+\+frame\s*>\s*3.*?corridor7WallID-1\+frame.*?frame\s*==\s*3.*?OpenWallCell\(spot,\s*false\)', LNSPEC, "Corridor 7 animated walls retain their final aperture")
 require(r'color\s*>=\s*208\s*&&\s*color\s*<=\s*239.*?color\s*&\s*~7.*?TimeCount\s*>>\s*3', WL_DRAW, "all four Corridor 7 VGA palette ramps cycle every eight tics")
-require(r'IsMaskedWallPassSide.*?IsMaskedWallSide.*?horizontalRun.*?verticalRun', WL_DRAW, "connected glass passes rays without rendering perpendicular end caps")
+require(r'IsConnectedMaskedWall.*?corridor7WallID\s*==\s*other->corridor7WallID.*?corridor7WallMarker\s*==\s*other->corridor7WallMarker.*?IsMaskedWallPassSide.*?IsMaskedWallSide.*?horizontalRun.*?verticalRun', WL_DRAW, "only matching connected glass suppresses perpendicular end caps")
+require(r'GetWallTexture.*?corridor7WallMarker\s*>=\s*1.*?corridor7WallMarker\s*<=\s*3.*?textureName\.Format\("C7W%04u",\s*base\+i\).*?TimeCount/5.*?animation\[base\]\[frame\]', WL_DRAW, "markers 86..88 animate four wall pages at the DOS cadence")
+for wall_id, result_id, kind in ((9, 10, 1), (11, 12, 2), (30, 31, 3)):
+    require(
+        rf'trigger\s+{wall_id}\s*\{{.*?action\s*=\s*"C7_WallSwitch".*?arg0\s*=\s*{result_id}.*?arg1\s*=\s*{kind}.*?playeruse\s*=\s*true',
+        XLAT,
+        f"wall {wall_id} must activate its native Corridor 7 terminal result",
+    )
+require(r'FUNC\(C7_WallSwitch\).*?C7Static001.*?C7Static002.*?GiveInventory.*?P_AlertCorridor7Monsters', LNSPEC, "Corridor 7 terminals grant access cards or raise the intruder alert")
+require(r'P_AlertCorridor7Monsters.*?AActor::GetIterator.*?FL_SHOOTABLE.*?FirstSighting', WL_STATE, "intruder alert wakes every live monster")
 require(r'void\s+WolfStatusBar::DrawTopOverlay.*?TimeCount\s*<\s*5\*TICRATE.*?Eliminate Aliens To Secure Floor', WOLF_SBAR, "Corridor 7 objective is a timed top overlay")
 require(r'ThreeDRefresh\s*\(\s*\).*?DrawTopOverlay\s*\(\s*\)', WL_PLAY, "top overlay redraws every rendered frame")
 require(r'hasSignon\s*&&\s*IWad::CheckGameFilter\("Corridor7"\).*?VH_UpdateScreen\(\).*?return\s+false', WL_MAIN, "Corridor 7 startup keeps its splash free of ECWolf initialization text")

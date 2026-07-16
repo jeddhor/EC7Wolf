@@ -53,12 +53,12 @@ tiles
 		repeatable = true;
 	}
 
-	// Wall 63 is Corridor 7's normal elevator switch. arg1 distinguishes it
+	// Wall 63 is Corridor 7's normal elevator switch. arg0 distinguishes it
 	// from floor/vortex exits so the two boss floors can disable the elevator.
 	trigger 63
 	{
 		action = "Exit_Normal";
-		arg1 = 1;
+		arg0 = 1;
 		playeruse = true;
 	}
 
@@ -2044,8 +2044,10 @@ things
 	{29, C7M343, 0, 0, 0}
 	{30, C7Static007, 0, 0, 0}
 	{31, C7Static008, 0, 0, 0}
-	{32, C7Static009, 0, 0, 0}
-	{33, C7Static010, 0, 0, 0}
+	// These two executable-table slots are internal markers in released maps,
+	// not the thin post sprites occupying the corresponding graphics pages.
+	ignore 32;
+	ignore 33;
 	{34, C7Static011, 0, 0, 0}
 	{35, C7Static012, 0, 0, 0}
 	{36, C7Static013, 0, 0, 0}
@@ -2109,7 +2111,9 @@ things
 	ignore 90;
 	ignore 91;
 	ignore 92;
-	{93, C7VisorBattery, 0, 0, 0}
+	// The executable's object switch has no case for 93. Treating it as sprite
+	// page 71 creates a collectible, room-sized mine-explosion frame.
+	ignore 93;
 	ignore 94;
 	ignore 95;
 	ignore 96;

@@ -685,7 +685,7 @@ actor C7TransporterExit
 	states { Spawn: C458 A -1 stop }
 }
 
-actor C7ExitVortex : Inventory
+actor C7ExitVortex : CustomInventory
 {
 	inventory.pickupsound "c7/teleport"
 	states

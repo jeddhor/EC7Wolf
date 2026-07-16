@@ -153,7 +153,7 @@ class C7AnimatedWall : public Thinker
 	DECLARE_CLASS(C7AnimatedWall, Thinker)
 
 public:
-	C7AnimatedWall(MapSpot spot) : Thinker(ThinkerList::WORLD), spot(spot), frame(0)
+	C7AnimatedWall(MapSpot spot) : Thinker(ThinkerList::WORLD), spot(spot), frame(0), tics(0)
 	{
 		spot->thinker = this;
 	}
@@ -167,7 +167,15 @@ public:
 
 	void Tick()
 	{
-		if(!spot || !spot->tile || ++frame > 3)
+		if(!spot || !spot->tile)
+		{
+			Destroy();
+			return;
+		}
+		if(++tics < 8)
+			return;
+		tics = 0;
+		if(++frame > 3)
 		{
 			Destroy();
 			return;
@@ -197,13 +205,14 @@ public:
 
 	void Serialize(FArchive &arc)
 	{
-		arc << spot << frame;
+		arc << spot << frame << tics;
 		Super::Serialize(arc);
 	}
 
 private:
 	MapSpot spot;
 	BYTE frame;
+	BYTE tics;
 };
 IMPLEMENT_INTERNAL_CLASS(C7AnimatedWall)
 
@@ -242,7 +251,12 @@ FUNC(C7_WallSwitch)
 		const char *keyClass = args[1] == 1 ? "C7Static001" : "C7Static002";
 		const ClassDef *key = ClassDef::FindClass(keyClass);
 		if(key && !activator->FindInventory(key))
+		{
 			activator->GiveInventory(key);
+			if(activator == players[ConsolePlayer].camera)
+				StatusBar->SetTopMessage(args[1] == 1 ?
+					"RED Access Granted" : "BLUE Access Granted");
+		}
 	}
 	else if(args[1] == 3)
 	{
@@ -1218,6 +1232,8 @@ FUNC(Exit_Normal)
 		const unsigned int destroyed = (gamestate.killcount*100)/gamestate.killtotal;
 		if(destroyed < clearance[skill])
 		{
+			if(activator == players[ConsolePlayer].camera)
+				StatusBar->SetTopMessage("FLOOR NOT SECURED");
 			Printf("Elevator clearance denied: %u%% of aliens destroyed; %u%% required.\n",
 				destroyed, clearance[skill]);
 			return 0;

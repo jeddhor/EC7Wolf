@@ -30,6 +30,7 @@ public:
 
 	virtual void DrawStatusBar()=0;
 	virtual void DrawTopOverlay() {}
+	virtual void SetTopMessage(const char *message, unsigned int duration=3*TICRATE) {}
 	virtual unsigned int GetHeight(bool top)=0;
 	virtual void NewGame() {}
 	virtual void Tick() {}

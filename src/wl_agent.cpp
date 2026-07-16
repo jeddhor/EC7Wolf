@@ -1425,12 +1425,12 @@ ACTION_FUNCTION(A_C7GunAttack)
 		}
 		if(hit)
 			++player->levelShotsHit;
-		return hit;
+		return true;
 	}
 
 	AActor *closest = player->FindTarget();
 	if(!closest)
-		return false;
+		return true;
 
 	int dist = MAX(abs(closest->x - self->x), abs(closest->y - self->y)) / FRACUNIT;
 	const int projectiles = weapon == 3 ? 3 : (weapon == 6 ? 4 : 1);
@@ -1463,7 +1463,7 @@ ACTION_FUNCTION(A_C7GunAttack)
 	}
 	if(hit)
 		++player->levelShotsHit;
-	return hit;
+	return true;
 }
 
 // Armed Corridor 7 mines use a square proximity check, matching the tile-based

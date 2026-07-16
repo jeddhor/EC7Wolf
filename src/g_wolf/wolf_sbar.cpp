@@ -60,7 +60,7 @@ static struct StatusBarConfig_t
 class WolfStatusBar : public DBaseStatusBar
 {
 public:
-	WolfStatusBar() : facecount(0), mac(false), corridor7(false)
+	WolfStatusBar() : facecount(0), mac(false), corridor7(false), topMessageUntil(0)
 	{
 		if(IWad::CheckGameFilter("Corridor7"))
 		{
@@ -106,8 +106,9 @@ public:
 
 	void DrawStatusBar();
 	void DrawTopOverlay();
+	void SetTopMessage(const char *message, unsigned int duration);
 	unsigned int GetHeight(bool top) { return top ? 0 : STATUSLINES+!mac; }
-	void NewGame() { facecount = 0; }
+	void NewGame() { facecount = 0; topMessage = ""; topMessageUntil = 0; }
 	void RefreshBackground(bool noborder);
 	void UpdateFace(int damage=0);
 	void WeaponGrin();
@@ -134,6 +135,8 @@ private:
 	int facecount;
 	bool mac;
 	bool corridor7;
+	FString topMessage;
+	int32_t topMessageUntil;
 };
 
 DBaseStatusBar *CreateStatusBar_Wolf3D() { return new WolfStatusBar(); }
@@ -648,6 +651,13 @@ void WolfStatusBar::DrawStatusBar()
 
 void WolfStatusBar::DrawTopOverlay()
 {
+	if(corridor7 && !topMessage.IsEmpty() && gamestate.TimeCount < topMessageUntil)
+	{
+		screen->DrawText(SmallFont, CR_YELLOW, 4, 4, topMessage.GetChars(),
+			DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
+		return;
+	}
+
 	// The mission prompt is a short level-introduction overlay, not permanent
 	// status-bar content. Drawing it every rendered frame also prevents the
 	// alternating-frame flicker caused by the status bar's update cadence.
@@ -657,6 +667,14 @@ void WolfStatusBar::DrawTopOverlay()
 			"Eliminate Aliens To Secure Floor",
 			DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
 	}
+}
+
+void WolfStatusBar::SetTopMessage(const char *message, unsigned int duration)
+{
+	if(!corridor7 || message == NULL || *message == 0)
+		return;
+	topMessage = message;
+	topMessageUntil = gamestate.TimeCount + static_cast<int32_t>(duration);
 }
 
 //===========================================================================

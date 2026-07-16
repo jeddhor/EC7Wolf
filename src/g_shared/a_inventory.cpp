@@ -41,6 +41,7 @@
 #include "wl_def.h"
 #include "wl_agent.h"
 #include "wl_game.h"
+#include "wl_iwad.h"
 #include "wl_net.h"
 #include "wl_play.h"
 #include "wl_loadsave.h"
@@ -236,7 +237,42 @@ void AInventory::Touch(AActor *toucher)
 
 	PlaySoundLocActor(pickupsound, toucher);
 	if(toucher->player == &players[ConsolePlayer])
+	{
 		StartBonusFlash();
+		if(IWad::CheckGameFilter("Corridor7"))
+		{
+			struct PickupMessage { const char *type; const char *message; };
+			static const PickupMessage messages[] = {
+				{ "C7MedicPack", "Medic Pack" },
+				{ "C7AmmoClip", "50 Rnd Clip" },
+				{ "C7AmmoPack", "Ammo Pack" },
+				{ "C7Adrenaline", "Adrenaline Boost" },
+				{ "C7BodyArmor", "Body Armor" },
+				{ "C7Invulnerability", "Invulnerability Sphere" },
+				{ "C7FloorPlan", "Floor Plan" },
+				{ "C7M343", "M-343 Mini Gun" },
+				{ "C7Shotgun", "Stakeout Ithaca Shotgun" },
+				{ "C7DualBlaster", "Alien Dual Blaster" },
+				{ "C7AssaultCannon", "Alien Assault Cannon" },
+				{ "C7Disintegrator", "Alien Disintegrator" },
+				{ "C7PlasmaRifle", "Alien Plasma Rifle" },
+				{ "C7ChargePack", "Alien Charge Pack" },
+				{ "C7MinePack", "Proximity Mines" },
+				{ "C7VisorBattery", "Visor Battery" },
+				{ "C7Static001", "RED Access Granted" },
+				{ "C7Static002", "BLUE Access Granted" }
+			};
+			for(unsigned int i = 0;i < countof(messages);++i)
+			{
+				const ClassDef *type = ClassDef::FindClass(messages[i].type);
+				if(type && IsA(type))
+				{
+					StatusBar->SetTopMessage(messages[i].message);
+					break;
+				}
+			}
+		}
+	}
 }
 
 bool AInventory::TryPickup(AActor *toucher)

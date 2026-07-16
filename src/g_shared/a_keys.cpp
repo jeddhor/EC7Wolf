@@ -9,6 +9,9 @@
 #include "thingdef/thingdef.h"
 #include "g_shared/a_inventory.h"
 #include "g_shared/a_keys.h"
+#include "wl_agent.h"
+#include "wl_game.h"
+#include "wl_play.h"
 
 IMPLEMENT_CLASS(Key)
 
@@ -470,24 +473,11 @@ bool P_CheckKeys (AActor *owner, int keynum, bool remote)
 
 	// If we get here, that means the actor isn't holding an appropriate key.
 
-	/*if (owner == players[consoleplayer].camera)
+	if (owner == players[ConsolePlayer].camera)
 	{
-		PrintMessage(failtext);
-
-		// Play the first defined key sound.
-		for (int i = 0; i < numfailsounds; ++i)
-		{
-			if (failsound[i] != 0)
-			{
-				int snd = S_FindSkinnedSound(owner, failsound[i]);
-				if (snd != 0)
-				{
-					S_Sound (owner, CHAN_VOICE, snd, 1, ATTN_NORM);
-					break;
-				}
-			}
-		}
-	}*/
+		StatusBar->SetTopMessage(failtext);
+		PlaySoundLocActor("misc/keytry", owner);
+	}
 
 	return false;
 }

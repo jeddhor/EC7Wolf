@@ -37,6 +37,7 @@
 #include "c_cvars.h"
 #include "g_mapinfo.h"
 #include "g_shared/a_keys.h"
+#include "id_ca.h"
 #include "thingdef/thingdef.h"
 #include "wl_agent.h"
 #include "wl_game.h"
@@ -295,6 +296,41 @@ void APlayerPawn::SetupWeaponSlots()
 	player->weapons.StandardSetup(GetClass());
 }
 
+static bool IsInC7HealthChamber(const APlayerPawn *player)
+{
+	// Released chambers are identified by their HEALTH CHAMBER wall (ID 2).
+	// The healing side is the open side of that sign; this distinguishes the
+	// chamber interior from the corridor immediately outside it.
+	const int px = player->tilex;
+	const int py = player->tiley;
+	for(int y = py-4;y <= py+4;++y)
+	{
+		for(int x = px-4;x <= px+4;++x)
+		{
+			if(x < 0 || y < 0 ||
+				!map->IsValidTileCoordinate(static_cast<unsigned>(x), static_cast<unsigned>(y), 0))
+				continue;
+			MapSpot sign = map->GetSpot(x, y, 0);
+			if(!sign->tile || sign->corridor7WallID != 2)
+				continue;
+
+			MapSpot side = sign->GetAdjacent(MapTile::East);
+			if(side && !side->tile && px > x)
+				return true;
+			side = sign->GetAdjacent(MapTile::West);
+			if(side && !side->tile && px < x)
+				return true;
+			side = sign->GetAdjacent(MapTile::South);
+			if(side && !side->tile && py > y)
+				return true;
+			side = sign->GetAdjacent(MapTile::North);
+			if(side && !side->tile && py < y)
+				return true;
+		}
+	}
+	return false;
+}
+
 void APlayerPawn::Tick()
 {
 	Super::Tick();
@@ -303,6 +339,17 @@ void APlayerPawn::Tick()
 
 	if(IWad::CheckGameFilter("Corridor7"))
 	{
+		// A chamber restores health continuously while the player remains inside.
+		// Ten points per second matches the visible, gradual DOS behavior without
+		// turning the chamber into a one-shot health pickup.
+		if(gamestate.TimeCount % (TICRATE/10) == 0 &&
+			player->health > 0 && player->health < maxhealth && IsInC7HealthChamber(this))
+		{
+			++player->health;
+			health = player->health;
+			StatusBar->UpdateFace(-1);
+		}
+
 		AInventory *invulnerability = FindInventory(ClassDef::FindClass("C7Invulnerability"));
 		if(invulnerability && invulnerability->amount > 0 && --invulnerability->amount == 0)
 			invulnerability->Destroy();

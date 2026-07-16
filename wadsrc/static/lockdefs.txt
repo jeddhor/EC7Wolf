@@ -81,9 +81,11 @@ Lock 101 Blake
 Lock 1 Corridor7
 {
 	C7Static002
+	Message "BLUE Access Required"
 }
 
 Lock 2 Corridor7
 {
 	C7Static001
+	Message "RED Access Required"
 }

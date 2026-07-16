@@ -49,8 +49,8 @@ actor C7Player : PlayerPawn
 	player.movebob 0
 	player.viewheight 32
 	player.displayname "Corridor 7 Marine"
-	player.startitem "C7Bayonet"
 	player.startitem "C7M16"
+	player.startitem "C7Bayonet"
 	player.startitem "C7Bullets", 100
 	player.startitem "C7VisorCharge", 100
 	player.startitem "C7VisorMode", 1
@@ -96,9 +96,7 @@ actor C7Weapon : Weapon
 {
 	attacksound "c7/weapon/fire"
 	weapon.yadjust 32
-	weapon.bobstyle "Thrust"
-	weapon.bobrangex 0
-	weapon.bobrangey 0.5
+	+WEAPON.DONTBOB
 	states
 	{
 		Select:
@@ -119,7 +117,7 @@ actor C7Bayonet : C7Weapon
 	states
 	{
 		Ready:
-			C746 A 1 A_WeaponReady
+			C753 A 1 A_WeaponReady
 			loop
 		Fire:
 			C746 A 6
@@ -142,7 +140,7 @@ actor C7M16 : C7Weapon
 	states
 	{
 		Ready:
-			C754 A 1 A_WeaponReady
+			C761 A 1 A_WeaponReady
 			loop
 		Fire:
 			C754 A 6
@@ -167,7 +165,7 @@ actor C7M343 : C7Weapon
 	states
 	{
 		Ready:
-			C762 A 1 A_WeaponReady
+			C769 A 1 A_WeaponReady
 			loop
 		Fire:
 			C762 A 6
@@ -191,7 +189,7 @@ actor C7DualBlaster : C7Weapon
 	states
 	{
 		Ready:
-			C770 A 1 A_WeaponReady
+			C777 A 1 A_WeaponReady
 			loop
 		Fire:
 			C770 A 6
@@ -216,7 +214,7 @@ actor C7Disintegrator : C7Weapon
 	states
 	{
 		Ready:
-			C802 A 1 A_WeaponReady
+			C809 A 1 A_WeaponReady
 			loop
 		Fire:
 			C802 A 6
@@ -241,7 +239,7 @@ actor C7Shotgun : C7Weapon
 	states
 	{
 		Ready:
-			C786 A 1 A_WeaponReady
+			C793 A 1 A_WeaponReady
 			loop
 		Fire:
 			C786 A 6
@@ -269,7 +267,7 @@ actor C7PlasmaRifle : C7Weapon
 	states
 	{
 		Ready:
-			C778 A 1 A_WeaponReady
+			C785 A 1 A_WeaponReady
 			loop
 		Fire:
 			C778 A 6
@@ -293,7 +291,7 @@ actor C7AssaultCannon : C7Weapon
 	states
 	{
 		Ready:
-			C794 A 1 A_WeaponReady
+			C801 A 1 A_WeaponReady
 			loop
 		Fire:
 			C794 A 6

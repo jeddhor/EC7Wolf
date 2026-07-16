@@ -48,6 +48,7 @@
 #include "wl_net.h"
 #include "wl_play.h"
 #include "r_sprites.h"
+#include "textures/textures.h"
 #include "resourcefiles/resourcefile.h"
 #include "wl_loadsave.h"
 #include "doomerrors.h"
@@ -728,6 +729,7 @@ MapSpot GameMap::Plane::Map::GetAdjacent(MapTile::Side dir, bool opposite) const
 void GameMap::Plane::Map::SetTile(const MapTile *tile)
 {
 	this->tile = tile;
+	maskedWallType = tile && tile->renderMasked ? 1 : 0;
 	for(unsigned int i = 0;i < 4;++i)
 	{
 		if(tile)

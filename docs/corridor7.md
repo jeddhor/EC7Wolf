@@ -64,8 +64,13 @@ Append an output directory and `--all` to load-check every map in the archive.
 - Bounds-checked, self-contained TED5 map loading for all 60 archived maps.
 - Direct GFXTILES, VGAGRAPH, AUDIOHED/AUDIOT, executable-palette, wall,
   sprite, font, HUD, menu-cursor, sound-effect, and music resource exposure.
-- Ordinary and special wall pages, Corridor 7 lighting defaults, solid and
-  passable masked-wall behavior, four door types with automatic orientation,
+- Correct directional ordinary wall pairs, same-numbered special wall pages,
+  marker-104/105 wall-ID-minus-one masked overrides,
+  Corridor 7 wall and plane depth ramps, exact six-bit VGA palette expansion,
+  solid and
+  passable masked-wall behavior, collision-safe index-255-to-0 normalization
+  with depth-correct wall opacity,
+  in-place force-field removal, four door types with automatic orientation,
   red/blue access cards, push walls, paired intralevel transporters, floor
   exits, ordinary and marker-99 bonus elevators, and the level-30/40 exit vortex.
 - The executable's complete plane-1 dispatch table, including static objects,
@@ -75,7 +80,8 @@ Append an output directory and `--all` to load-check every map in the archive.
   Ithaca shotgun's secondary animation), proximity mines, all weapon pickups,
   ammunition/charge/health/armor items, monster combat, score, event sounds,
   and native first-person weapon scaling.
-- The original status bar art and number glyphs, aliens-remaining counter,
+- The original status bar art, number placement, segmented color gauges,
+  aliens-remaining counter, M-16 start selection and native weapon anchoring,
   episode and four rank choices, the documented 10/75/100/100-percent alien
   objective gate, body armor, visor modes and charge, MAP01-MAP40 progression
   and victory, six routed bonus maps, the released per-floor hit/miss award,
@@ -94,9 +100,11 @@ reimplementation. Released enemy health, weapon resource costs, music routing,
 map dispatch, and campaign rules are reproduced; several movement, attack,
 pain-chance, damage, and frame-timing constants remain evidence-based
 reconstructions where the executable did not yield an unambiguous value.
-Masked screens preserve collision and sight behavior but use ECWolf's wall
-renderer rather than the DOS renderer's exact transparent-column composition.
-The port uses a native ECWolf results/victory presentation rather than every
+Masked screens preserve collision and sight behavior while transparent columns
+are composited with walls and actors at their actual depth. Plane-1 masked-wall
+configuration markers 86..88 are preserved distinctly, but their exact DOS
+state differences remain unresolved. The port uses a native ECWolf results/victory
+presentation rather than every
 DOS briefing and palette-cycle effect. Plane 2 contains editor grouping values
 on two released maps and has no observed runtime effect. Original demos,
 network protocol, multiplayer rules, and other executable editions are

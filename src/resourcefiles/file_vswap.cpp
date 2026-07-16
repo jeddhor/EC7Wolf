@@ -66,6 +66,11 @@ struct FCorridor7PaletteLump : public FResourceLump
 			Cache = NULL;
 			return 0;
 		}
+		for(int i = 0;i < LumpSize;++i)
+		{
+			const BYTE component = reinterpret_cast<BYTE *>(Cache)[i];
+			reinterpret_cast<BYTE *>(Cache)[i] = (component << 2) | (component >> 4);
+		}
 		RefCount = 1;
 		return 1;
 	}

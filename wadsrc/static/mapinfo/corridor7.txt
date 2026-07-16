@@ -150,12 +150,14 @@ defaultmap
 	music = "C7MUS00"
 	victorynext = "EndTitle"
 	bordertexture = "#000000"
-	defaultfloor = "#383838"
-	defaultceiling = "#202020"
-	// Corridor 7 has a steep falloff: the level 1 start is dark at range but
-	// its nearby sliding wall is fully illuminated.
-	DefaultLighting = 256
-	DefaultVisibility = 7.0
+	defaultfloor = "#71518A"
+	defaultceiling = "#FFFFFF"
+	// Corridor 7 uses a full-range depth ramp:
+	// MAP01's nearby surfaces stay bright while its distant fence line and
+	// floor/ceiling fade toward the dark palette ramps.
+	DefaultLighting = 130
+	DefaultVisibility = 10.0
+	DefaultMaxLightVis = 30.0
 }
 
 episode "MAP01"

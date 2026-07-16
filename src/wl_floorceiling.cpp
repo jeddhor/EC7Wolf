@@ -6,6 +6,7 @@
 #include "wl_draw.h"
 #include "wl_main.h"
 #include "wl_shade.h"
+#include "wl_iwad.h"
 #include "r_data/colormaps.h"
 
 #include <climits>
@@ -82,10 +83,32 @@ static void R_DrawPlane(byte *vbuf, unsigned vbufPitch, int min_wallheight, int 
 		gu -= (viewwidth >> 1) * du;
 		gv -= (viewwidth >> 1) * dv; // starting point (leftmost)
 
-		// Depth fog
-		const int shade = LIGHT2SHADE(gLevelLight + r_extralight);
-		const int tz = FixedMul(FixedDiv(r_depthvisibility, abs(planeheight)), abs(((halfheight)<<16) - ((halfheight-y)<<16)));
-		curshades = &NormalLight.Maps[GETPALOOKUP(tz, shade)<<8];
+		// Corridor 7's untextured planes use a much steeper VGA shade ramp
+		// than its walls. Preserve the bright near ceiling/floor while reaching
+		// the darkest ramp entries before the horizon, as in the DOS renderer.
+		if(IWad::CheckGameFilter("Corridor7"))
+		{
+			const int shade = LIGHT2SHADE(118 + r_extralight);
+			const int cutoff = (halfheight*19)/80;
+			const int range = MAX(1, halfheight-1-cutoff);
+			const int maxVisibility =
+				((NUMCOLORMAPS-1)-(4*LIGHTVISIBILITY_FACTOR))*FRACUNIT;
+			const int distance = MAX(0, y-cutoff);
+			const fixed linearVisibility =
+				fixed((int64_t(distance)*maxVisibility)/range);
+			const int curveStrength = floor ? 40 : 24;
+			const fixed curve = fixed((int64_t(curveStrength)*FRACUNIT*distance*
+				MAX(0, range-distance))/(range*range));
+			const fixed visibility = MAX<fixed>(0, linearVisibility-curve);
+			curshades = &NormalLight.Maps[GETPALOOKUP(visibility, shade)<<8];
+		}
+		else
+		{
+			const int shade = LIGHT2SHADE(gLevelLight + r_extralight);
+			const int tz = FixedMul(FixedDiv(r_depthvisibility, abs(planeheight)),
+				abs(((halfheight)<<16) - ((halfheight-y)<<16)));
+			curshades = &NormalLight.Maps[GETPALOOKUP(tz, shade)<<8];
+		}
 
 		for(unsigned int x = 0;x < (unsigned)viewwidth; ++x, ++tex_offset)
 		{

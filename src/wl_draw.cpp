@@ -22,6 +22,7 @@
 #include "wl_agent.h"
 #include "wl_draw.h"
 #include "wl_game.h"
+#include "wl_iwad.h"
 #include "wl_net.h"
 #include "wl_play.h"
 #include "wl_state.h"
@@ -549,12 +550,21 @@ unsigned int CalcRotate (AActor *ob)
 =====================
 */
 
-#define MAXVISABLE 250
+#define MAXVISABLE 512
+
+enum VisObjectType
+{
+	VIS_Actor,
+	VIS_MaskedWall
+};
 
 typedef struct
 {
+	VisObjectType type;
 	AActor *actor;
-	short viewheight;
+	MapSpot spot;
+	MapTile::Side side;
+	int viewheight;
 	//short      viewx,
 	//		viewheight,
 	//		shapenum;
@@ -565,11 +575,239 @@ typedef struct
 visobj_t vislist[MAXVISABLE];
 visobj_t *visptr,*visstep,*farthest;
 
+static bool IsMaskedWallSide(MapSpot spot, MapTile::Side)
+{
+	return spot->maskedWallType || spot->tile->renderMasked;
+}
+
+static void GetMaskedWallEndpoints(MapSpot spot, MapTile::Side side,
+	fixed &worldx1, fixed &worldy1, fixed &worldx2, fixed &worldy2)
+{
+	const fixed left = spot->GetX() << TILESHIFT;
+	const fixed top = spot->GetY() << TILESHIFT;
+	const fixed right = left + TILEGLOBAL;
+	const fixed bottom = top + TILEGLOBAL;
+
+	switch(side)
+	{
+		case MapTile::West:
+			worldx1 = worldx2 = left;
+			worldy1 = top;
+			worldy2 = bottom;
+			break;
+		case MapTile::East:
+			worldx1 = worldx2 = right;
+			worldy1 = bottom;
+			worldy2 = top;
+			break;
+		case MapTile::North:
+			worldy1 = worldy2 = top;
+			worldx1 = right;
+			worldx2 = left;
+			break;
+		default:
+			worldy1 = worldy2 = bottom;
+			worldx1 = left;
+			worldx2 = right;
+			break;
+	}
+}
+
+static void TransformMaskedWallPoint(fixed worldx, fixed worldy, fixed &nx, fixed &ny)
+{
+	const fixed gx = worldx-viewx;
+	const fixed gy = worldy-viewy;
+	nx = FixedMul(gx, viewcos)-FixedMul(gy, viewsin);
+	ny = FixedMul(gy, viewcos)+FixedMul(gx, viewsin);
+}
+
+static bool ClipMaskedWall(fixed &nx1, fixed &ny1, fixed &u1,
+	fixed &nx2, fixed &ny2, fixed &u2)
+{
+	if(nx1 < MINDIST && nx2 < MINDIST)
+		return false;
+
+	if(nx1 < MINDIST)
+	{
+		const fixed fraction = FixedDiv(MINDIST-nx1, nx2-nx1);
+		ny1 += FixedMul(ny2-ny1, fraction);
+		u1 += FixedMul(u2-u1, fraction);
+		nx1 = MINDIST;
+	}
+	else if(nx2 < MINDIST)
+	{
+		const fixed fraction = FixedDiv(MINDIST-nx2, nx1-nx2);
+		ny2 += FixedMul(ny1-ny2, fraction);
+		u2 += FixedMul(u1-u2, fraction);
+		nx2 = MINDIST;
+	}
+	return true;
+}
+
+static int MaskedWallHeight(MapSpot spot, MapTile::Side side)
+{
+	fixed worldx1, worldy1, worldx2, worldy2;
+	fixed nx1, ny1, nx2, ny2;
+	GetMaskedWallEndpoints(spot, side, worldx1, worldy1, worldx2, worldy2);
+	TransformMaskedWallPoint(worldx1, worldy1, nx1, ny1);
+	TransformMaskedWallPoint(worldx2, worldy2, nx2, ny2);
+	const fixed depth = (nx1+nx2)/2;
+	return depth < MINDIST ? 0 : (heightnumerator<<8)/depth;
+}
+
+static void ScaleMaskedWallPost(const BYTE *source, const BYTE *opacity,
+	int screenx, int height, int textureHeight, int textureYScale)
+{
+	if(height <= 0 || wallheight[screenx] > height)
+		return;
+
+	const int textureSpan = MAX(1, textureHeight*textureYScale/256);
+	int ywcount = height;
+	int yd = height;
+	if(yd <= 0)
+		yd = 100;
+
+	const int topoffset = ywcount*((viewz + fixed(map->GetPlane(0).depth<<FRACBITS))>>8)/(32<<(FRACBITS-5));
+	const int botoffset = ywcount*(viewz>>8)/(32<<(FRACBITS-5));
+	int yoffs = (viewheight/2-topoffset-viewshift)*vbufPitch;
+	if(yoffs < 0)
+		yoffs = 0;
+	yoffs += screenx;
+
+	int yend = viewheight/2-botoffset-1-viewshift;
+	int yw = textureSpan-1;
+	while(yend >= viewheight)
+	{
+		ywcount -= textureYScale;
+		while(ywcount <= 0)
+		{
+			ywcount += yd;
+			--yw;
+		}
+		--yend;
+	}
+	yw %= textureSpan;
+	if(yw < 0)
+		yw += textureSpan;
+
+	const int shade = LIGHT2SHADE(gLevelLight+r_extralight);
+	const int tz = FixedMul(r_depthvisibility<<8, height);
+	BYTE *curshades = &NormalLight.Maps[GETPALOOKUP(MAX(tz, MINZ), shade)<<8];
+	const BYTE maskColor = GPalette.Remap[255];
+	int yendoffs = yend*vbufPitch+screenx;
+	while(yoffs <= yendoffs)
+	{
+		if(opacity ? opacity[yw] != 0 : source[yw] != maskColor)
+			vbuf[yendoffs] = curshades[source[yw]];
+		ywcount -= textureYScale;
+		if(ywcount <= 0)
+		{
+			do
+			{
+				ywcount += yd;
+				--yw;
+			}
+			while(ywcount <= 0);
+			if(yw < 0)
+				yw = textureSpan-1;
+		}
+		yendoffs -= vbufPitch;
+	}
+}
+
+static void DrawMaskedWall(MapSpot spot, MapTile::Side side)
+{
+	FTexture *texture = TexMan(spot->texture[side]);
+	if(!texture)
+		return;
+
+	fixed worldx1, worldy1, worldx2, worldy2;
+	fixed nx1, ny1, nx2, ny2;
+	fixed u1 = 0;
+	fixed u2 = texture->GetWidth()<<FRACBITS;
+	GetMaskedWallEndpoints(spot, side, worldx1, worldy1, worldx2, worldy2);
+	TransformMaskedWallPoint(worldx1, worldy1, nx1, ny1);
+	TransformMaskedWallPoint(worldx2, worldy2, nx2, ny2);
+	if(!ClipMaskedWall(nx1, ny1, u1, nx2, ny2, u2))
+		return;
+
+	int screenx1 = centerx + int((int64_t(ny1)*scale)/nx1);
+	int screenx2 = centerx + int((int64_t(ny2)*scale)/nx2);
+	if(screenx1 == screenx2)
+		return;
+	if(screenx1 > screenx2)
+	{
+		swapvalues(screenx1, screenx2);
+		swapvalues(nx1, nx2);
+		swapvalues(u1, u2);
+	}
+
+	const int first = MAX(screenx1, 0);
+	const int last = MIN(screenx2, viewwidth-1);
+	const int range = screenx2-screenx1;
+	const int textureHeight = texture->GetHeight();
+	const int textureYScale = texture->yScale>>(FRACBITS-8);
+	for(int screenx = first;screenx <= last;++screenx)
+	{
+		const double fraction = double(screenx-screenx1)/range;
+		const double inverseDepth = (1.0-fraction)/nx1+fraction/nx2;
+		if(inverseDepth <= 0)
+			continue;
+		const fixed depth = fixed(1.0/inverseDepth);
+		const double perspectiveU =
+			(((1.0-fraction)*u1/nx1)+(fraction*u2/nx2))/inverseDepth;
+		const int column = MAX(0, MIN<int>(texture->GetWidth()-1,
+			int(perspectiveU)>>FRACBITS));
+		const int height = (heightnumerator<<8)/depth;
+		ScaleMaskedWallPost(texture->GetMaskedColumn(column),
+			texture->GetColumnOpacity(column), screenx, height, textureHeight,
+			textureYScale);
+	}
+}
+
+static void AddMaskedWall(MapSpot spot, MapTile::Side side)
+{
+	if(visptr >= &vislist[MAXVISABLE-1] || !IsMaskedWallSide(spot, side))
+		return;
+	const int height = MaskedWallHeight(spot, side);
+	if(height <= 0)
+		return;
+	visptr->type = VIS_MaskedWall;
+	visptr->actor = NULL;
+	visptr->spot = spot;
+	visptr->side = side;
+	visptr->viewheight = height;
+	++visptr;
+}
+
 void DrawScaleds (void)
 {
 	int      i,least,numvisable,height;
 
 	visptr = &vislist[0];
+
+	const fixed camerax = players[ConsolePlayer].camera->x;
+	const fixed cameray = players[ConsolePlayer].camera->y;
+	for(unsigned int y = 0;y < mapheight;++y)
+	{
+		for(unsigned int x = 0;x < mapwidth;++x)
+		{
+			MapSpot spot = map->GetSpot(x, y, 0);
+			if(!spot->visible || !spot->tile)
+				continue;
+
+			const fixed left = x<<TILESHIFT;
+			const fixed top = y<<TILESHIFT;
+			if(camerax < left)
+				AddMaskedWall(spot, MapTile::West);
+			else if(camerax >= left+TILEGLOBAL)
+				AddMaskedWall(spot, MapTile::East);
+			if(cameray < top)
+				AddMaskedWall(spot, MapTile::North);
+			else if(cameray >= top+TILEGLOBAL)
+				AddMaskedWall(spot, MapTile::South);
+		}
+	}
 
 //
 // place active objects
@@ -609,7 +847,9 @@ void DrawScaleds (void)
 			if (!obj->viewheight || (gamestate.victoryflag && obj == players[ConsolePlayer].mo))
 				continue;                                               // too close or far away
 
+			visptr->type = VIS_Actor;
 			visptr->actor = obj;
+			visptr->spot = NULL;
 			visptr->viewheight = obj->viewheight;
 
 			if (visptr < &vislist[MAXVISABLE-1])    // don't let it overflow
@@ -627,7 +867,7 @@ void DrawScaleds (void)
 
 	for (i = 0; i<numvisable; i++)
 	{
-		least = 32000;
+		least = 0x7fffffff;
 		for (visstep=&vislist[0] ; visstep<visptr ; visstep++)
 		{
 			height = visstep->viewheight;
@@ -640,12 +880,14 @@ void DrawScaleds (void)
 		//
 		// draw farthest
 		//
-		if(farthest->actor->flags & FL_BILLBOARD)
+		if(farthest->type == VIS_MaskedWall)
+			DrawMaskedWall(farthest->spot, farthest->side);
+		else if(farthest->actor->flags & FL_BILLBOARD)
 			Scale3DSprite(farthest->actor, farthest->actor->state, farthest->viewheight);
 		else
 			ScaleSprite(farthest->actor, farthest->actor->viewx, farthest->actor->state, farthest->viewheight);
 
-		farthest->viewheight = 32000;
+		farthest->viewheight = 0x7fffffff;
 	}
 }
 
@@ -663,6 +905,14 @@ void DrawScaleds (void)
 
 void DrawPlayerWeapon (void)
 {
+	static const int corridor7Bases[] = { 746, 786, 754, 762, 770, 778, 794, 802, 810 };
+	static const int corridor7Frames[16] =
+		{ 7, 7, 6, 5, 4, 5, 6, 7, 7, 7, 6, 5, 4, 5, 6, 7 };
+	static const int corridor7X[16] =
+		{ 0, 1, 2, 3, 4, 3, 2, 1, 0, -1, -2, -3, -4, -3, -2, -1 };
+	static int corridor7Phase[MAXPLAYERS] = { 0 };
+	static int corridor7LastTime[MAXPLAYERS] = { 0 };
+
 	for(unsigned int i = 0;i < player_t::NUM_PSPRITES;++i)
 	{
 		if(!players[ConsolePlayer].psprite[i].frame)
@@ -671,7 +921,58 @@ void DrawPlayerWeapon (void)
 		fixed xoffset, yoffset;
 		players[ConsolePlayer].BobWeapon(&xoffset, &yoffset);
 
-		R_DrawPlayerSprite(players[ConsolePlayer].ReadyWeapon, players[ConsolePlayer].psprite[i].frame, players[ConsolePlayer].psprite[i].sx+xoffset, players[ConsolePlayer].psprite[i].sy+yoffset);
+		const Frame *frame = players[ConsolePlayer].psprite[i].frame;
+		Frame corridor7Frame;
+		if(IWad::CheckGameFilter("Corridor7"))
+		{
+			int base = -1;
+			for(unsigned int weapon = 0;
+				weapon < sizeof(corridor7Bases)/sizeof(corridor7Bases[0]);++weapon)
+			{
+				char readyName[5];
+				mysnprintf(readyName, sizeof(readyName), "C%03d",
+					corridor7Bases[weapon]+7);
+				if(frame->spriteInf == R_GetSprite(readyName))
+				{
+					base = corridor7Bases[weapon];
+					break;
+				}
+			}
+			if(base >= 0)
+			{
+				if(corridor7LastTime[ConsolePlayer] != gamestate.TimeCount)
+				{
+					TicCmd_t &cmd = control[ConsolePlayer];
+					if(cmd.controly == 0)
+						corridor7Phase[ConsolePlayer] = 0;
+					else
+					{
+						const bool running =
+							(!alwaysrun && cmd.buttonstate[bt_run]) ||
+							(alwaysrun && !cmd.buttonstate[bt_run]);
+						corridor7Phase[ConsolePlayer] =
+							(corridor7Phase[ConsolePlayer]+(running ? 2 : 1))&15;
+					}
+					corridor7LastTime[ConsolePlayer] = gamestate.TimeCount;
+				}
+				const int phase = corridor7Phase[ConsolePlayer]&15;
+				char frameName[5];
+				mysnprintf(frameName, sizeof(frameName), "C%03d",
+					base+corridor7Frames[phase]);
+				corridor7Frame = *frame;
+				// This stack copy borrows the live frame's action arguments.
+				// Do not let its destructor free the shared allocation.
+				corridor7Frame.freeActionArgs = false;
+				corridor7Frame.spriteInf = R_GetSprite(frameName);
+				corridor7Frame.frame = 0;
+				frame = &corridor7Frame;
+				xoffset += corridor7X[phase]<<FRACBITS;
+			}
+		}
+
+		R_DrawPlayerSprite(players[ConsolePlayer].ReadyWeapon, frame,
+			players[ConsolePlayer].psprite[i].sx+xoffset,
+			players[ConsolePlayer].psprite[i].sy+yoffset);
 	}
 }
 
@@ -800,9 +1101,11 @@ vertentry:
 			tilehit=map->GetSpot(xspot[0], xspot[1], 0);
 			if(tilehit && tilehit->tile)
 			{
+				DetermineHitDir(true);
+				if(IsMaskedWallSide(tilehit, hitdir))
+					goto passvert;
 				if(tilehit->tile->offsetVertical)
 				{
-					DetermineHitDir(true);
 					int32_t yintbuf=yintercept+(ystep>>1);
 					if((yintbuf>>16)!=(yintercept>>16))
 						goto passvert;
@@ -967,9 +1270,11 @@ horizentry:
 			tilehit=map->GetSpot(yspot[0], yspot[1], 0);
 			if(tilehit && tilehit->tile)
 			{
+				DetermineHitDir(false);
+				if(IsMaskedWallSide(tilehit, hitdir))
+					goto passhoriz;
 				if(tilehit->tile->offsetHorizontal)
 				{
-					DetermineHitDir(false);
 					int32_t xintbuf=xintercept+(xstep>>1);
 					if((xintbuf>>16)!=(xintercept>>16))
 						goto passhoriz;

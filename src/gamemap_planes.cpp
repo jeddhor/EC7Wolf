@@ -1083,6 +1083,12 @@ void GameMap::ReadPlanesData()
 					else
 						mapPlane.map[i].SetTile(NULL);
 
+					if(IWad::CheckGameFilter("Corridor7") &&
+						oldplane[i] >= 1 && oldplane[i] <= 250)
+					{
+						mapPlane.map[i].corridor7WallID = oldplane[i];
+					}
+
 					// Corridor 7 pairs 0x117..0x11e warp-floor cells by
 					// value. Their trigger arguments are linked after all map
 					// spots have stable addresses.
@@ -1285,8 +1291,11 @@ void GameMap::ReadPlanesData()
 					// markers 98/101/102 are separately activated disintegrating
 					// walls and marker 106 is a manually toggled sliding wall.
 					if(IWad::CheckGameFilter("Corridor7") && oldplane[i] == 107 && mapPlane.map[i].tile)
+					{
 						mapPlane.map[i].sideSolid[0] = mapPlane.map[i].sideSolid[1] =
 							mapPlane.map[i].sideSolid[2] = mapPlane.map[i].sideSolid[3] = false;
+						mapPlane.map[i].corridor7SightTransparent = true;
+					}
 
 					if(oldplane[i] == 0)
 					{
@@ -1381,6 +1390,44 @@ void GameMap::ReadPlanesData()
 						}
 					}
 
+					// Markers 104/105 select the raw wall-ID-minus-one page and
+					// render index 255 as transparent. Both remain movement-solid;
+					// only marker 105 permits actor sight through the screen.
+					if(IWad::CheckGameFilter("Corridor7") &&
+						(oldplane[i] == 104 || oldplane[i] == 105) &&
+						mapPlane.map[i].tile && mapPlane.map[i].corridor7WallID > 0)
+					{
+						FString textureName;
+						textureName.Format("C7W%04u",
+							mapPlane.map[i].corridor7WallID-1);
+						const FTextureID texture = TexMan.CheckForTexture(textureName,
+							FTexture::TEX_Wall);
+						if(texture.isValid())
+						{
+							for(unsigned int side = 0;side < 4;++side)
+								mapPlane.map[i].texture[side] = texture;
+							FTexture *wall = TexMan(texture);
+							if(wall)
+								wall->GetPixels();
+							mapPlane.map[i].maskedWallType = 1;
+							mapPlane.map[i].corridor7WallMarker = oldplane[i];
+							mapPlane.map[i].corridor7SightTransparent =
+								oldplane[i] == 105;
+						}
+					}
+
+					// Values 86..88 are Corridor 7 masked-wall configuration
+					// metadata, not
+					// spawned objects. Preserve the subtype on its wall cell
+					// without conflating it with marker 106's sliding/removal
+					// behavior or with index-255 transparency.
+					if(IWad::CheckGameFilter("Corridor7") &&
+						oldplane[i] >= 86 && oldplane[i] <= 88 &&
+						mapPlane.map[i].tile)
+					{
+						mapPlane.map[i].corridor7WallMarker = oldplane[i]-85;
+					}
+
 					if(xlat.IsIgnoredThing(oldplane[i]))
 						continue;
 					if((tsFlags = xlat.TranslateThing(thing, trigger, flags, oldplane[i])) == 0)
@@ -1399,13 +1446,24 @@ void GameMap::ReadPlanesData()
 							if(IWad::CheckGameFilter("Corridor7") && oldplane[i] == 106 &&
 								trigger.action == Specials::Door_Open)
 							{
-								const unsigned int x = i%header.width;
-								const unsigned int y = i/header.width;
-								const bool openNorth = y > 0 && !mapPlane.map[i-header.width].tile;
-								const bool openSouth = y+1 < header.height && !mapPlane.map[i+header.width].tile;
-								const bool openWest = x > 0 && !mapPlane.map[i-1].tile;
-								const bool openEast = x+1 < header.width && !mapPlane.map[i+1].tile;
-								trigger.arg[4] = (openNorth + openSouth) > (openWest + openEast);
+								if(mapPlane.map[i].maskedWallType)
+								{
+									// A 106 marker on a masked screen removes the
+									// force field in place; it must not expose the
+									// generic door's lateral slide animation.
+									trigger.action = Specials::Wall_Remove;
+									trigger.repeatable = false;
+								}
+								else
+								{
+									const unsigned int x = i%header.width;
+									const unsigned int y = i/header.width;
+									const bool openNorth = y > 0 && !mapPlane.map[i-header.width].tile;
+									const bool openSouth = y+1 < header.height && !mapPlane.map[i+header.width].tile;
+									const bool openWest = x > 0 && !mapPlane.map[i-1].tile;
+									const bool openEast = x+1 < header.width && !mapPlane.map[i+1].tile;
+									trigger.arg[4] = (openNorth + openSouth) > (openWest + openEast);
+								}
 							}
 
 							triggers.Push(trigger);

@@ -41,10 +41,12 @@
 #include "id_us.h"
 #include "templates.h"
 #include "wl_agent.h"
+#include "wl_iwad.h"
 #include "wl_main.h"
 #include "wl_play.h"
 
 static bool doWriteConfig = false;
+static bool viewSizeConfigured = false;
 
 Aspect r_ratio = ASPECT_4_3, vid_aspect = ASPECT_NONE;
 bool forcegrabmouse = false;
@@ -153,6 +155,12 @@ void FinalReadConfig()
 	SD_SetDigiDevice(sds);
 	N3DTempoEmulation = !!config.GetSetting("N3DTempoEmulation")->GetInteger();
 
+	if(!viewSizeConfigured && IWad::CheckGameFilter("Corridor7"))
+	{
+		viewsize = 20;
+		config.GetSetting("ViewSize")->SetValue(viewsize);
+	}
+
 	AM_UpdateFlags();
 
 	doWriteConfig = true;
@@ -171,6 +179,7 @@ void ReadConfig(void)
 	int uniScreenWidth = 0, uniScreenHeight = 0;
 	SettingsData * sd = NULL;
 
+	viewSizeConfigured = config.GetSetting("ViewSize") != NULL;
 	config.CreateSetting("ForceGrabMouse", false);
 	config.CreateSetting("MouseEnabled", 1);
 	config.CreateSetting("JoystickEnabled", true);

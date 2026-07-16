@@ -930,13 +930,6 @@ void StartDamageFlash (int damage)
 void UpdatePaletteShifts (void)
 {
 	int red, white;
-	int c7VisorMode = 1;
-	if(IWad::CheckGameFilter("Corridor7") && players[ConsolePlayer].mo)
-	{
-		AInventory *mode = players[ConsolePlayer].mo->FindInventory(ClassDef::FindClass("C7VisorMode"));
-		if(mode)
-			c7VisorMode = mode->amount;
-	}
 
 	if (bonuscount)
 	{
@@ -975,16 +968,6 @@ void UpdatePaletteShifts (void)
 	{
 		// [BL] More of a yellow if you ask me.
 		V_SetBlend(0xFF, 0xF8, 0x00, white*(38/NUMWHITESHIFTS));
-		palshifted = true;
-	}
-	else if(c7VisorMode == 2)
-	{
-		V_SetBlend(0x20, 0xFF, 0x50, 44);
-		palshifted = true;
-	}
-	else if(c7VisorMode == 3)
-	{
-		V_SetBlend(0xFF, 0x30, 0x10, 34);
 		palshifted = true;
 	}
 	else if (palshifted)

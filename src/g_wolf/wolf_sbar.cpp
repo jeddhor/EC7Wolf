@@ -114,7 +114,8 @@ public:
 private:
 	static void LatchNumber (int x, int y, unsigned width, int32_t number, bool zerofill, bool cap=false);
 	static void LatchString (int x, int y, unsigned width, const FString &str);
-	static void DrawC7Gauge(int x, int y, unsigned int amount, unsigned int maximum, int red, int green, int blue);
+	static void DrawC7Gauge(int x, int y, unsigned int width, unsigned int height,
+		unsigned int paletteStart);
 	static void StatusDrawFace(FTexture *pic);
 	static void StatusDrawPic(unsigned x, unsigned y, const char* pic);
 
@@ -340,17 +341,29 @@ void WolfStatusBar::LatchString (int x, int y, unsigned width, const FString &st
 	}
 }
 
-void WolfStatusBar::DrawC7Gauge(int x, int y, unsigned int amount, unsigned int maximum,
-	int red, int green, int blue)
+void WolfStatusBar::DrawC7Gauge(int x, int y, unsigned int width, unsigned int height,
+	unsigned int paletteStart)
 {
-	if(maximum == 0 || amount == 0)
+	if(width == 0 || height == 0)
 		return;
-	const unsigned int width = MIN(25U, (25U * MIN(amount, maximum) + maximum - 1) / maximum);
-	int realX = x, realY = y, realWidth = width, realHeight = 4;
-	screen->VirtualToRealCoordsInt(realX, realY, realWidth, realHeight, 320, 200, true, true);
-	const int color = ColorMatcher.Pick(red, green, blue);
-	screen->Clear(realX, realY, realX + realWidth, realY + realHeight,
-		color, GPalette.BaseColors[color]);
+
+	// DOS advances one native palette entry after every three columns. At a
+	// nominal width of 25 the final column reaches the black separator that
+	// follows each eight-entry HUD ramp.
+	width = MIN(width, 25U);
+	for(unsigned int column = 0;column < width;++column)
+	{
+		int realX = x + column;
+		int realY = y;
+		int realWidth = 1;
+		int realHeight = height;
+		screen->VirtualToRealCoordsInt(realX, realY, realWidth, realHeight,
+			320, 200, true, true);
+		const int color = GPalette.Remap[
+			MIN<unsigned int>(255, paletteStart+column/3)];
+		screen->Clear(realX, realY, realX + realWidth, realY + realHeight,
+			color, GPalette.BaseColors[color]);
+	}
 }
 
 
@@ -578,19 +591,17 @@ void WolfStatusBar::DrawStatusBar()
 
 		FString level;
 		level.Format("%2s", levelInfo->FloorNumber.GetChars());
-		LatchString(16, 18, 2, level);
-		LatchNumber(48, 18, 6, players[ConsolePlayer].score, false, true);
-		unsigned int ammo = 0, ammoMaximum = 1;
+		LatchString(10, 16, 2, level);
+		LatchNumber(30, 16, 7, players[ConsolePlayer].score, false, true);
+		unsigned int ammo = 0;
 		if(players[ConsolePlayer].ReadyWeapon &&
 			players[ConsolePlayer].ReadyWeapon->ammo[AWeapon::PrimaryFire])
 		{
 			AAmmo *readyAmmo = players[ConsolePlayer].ReadyWeapon->ammo[AWeapon::PrimaryFire];
 			ammo = readyAmmo->amount;
-			ammoMaximum = readyAmmo->maxamount;
-			if(readyAmmo->IsA(ClassDef::FindClass("C7Energy")))
-				ammoMaximum = 100;
 		}
-		LatchNumber(288, 18, 3, MAX(0, gamestate.killtotal-gamestate.killcount), false, true);
+		LatchNumber(296, 16, 2,
+			MAX(0, gamestate.killtotal-gamestate.killcount), false, true);
 
 		if(players[ConsolePlayer].mo)
 		{
@@ -599,18 +610,34 @@ void WolfStatusBar::DrawStatusBar()
 			AInventory *mines = pawn->FindInventory(ClassDef::FindClass("C7Mines"));
 			AInventory *visor = pawn->FindInventory(ClassDef::FindClass("C7VisorCharge"));
 
-			// Adrenaline can raise Corridor 7 health to 400; the released meter
-			// represents that complete boosted range rather than clipping at 100.
-			DrawC7Gauge(96, 172, MAX(0, players[ConsolePlayer].health), 400, 160, 190, 70);
-			DrawC7Gauge(96, 188, armor ? armor->amount : 0, 200, 145, 170, 160);
-			DrawC7Gauge(199, 172, ammo, ammoMaximum, 190, 200, 70);
-			DrawC7Gauge(199, 188, mines ? mines->amount : 0, 25, 170, 175, 145);
-			DrawC7Gauge(149, 188, visor ? visor->amount : 0, 100, 205, 205, 55);
+			DrawC7Gauge(97, 172,
+				MIN(25U, unsigned(MAX(0, players[ConsolePlayer].health))>>2),
+				5, players[ConsolePlayer].health < 32 ? 80 : 128);
+			DrawC7Gauge(97, 191,
+				MIN(25U, unsigned(armor ? armor->amount : 0)>>2), 5, 56);
+			DrawC7Gauge(200, 172, MIN(25U, ammo>>2), 5, 104);
+			DrawC7Gauge(200, 190,
+				MIN(25U, unsigned(mines ? mines->amount : 0)), 5, 104);
+			DrawC7Gauge(149, 193,
+				MIN(25U, unsigned(visor ? visor->amount : 0)>>2), 3, 56);
 
-			if(pawn->FindInventory(ClassDef::FindClass("C7Static001")))
-				VWB_DrawGraphic(TexMan("C002A0"), 246, 174);
-			if(pawn->FindInventory(ClassDef::FindClass("C7Static002")))
-				VWB_DrawGraphic(TexMan("C003A0"), 258, 174);
+			const char *itemGraphics[3] =
+			{
+				"C7G0019", "C7G0020", "C7G0021"
+			};
+			const char *itemClasses[3] =
+			{
+				"C7Static001", "C7Static002", "C7FloorPlan"
+			};
+			unsigned int slot = 0;
+			for(;slot < 3;++slot)
+				VWB_DrawGraphic(TexMan("C7G0018"), 256+slot*8, 176);
+			slot = 0;
+			for(unsigned int item = 0;item < 3 && slot < 3;++item)
+			{
+				if(pawn->FindInventory(ClassDef::FindClass(itemClasses[item])))
+					VWB_DrawGraphic(TexMan(itemGraphics[item]), 256+(slot++)*8, 176);
+			}
 		}
 		return;
 	}

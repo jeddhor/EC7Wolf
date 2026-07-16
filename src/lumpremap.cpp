@@ -285,8 +285,10 @@ void LumpRemapper::ParseMap(Scanner &sc)
 						psprites.Push(PSprite(spriteName, PSPR_NORMAL));
 					else if(sc->str.Compare("blakepspr") == 0)
 						psprites.Push(PSprite(spriteName, PSPR_BLAKE));
+					else if(sc->str.Compare("c7pspr") == 0)
+						psprites.Push(PSprite(spriteName, PSPR_CORRIDOR7));
 					else
-						sc.ScriptMessage(Scanner::ERROR, "Expected pspr modifier.\n");
+						sc.ScriptMessage(Scanner::ERROR, "Expected pspr, blakepspr, or c7pspr modifier.\n");
 				}
 				if(sc.CheckToken('}'))
 					break;

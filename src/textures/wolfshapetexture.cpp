@@ -42,6 +42,7 @@
 #include "v_palette.h"
 #include "textures.h"
 #include "lumpremap.h"
+#include "wl_iwad.h"
 
 //==========================================================================
 //
@@ -87,7 +88,7 @@ protected:
 static bool CheckIfWolfShape(FileReader &file)
 {
 	if(file.GetLength() < 4) return false; // No header
-	
+
 	WORD header[2];
 	file.Seek(0, SEEK_SET);
 	file.Read(header, 4);
@@ -112,7 +113,7 @@ static bool CheckIfWolfShape(FileReader &file)
 static bool CheckIfMacShape(FileReader &file)
 {
 	if(file.GetLength() < 2) return false; // No header
-	
+
 	WORD width;
 	file.Seek(0, SEEK_SET);
 	file.Read(&width, sizeof(width));
@@ -183,6 +184,9 @@ void FWolfShapeTexture::Init(FileReader &file)
 	header[0] = LittleShort(header[0]);
 	header[1] = LittleShort(header[1]);
 
+	// GFXTILES sprites store a left/right column range instead of a fixed
+	// 64-pixel stride. Width is taken from that header; height starts as the
+	// 64-pixel Wolf post canvas and is cropped below to the occupied posts.
 	Width = header[1]-header[0]+1;
 	Height = 64;
 	LeftOffset = 32-header[0];
@@ -206,6 +210,14 @@ void FWolfShapeTexture::Init(FileReader &file)
 			LeftOffset -= 114;
 			xScale = 5*FRACUNIT/7;
 			yScale = 5*FRACUNIT/7;
+			break;
+		case LumpRemapper::PSPR_CORRIDOR7:
+			// The DOS renderer expands the 64x64 weapon box to 80x80 logical
+			// pixels, centers it, and anchors its bottom to the 160-pixel view.
+			TopOffset = -54;
+			LeftOffset -= 128;
+			xScale = 4*FRACUNIT/5;
+			yScale = 4*FRACUNIT/5;
 			break;
 	}
 
@@ -373,10 +385,14 @@ void FWolfShapeTexture::MakeTexture ()
 {
 	FMemLump lump = Wads.ReadLump (SourceLump);
 	const BYTE* data = (const BYTE*)lump.GetMem();
+	const bool corridor7 = IWad::CheckGameFilter("Corridor7");
 
 	Pixels = new BYTE[Width*Height];
 	memset(Pixels, 0, Width*Height);
 
+	// Width comes from the GFXTILES sprite's left/right column header, not a
+	// fixed 64-pixel stride. Height starts as the 64-pixel Wolf post canvas and
+	// is cropped to the posts that are actually present.
 	for(int x = 0;x < Width;x++)
 	{
 		BYTE* out = Pixels+(x*Height);
@@ -389,7 +405,14 @@ void FWolfShapeTexture::MakeTexture ()
 			start = (ReadLittleShort(column+4)>>1) - TopCrop;
 			column += 6;
 			for(int y = start;y < end;y++)
-				out[y] = GPalette.Remap[in[y]];
+			{
+				BYTE source = in[y];
+				// Corridor 7's transparent key is source index 255. Map it to
+				// ECWolf's transparent index 0 before palette remapping.
+				if(corridor7 && source == 255)
+					source = 0;
+				out[y] = GPalette.Remap[source];
+			}
 		}
 	}
 }

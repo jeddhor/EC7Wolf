@@ -42,6 +42,7 @@ export C7_CONFIG_FILE="$config_file"
 export C7_SAVE_DIR="$savedir"
 export C7_TITLE_SHOT="$config_dir/title.png"
 export C7_MENU_SHOT="$config_dir/menu.png"
+export C7_OPTIONS_SHOT="$config_dir/options.png"
 
 set +e
 xvfb-run -a sh -c '
@@ -111,6 +112,23 @@ xvfb-run -a sh -c '
 	sleep 1
 	import -window "$window" "$C7_MENU_SHOT"
 	[ "$(convert "$C7_MENU_SHOT" -colorspace Gray -format "%[fx:mean>0.01]" info:)" = 1 ] || exit 19
+	# Options -> Customize Controls contains the boolean selectors that used to
+	# resolve to missing Wolf3D graphics under Corridor 7.
+	xdotool key Down
+	sleep 0.2
+	xdotool key Return
+	sleep 0.2
+	xdotool key Return
+	sleep 1
+	import -window "$window" "$C7_OPTIONS_SHOT"
+	[ "$(convert "$C7_OPTIONS_SHOT" -colorspace Gray -format "%[fx:mean>0.01]" info:)" = 1 ] || exit 20
+	[ "$(convert "$C7_OPTIONS_SHOT" -format "%k" info:)" -gt 4 ] || exit 21
+	xdotool key Escape
+	sleep 0.2
+	xdotool key Escape
+	sleep 0.2
+	xdotool key Up
+	sleep 0.2
 	# New Game -> selected rank starts MAP01.
 	xdotool key Return
 	sleep 1

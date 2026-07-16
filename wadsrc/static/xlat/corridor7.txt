@@ -1,7 +1,7 @@
 /* Corridor 7 map translation.
- * The 48 ordinary wall pairs begin at GFXTILES page 160. Extended wall IDs
- * 49..250 select the page bearing the same number; 105 and 107 are the two
- * released sight-transparent screen-wall types. */
+ * The 48 ordinary directional wall pairs use GFXTILES pages 160..255.
+ * Markers 104/105 override those cells with page wall-ID-minus-one; extended
+ * wall IDs 49..250 otherwise select the page bearing the same number. */
 
 tiles
 {

@@ -38,6 +38,7 @@
 #include "w_wad.h"
 #include "v_palette.h"
 #include "textures.h"
+#include "wl_iwad.h"
 
 //==========================================================================
 //
@@ -52,11 +53,15 @@ public:
 	~FFlatTexture ();
 
 	const BYTE *GetColumn (unsigned int column, const Span **spans_out);
+	const BYTE *GetMaskedColumn (unsigned int column);
+	const BYTE *GetColumnOpacity (unsigned int column);
 	const BYTE *GetPixels ();
 	void Unload ();
 
 protected:
 	BYTE *Pixels;
+	BYTE *MaskedPixels;
+	BYTE *Opacity;
 	Span DummySpans[2];
 
 
@@ -86,22 +91,21 @@ FTexture *FlatTexture_TryCreate(FileReader & file, int lumpnum)
 //==========================================================================
 
 FFlatTexture::FFlatTexture (int lumpnum)
-: FTexture(NULL, lumpnum), Pixels(0)
+: FTexture(NULL, lumpnum), Pixels(0), MaskedPixels(0), Opacity(0)
 {
-	int area;
-	int bits;
-
-	area = Wads.LumpLength (lumpnum);
-
-	switch (area)
+	// Size the texture from the lump length recorded in the resource
+	// directory. Corridor 7 GFXTILES wall pages are square raw bitmaps with
+	// no embedded width/height header; every released page is 4096 bytes
+	// (64x64), so the VSWAP length is the authoritative stride source.
+	const int area = Wads.LumpLength (lumpnum);
+	int bits = 6;
+	for(int candidate = 3;candidate <= 8;++candidate)
 	{
-	default:
-	case 64*64:		bits = 6;	break;
-	case 8*8:		bits = 3;	break;
-	case 16*16:		bits = 4;	break;
-	case 32*32:		bits = 5;	break;
-	case 128*128:	bits = 7;	break;
-	case 256*256:	bits = 8;	break;
+		if((1 << candidate)*(1 << candidate) == area)
+		{
+			bits = candidate;
+			break;
+		}
 	}
 
 	bMasked = false;
@@ -141,6 +145,16 @@ void FFlatTexture::Unload ()
 		delete[] Pixels;
 		Pixels = NULL;
 	}
+	if (Opacity != NULL)
+	{
+		delete[] Opacity;
+		Opacity = NULL;
+	}
+	if (MaskedPixels != NULL)
+	{
+		delete[] MaskedPixels;
+		MaskedPixels = NULL;
+	}
 }
 
 //==========================================================================
@@ -179,6 +193,50 @@ const BYTE *FFlatTexture::GetColumn (unsigned int column, const Span **spans_out
 //
 //==========================================================================
 
+const BYTE *FFlatTexture::GetColumnOpacity (unsigned int column)
+{
+	if (Pixels == NULL)
+		MakeTexture ();
+	if (Opacity == NULL)
+		return NULL;
+	if ((unsigned)column >= (unsigned)Width)
+	{
+		if (WidthMask + 1 == Width)
+			column &= WidthMask;
+		else
+			column %= Width;
+	}
+	return Opacity + column*Height;
+}
+
+//==========================================================================
+//
+//
+//
+//==========================================================================
+
+const BYTE *FFlatTexture::GetMaskedColumn (unsigned int column)
+{
+	if (Pixels == NULL)
+		MakeTexture ();
+	if (MaskedPixels == NULL)
+		return GetColumn(column, NULL);
+	if ((unsigned)column >= (unsigned)Width)
+	{
+		if (WidthMask + 1 == Width)
+			column &= WidthMask;
+		else
+			column %= Width;
+	}
+	return MaskedPixels + column*Height;
+}
+
+//==========================================================================
+//
+//
+//
+//==========================================================================
+
 const BYTE *FFlatTexture::GetPixels ()
 {
 	if (Pixels == NULL)
@@ -203,10 +261,54 @@ void FFlatTexture::MakeTexture ()
 	{
 		memset (Pixels + numread, 0xBB, Width*Height - numread);
 	}
+	if(IWad::CheckGameFilter("Corridor7"))
+	{
+		// Corridor 7 uses source index 255 as the DOS transparent key. ECWolf's
+		// masked/compositor paths treat index 0 as transparent, so remap 255 to
+		// 0 before palette injection. Opaque art may still use index 0 as black,
+		// so keep a separate opacity plane and leave the opaque Pixels buffer on
+		// the original indices (255 remains the magenta palette entry there).
+		for(int i = 0;i < Width*Height;++i)
+		{
+			if(Pixels[i] == 255)
+			{
+				bMasked = true;
+				break;
+			}
+		}
+		if(bMasked)
+		{
+			Opacity = new BYTE[Width*Height];
+			MaskedPixels = new BYTE[Width*Height];
+			for(int i = 0;i < Width*Height;++i)
+			{
+				const BYTE source = Pixels[i];
+				Opacity[i] = source == 255 ? 0 : 1;
+				MaskedPixels[i] = source == 255 ? 0 : source;
+			}
+		}
+	}
 	if(!(Wads.GetLumpFlags(SourceLump) & LUMPF_DONTFLIPFLAT))
+	{
 		FlipSquareBlockRemap (Pixels, Width, Height, GPalette.Remap);
+		if(MaskedPixels)
+			FlipSquareBlockRemap (MaskedPixels, Width, Height, GPalette.Remap);
+		if(Opacity)
+		{
+			BYTE identity[256];
+			for(unsigned int i = 0;i < 256;++i)
+				identity[i] = i;
+			FlipSquareBlockRemap (Opacity, Width, Height, identity);
+		}
+	}
 	else
+	{
 		for(int i = 0;i < Width*Height;i++)
+		{
 			Pixels[i] = GPalette.Remap[Pixels[i]];
+			if(MaskedPixels)
+				MaskedPixels[i] = GPalette.Remap[MaskedPixels[i]];
+		}
+	}
 }
 

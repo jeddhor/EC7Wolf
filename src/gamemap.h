@@ -114,7 +114,7 @@ class GameMap
 		struct Tile
 		{
 			Tile() : offsetVertical(false), offsetHorizontal(false), autoOrient(false),
-				sightTransparent(false), mapped(0), dontOverlay(false)
+				sightTransparent(false), renderMasked(false), mapped(0), dontOverlay(false)
 			{
 				texture[0].SetInvalid();
 				texture[1].SetInvalid();
@@ -133,8 +133,11 @@ class GameMap
 			// Some games store one door ID and derive its axis from adjacent
 			// floor cells instead of using separate horizontal/vertical IDs.
 			bool			autoOrient;
-			// Blocks movement and rendering, but not actor sight/hitscan checks.
+			// Blocks movement, but not actor sight/hitscan checks.
 			bool			sightTransparent;
+			// Render this tile as a color-keyed wall while keeping collision,
+			// sight, and activation semantics independent.
+			bool			renderMasked;
 			FName			soundSequence;
 
 			unsigned int	mapped; // filter level for always visible
@@ -165,7 +168,9 @@ class GameMap
 				Map() : tile(NULL), sector(NULL), zone(NULL), visible(false),
 					amFlags(0), thinker(NULL), slideStyle(0),
 					pushDirection(Tile::East), pushAmount(0),
-					pushReceptor(NULL), tag(0), nexttag(NULL)
+					pushReceptor(NULL), maskedWallType(0),
+					corridor7WallMarker(0), corridor7WallID(0),
+					corridor7SightTransparent(false), tag(0), nexttag(NULL)
 				{
 					slideAmount[0] = slideAmount[1] = slideAmount[2] = slideAmount[3] = 0;
 					sideSolid[0] = sideSolid[1] = sideSolid[2] = sideSolid[3] = true;
@@ -195,6 +200,13 @@ class GameMap
 				Tile::Side		pushDirection;
 				unsigned int	pushAmount;
 				Map				*pushReceptor;
+				// Corridor 7 plane-1 values 86..88 select masked-wall
+				// subtypes without spawning a map object. maskedWallType is
+				// derived independently from index-255 wall art.
+				BYTE			maskedWallType;
+				BYTE			corridor7WallMarker;
+				WORD			corridor7WallID;
+				bool			corridor7SightTransparent;
 
 				unsigned int	tag;
 				Plane::Map		*nexttag;

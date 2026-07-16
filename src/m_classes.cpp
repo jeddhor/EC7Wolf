@@ -11,6 +11,7 @@
 #include "g_mapinfo.h"
 #include "v_palette.h"
 #include "colormatcher.h"
+#include "wl_iwad.h"
 
 bool 			Menu::close = false;
 FTexture		*Menu::cursor = NULL;
@@ -102,11 +103,22 @@ void BooleanMenuItem::activate()
 
 void BooleanMenuItem::draw()
 {
-	static FTexture *selected = TexMan("M_SELCT"), *deselected = TexMan("M_NSELCT");
-	if (value)
-		VWB_DrawGraphic (selected, PrintX - 24, PrintY + 3, MENU_CENTER);
+	if(IWad::CheckGameFilter("Corridor7"))
+	{
+		const int x = PrintX-23;
+		const int y = PrintY+2;
+		DrawWindow(x, y, 9, 9, MENUWIN_BACKGROUND, MENUWIN_BOTBORDER, MENUWIN_TOPBORDER);
+		if(value)
+			VWB_Clear(MENUWINHGLT_TOPBORDER, x+2, y+2, x+7, y+7);
+	}
 	else
-		VWB_DrawGraphic (deselected, PrintX - 24, PrintY + 3, MENU_CENTER);
+	{
+		static FTexture *selected = TexMan("M_SELCT"), *deselected = TexMan("M_NSELCT");
+		if(value)
+			VWB_DrawGraphic(selected, PrintX-24, PrintY+3, MENU_CENTER);
+		else
+			VWB_DrawGraphic(deselected, PrintX-24, PrintY+3, MENU_CENTER);
+	}
 	MenuItem::draw();
 }
 

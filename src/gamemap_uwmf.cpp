@@ -149,6 +149,11 @@ void TextMapParser::ParseTile(Scanner &sc, MapTile &tile)
 		sc.MustGetToken(TK_BoolConst);
 		tile.sightTransparent = sc->boolean;
 	}
+	else CheckKey("rendermasked")
+	{
+		sc.MustGetToken(TK_BoolConst);
+		tile.renderMasked = sc->boolean;
+	}
 
 	EndParseBlock
 }

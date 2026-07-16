@@ -53,7 +53,8 @@ class LumpRemapper
 		{
 			PSPR_NONE,
 			PSPR_NORMAL,
-			PSPR_BLAKE
+			PSPR_BLAKE,
+			PSPR_CORRIDOR7
 		};
 
 		LumpRemapper(const char* extension);

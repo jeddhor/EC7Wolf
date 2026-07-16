@@ -204,6 +204,11 @@ public:
 
 	// Returns a single column of the texture
 	virtual const BYTE *GetColumn (unsigned int column, const Span **spans_out) = 0;
+	// Returns an optional color-key-normalized variant for masked rendering.
+	virtual const BYTE *GetMaskedColumn (unsigned int column) { return GetColumn(column, NULL); }
+	// Optional per-pixel opacity for indexed formats whose native transparent
+	// key collides with ECWolf palette index 0.
+	virtual const BYTE *GetColumnOpacity (unsigned int column) { return NULL; }
 
 	// Returns the whole texture, stored in column-major order
 	virtual const BYTE *GetPixels () = 0;

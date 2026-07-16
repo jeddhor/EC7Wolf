@@ -253,6 +253,130 @@ FUNC(C7_WallSwitch)
 	return 1;
 }
 
+static FTextureID C7WallTexture(unsigned int wallID)
+{
+	FString textureName;
+	textureName.Format("C7W%04u", wallID-1);
+	return TexMan.CheckForTexture(textureName, FTexture::TEX_Wall);
+}
+
+static bool SetC7WallTexture(MapSpot spot, unsigned int wallID)
+{
+	const FTextureID texture = C7WallTexture(wallID);
+	if(!texture.isValid())
+		return false;
+	for(unsigned int side = 0;side < 4;++side)
+		spot->texture[side] = texture;
+	return true;
+}
+
+class C7HealthDispenser : public Thinker
+{
+	DECLARE_CLASS(C7HealthDispenser, Thinker)
+
+public:
+	C7HealthDispenser(MapSpot spot)
+		: Thinker(ThinkerList::WORLD), spot(spot), frame(85), tics(0)
+	{
+		spot->thinker = this;
+	}
+
+	void Destroy()
+	{
+		if(spot && spot->thinker == this)
+			spot->thinker = NULL;
+		Super::Destroy();
+	}
+
+	void Tick()
+	{
+		if(!spot || !spot->tile)
+		{
+			Destroy();
+			return;
+		}
+
+		// The DOS game runs this four-page sequence through its wall animation
+		// controller. Eight 70 Hz tics per page preserves the visible button
+		// press without making the unit feel sluggish.
+		if(++tics < 8)
+			return;
+		tics = 0;
+		if(++frame > 88 || !SetC7WallTexture(spot, frame))
+		{
+			Destroy();
+			return;
+		}
+		if(frame == 88)
+			Destroy();
+	}
+
+	void Serialize(FArchive &arc)
+	{
+		arc << spot << frame << tics;
+		Super::Serialize(arc);
+	}
+
+private:
+	MapSpot spot;
+	BYTE frame;
+	BYTE tics;
+};
+IMPLEMENT_INTERNAL_CLASS(C7HealthDispenser)
+
+// Corridor 7 has two consumable wall units. Wall 85 animates through 88,
+// where a second use supplies 25 health and leaves empty wall 89. Wall 111
+// supplies a 50-round clip and immediately changes to empty wall 112.
+FUNC(C7_Dispenser)
+{
+	if(!spot || !spot->tile || !activator)
+		return 0;
+
+	if(args[0] == 1)
+	{
+		const FTextureID initial = C7WallTexture(85);
+		const FTextureID ready = C7WallTexture(88);
+		const FTextureID empty = C7WallTexture(89);
+		if(!initial.isValid() || !ready.isValid() || !empty.isValid())
+			return 0;
+
+		if(spot->texture[0] == empty || spot->thinker)
+			return 0;
+		if(spot->texture[0] == ready)
+		{
+			const ClassDef *health = ClassDef::FindClass("C7MedicPack");
+			if(!health || !activator->GiveInventory(health))
+				return 0;
+			SetC7WallTexture(spot, 89);
+			PlaySoundLocMapSpot("misc/health_pkup", spot);
+			return 1;
+		}
+		if(spot->texture[0] != initial)
+			return 0;
+
+		new C7HealthDispenser(spot);
+		PlaySoundLocMapSpot("switches/normbutn", spot);
+		return 1;
+	}
+
+	if(args[0] == 2)
+	{
+		const FTextureID loaded = C7WallTexture(111);
+		const FTextureID empty = C7WallTexture(112);
+		if(!loaded.isValid() || !empty.isValid() || spot->texture[0] != loaded)
+			return 0;
+
+		const ClassDef *ammo = ClassDef::FindClass("C7Bullets");
+		if(!ammo || !activator->GiveInventory(ammo, 50))
+			return 0;
+		SetC7WallTexture(spot, 112);
+		PlaySoundLocMapSpot("misc/ammo_pkup", spot);
+		return 1;
+	}
+
+	return 0;
+}
+
 class EVDoor : public Thinker
 {
 	DECLARE_CLASS(EVDoor, Thinker)

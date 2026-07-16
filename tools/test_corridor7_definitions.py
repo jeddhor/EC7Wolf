@@ -107,6 +107,7 @@ require(r'oldplane\[i\]\s*==\s*107.*?sideSolid\[0\].*?false.*?maskedWallType\s*=
 require(r'class\s+C7AnimatedWall.*?\+\+frame\s*>\s*3.*?corridor7WallID-1\+frame.*?frame\s*==\s*3.*?OpenWallCell\(spot,\s*false\)', LNSPEC, "Corridor 7 animated walls retain their final aperture")
 require(r'color\s*>=\s*208\s*&&\s*color\s*<=\s*239.*?color\s*&\s*~7.*?TimeCount\s*>>\s*3', WL_DRAW, "all four Corridor 7 VGA palette ramps cycle every eight tics")
 require(r'IsMaskedWallPassSide.*?CheckGameFilter\("Corridor7"\).*?return\s+true.*?RecordMaskedWallHit.*?maskedWallHits\.Push.*?DrawMaskedWall.*?hitFirst.*?hitLast', WL_DRAW, "masked Corridor 7 rays cross adjacent glass and retain their exact surface spans")
+require(r'IsConnectedMaskedWall.*?corridor7WallID.*?IsMaskedWallRenderSide.*?horizontalRun.*?verticalRun.*?RecordMaskedWallHit', WL_DRAW, "adjacent masked walls suppress internal end faces while rays continue through them")
 require(r'height\s*>=\s*maskedWallDepth\[depthIndex\].*?maskedWallDepth\[depthIndex\]\s*=\s*height', WL_DRAW, "overlapping masked walls use per-pixel depth compositing")
 require(r'GetWallTexture.*?corridor7WallMarker\s*>=\s*1.*?corridor7WallMarker\s*<=\s*3.*?textureName\.Format\("C7W%04u",\s*base\+i\).*?TimeCount/5.*?animation\[base\]\[frame\]', WL_DRAW, "markers 86..88 animate four wall pages at the DOS cadence")
 for wall_id, result_id, kind in ((9, 10, 1), (11, 12, 2), (30, 31, 3)):
@@ -116,6 +117,14 @@ for wall_id, result_id, kind in ((9, 10, 1), (11, 12, 2), (30, 31, 3)):
         f"wall {wall_id} must activate its native Corridor 7 terminal result",
     )
 require(r'FUNC\(C7_WallSwitch\).*?C7Static001.*?C7Static002.*?GiveInventory.*?P_AlertCorridor7Monsters', LNSPEC, "Corridor 7 terminals grant access cards or raise the intruder alert")
+for wall_id, kind in ((85, 1), (88, 1), (111, 2)):
+    require(
+        rf'trigger\s+{wall_id}\s*\{{.*?action\s*=\s*"C7_Dispenser".*?arg0\s*=\s*{kind}.*?playeruse\s*=\s*true.*?repeatable\s*=\s*true',
+        XLAT,
+        f"Corridor 7 dispenser wall {wall_id}",
+    )
+require(r'FUNC\(C7_Dispenser\).*?C7MedicPack.*?GiveInventory.*?SetC7WallTexture\(spot,\s*89\).*?C7Bullets.*?GiveInventory\(ammo,\s*50\).*?SetC7WallTexture\(spot,\s*112\)', LNSPEC, "Corridor 7 wall dispensers grant 25 health or 50 bullets and become empty")
+require(r'actor\s+C7MedicPack\s*:\s*Health.*?inventory\.amount\s+25', PLAYER, "Corridor 7 health dispensers supply 25 health")
 require(r'P_AlertCorridor7Monsters.*?AActor::GetIterator.*?FL_SHOOTABLE.*?FirstSighting', WL_STATE, "intruder alert wakes every live monster")
 require(r'void\s+WolfStatusBar::DrawTopOverlay.*?TimeCount\s*<\s*5\*TICRATE.*?Eliminate Aliens To Secure Floor', WOLF_SBAR, "Corridor 7 objective is a timed top overlay")
 require(r'ThreeDRefresh\s*\(\s*\).*?DrawTopOverlay\s*\(\s*\)', WL_PLAY, "top overlay redraws every rendered frame")

@@ -29,6 +29,30 @@ tiles
 		playeruse = true;
 	}
 
+	// The health unit exposes its red control after a short four-frame wall
+	// animation. Wall 88 is also present directly in two released maps.
+	trigger 85
+	{
+		action = "C7_Dispenser";
+		arg0 = 1;
+		playeruse = true;
+		repeatable = true;
+	}
+	trigger 88
+	{
+		action = "C7_Dispenser";
+		arg0 = 1;
+		playeruse = true;
+		repeatable = true;
+	}
+	trigger 111
+	{
+		action = "C7_Dispenser";
+		arg0 = 2;
+		playeruse = true;
+		repeatable = true;
+	}
+
 	// Wall 63 is Corridor 7's normal elevator switch. arg1 distinguishes it
 	// from floor/vortex exits so the two boss floors can disable the elevator.
 	trigger 63

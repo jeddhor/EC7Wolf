@@ -679,6 +679,52 @@ static bool IsMaskedWallPassSide(MapSpot spot, MapTile::Side side)
 	return !adjacent || !adjacent->tile;
 }
 
+static bool IsConnectedMaskedWall(MapSpot spot, MapTile::Side direction)
+{
+	MapSpot other = spot->GetAdjacent(direction);
+	if(!other || !other->tile ||
+		!(other->maskedWallType || other->tile->renderMasked))
+	{
+		return false;
+	}
+
+	// Corridor 7 puts unrelated masked artwork next to one another in a few
+	// places. Only merge faces that came from the same wall definition and map
+	// marker, otherwise a real exposed edge could disappear.
+	if(spot->corridor7WallID || other->corridor7WallID)
+	{
+		return spot->corridor7WallID == other->corridor7WallID &&
+			spot->corridor7WallMarker == other->corridor7WallMarker;
+	}
+	return true;
+}
+
+static bool IsMaskedWallRenderSide(MapSpot spot, MapTile::Side side)
+{
+	if(!IsMaskedWallPassSide(spot, side))
+		return false;
+
+	const bool horizontalRun = IsConnectedMaskedWall(spot, MapTile::East) ||
+		IsConnectedMaskedWall(spot, MapTile::West);
+	const bool verticalRun = IsConnectedMaskedWall(spot, MapTile::North) ||
+		IsConnectedMaskedWall(spot, MapTile::South);
+
+	// A row of panes is one continuous plane. Its internal east/west tile
+	// boundaries are not surfaces; drawing them edge-on creates the periodic
+	// floor-to-ceiling black lines seen down glass-lined corridors.
+	if(horizontalRun && !verticalRun &&
+		(side == MapTile::East || side == MapTile::West))
+	{
+		return false;
+	}
+	if(verticalRun && !horizontalRun &&
+		(side == MapTile::North || side == MapTile::South))
+	{
+		return false;
+	}
+	return true;
+}
+
 static void RecordMaskedWallHit(MapSpot spot, MapTile::Side side, int column)
 {
 	// Rays are traced from left to right, but each ray can cross several panes.
@@ -1235,7 +1281,8 @@ vertentry:
 				DetermineHitDir(true);
 				if(IsMaskedWallPassSide(tilehit, hitdir))
 				{
-					RecordMaskedWallHit(tilehit, hitdir, pixx);
+					if(IsMaskedWallRenderSide(tilehit, hitdir))
+						RecordMaskedWallHit(tilehit, hitdir, pixx);
 					goto passvert;
 				}
 				if(tilehit->tile->offsetVertical)
@@ -1407,7 +1454,8 @@ horizentry:
 				DetermineHitDir(false);
 				if(IsMaskedWallPassSide(tilehit, hitdir))
 				{
-					RecordMaskedWallHit(tilehit, hitdir, pixx);
+					if(IsMaskedWallRenderSide(tilehit, hitdir))
+						RecordMaskedWallHit(tilehit, hitdir, pixx);
 					goto passhoriz;
 				}
 				if(tilehit->tile->offsetHorizontal)

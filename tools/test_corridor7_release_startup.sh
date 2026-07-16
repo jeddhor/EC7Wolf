@@ -43,6 +43,7 @@ export C7_SAVE_DIR="$savedir"
 export C7_TITLE_SHOT="$config_dir/title.png"
 export C7_MENU_SHOT="$config_dir/menu.png"
 export C7_OPTIONS_SHOT="$config_dir/options.png"
+export C7_GAME_SHOT="$config_dir/map01-after-fire.png"
 
 set +e
 xvfb-run -a sh -c '
@@ -141,6 +142,17 @@ xvfb-run -a sh -c '
 		[ "$attempt" -lt 100 ] || exit 14
 		sleep 0.1
 	done
+	# Firing used to destroy an uninitialized drawing-only Frame and segfault as
+	# soon as the live psprite left its Ready state. Exercise that exact path in
+	# the packaged optimized binary before accepting the release.
+	sleep 1
+	xdotool keydown --window "$window" Control_L
+	sleep 1
+	xdotool keyup --window "$window" Control_L
+	sleep 0.5
+	kill -0 "$pid" 2>/dev/null || exit 22
+	import -window "$window" "$C7_GAME_SHOT"
+	[ "$(convert "$C7_GAME_SHOT" -colorspace Gray -format "%[fx:mean>0.01]" info:)" = 1 ] || exit 23
 	cleanup_child
 	pid=0
 ' 

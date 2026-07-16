@@ -925,8 +925,6 @@ void DrawScaleds (void)
 void DrawPlayerWeapon (void)
 {
 	static const int corridor7Bases[] = { 746, 786, 754, 762, 770, 778, 794, 802, 810 };
-	static const int corridor7Frames[16] =
-		{ 7, 7, 6, 5, 4, 5, 6, 7, 7, 7, 6, 5, 4, 5, 6, 7 };
 	static const int corridor7X[16] =
 		{ 0, 1, 2, 3, 4, 3, 2, 1, 0, -1, -2, -3, -4, -3, -2, -1 };
 	static int corridor7Phase[MAXPLAYERS] = { 0 };
@@ -941,10 +939,9 @@ void DrawPlayerWeapon (void)
 		players[ConsolePlayer].BobWeapon(&xoffset, &yoffset);
 
 		const Frame *frame = players[ConsolePlayer].psprite[i].frame;
-		Frame corridor7Frame;
 		if(IWad::CheckGameFilter("Corridor7"))
 		{
-			int base = -1;
+			bool readyFrame = false;
 			for(unsigned int weapon = 0;
 				weapon < sizeof(corridor7Bases)/sizeof(corridor7Bases[0]);++weapon)
 			{
@@ -953,11 +950,11 @@ void DrawPlayerWeapon (void)
 					corridor7Bases[weapon]+7);
 				if(frame->spriteInf == R_GetSprite(readyName))
 				{
-					base = corridor7Bases[weapon];
+					readyFrame = true;
 					break;
 				}
 			}
-			if(base >= 0)
+			if(readyFrame)
 			{
 				if(corridor7LastTime[ConsolePlayer] != gamestate.TimeCount)
 				{
@@ -975,16 +972,9 @@ void DrawPlayerWeapon (void)
 					corridor7LastTime[ConsolePlayer] = gamestate.TimeCount;
 				}
 				const int phase = corridor7Phase[ConsolePlayer]&15;
-				char frameName[5];
-				mysnprintf(frameName, sizeof(frameName), "C%03d",
-					base+corridor7Frames[phase]);
-				corridor7Frame = *frame;
-				// This stack copy borrows the live frame's action arguments.
-				// Do not let its destructor free the shared allocation.
-				corridor7Frame.freeActionArgs = false;
-				corridor7Frame.spriteInf = R_GetSprite(frameName);
-				corridor7Frame.frame = 0;
-				frame = &corridor7Frame;
+				// The DOS walk cycle moves the stationary weapon image sideways.
+				// Cycling through the preceding entries in each sprite group would
+				// display the weapon's firing frames and produce severe flicker.
 				xoffset += corridor7X[phase]<<FRACBITS;
 			}
 		}

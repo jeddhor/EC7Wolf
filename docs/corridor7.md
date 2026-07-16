@@ -64,8 +64,8 @@ Append an output directory and `--all` to load-check every map in the archive.
 - Bounds-checked, self-contained TED5 map loading for all 60 archived maps.
 - Direct GFXTILES, VGAGRAPH, AUDIOHED/AUDIOT, executable-palette, wall,
   sprite, font, HUD, menu-cursor, sound-effect, and music resource exposure.
-- Correct directional ordinary wall pairs, zero-based special wall pages,
-  marker-104/105 wall-ID-minus-one masked overrides,
+- Zero-based wall pages (`map wall ID - 1`) across the complete solid-wall
+  range, including marker-104/105 masked overrides,
   Corridor 7 wall and plane depth ramps, exact six-bit VGA palette expansion,
   solid and
   passable masked-wall behavior, collision-safe index-255-to-0 normalization

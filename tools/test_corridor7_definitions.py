@@ -73,9 +73,8 @@ require(r'args\[0\]\s*==\s*1\s*&&\s*!levelInfo->BonusLevel\s*&&\s*gamestate\.kil
 require(r'skill\s*=\s*MIN<unsigned int>\(gamestate\.difficulty->SpawnFilter,\s*3\)', LNSPEC, "zero-based rank clearance index")
 require(r'tile\s+105\s*\{.*?sighttransparent\s*=\s*true', XLAT, "wall 105 is sight-transparent but solid")
 require(r'tile\s+107\s*\{.*?sighttransparent\s*=\s*true', XLAT, "wall 107 is sight-transparent but solid")
-require(r'tile\s+1\s*\{.*?C7W0160.*?C7W0161.*?tile\s+14\s*\{.*?C7W0186.*?C7W0187.*?tile\s+48\s*\{.*?C7W0254.*?C7W0255', XLAT, "ordinary walls use released directional pages 160..255")
-require(r'tile\s+49\s*\{.*?C7W0048.*?tile\s+92\s*\{.*?C7W0091.*?tile\s+250\s*\{.*?C7W0249', XLAT, "extended wall IDs convert from one-based map IDs to zero-based pages")
-for wall_id in range(49, 251):
+require(r'tile\s+1\s*\{.*?C7W0000.*?tile\s+32\s*\{.*?C7W0031.*?tile\s+92\s*\{.*?C7W0091.*?tile\s+250\s*\{.*?C7W0249', XLAT, "solid wall IDs convert from one-based map IDs to zero-based pages")
+for wall_id in range(1, 251):
     block = re.search(rf'tile\s+{wall_id}\s*\{{(.*?)\}}', XLAT, re.DOTALL)
     if block is None:
         raise SystemExit(f"Corridor 7 definition check failed: wall {wall_id} is missing")
@@ -122,8 +121,9 @@ require(r'C7G0019.*?C7G0020.*?C7G0021.*?C7G0018.*?256\+\(slot\+\+\)\*8,\s*176', 
 require(r'component\s*<<\s*2.*?component\s*>>\s*4', VSWAP, "Corridor 7 VGA DAC palette expansion")
 require(r'PSPR_CORRIDOR7.*?TopOffset\s*=\s*-54.*?xScale\s*=\s*4\*FRACUNIT/5', WOLF_SHAPE, "native Corridor 7 weapon scale and anchor")
 require(r'actor\s+C7M16.*?Ready:\s*C761\s+A\s+1\s+A_WeaponReady', PLAYER, "M-16 uses its released stationary frame")
-require(r'corridor7Frame\.freeActionArgs\s*=\s*false', WL_DRAW, "Corridor 7 weapon bob stack frames must not free shared CallArguments")
-require(r'7,\s*7,\s*6,\s*5,\s*4,\s*5,\s*6,\s*7,\s*7,\s*7,\s*6,\s*5,\s*4,\s*5,\s*6,\s*7.*?0,\s*1,\s*2,\s*3,\s*4,\s*3,\s*2,\s*1,\s*0,\s*-1,\s*-2,\s*-3,\s*-4,\s*-3,\s*-2,\s*-1', WL_DRAW, "released 16-step Corridor 7 weapon bob tables")
+require(r'0,\s*1,\s*2,\s*3,\s*4,\s*3,\s*2,\s*1,\s*0,\s*-1,\s*-2,\s*-3,\s*-4,\s*-3,\s*-2,\s*-1.*?if\(readyFrame\).*?xoffset\s*\+=\s*corridor7X\[phase\]', WL_DRAW, "released 16-step Corridor 7 stationary-frame weapon bob")
+if "corridor7Frame" in WL_DRAW:
+    raise SystemExit("Corridor 7 definition check failed: weapon bob must not copy live Frames")
 require(r'CheckGameFilter\("Corridor7"\).*?curveStrength\s*=\s*floor\s*\?\s*40\s*:\s*24', FLOOR_CEILING, "Corridor 7 floor and ceiling depth ramps")
 if len(re.findall(r'bonuslevel\s*=\s*true', MAPINFO, re.IGNORECASE)) != 6:
     raise SystemExit("Corridor 7 definition check failed: all six bonus maps must use bonus-level rules")

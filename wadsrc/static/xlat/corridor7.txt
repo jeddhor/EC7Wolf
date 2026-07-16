@@ -1,7 +1,7 @@
 /* Corridor 7 map translation.
- * The 48 ordinary directional wall pairs use GFXTILES pages 160..255.
- * Markers 104/105 override those cells with page wall-ID-minus-one; extended
- * wall IDs 49..250 use the same one-based-ID to zero-based-page conversion. */
+ * Solid wall IDs 1..250 use the zero-based GFXTILES page wall-ID-minus-one.
+ * Markers 104/105 preserve that page selection while changing the wall's
+ * masked rendering, sight, and interaction behavior. */
 
 tiles
 {
@@ -121,339 +121,339 @@ tiles
 
 	tile 1
 	{
-		texturenorth = "C7W0160";
-		texturesouth = "C7W0160";
-		textureeast = "C7W0161";
-		texturewest = "C7W0161";
+		texturenorth = "C7W0000";
+		texturesouth = "C7W0000";
+		textureeast = "C7W0000";
+		texturewest = "C7W0000";
 	}
 	tile 2
 	{
-		texturenorth = "C7W0162";
-		texturesouth = "C7W0162";
-		textureeast = "C7W0163";
-		texturewest = "C7W0163";
+		texturenorth = "C7W0001";
+		texturesouth = "C7W0001";
+		textureeast = "C7W0001";
+		texturewest = "C7W0001";
 	}
 	tile 3
 	{
-		texturenorth = "C7W0164";
-		texturesouth = "C7W0164";
-		textureeast = "C7W0165";
-		texturewest = "C7W0165";
+		texturenorth = "C7W0002";
+		texturesouth = "C7W0002";
+		textureeast = "C7W0002";
+		texturewest = "C7W0002";
 	}
 	tile 4
 	{
-		texturenorth = "C7W0166";
-		texturesouth = "C7W0166";
-		textureeast = "C7W0167";
-		texturewest = "C7W0167";
+		texturenorth = "C7W0003";
+		texturesouth = "C7W0003";
+		textureeast = "C7W0003";
+		texturewest = "C7W0003";
 	}
 	tile 5
 	{
-		texturenorth = "C7W0168";
-		texturesouth = "C7W0168";
-		textureeast = "C7W0169";
-		texturewest = "C7W0169";
+		texturenorth = "C7W0004";
+		texturesouth = "C7W0004";
+		textureeast = "C7W0004";
+		texturewest = "C7W0004";
 	}
 	tile 6
 	{
-		texturenorth = "C7W0170";
-		texturesouth = "C7W0170";
-		textureeast = "C7W0171";
-		texturewest = "C7W0171";
+		texturenorth = "C7W0005";
+		texturesouth = "C7W0005";
+		textureeast = "C7W0005";
+		texturewest = "C7W0005";
 	}
 	tile 7
 	{
-		texturenorth = "C7W0172";
-		texturesouth = "C7W0172";
-		textureeast = "C7W0173";
-		texturewest = "C7W0173";
+		texturenorth = "C7W0006";
+		texturesouth = "C7W0006";
+		textureeast = "C7W0006";
+		texturewest = "C7W0006";
 	}
 	tile 8
 	{
-		texturenorth = "C7W0174";
-		texturesouth = "C7W0174";
-		textureeast = "C7W0175";
-		texturewest = "C7W0175";
+		texturenorth = "C7W0007";
+		texturesouth = "C7W0007";
+		textureeast = "C7W0007";
+		texturewest = "C7W0007";
 	}
 	tile 9
 	{
-		texturenorth = "C7W0176";
-		texturesouth = "C7W0176";
-		textureeast = "C7W0177";
-		texturewest = "C7W0177";
+		texturenorth = "C7W0008";
+		texturesouth = "C7W0008";
+		textureeast = "C7W0008";
+		texturewest = "C7W0008";
 	}
 	tile 10
 	{
-		texturenorth = "C7W0178";
-		texturesouth = "C7W0178";
-		textureeast = "C7W0179";
-		texturewest = "C7W0179";
+		texturenorth = "C7W0009";
+		texturesouth = "C7W0009";
+		textureeast = "C7W0009";
+		texturewest = "C7W0009";
 	}
 	tile 11
 	{
-		texturenorth = "C7W0180";
-		texturesouth = "C7W0180";
-		textureeast = "C7W0181";
-		texturewest = "C7W0181";
+		texturenorth = "C7W0010";
+		texturesouth = "C7W0010";
+		textureeast = "C7W0010";
+		texturewest = "C7W0010";
 	}
 	tile 12
 	{
-		texturenorth = "C7W0182";
-		texturesouth = "C7W0182";
-		textureeast = "C7W0183";
-		texturewest = "C7W0183";
+		texturenorth = "C7W0011";
+		texturesouth = "C7W0011";
+		textureeast = "C7W0011";
+		texturewest = "C7W0011";
 	}
 	tile 13
 	{
-		texturenorth = "C7W0184";
-		texturesouth = "C7W0184";
-		textureeast = "C7W0185";
-		texturewest = "C7W0185";
+		texturenorth = "C7W0012";
+		texturesouth = "C7W0012";
+		textureeast = "C7W0012";
+		texturewest = "C7W0012";
 	}
 	tile 14
 	{
-		texturenorth = "C7W0186";
-		texturesouth = "C7W0186";
-		textureeast = "C7W0187";
-		texturewest = "C7W0187";
+		texturenorth = "C7W0013";
+		texturesouth = "C7W0013";
+		textureeast = "C7W0013";
+		texturewest = "C7W0013";
 	}
 	tile 15
 	{
-		texturenorth = "C7W0188";
-		texturesouth = "C7W0188";
-		textureeast = "C7W0189";
-		texturewest = "C7W0189";
+		texturenorth = "C7W0014";
+		texturesouth = "C7W0014";
+		textureeast = "C7W0014";
+		texturewest = "C7W0014";
 	}
 	tile 16
 	{
-		texturenorth = "C7W0190";
-		texturesouth = "C7W0190";
-		textureeast = "C7W0191";
-		texturewest = "C7W0191";
+		texturenorth = "C7W0015";
+		texturesouth = "C7W0015";
+		textureeast = "C7W0015";
+		texturewest = "C7W0015";
 	}
 	tile 17
 	{
-		texturenorth = "C7W0192";
-		texturesouth = "C7W0192";
-		textureeast = "C7W0193";
-		texturewest = "C7W0193";
+		texturenorth = "C7W0016";
+		texturesouth = "C7W0016";
+		textureeast = "C7W0016";
+		texturewest = "C7W0016";
 	}
 	tile 18
 	{
-		texturenorth = "C7W0194";
-		texturesouth = "C7W0194";
-		textureeast = "C7W0195";
-		texturewest = "C7W0195";
+		texturenorth = "C7W0017";
+		texturesouth = "C7W0017";
+		textureeast = "C7W0017";
+		texturewest = "C7W0017";
 	}
 	tile 19
 	{
-		texturenorth = "C7W0196";
-		texturesouth = "C7W0196";
-		textureeast = "C7W0197";
-		texturewest = "C7W0197";
+		texturenorth = "C7W0018";
+		texturesouth = "C7W0018";
+		textureeast = "C7W0018";
+		texturewest = "C7W0018";
 	}
 	tile 20
 	{
-		texturenorth = "C7W0198";
-		texturesouth = "C7W0198";
-		textureeast = "C7W0199";
-		texturewest = "C7W0199";
+		texturenorth = "C7W0019";
+		texturesouth = "C7W0019";
+		textureeast = "C7W0019";
+		texturewest = "C7W0019";
 	}
 	tile 21
 	{
-		texturenorth = "C7W0200";
-		texturesouth = "C7W0200";
-		textureeast = "C7W0201";
-		texturewest = "C7W0201";
+		texturenorth = "C7W0020";
+		texturesouth = "C7W0020";
+		textureeast = "C7W0020";
+		texturewest = "C7W0020";
 	}
 	tile 22
 	{
-		texturenorth = "C7W0202";
-		texturesouth = "C7W0202";
-		textureeast = "C7W0203";
-		texturewest = "C7W0203";
+		texturenorth = "C7W0021";
+		texturesouth = "C7W0021";
+		textureeast = "C7W0021";
+		texturewest = "C7W0021";
 	}
 	tile 23
 	{
-		texturenorth = "C7W0204";
-		texturesouth = "C7W0204";
-		textureeast = "C7W0205";
-		texturewest = "C7W0205";
+		texturenorth = "C7W0022";
+		texturesouth = "C7W0022";
+		textureeast = "C7W0022";
+		texturewest = "C7W0022";
 	}
 	tile 24
 	{
-		texturenorth = "C7W0206";
-		texturesouth = "C7W0206";
-		textureeast = "C7W0207";
-		texturewest = "C7W0207";
+		texturenorth = "C7W0023";
+		texturesouth = "C7W0023";
+		textureeast = "C7W0023";
+		texturewest = "C7W0023";
 	}
 	tile 25
 	{
-		texturenorth = "C7W0208";
-		texturesouth = "C7W0208";
-		textureeast = "C7W0209";
-		texturewest = "C7W0209";
+		texturenorth = "C7W0024";
+		texturesouth = "C7W0024";
+		textureeast = "C7W0024";
+		texturewest = "C7W0024";
 	}
 	tile 26
 	{
-		texturenorth = "C7W0210";
-		texturesouth = "C7W0210";
-		textureeast = "C7W0211";
-		texturewest = "C7W0211";
+		texturenorth = "C7W0025";
+		texturesouth = "C7W0025";
+		textureeast = "C7W0025";
+		texturewest = "C7W0025";
 	}
 	tile 27
 	{
-		texturenorth = "C7W0212";
-		texturesouth = "C7W0212";
-		textureeast = "C7W0213";
-		texturewest = "C7W0213";
+		texturenorth = "C7W0026";
+		texturesouth = "C7W0026";
+		textureeast = "C7W0026";
+		texturewest = "C7W0026";
 	}
 	tile 28
 	{
-		texturenorth = "C7W0214";
-		texturesouth = "C7W0214";
-		textureeast = "C7W0215";
-		texturewest = "C7W0215";
+		texturenorth = "C7W0027";
+		texturesouth = "C7W0027";
+		textureeast = "C7W0027";
+		texturewest = "C7W0027";
 	}
 	tile 29
 	{
-		texturenorth = "C7W0216";
-		texturesouth = "C7W0216";
-		textureeast = "C7W0217";
-		texturewest = "C7W0217";
+		texturenorth = "C7W0028";
+		texturesouth = "C7W0028";
+		textureeast = "C7W0028";
+		texturewest = "C7W0028";
 	}
 	tile 30
 	{
-		texturenorth = "C7W0218";
-		texturesouth = "C7W0218";
-		textureeast = "C7W0219";
-		texturewest = "C7W0219";
+		texturenorth = "C7W0029";
+		texturesouth = "C7W0029";
+		textureeast = "C7W0029";
+		texturewest = "C7W0029";
 	}
 	tile 31
 	{
-		texturenorth = "C7W0220";
-		texturesouth = "C7W0220";
-		textureeast = "C7W0221";
-		texturewest = "C7W0221";
+		texturenorth = "C7W0030";
+		texturesouth = "C7W0030";
+		textureeast = "C7W0030";
+		texturewest = "C7W0030";
 	}
 	tile 32
 	{
-		texturenorth = "C7W0222";
-		texturesouth = "C7W0222";
-		textureeast = "C7W0223";
-		texturewest = "C7W0223";
+		texturenorth = "C7W0031";
+		texturesouth = "C7W0031";
+		textureeast = "C7W0031";
+		texturewest = "C7W0031";
 	}
 	tile 33
 	{
-		texturenorth = "C7W0224";
-		texturesouth = "C7W0224";
-		textureeast = "C7W0225";
-		texturewest = "C7W0225";
+		texturenorth = "C7W0032";
+		texturesouth = "C7W0032";
+		textureeast = "C7W0032";
+		texturewest = "C7W0032";
 	}
 	tile 34
 	{
-		texturenorth = "C7W0226";
-		texturesouth = "C7W0226";
-		textureeast = "C7W0227";
-		texturewest = "C7W0227";
+		texturenorth = "C7W0033";
+		texturesouth = "C7W0033";
+		textureeast = "C7W0033";
+		texturewest = "C7W0033";
 	}
 	tile 35
 	{
-		texturenorth = "C7W0228";
-		texturesouth = "C7W0228";
-		textureeast = "C7W0229";
-		texturewest = "C7W0229";
+		texturenorth = "C7W0034";
+		texturesouth = "C7W0034";
+		textureeast = "C7W0034";
+		texturewest = "C7W0034";
 	}
 	tile 36
 	{
-		texturenorth = "C7W0230";
-		texturesouth = "C7W0230";
-		textureeast = "C7W0231";
-		texturewest = "C7W0231";
+		texturenorth = "C7W0035";
+		texturesouth = "C7W0035";
+		textureeast = "C7W0035";
+		texturewest = "C7W0035";
 	}
 	tile 37
 	{
-		texturenorth = "C7W0232";
-		texturesouth = "C7W0232";
-		textureeast = "C7W0233";
-		texturewest = "C7W0233";
+		texturenorth = "C7W0036";
+		texturesouth = "C7W0036";
+		textureeast = "C7W0036";
+		texturewest = "C7W0036";
 	}
 	tile 38
 	{
-		texturenorth = "C7W0234";
-		texturesouth = "C7W0234";
-		textureeast = "C7W0235";
-		texturewest = "C7W0235";
+		texturenorth = "C7W0037";
+		texturesouth = "C7W0037";
+		textureeast = "C7W0037";
+		texturewest = "C7W0037";
 	}
 	tile 39
 	{
-		texturenorth = "C7W0236";
-		texturesouth = "C7W0236";
-		textureeast = "C7W0237";
-		texturewest = "C7W0237";
+		texturenorth = "C7W0038";
+		texturesouth = "C7W0038";
+		textureeast = "C7W0038";
+		texturewest = "C7W0038";
 	}
 	tile 40
 	{
-		texturenorth = "C7W0238";
-		texturesouth = "C7W0238";
-		textureeast = "C7W0239";
-		texturewest = "C7W0239";
+		texturenorth = "C7W0039";
+		texturesouth = "C7W0039";
+		textureeast = "C7W0039";
+		texturewest = "C7W0039";
 	}
 	tile 41
 	{
-		texturenorth = "C7W0240";
-		texturesouth = "C7W0240";
-		textureeast = "C7W0241";
-		texturewest = "C7W0241";
+		texturenorth = "C7W0040";
+		texturesouth = "C7W0040";
+		textureeast = "C7W0040";
+		texturewest = "C7W0040";
 	}
 	tile 42
 	{
-		texturenorth = "C7W0242";
-		texturesouth = "C7W0242";
-		textureeast = "C7W0243";
-		texturewest = "C7W0243";
+		texturenorth = "C7W0041";
+		texturesouth = "C7W0041";
+		textureeast = "C7W0041";
+		texturewest = "C7W0041";
 	}
 	tile 43
 	{
-		texturenorth = "C7W0244";
-		texturesouth = "C7W0244";
-		textureeast = "C7W0245";
-		texturewest = "C7W0245";
+		texturenorth = "C7W0042";
+		texturesouth = "C7W0042";
+		textureeast = "C7W0042";
+		texturewest = "C7W0042";
 	}
 	tile 44
 	{
-		texturenorth = "C7W0246";
-		texturesouth = "C7W0246";
-		textureeast = "C7W0247";
-		texturewest = "C7W0247";
+		texturenorth = "C7W0043";
+		texturesouth = "C7W0043";
+		textureeast = "C7W0043";
+		texturewest = "C7W0043";
 	}
 	tile 45
 	{
-		texturenorth = "C7W0248";
-		texturesouth = "C7W0248";
-		textureeast = "C7W0249";
-		texturewest = "C7W0249";
+		texturenorth = "C7W0044";
+		texturesouth = "C7W0044";
+		textureeast = "C7W0044";
+		texturewest = "C7W0044";
 	}
 	tile 46
 	{
-		texturenorth = "C7W0250";
-		texturesouth = "C7W0250";
-		textureeast = "C7W0251";
-		texturewest = "C7W0251";
+		texturenorth = "C7W0045";
+		texturesouth = "C7W0045";
+		textureeast = "C7W0045";
+		texturewest = "C7W0045";
 	}
 	tile 47
 	{
-		texturenorth = "C7W0252";
-		texturesouth = "C7W0252";
-		textureeast = "C7W0253";
-		texturewest = "C7W0253";
+		texturenorth = "C7W0046";
+		texturesouth = "C7W0046";
+		textureeast = "C7W0046";
+		texturewest = "C7W0046";
 	}
 	tile 48
 	{
-		texturenorth = "C7W0254";
-		texturesouth = "C7W0254";
-		textureeast = "C7W0255";
-		texturewest = "C7W0255";
+		texturenorth = "C7W0047";
+		texturesouth = "C7W0047";
+		textureeast = "C7W0047";
+		texturewest = "C7W0047";
 	}
 	tile 49
 	{

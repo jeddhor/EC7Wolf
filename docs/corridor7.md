@@ -64,12 +64,12 @@ Append an output directory and `--all` to load-check every map in the archive.
 - Bounds-checked, self-contained TED5 map loading for all 60 archived maps.
 - Direct GFXTILES, VGAGRAPH, AUDIOHED/AUDIOT, executable-palette, wall,
   sprite, font, HUD, menu-cursor, sound-effect, and music resource exposure.
-- Correct directional ordinary wall pairs, same-numbered special wall pages,
+- Correct directional ordinary wall pairs, zero-based special wall pages,
   marker-104/105 wall-ID-minus-one masked overrides,
   Corridor 7 wall and plane depth ramps, exact six-bit VGA palette expansion,
   solid and
   passable masked-wall behavior, collision-safe index-255-to-0 normalization
-  with depth-correct wall opacity,
+  with depth-correct wall and door opacity,
   in-place force-field removal, four door types with automatic orientation,
   red/blue access cards, push walls, paired intralevel transporters, floor
   exits, ordinary and marker-99 bonus elevators, and the level-30/40 exit vortex.

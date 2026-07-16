@@ -254,6 +254,7 @@ int CalcHeight()
 */
 
 const byte *postsource;
+const byte *postopacity;
 int postx;
 
 void ScalePost()
@@ -301,10 +302,12 @@ void ScalePost()
 		yw = (texyscale>>2) - ((-yw) % (texyscale>>2));
 
 	col = curshades[postsource[yw]];
+	bool opaque = postopacity == NULL || postopacity[yw] != 0;
 	yendoffs = yendoffs * vbufPitch + postx;
 	while(yoffs <= yendoffs)
 	{
-		vbuf[yendoffs] = col;
+		if(opaque)
+			vbuf[yendoffs] = col;
 		ywcount -= texyscale;
 		if(ywcount <= 0)
 		{
@@ -316,6 +319,7 @@ void ScalePost()
 			while(ywcount <= 0);
 			if(yw < 0) yw = (texyscale>>2)-1;
 			col = curshades[postsource[yw]];
+			opaque = postopacity == NULL || postopacity[yw] != 0;
 		}
 		yendoffs -= vbufPitch;
 	}
@@ -325,6 +329,7 @@ void GlobalScalePost(byte *vidbuf, unsigned pitch)
 {
 	vbuf = vidbuf;
 	vbufPitch = pitch;
+	postopacity = NULL;
 	ScalePost();
 }
 
@@ -400,6 +405,8 @@ void HitVertWall (void)
 		wallheight[pixx] = CalcHeight();
 		if(postsource)
 			postsource+=(texture-lasttexture)*texheight/texxscale;
+		if(postopacity)
+			postopacity+=(texture-lasttexture)*texheight/texxscale;
 		postx=pixx;
 		lasttexture=texture;
 		return;
@@ -427,10 +434,15 @@ void HitVertWall (void)
 		texyscale = source->yScale>>(FRACBITS-8);
 		texture -= texture%texxscale;
 
-		postsource = source->GetColumn(texture/texxscale, NULL);
+		const unsigned int column = texture/texxscale;
+		postsource = source->GetColumn(column, NULL);
+		postopacity = source->GetColumnOpacity(column);
 	}
 	else
+	{
 		postsource = NULL;
+		postopacity = NULL;
+	}
 
 	lasttexture=texture;
 }
@@ -474,6 +486,8 @@ void HitHorizWall (void)
 		wallheight[pixx] = CalcHeight();
 		if(postsource)
 			postsource+=(texture-lasttexture)*texheight/texxscale;
+		if(postopacity)
+			postopacity+=(texture-lasttexture)*texheight/texxscale;
 		postx=pixx;
 		lasttexture=texture;
 		return;
@@ -501,10 +515,15 @@ void HitHorizWall (void)
 		texyscale = source->yScale>>(FRACBITS-8);
 		texture -= texture%texxscale;
 
-		postsource = source->GetColumn(texture/texxscale, NULL);
+		const unsigned int column = texture/texxscale;
+		postsource = source->GetColumn(column, NULL);
+		postopacity = source->GetColumnOpacity(column);
 	}
 	else
+	{
 		postsource = NULL;
+		postopacity = NULL;
+	}
 
 	lasttexture=texture;
 }

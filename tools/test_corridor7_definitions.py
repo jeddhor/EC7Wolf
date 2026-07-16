@@ -74,11 +74,24 @@ require(r'skill\s*=\s*MIN<unsigned int>\(gamestate\.difficulty->SpawnFilter,\s*3
 require(r'tile\s+105\s*\{.*?sighttransparent\s*=\s*true', XLAT, "wall 105 is sight-transparent but solid")
 require(r'tile\s+107\s*\{.*?sighttransparent\s*=\s*true', XLAT, "wall 107 is sight-transparent but solid")
 require(r'tile\s+1\s*\{.*?C7W0160.*?C7W0161.*?tile\s+14\s*\{.*?C7W0186.*?C7W0187.*?tile\s+48\s*\{.*?C7W0254.*?C7W0255', XLAT, "ordinary walls use released directional pages 160..255")
+require(r'tile\s+49\s*\{.*?C7W0048.*?tile\s+92\s*\{.*?C7W0091.*?tile\s+250\s*\{.*?C7W0249', XLAT, "extended wall IDs convert from one-based map IDs to zero-based pages")
+for wall_id in range(49, 251):
+    block = re.search(rf'tile\s+{wall_id}\s*\{{(.*?)\}}', XLAT, re.DOTALL)
+    if block is None:
+        raise SystemExit(f"Corridor 7 definition check failed: wall {wall_id} is missing")
+    pages = re.findall(r'C7W(\d{4})', block.group(1))
+    expected = f"{wall_id - 1:04d}"
+    if pages != [expected] * 4:
+        raise SystemExit(
+            f"Corridor 7 definition check failed: wall {wall_id} must use page {expected}"
+        )
 require(r'bool\s+sightTransparent', GAMEMAP_H, "sight-transparent solid wall property")
 require(r'bool\s+renderMasked', GAMEMAP_H, "masked wall rendering property")
 require(r'for\(int candidate = 3;candidate <= 8;\+\+candidate\).*?\(1 << candidate\)\*\(1 << candidate\)\s*==\s*area', FLAT_TEXTURE, "Corridor 7 wall dimensions come from the VSWAP lump length")
 require(r'CheckGameFilter\("Corridor7"\).*?Pixels\[i\]\s*==\s*255.*?bMasked\s*=\s*true', FLAT_TEXTURE, "Corridor 7 wall pages detect index-255 transparency")
 require(r'source\s*==\s*255\s*\?\s*0\s*:\s*1.*?source\s*==\s*255\s*\?\s*0\s*:\s*source', FLAT_TEXTURE, "Corridor 7 index 255 normalizes to index 0 in a masked buffer with separate opacity")
+require(r'bool\s+opaque\s*=\s*postopacity\s*==\s*NULL\s*\|\|\s*postopacity\[yw\]\s*!=\s*0.*?if\(opaque\).*?vbuf\[yendoffs\]', WL_DRAW, "solid walls and doors honor Corridor 7 opacity planes")
+require(r'postopacity\s*=\s*source->GetColumnOpacity\(column\)', WL_DRAW, "wall columns carry their matching opacity columns")
 require(r'corridor7\s*&&\s*source\s*==\s*255.*?source\s*=\s*0.*?GPalette\.Remap\[source\]', WOLF_SHAPE, "Corridor 7 sprite posts remap index 255 to 0 before palette injection")
 require(r'oldplane\[i\]\s*==\s*104\s*\|\|\s*oldplane\[i\]\s*==\s*105.*?corridor7WallID-1.*?maskedWallType\s*=\s*1', GAMEMAP_PLANES, "markers 104/105 select wall-ID-minus-one masked pages")
 require(r'corridor7SightTransparent\s*=\s*oldplane\[i\]\s*==\s*105', GAMEMAP_PLANES, "marker 105 alone is sight-transparent")

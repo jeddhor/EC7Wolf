@@ -50,6 +50,7 @@
 #include "wl_iwad.h"
 #include "g_mapinfo.h"
 #include "g_shared/a_keys.h"
+#include "textures/textures.h"
 #include "thingdef/thingdef.h"
 using namespace Specials;
 
@@ -110,14 +111,8 @@ FUNC(NOP)
 	return 0;
 }
 
-// Corridor 7's object-plane values 98, 101, and 102 mark walls that
-// disintegrate when used. Preserve the neighboring area connectivity when the
-// wall cell becomes floor so actors, sound, and saves all see the opened route.
-FUNC(Wall_Remove)
+static void OpenWallCell(MapSpot spot, bool removeTile)
 {
-	if(!spot || !spot->tile)
-		return 0;
-
 	const MapZone *zone = NULL;
 	for(unsigned int side = 0;side < 4;++side)
 	{
@@ -130,7 +125,96 @@ FUNC(Wall_Remove)
 			map->LinkZones(zone, adjacent->zone, true);
 	}
 	spot->zone = zone;
-	spot->SetTile(NULL);
+	if(removeTile)
+		spot->SetTile(NULL);
+	else
+	{
+		for(unsigned int side = 0;side < 4;++side)
+			spot->sideSolid[side] = false;
+		spot->corridor7SightTransparent = true;
+	}
+}
+
+// Corridor 7's object-plane values 98, 101, and 102 mark walls that
+// disintegrate when used. Preserve the neighboring area connectivity when the
+// wall cell becomes floor so actors, sound, and saves all see the opened route.
+FUNC(Wall_Remove)
+{
+	if(!spot || !spot->tile)
+		return 0;
+
+	OpenWallCell(spot, true);
+	return 1;
+}
+
+class C7AnimatedWall : public Thinker
+{
+	DECLARE_CLASS(C7AnimatedWall, Thinker)
+
+public:
+	C7AnimatedWall(MapSpot spot) : Thinker(ThinkerList::WORLD), spot(spot), frame(0)
+	{
+		spot->thinker = this;
+	}
+
+	void Destroy()
+	{
+		if(spot && spot->thinker == this)
+			spot->thinker = NULL;
+		Super::Destroy();
+	}
+
+	void Tick()
+	{
+		if(!spot || !spot->tile || ++frame > 3)
+		{
+			Destroy();
+			return;
+		}
+
+		FString textureName;
+		textureName.Format("C7W%04u", spot->corridor7WallID-1+frame);
+		const FTextureID texture = TexMan.CheckForTexture(textureName,
+			FTexture::TEX_Wall);
+		if(texture.isValid())
+		{
+			for(unsigned int side = 0;side < 4;++side)
+				spot->texture[side] = texture;
+		}
+
+		if(frame == 3)
+		{
+			// The last frame is an empty aperture with its metal surround still
+			// visible. Keep the tile for masked rendering, but open collision,
+			// sight, sound, and area connectivity through it.
+			spot->corridor7WallMarker = 107;
+			spot->maskedWallType = 1;
+			OpenWallCell(spot, false);
+			Destroy();
+		}
+	}
+
+	void Serialize(FArchive &arc)
+	{
+		arc << spot << frame;
+		Super::Serialize(arc);
+	}
+
+private:
+	MapSpot spot;
+	BYTE frame;
+};
+IMPLEMENT_INTERNAL_CLASS(C7AnimatedWall)
+
+FUNC(Wall_AnimateRemove)
+{
+	if(!spot || !spot->tile || spot->corridor7WallMarker != 106 ||
+		spot->corridor7WallID == 0 || spot->thinker)
+	{
+		return 0;
+	}
+
+	new C7AnimatedWall(spot);
 	return 1;
 }
 

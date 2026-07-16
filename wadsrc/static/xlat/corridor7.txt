@@ -1946,16 +1946,13 @@ tiles
 
 things
 {
-	// Marker 106 is a manually toggled sliding wall. A negative open delay
-	// makes Door_Open stay open; using it again closes it, matching the native
-	// sliding-wall state machine. Marker 107 is initialized open by the loader.
+	// Marker 106 advances the wall's four consecutive texture frames and leaves
+	// the final masked aperture in place. Marker 107 starts in that open state.
 	trigger 106
 	{
-		action = "Door_Open";
-		arg1 = 8;
-		arg2 = -1;
+		action = "Wall_AnimateRemove";
 		playeruse = true;
-		repeatable = true;
+		repeatable = false;
 	}
 	ignore 107;
 

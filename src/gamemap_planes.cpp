@@ -1286,15 +1286,31 @@ void GameMap::ReadPlanesData()
 				{
 					oldplane[i] = LittleShort(oldplane[i]);
 
-					// Marker 107 is the native sliding-wall setup's permanently
-					// open state. Keep its wall art visible but allow actors through;
-					// markers 98/101/102 are separately activated disintegrating
-					// walls and marker 106 is a manually toggled sliding wall.
+					// Marker 107 is the final, permanently-open frame of Corridor 7's
+					// four-frame animated wall doors. Keep the surrounding frame visible
+					// as a masked plane while allowing actors and rays through it.
 					if(IWad::CheckGameFilter("Corridor7") && oldplane[i] == 107 && mapPlane.map[i].tile)
 					{
 						mapPlane.map[i].sideSolid[0] = mapPlane.map[i].sideSolid[1] =
 							mapPlane.map[i].sideSolid[2] = mapPlane.map[i].sideSolid[3] = false;
+						mapPlane.map[i].maskedWallType = 1;
+						mapPlane.map[i].corridor7WallMarker = 107;
 						mapPlane.map[i].corridor7SightTransparent = true;
+					}
+
+					// Source index 255 is a transparency key everywhere in Corridor 7,
+					// not only on explicit 104/105 map markers. Route every such wall
+					// through the masked-plane renderer so a fresh ray is drawn behind
+					// each transparent pixel instead of exposing the previous frame.
+					if(IWad::CheckGameFilter("Corridor7") && mapPlane.map[i].tile)
+					{
+						FTexture *wall = TexMan(mapPlane.map[i].texture[0]);
+						if(wall)
+						{
+							wall->GetPixels();
+							if(wall->bMasked)
+								mapPlane.map[i].maskedWallType = 1;
+						}
 					}
 
 					if(oldplane[i] == 0)
@@ -1419,7 +1435,7 @@ void GameMap::ReadPlanesData()
 					// Values 86..88 are Corridor 7 masked-wall configuration
 					// metadata, not
 					// spawned objects. Preserve the subtype on its wall cell
-					// without conflating it with marker 106's sliding/removal
+					// without conflating it with marker 106's animated opening
 					// behavior or with index-255 transparency.
 					if(IWad::CheckGameFilter("Corridor7") &&
 						oldplane[i] >= 86 && oldplane[i] <= 88 &&
@@ -1440,30 +1456,14 @@ void GameMap::ReadPlanesData()
 							trigger.y = i/header.width;
 							trigger.z = 0;
 
-							// Corridor 7 sliding-wall marker 106 uses the same in-place
-							// slide representation as a door, but its axis is inferred from
-							// surrounding floor just like the game's color-only doors.
+							// Marker 106 selects one of four native texture-frame door
+							// sequences (53, 73, 81, or 229). It never slides laterally.
 							if(IWad::CheckGameFilter("Corridor7") && oldplane[i] == 106 &&
-								trigger.action == Specials::Door_Open)
+								trigger.action == Specials::Wall_AnimateRemove)
 							{
-								if(mapPlane.map[i].maskedWallType)
-								{
-									// A 106 marker on a masked screen removes the
-									// force field in place; it must not expose the
-									// generic door's lateral slide animation.
-									trigger.action = Specials::Wall_Remove;
-									trigger.repeatable = false;
-								}
-								else
-								{
-									const unsigned int x = i%header.width;
-									const unsigned int y = i/header.width;
-									const bool openNorth = y > 0 && !mapPlane.map[i-header.width].tile;
-									const bool openSouth = y+1 < header.height && !mapPlane.map[i+header.width].tile;
-									const bool openWest = x > 0 && !mapPlane.map[i-1].tile;
-									const bool openEast = x+1 < header.width && !mapPlane.map[i+1].tile;
-									trigger.arg[4] = (openNorth + openSouth) > (openWest + openEast);
-								}
+								mapPlane.map[i].maskedWallType = 1;
+								mapPlane.map[i].corridor7WallMarker = 106;
+								trigger.repeatable = false;
 							}
 
 							triggers.Push(trigger);

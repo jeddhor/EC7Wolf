@@ -257,6 +257,23 @@ const byte *postsource;
 const byte *postopacity;
 int postx;
 
+static inline BYTE Corridor7CycleColor(BYTE color)
+{
+	if(!IWad::CheckGameFilter("Corridor7"))
+		return color;
+
+	// The DOS game rotates the red and blue eight-color ramps every eight
+	// tics. Force fields use 217..223, with 216 providing the dark step that
+	// makes the bright diagonal band travel across the screen.
+	if(color >= 208 && color <= 223)
+	{
+		const int base = color < 216 ? 208 : 216;
+		const int phase = (gamestate.TimeCount >> 3) & 7;
+		return base + ((color-base-phase) & 7);
+	}
+	return color;
+}
+
 void ScalePost()
 {
 	if(postsource == NULL)
@@ -301,7 +318,7 @@ void ScalePost()
 	if(yw < 0)
 		yw = (texyscale>>2) - ((-yw) % (texyscale>>2));
 
-	col = curshades[postsource[yw]];
+	col = curshades[Corridor7CycleColor(postsource[yw])];
 	bool opaque = postopacity == NULL || postopacity[yw] != 0;
 	yendoffs = yendoffs * vbufPitch + postx;
 	while(yoffs <= yendoffs)
@@ -318,7 +335,7 @@ void ScalePost()
 			}
 			while(ywcount <= 0);
 			if(yw < 0) yw = (texyscale>>2)-1;
-			col = curshades[postsource[yw]];
+			col = curshades[Corridor7CycleColor(postsource[yw])];
 			opaque = postopacity == NULL || postopacity[yw] != 0;
 		}
 		yendoffs -= vbufPitch;
@@ -594,9 +611,20 @@ typedef struct
 visobj_t vislist[MAXVISABLE];
 visobj_t *visptr,*visstep,*farthest;
 
-static bool IsMaskedWallSide(MapSpot spot, MapTile::Side)
+static bool IsMaskedWallSide(MapSpot spot, MapTile::Side side)
 {
-	return spot->maskedWallType || spot->tile->renderMasked;
+	if(!(spot->maskedWallType || spot->tile->renderMasked))
+		return false;
+	if(spot->tile->offsetVertical && side != MapTile::West && side != MapTile::East)
+		return false;
+	if(spot->tile->offsetHorizontal && side != MapTile::North && side != MapTile::South)
+		return false;
+
+	// A masked wall is a plane between open space and its wall cell, not a
+	// transparent cube. Drawing the camera-facing X and Y sides together was
+	// the source of the kaleidoscope/corner projection seen at close range.
+	MapSpot adjacent = spot->GetAdjacent(side);
+	return !adjacent || !adjacent->tile;
 }
 
 static void GetMaskedWallEndpoints(MapSpot spot, MapTile::Side side,
@@ -606,26 +634,30 @@ static void GetMaskedWallEndpoints(MapSpot spot, MapTile::Side side,
 	const fixed top = spot->GetY() << TILESHIFT;
 	const fixed right = left + TILEGLOBAL;
 	const fixed bottom = top + TILEGLOBAL;
+	const fixed verticalPlane = spot->tile->offsetVertical ? left+TILEGLOBAL/2 : left;
+	const fixed verticalBackPlane = spot->tile->offsetVertical ? left+TILEGLOBAL/2 : right;
+	const fixed horizontalPlane = spot->tile->offsetHorizontal ? top+TILEGLOBAL/2 : top;
+	const fixed horizontalBackPlane = spot->tile->offsetHorizontal ? top+TILEGLOBAL/2 : bottom;
 
 	switch(side)
 	{
 		case MapTile::West:
-			worldx1 = worldx2 = left;
+			worldx1 = worldx2 = verticalPlane;
 			worldy1 = top;
 			worldy2 = bottom;
 			break;
 		case MapTile::East:
-			worldx1 = worldx2 = right;
+			worldx1 = worldx2 = verticalBackPlane;
 			worldy1 = bottom;
 			worldy2 = top;
 			break;
 		case MapTile::North:
-			worldy1 = worldy2 = top;
+			worldy1 = worldy2 = horizontalPlane;
 			worldx1 = right;
 			worldx2 = left;
 			break;
 		default:
-			worldy1 = worldy2 = bottom;
+			worldy1 = worldy2 = horizontalBackPlane;
 			worldx1 = left;
 			worldx2 = right;
 			break;
@@ -717,7 +749,7 @@ static void ScaleMaskedWallPost(const BYTE *source, const BYTE *opacity,
 	while(yoffs <= yendoffs)
 	{
 		if(opacity ? opacity[yw] != 0 : source[yw] != maskColor)
-			vbuf[yendoffs] = curshades[source[yw]];
+			vbuf[yendoffs] = curshades[Corridor7CycleColor(source[yw])];
 		ywcount -= textureYScale;
 		if(ywcount <= 0)
 		{
@@ -764,8 +796,12 @@ static void DrawMaskedWall(MapSpot spot, MapTile::Side side)
 	const int first = MAX(screenx1, 0);
 	const int last = MIN(screenx2, viewwidth-1);
 	const int range = screenx2-screenx1;
+	const int textureWidth = texture->GetWidth();
 	const int textureHeight = texture->GetHeight();
 	const int textureYScale = texture->yScale>>(FRACBITS-8);
+	const bool slidingPlane =
+		(spot->tile->offsetVertical && (side == MapTile::West || side == MapTile::East)) ||
+		(spot->tile->offsetHorizontal && (side == MapTile::North || side == MapTile::South));
 	for(int screenx = first;screenx <= last;++screenx)
 	{
 		const double fraction = double(screenx-screenx1)/range;
@@ -775,8 +811,23 @@ static void DrawMaskedWall(MapSpot spot, MapTile::Side side)
 		const fixed depth = fixed(1.0/inverseDepth);
 		const double perspectiveU =
 			(((1.0-fraction)*u1/nx1)+(fraction*u2/nx2))/inverseDepth;
-		const int column = MAX(0, MIN<int>(texture->GetWidth()-1,
-			int(perspectiveU)>>FRACBITS));
+		int column;
+		if(slidingPlane)
+		{
+			const unsigned int intercept = MAX(0, MIN<int>(FRACUNIT-1,
+				int(perspectiveU/textureWidth)));
+			const unsigned int amount = spot->slideAmount[side];
+			if(CheckSlidePass(spot->slideStyle, intercept, amount))
+				continue;
+			const int shifted = (intercept+SlideTextureOffset(spot->slideStyle,
+				intercept, amount))&(FRACUNIT-1);
+			column = int((int64_t(shifted)*textureWidth)>>FRACBITS);
+		}
+		else
+		{
+			column = MAX(0, MIN<int>(textureWidth-1,
+				int(perspectiveU)>>FRACBITS));
+		}
 		const int height = (heightnumerator<<8)/depth;
 		ScaleMaskedWallPost(texture->GetMaskedColumn(column),
 			texture->GetColumnOpacity(column), screenx, height, textureHeight,

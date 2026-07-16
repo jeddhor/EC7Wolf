@@ -67,10 +67,10 @@ Append an output directory and `--all` to load-check every map in the archive.
 - Zero-based wall pages (`map wall ID - 1`) across the complete solid-wall
   range, including marker-104/105 masked overrides,
   Corridor 7 wall and plane depth ramps, exact six-bit VGA palette expansion,
-  solid and
-  passable masked-wall behavior, collision-safe index-255-to-0 normalization
-  with depth-correct wall and door opacity,
-  in-place force-field removal, four door types with automatic orientation,
+  solid and passable masked-wall behavior, collision-safe index-255-to-0
+  normalization with freshly traced geometry behind transparent wall and door
+  pixels, native red/blue palette cycling, four-frame in-place force-field and
+  animated-wall openings, four sliding door types with automatic orientation,
   red/blue access cards, push walls, paired intralevel transporters, floor
   exits, ordinary and marker-99 bonus elevators, and the level-30/40 exit vortex.
 - The executable's complete plane-1 dispatch table, including static objects,

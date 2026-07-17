@@ -2044,10 +2044,10 @@ things
 	{29, C7M343, 0, 0, 0}
 	{30, C7Static007, 0, 0, 0}
 	{31, C7Static008, 0, 0, 0}
-	// These two executable-table slots are internal markers in released maps,
-	// not the thin post sprites occupying the corresponding graphics pages.
-	ignore 32;
-	ignore 33;
+	// Invisible damaging electric-field markers. The corresponding C010/C011
+	// pages are implementation art and are not rendered by the DOS game.
+	{32, C7DamageField, 0, 0, 0}
+	{33, C7DamageField, 0, 0, 0}
 	{34, C7Static011, 0, 0, 0}
 	{35, C7Static012, 0, 0, 0}
 	{36, C7Static013, 0, 0, 0}

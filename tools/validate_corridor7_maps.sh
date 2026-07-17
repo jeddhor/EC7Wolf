@@ -17,6 +17,7 @@ log_dir=${3:-"$build_dir/corridor7-map-validation"}
 ecwolf="$build_dir/ecwolf"
 maps="MAP01 MAP10 MAP20 MAP29 MAP30 MAP31 MAP39 MAP40 MAP41 MAP46 MAP51 MAP60"
 validation_label="representative-map"
+validation_timeout=${CORRIDOR7_VALIDATION_TIMEOUT:-6}
 if [ "${4:-}" = "--all" ]; then
 	maps=$(i=1; while [ "$i" -le 60 ]; do printf 'MAP%02d ' "$i"; i=$((i + 1)); done)
 	validation_label="all-map"
@@ -42,7 +43,7 @@ for map in $maps; do
 	set +e
 	(
 		cd "$data_dir"
-		timeout 6s env SDL_AUDIODRIVER=dummy \
+		timeout "${validation_timeout}s" env SDL_AUDIODRIVER=dummy \
 			xvfb-run -a stdbuf -oL -eL "$ecwolf" --data CO7 --config "$config" \
 			--savedir "$save" --nowait --tedlevel "$map" --skill 2
 	) >"$log" 2>&1

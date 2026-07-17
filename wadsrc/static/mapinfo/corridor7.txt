@@ -55,6 +55,16 @@ intermission DemoLoop
 	}
 	Fader
 	{
+		Background = "C7G0006"
+		Time = 55
+		FadeType = Fizzle
+	}
+	Image
+	{
+		Time = 20
+	}
+	Fader
+	{
 		Time = 15
 		FadeType = FadeOut
 	}
@@ -150,24 +160,28 @@ skill baby
 	name = "Corporal"
 	spawnfilter = 1
 	damagefactor = 0.25
+	lives = 0
 }
 
 skill easy
 {
 	name = "2nd Lieutenant"
 	spawnfilter = 2
+	lives = 0
 }
 
 skill normal
 {
 	name = "Captain"
 	spawnfilter = 3
+	lives = 0
 }
 
 skill hard
 {
 	name = "Major"
 	spawnfilter = 4
+	lives = 0
 }
 
 defaultmap

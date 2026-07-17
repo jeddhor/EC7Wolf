@@ -23,6 +23,7 @@ void DrawHighScores(void);
 void CheckHighScore (int32_t score, const class LevelInfo *levelInfo);
 void Victory (bool fromIntermission);
 void LevelCompleted (void);
+void Corridor7Death (void);
 void ClearSplitVWB (void);
 
 void PreloadGraphics(bool showPsych);

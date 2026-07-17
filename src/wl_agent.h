@@ -31,6 +31,7 @@ public:
 	virtual void DrawStatusBar()=0;
 	virtual void DrawTopOverlay() {}
 	virtual void SetTopMessage(const char *message, unsigned int duration=3*TICRATE) {}
+	virtual void SetC7HealthChamberPower(unsigned int power, unsigned int duration=3*TICRATE) {}
 	virtual unsigned int GetHeight(bool top)=0;
 	virtual void NewGame() {}
 	virtual void Tick() {}
@@ -113,6 +114,14 @@ extern class player_t
 
 		int32_t		oldscore,score,nextextra;
 		uint32_t	levelShotsFired, levelShotsHit;
+		// Native Corridor 7 feedback and health-chamber state. Keeping this on
+		// the player makes save/load and level transitions deterministic.
+		uint16_t	c7MuzzleFlashTics;
+		int16_t		c7ChamberX, c7ChamberY;
+		uint16_t	c7ChamberPower;
+		uint16_t	c7ChamberTics;
+		BYTE		c7ChamberState;
+		bool		c7ClearanceNotified, c7FloorSecuredNotified;
 		int32_t		health;
 		int32_t		frags;
 		short		lives;

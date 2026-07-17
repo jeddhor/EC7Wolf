@@ -363,6 +363,8 @@ FUNC(C7_Dispenser)
 				return 0;
 			SetC7WallTexture(spot, 89);
 			PlaySoundLocMapSpot("misc/health_pkup", spot);
+			if(activator == players[ConsolePlayer].camera)
+				StatusBar->SetTopMessage("25 Health Restored");
 			return 1;
 		}
 		if(spot->texture[0] != initial)
@@ -385,6 +387,8 @@ FUNC(C7_Dispenser)
 			return 0;
 		SetC7WallTexture(spot, 112);
 		PlaySoundLocMapSpot("misc/ammo_pkup", spot);
+		if(activator == players[ConsolePlayer].camera)
+			StatusBar->SetTopMessage("50 Rounds Acquired");
 		return 1;
 	}
 
@@ -1228,7 +1232,8 @@ FUNC(Exit_Normal)
 	if(IWad::CheckGameFilter("Corridor7") && args[0] == 1 && !levelInfo->BonusLevel && gamestate.killtotal > 0)
 	{
 		static const unsigned int clearance[4] = { 10, 75, 100, 100 };
-		const unsigned int skill = MIN<unsigned int>(gamestate.difficulty->SpawnFilter, 3);
+		const unsigned int skill = MIN<unsigned int>(MAX<unsigned int>(1,
+			gamestate.difficulty->SpawnFilter)-1, 3);
 		const unsigned int destroyed = (gamestate.killcount*100)/gamestate.killtotal;
 		if(destroyed < clearance[skill])
 		{

@@ -91,7 +91,8 @@ public:
 	enum FadeType
 	{
 		FADEIN,
-		FADEOUT
+		FADEOUT,
+		FIZZLE
 	};
 
 	FadeType	Fade;

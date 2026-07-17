@@ -58,6 +58,7 @@ actor Actor native
 	native int health;
 
 	action native A_ActiveSound(int chance=256);
+	action native A_C7DamageField();
 	action native A_AlertMonsters();
 	action native A_BossDeath();
 	action native A_CallSpecial(int special, int arg1=0, int arg2=0, int arg3=0, int arg4=0, int arg5=0);

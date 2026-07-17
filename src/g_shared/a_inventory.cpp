@@ -243,10 +243,10 @@ void AInventory::Touch(AActor *toucher)
 		{
 			struct PickupMessage { const char *type; const char *message; };
 			static const PickupMessage messages[] = {
-				{ "C7MedicPack", "Medic Pack" },
-				{ "C7AmmoClip", "50 Rnd Clip" },
-				{ "C7AmmoPack", "Ammo Pack" },
-				{ "C7Adrenaline", "Adrenaline Boost" },
+				{ "C7MedicPack", "25 Health Restored" },
+				{ "C7AmmoClip", "50 Rounds Acquired" },
+				{ "C7AmmoPack", "100 Rounds Acquired" },
+				{ "C7Adrenaline", "300 Health Boost" },
 				{ "C7BodyArmor", "Body Armor" },
 				{ "C7Invulnerability", "Invulnerability Sphere" },
 				{ "C7FloorPlan", "Floor Plan" },

@@ -247,6 +247,18 @@ static void ShowFader(FaderIntermissionAction *fader)
 			// We want to hold whatever may have been drawn in the previous page during the fade, so we don't need to draw.
 			VL_FadeOut(0, 255, 0, 0, 0, fader->Time);
 			break;
+		case FaderIntermissionAction::FIZZLE:
+		{
+			// Capture the currently displayed page, draw the destination under it,
+			// then randomly erase pixels from the old page. Corridor 7 uses this
+			// to dissolve only the title logo into its clean background plate.
+			FFizzleFader dissolve(0, 0, screenWidth, screenHeight,
+				MAX(1U, fader->Time), false);
+			dissolve.CaptureFrame();
+			ShowImage(fader, true);
+			FizzleFade(dissolve);
+			break;
+		}
 	}
 }
 

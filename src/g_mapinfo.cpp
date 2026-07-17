@@ -1318,6 +1318,8 @@ protected:
 					fader->Fade = FaderIntermissionAction::FADEIN;
 				else if(sc->str.CompareNoCase("FadeOut") == 0)
 					fader->Fade = FaderIntermissionAction::FADEOUT;
+				else if(sc->str.CompareNoCase("Fizzle") == 0)
+					fader->Fade = FaderIntermissionAction::FIZZLE;
 				else
 					sc.ScriptMessage(Scanner::ERROR, "Unknown fade type.");
 			}

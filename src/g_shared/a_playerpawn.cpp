@@ -38,6 +38,7 @@
 #include "g_mapinfo.h"
 #include "g_shared/a_keys.h"
 #include "id_ca.h"
+#include "lnspec.h"
 #include "thingdef/thingdef.h"
 #include "wl_agent.h"
 #include "wl_game.h"
@@ -331,6 +332,143 @@ static bool IsInC7HealthChamber(const APlayerPawn *player)
 	return false;
 }
 
+static MapSpot FindC7HealthChamberDoor(const APlayerPawn *pawn, bool openOnly)
+{
+	MapSpot closest = NULL;
+	unsigned int closestDistance = UINT_MAX;
+	for(int y = pawn->tiley-3;y <= pawn->tiley+3;++y)
+	{
+		for(int x = pawn->tilex-3;x <= pawn->tilex+3;++x)
+		{
+			if(x < 0 || y < 0 ||
+				!map->IsValidTileCoordinate(static_cast<unsigned>(x), static_cast<unsigned>(y), 0))
+				continue;
+			MapSpot spot = map->GetSpot(x, y, 0);
+			if(!spot->tile || spot->corridor7WallID != 53 ||
+				(openOnly && spot->corridor7WallMarker != 107))
+				continue;
+			const unsigned int distance = abs(x-pawn->tilex) + abs(y-pawn->tiley);
+			if(distance < closestDistance)
+			{
+				closest = spot;
+				closestDistance = distance;
+			}
+		}
+	}
+	return closest;
+}
+
+bool APlayerPawn::TryUseC7HealthChamber()
+{
+	if(!IWad::CheckGameFilter("Corridor7") || player->c7ChamberState ||
+		!IsInC7HealthChamber(this))
+		return false;
+
+	MapSpot door = FindC7HealthChamberDoor(this, true);
+	if(!door)
+		return false;
+
+	player->c7ChamberX = static_cast<int16_t>(door->GetX());
+	player->c7ChamberY = static_cast<int16_t>(door->GetY());
+	player->c7ChamberTics = 0;
+	player->c7ChamberState = 1;
+	return true;
+}
+
+static angle_t C7ChamberExitAngle(const APlayerPawn *pawn)
+{
+	const fixed doorX = (static_cast<fixed>(pawn->player->c7ChamberX) << TILESHIFT) + TILEGLOBAL/2;
+	const fixed doorY = (static_cast<fixed>(pawn->player->c7ChamberY) << TILESHIFT) + TILEGLOBAL/2;
+	float fangle = static_cast<float>(atan2(static_cast<double>(pawn->y-doorY),
+		static_cast<double>(doorX-pawn->x)));
+	if(fangle < 0)
+		fangle = static_cast<float>(M_PI*2 + fangle);
+	return static_cast<angle_t>(fangle*ANGLE_180/M_PI);
+}
+
+static void SetC7ChamberDoorFrame(MapSpot door, unsigned int wallID)
+{
+	FString textureName;
+	textureName.Format("C7W%04u", wallID-1);
+	const FTextureID texture = TexMan.CheckForTexture(textureName, FTexture::TEX_Wall);
+	if(texture.isValid())
+		for(unsigned int side = 0;side < 4;++side)
+			door->texture[side] = texture;
+}
+
+static bool TickC7HealthChamber(APlayerPawn *pawn)
+{
+	player_t *player = pawn->player;
+	if(!player->c7ChamberState)
+		return false;
+
+	MapSpot door = map->GetSpot(player->c7ChamberX, player->c7ChamberY, 0);
+	if(!door || !door->tile)
+	{
+		player->c7ChamberState = 0;
+		return false;
+	}
+
+	if(player->c7ChamberState == 1)
+	{
+		const angle_t target = C7ChamberExitAngle(pawn);
+		const angle_t clockwise = target-pawn->angle;
+		const angle_t step = ANGLE_1*2;
+		if(MIN(clockwise, static_cast<angle_t>(0-clockwise)) <= step)
+		{
+			pawn->angle = target;
+			player->c7ChamberState = 2;
+			player->c7ChamberTics = 0;
+		}
+		else if(clockwise < ANGLE_180)
+			pawn->angle += step;
+		else
+			pawn->angle -= step;
+		return true;
+	}
+
+	// Close the four-frame aperture in reverse, eight 70 Hz tics per page.
+	if(++player->c7ChamberTics % 8 == 0)
+	{
+		const unsigned int phase = player->c7ChamberTics/8;
+		SetC7ChamberDoorFrame(door, 56-MIN(phase, 3U));
+		if(phase >= 3)
+		{
+			for(unsigned int side = 0;side < 4;++side)
+				door->sideSolid[side] = true;
+			door->corridor7SightTransparent = false;
+			door->corridor7WallMarker = 106;
+			for(unsigned int trigger = 0;trigger < door->triggers.Size();++trigger)
+			{
+				if(door->triggers[trigger].action == Specials::Wall_AnimateRemove)
+				{
+					door->triggers[trigger].active = true;
+					door->triggers[trigger].repeatable = true;
+				}
+			}
+
+			// pushAmount is otherwise unused by these stationary wall cells and is
+			// already save-serialized. Store power+1 so zero can mean an untouched,
+			// fully charged chamber and one can represent an exhausted chamber.
+			unsigned int chamberPower = door->pushAmount ? door->pushAmount-1 : 100;
+			const unsigned int missing = pawn->maxhealth > player->health ?
+				pawn->maxhealth-player->health : 0;
+			const unsigned int restored = MIN<unsigned int>(missing, chamberPower);
+			player->health += restored;
+			pawn->health = player->health;
+			chamberPower -= restored;
+			door->pushAmount = chamberPower+1;
+			player->c7ChamberPower = chamberPower;
+			StartBonusFlash();
+			StatusBar->UpdateFace(-1);
+			StatusBar->SetC7HealthChamberPower(player->c7ChamberPower, 4*TICRATE);
+			player->c7ChamberState = 0;
+			player->c7ChamberTics = 0;
+		}
+	}
+	return true;
+}
+
 void APlayerPawn::Tick()
 {
 	Super::Tick();
@@ -339,16 +477,7 @@ void APlayerPawn::Tick()
 
 	if(IWad::CheckGameFilter("Corridor7"))
 	{
-		// A chamber restores health continuously while the player remains inside.
-		// Ten points per second matches the visible, gradual DOS behavior without
-		// turning the chamber into a one-shot health pickup.
-		if(gamestate.TimeCount % (TICRATE/10) == 0 &&
-			player->health > 0 && player->health < maxhealth && IsInC7HealthChamber(this))
-		{
-			++player->health;
-			health = player->health;
-			StatusBar->UpdateFace(-1);
-		}
+		const bool chamberBusy = TickC7HealthChamber(this);
 
 		AInventory *invulnerability = FindInventory(ClassDef::FindClass("C7Invulnerability"));
 		if(invulnerability && invulnerability->amount > 0 && --invulnerability->amount == 0)
@@ -369,7 +498,10 @@ void APlayerPawn::Tick()
 				visorMode->amount = 1;
 			}
 		}
-		player->extralight = visorMode && visorMode->amount == 2 ? 20 : 0;
+		player->extralight = visorMode && visorMode->amount == 2 ? 20 :
+			(player->c7MuzzleFlashTics ? 12 : 0);
+		if(player->c7MuzzleFlashTics)
+			--player->c7MuzzleFlashTics;
 
 		AInventory *energy = FindInventory(ClassDef::FindClass("C7Energy"));
 		AInventory *capacity = FindInventory(ClassDef::FindClass("C7EnergyCapacity"));
@@ -405,6 +537,34 @@ void APlayerPawn::Tick()
 				if(--mines->amount == 0)
 					mines->Destroy();
 			}
+		}
+
+		if(gamestate.killtotal > 0)
+		{
+			static const unsigned int clearance[4] = { 10, 75, 100, 100 };
+			const unsigned int skill = MIN<unsigned int>(
+				MAX<unsigned int>(1, gamestate.difficulty->SpawnFilter)-1, 3);
+			const unsigned int destroyed =
+				(static_cast<unsigned int>(gamestate.killcount)*100)/gamestate.killtotal;
+			if(!player->c7FloorSecuredNotified && gamestate.killcount >= gamestate.killtotal)
+			{
+				player->c7FloorSecuredNotified = true;
+				player->c7ClearanceNotified = true;
+				if(player->GetPlayerNum() == ConsolePlayer)
+					StatusBar->SetTopMessage("FLOOR SECURED", 4*TICRATE);
+			}
+			else if(!player->c7ClearanceNotified && destroyed >= clearance[skill])
+			{
+				player->c7ClearanceNotified = true;
+				if(player->GetPlayerNum() == ConsolePlayer)
+					StatusBar->SetTopMessage("ELEVATOR CLEARANCE ACQUIRED", 4*TICRATE);
+			}
+		}
+
+		if(chamberBusy)
+		{
+			TickPSprites();
+			return;
 		}
 	}
 

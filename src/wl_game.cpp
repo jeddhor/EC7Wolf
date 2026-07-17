@@ -28,6 +28,7 @@
 #include "wl_net.h"
 #include "wl_play.h"
 #include "wl_game.h"
+#include "wl_iwad.h"
 #include "wl_text.h"
 #include "a_inventory.h"
 #include "colormatcher.h"
@@ -308,6 +309,10 @@ void SetupGameLevel (void)
 		{
 			players[i].killerobj = NULL;
 			players[i].levelShotsFired = players[i].levelShotsHit = 0;
+			players[i].c7MuzzleFlashTics = players[i].c7ChamberTics = players[i].c7ChamberState = 0;
+			players[i].c7ChamberX = players[i].c7ChamberY = -1;
+			players[i].c7ChamberPower = 100;
+			players[i].c7ClearanceNotified = players[i].c7FloorSecuredNotified = false;
 		}
 	}
 
@@ -941,6 +946,15 @@ restartgame:
 			}
 
 			case ex_died:
+				if(IWad::CheckGameFilter("Corridor7"))
+				{
+					VW_FadeOut();
+					Corridor7Death();
+					if(screenHeight % 200 != 0)
+						VL_ClearScreen(0);
+					CheckHighScore(players[ConsolePlayer].score, levelInfo);
+					return false;
+				}
 				Died ();
 				died = true;                    // don't "get psyched!"
 

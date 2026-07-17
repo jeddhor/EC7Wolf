@@ -124,6 +124,19 @@ actor C7Static010
 	}
 }
 
+// Object-table slots 9 and 10 are invisible electric-field markers in the
+// released maps. Their associated thin post art is never drawn by DOS.
+actor C7DamageField
+{
+	radius 32
+	states
+	{
+		Spawn:
+			TNT1 A 7 A_C7DamageField
+			loop
+	}
+}
+
 actor C7Static011
 {
 	states

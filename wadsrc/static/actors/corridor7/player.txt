@@ -353,6 +353,7 @@ actor C7BodyArmor : Inventory
 
 actor C7AmmoClip : C7Bullets
 {
+	inventory.amount 50
 	states { Spawn: C057 A -1 stop }
 }
 

@@ -89,6 +89,7 @@ class APlayerPawn : public AActor
 
 		void Cmd_Use();
 		void DeathTick();
+		bool TryUseC7HealthChamber();
 };
 
 #endif

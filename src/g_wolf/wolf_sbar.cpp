@@ -60,7 +60,8 @@ static struct StatusBarConfig_t
 class WolfStatusBar : public DBaseStatusBar
 {
 public:
-	WolfStatusBar() : facecount(0), mac(false), corridor7(false), topMessageUntil(0)
+	WolfStatusBar() : facecount(0), mac(false), corridor7(false), topMessageUntil(0),
+		c7ChamberPower(0), c7ChamberPowerUntil(0)
 	{
 		if(IWad::CheckGameFilter("Corridor7"))
 		{
@@ -107,8 +108,9 @@ public:
 	void DrawStatusBar();
 	void DrawTopOverlay();
 	void SetTopMessage(const char *message, unsigned int duration);
+	void SetC7HealthChamberPower(unsigned int power, unsigned int duration);
 	unsigned int GetHeight(bool top) { return top ? 0 : STATUSLINES+!mac; }
-	void NewGame() { facecount = 0; topMessage = ""; topMessageUntil = 0; }
+	void NewGame() { facecount = 0; topMessage = ""; topMessageUntil = 0; c7ChamberPowerUntil = 0; }
 	void RefreshBackground(bool noborder);
 	void UpdateFace(int damage=0);
 	void WeaponGrin();
@@ -137,6 +139,8 @@ private:
 	bool corridor7;
 	FString topMessage;
 	int32_t topMessageUntil;
+	unsigned int c7ChamberPower;
+	int32_t c7ChamberPowerUntil;
 };
 
 DBaseStatusBar *CreateStatusBar_Wolf3D() { return new WolfStatusBar(); }
@@ -651,6 +655,15 @@ void WolfStatusBar::DrawStatusBar()
 
 void WolfStatusBar::DrawTopOverlay()
 {
+	if(corridor7 && gamestate.TimeCount < c7ChamberPowerUntil)
+	{
+		// This is the original 32x15 VGA overlay. The DOS game replaces the
+		// red meter interior with the remaining blue charge after treatment.
+		VWB_DrawGraphic(TexMan("C7G0062"), 4, 4);
+		DrawC7Gauge(7, 15, (MIN(c7ChamberPower, 100U)*25)/100, 2, 96);
+		return;
+	}
+
 	if(corridor7 && !topMessage.IsEmpty() && gamestate.TimeCount < topMessageUntil)
 	{
 		screen->DrawText(SmallFont, CR_YELLOW, 4, 4, topMessage.GetChars(),
@@ -675,6 +688,14 @@ void WolfStatusBar::SetTopMessage(const char *message, unsigned int duration)
 		return;
 	topMessage = message;
 	topMessageUntil = gamestate.TimeCount + static_cast<int32_t>(duration);
+}
+
+void WolfStatusBar::SetC7HealthChamberPower(unsigned int power, unsigned int duration)
+{
+	if(!corridor7)
+		return;
+	c7ChamberPower = MIN(power, 100U);
+	c7ChamberPowerUntil = gamestate.TimeCount + static_cast<int32_t>(duration);
 }
 
 //===========================================================================

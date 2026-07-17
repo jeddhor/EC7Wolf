@@ -63,8 +63,10 @@ static void Erase (int x, int y, const char *string, bool rightAlign=false)
 
 static void Write (int x, int y, const char *string, bool rightAlign=false, bool bonusfont=false)
 {
-	FFont *font = bonusfont ? V_GetFont("BonusFont") : IntermissionFont;
-	FRemapTable *remap = font->GetColorTranslation(CR_UNTRANSLATED);
+	FFont *font = IWad::CheckGameFilter("Corridor7") ? SmallFont :
+		(bonusfont ? V_GetFont("BonusFont") : IntermissionFont);
+	FRemapTable *remap = font->GetColorTranslation(
+		IWad::CheckGameFilter("Corridor7") ? CR_YELLOW : CR_UNTRANSLATED);
 
 	int nx = x*8;
 	int ny = y*8;
@@ -555,35 +557,52 @@ static void DetermineIntermissionMode()
 	}
 }
 
-static void InterDoCorridor7()
+static void InterDoCorridor7(bool died=false)
 {
 	const uint32_t shots = players[ConsolePlayer].levelShotsFired;
 	const uint32_t hits = MIN(players[ConsolePlayer].levelShotsHit, shots);
 	const uint32_t accuracy = shots ? (hits * 100) / shots : 0;
 	// Recovered from the released hit/miss tally: each started block of one
 	// hundred shots multiplies the accuracy award by another ten points.
-	InterState.bonus = accuracy * (shots / 100 + 1) * 10;
-	InterGiveBonus(InterState.bonus);
+	InterState.bonus = died ? 0 : accuracy * (shots / 100 + 1) * 10;
+	if(!died)
+		InterGiveBonus(InterState.bonus);
 
-	VWB_DrawFill(TexMan(levelInfo->GetBorderTexture()), 0, 0, screenWidth, screenHeight);
-	Write(12, 2, levelInfo->BonusLevel ? "BONUS LEVEL HIT/MISS RATIO" : "MISSION HIT/MISS RATIO");
+	CA_CacheScreen(TexMan("C7G0014"));
+	if(died)
+		Write(14, 2, "YOU'RE DEAD");
 
-	FString line;
-	line.Format("FLOOR %s SECURED", levelInfo->FloorNumber.GetChars());
-	Write(14, 5, line);
-	line.Format("Shots fired: %u", shots);
-	Write(11, 8, line);
-	line.Format("Shots hit:   %u", hits);
-	Write(11, 10, line);
-	line.Format("Accuracy = %u%%", accuracy);
-	Write(11, 12, line);
-	line.Format("Bonus = %u points", InterState.bonus);
-	Write(11, 15, line);
-	line.Format("Score = %d points", players[ConsolePlayer].score);
-	Write(11, 17, line);
+	const unsigned int aliens = gamestate.killtotal ?
+		(static_cast<unsigned int>(gamestate.killcount)*100)/gamestate.killtotal : 100;
+	const unsigned int restricted = gamestate.secrettotal ?
+		(static_cast<unsigned int>(gamestate.secretcount)*100)/gamestate.secrettotal : 100;
+	FString value;
+	value.Format("%s", died ? "UNSECURED" : "SECURED");
+	Write(25, 8, value);
+	value.Format("%u%%", aliens);
+	Write(25, 11, value);
+	value.Format("%u%%", restricted);
+	Write(25, 13, value);
+	value.Format("%u%%", accuracy);
+	Write(25, 16, value);
+	value.Format("%u", InterState.bonus);
+	Write(25, 18, value);
+	value.Format("%d", players[ConsolePlayer].score);
+	Write(25, 20, value);
 
 	VW_UpdateScreen();
 	VW_FadeIn();
+}
+
+void Corridor7Death(void)
+{
+	ClearSplitVWB();
+	StartCPMusic(gameinfo.IntermissionMusic);
+	IN_ClearKeysDown();
+	IN_StartAck(ACK_Any);
+	InterDoCorridor7(true);
+	InterWaitForAck();
+	VW_FadeOut();
 }
 
 /*
@@ -851,14 +870,24 @@ void PreloadGraphics (bool showPsych)
 
 		VWB_DrawFill(TexMan(levelInfo->GetBorderTexture()), 0, 0, screenWidth, screenHeight);
 
-		const bool oldingame = ingame;
-		ingame = false;
-		DrawPlayScreen(true);
-		ingame = oldingame;
+		if(IWad::CheckGameFilter("Corridor7"))
+		{
+			// The CD release uses a dedicated full-screen loading plate plus the
+			// native centered progress meter, not Wolf3D's GET PSYCHED plaque.
+			VWB_DrawGraphic(TexMan("C7G0006"), 0, 0, 320, 200);
+			Write(14, 10, "Loading...");
+		}
+		else
+		{
+			const bool oldingame = ingame;
+			ingame = false;
+			DrawPlayScreen(true);
+			ingame = oldingame;
 
-		FTextureID getPsyched = TexMan.CheckForTexture("GETPSYCH", FTexture::TEX_Any);
-		if(getPsyched.isValid())
-			VWB_DrawGraphic(TexMan(getPsyched), 48, 56);
+			FTextureID getPsyched = TexMan.CheckForTexture("GETPSYCH", FTexture::TEX_Any);
+			if(getPsyched.isValid())
+				VWB_DrawGraphic(TexMan(getPsyched), 48, 56);
+		}
 
 		WindowX = (screenWidth - scaleFactorX*224)/2;
 		WindowY = (screenHeight - scaleFactorY*(StatusBar->GetHeight(false)+48))/2;
@@ -904,7 +933,10 @@ void DrawHighScores (void)
 
 	FFont *font = V_GetFont(gameinfo.HighScoresFont);
 
-	ClearMScreen ();
+	if(IWad::CheckGameFilter("Corridor7"))
+		CA_CacheScreen(TexMan("C7G0015"));
+	else
+		ClearMScreen ();
 	if(IWad::CheckGameFilter("Corridor7"))
 	{
 		PrintX = 112;

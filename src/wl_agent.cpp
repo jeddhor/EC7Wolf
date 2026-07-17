@@ -643,6 +643,9 @@ static void Thrust (APlayerPawn *player, angle_t angle, int32_t speed)
 
 void APlayerPawn::Cmd_Use()
 {
+	if(TryUseC7HealthChamber())
+		return;
+
 	int     checkx,checky;
 	MapTrigger::Side direction;
 
@@ -706,7 +709,10 @@ void APlayerPawn::Cmd_Use()
 =============================================================================
 */
 
-player_t::player_t() : levelShotsFired(0), levelShotsHit(0), FOV(90), DesiredFOV(90), bob(0), attackheld(false)
+player_t::player_t() : levelShotsFired(0), levelShotsHit(0), c7MuzzleFlashTics(0),
+	c7ChamberX(-1), c7ChamberY(-1), c7ChamberPower(100), c7ChamberTics(0),
+	c7ChamberState(0), c7ClearanceNotified(false), c7FloorSecuredNotified(false),
+	FOV(90), DesiredFOV(90), bob(0), attackheld(false)
 {
 }
 
@@ -975,6 +981,9 @@ void player_t::Reborn()
 	flags = 0;
 	FOV = DesiredFOV;
 	RespawnEligible = -1;
+	c7MuzzleFlashTics = 0;
+	c7ChamberState = 0;
+	c7ChamberTics = 0;
 
 	if(state == PST_ENTER)
 	{
@@ -1037,6 +1046,18 @@ void player_t::Serialize(FArchive &arc)
 		arc << levelShotsFired << levelShotsHit;
 	else
 		levelShotsFired = levelShotsHit = 0;
+
+	if(GameSave::SaveVersion >= 1784246700ULL)
+		arc << c7MuzzleFlashTics << c7ChamberX << c7ChamberY
+			<< c7ChamberPower << c7ChamberTics << c7ChamberState
+			<< c7ClearanceNotified << c7FloorSecuredNotified;
+	else
+	{
+		c7MuzzleFlashTics = c7ChamberTics = c7ChamberState = 0;
+		c7ChamberX = c7ChamberY = -1;
+		c7ChamberPower = 100;
+		c7ClearanceNotified = c7FloorSecuredNotified = false;
+	}
 
 	if(arc.IsLoading())
 	{
@@ -1392,6 +1413,7 @@ ACTION_FUNCTION(A_C7GunAttack)
 
 	if(!player || !player->ReadyWeapon->DepleteAmmo())
 		return false;
+	player->c7MuzzleFlashTics = 5;
 	++player->levelShotsFired;
 	if(weapon == 4)
 		ConsumeC7AlienCharge(self, 5, 1);
@@ -1463,6 +1485,23 @@ ACTION_FUNCTION(A_C7GunAttack)
 	}
 	if(hit)
 		++player->levelShotsHit;
+	return true;
+}
+
+// Corridor 7's object-plane values 32/33 form invisible electrical barriers.
+// They are intentionally passable, but crossing a marker delivers repeated
+// contact damage at the original 10 Hz gameplay cadence.
+ACTION_FUNCTION(A_C7DamageField)
+{
+	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+	{
+		APlayerPawn *pawn = players[i].mo;
+		if(!pawn || players[i].state != player_t::PST_LIVE || players[i].health <= 0)
+			continue;
+		if(abs(pawn->x-self->x) <= 36*FRACUNIT &&
+			abs(pawn->y-self->y) <= 36*FRACUNIT)
+			DamageActor(pawn, self, 5);
+	}
 	return true;
 }
 

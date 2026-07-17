@@ -594,13 +594,73 @@ static void InterDoCorridor7(bool died=false)
 	VW_FadeIn();
 }
 
+static void C7PrintAt(FFont *font, int x, int y, const char *text,
+	EColorRange color, bool rightAlign=false)
+{
+	word width, height;
+	if(rightAlign)
+	{
+		VW_MeasurePropString(font, text, width, height);
+		x -= width;
+	}
+	PrintX = x;
+	PrintY = y;
+	US_Print(font, text, color);
+}
+
+static void C7StencilPrintAt(FFont *font, int x, int y, const char *text,
+	BYTE paletteIndex)
+{
+	px = x;
+	py = y;
+	VWB_DrawPropString(font, text, CR_UNTRANSLATED, true, paletteIndex);
+}
+
 void Corridor7Death(void)
 {
 	ClearSplitVWB();
 	StartCPMusic(gameinfo.IntermissionMusic);
 	IN_ClearKeysDown();
 	IN_StartAck(ACK_Any);
-	InterDoCorridor7(true);
+
+	// The DOS death report uses the small repeating skull tile and the
+	// centered 128x120 death plate, not the per-floor status-report artwork.
+	VWB_DrawFill(TexMan("C7G0004"), 0, 0, screenWidth, screenHeight);
+	VWB_DrawGraphic(TexMan("C7G0003"), 96, 40);
+
+	const unsigned int thisAliens = gamestate.killtotal ?
+		(static_cast<unsigned int>(gamestate.killcount)*100)/gamestate.killtotal : 100;
+	const unsigned int thisSecrets = gamestate.secrettotal ?
+		(static_cast<unsigned int>(gamestate.secretcount)*100)/gamestate.secrettotal : 0;
+	const unsigned int floors = LevelRatios.numLevels;
+	const unsigned int divisor = floors+1;
+	const unsigned int aliens = (LevelRatios.killratio+thisAliens)/divisor;
+	const unsigned int secrets = (LevelRatios.secretsratio+thisSecrets)/divisor;
+	const unsigned int rating = (aliens+secrets)/2;
+
+	word titleWidth, titleHeight;
+	VW_MeasurePropString(SmallFont, "YOU'RE DEAD", titleWidth, titleHeight);
+	C7PrintAt(SmallFont, 160-titleWidth/2, 70, "YOU'RE DEAD", CR_RED);
+	static const char *labels[] = {
+		"Total floors secured", "Alien kill ratio", "Secret room ratio",
+		"Total score", "Overall rating"
+	};
+	for(unsigned int i = 0;i < countof(labels);++i)
+		C7PrintAt(SmallFont, 80, 90+i*16, labels[i], CR_TAN);
+
+	FString value;
+	value.Format("%u", floors);
+	C7PrintAt(SmallFont, 240, 90, value, CR_TAN);
+	value.Format("%u%%", aliens);
+	C7PrintAt(SmallFont, 240, 106, value, CR_TAN);
+	value.Format("%u%%", secrets);
+	C7PrintAt(SmallFont, 240, 122, value, CR_TAN);
+	value.Format("%d", players[ConsolePlayer].score);
+	C7PrintAt(SmallFont, 240, 138, value, CR_TAN);
+	value.Format("%u%%", rating);
+	C7PrintAt(SmallFont, 240, 154, value, CR_TAN);
+	VW_UpdateScreen();
+	VW_FadeIn();
 	InterWaitForAck();
 	VW_FadeOut();
 }
@@ -837,6 +897,22 @@ void Victory (bool fromIntermission)
 
 bool PreloadUpdate (unsigned current, unsigned total)
 {
+	if(IWad::CheckGameFilter("Corridor7"))
+	{
+		double x = 59, y = 98, fullWidth = 200, filledWidth = 200.0*current/total;
+		double height = 7, ignoredHeight = 7;
+		screen->VirtualToRealCoords(x, y, fullWidth, height, 320, 200, true, true);
+		double filledX = 59, filledY = 98;
+		screen->VirtualToRealCoords(filledX, filledY, filledWidth, ignoredHeight,
+			320, 200, true, true);
+		VWB_Clear(GPalette.Remap[0], x, y, x+fullWidth, y+height);
+		if(current)
+			VWB_Clear(GPalette.Remap[4], filledX, filledY,
+				filledX+filledWidth, filledY+ignoredHeight);
+		VW_UpdateScreen();
+		return false;
+	}
+
 	static const PalEntry colors[2] = {
 		ColorMatcher.Pick(RPART(gameinfo.PsychedColors[0]), GPART(gameinfo.PsychedColors[0]), BPART(gameinfo.PsychedColors[0])),
 		ColorMatcher.Pick(RPART(gameinfo.PsychedColors[1]), GPART(gameinfo.PsychedColors[1]), BPART(gameinfo.PsychedColors[1]))
@@ -872,10 +948,11 @@ void PreloadGraphics (bool showPsych)
 
 		if(IWad::CheckGameFilter("Corridor7"))
 		{
-			// The CD release uses a dedicated full-screen loading plate plus the
-			// native centered progress meter, not Wolf3D's GET PSYCHED plaque.
-			VWB_DrawGraphic(TexMan("C7G0006"), 0, 0, 320, 200);
-			Write(14, 10, "Loading...");
+			// The CD release tiles its skull pattern and places the 224x56
+			// loading plate at (48,56). Its red 200x7 meter is drawn by
+			// PreloadUpdate inside that plate.
+			VWB_DrawFill(TexMan("C7G0004"), 0, 0, screenWidth, screenHeight);
+			VWB_DrawGraphic(TexMan("C7G0073"), 48, 56);
 		}
 		else
 		{
@@ -924,8 +1001,41 @@ void PreloadGraphics (bool showPsych)
 ==================
 */
 
+static void PrepareCorridor7HighScores()
+{
+	if(!IWad::CheckGameFilter("Corridor7"))
+		return;
+
+	// High scores predate per-game config sections, so a fresh ECWolf config
+	// starts with Wolf3D's seven developer names. Replace only that untouched
+	// stock table; once the player has earned or edited any entry it is theirs.
+	static const char *wolfDefaults[MaxScores] = {
+		"id software-'92", "Adrian Carmack", "John Carmack", "Kevin Cloud",
+		"Tom Hall", "John Romero", "Jay Wilbur"
+	};
+	for(unsigned int i = 0;i < MaxScores;++i)
+	{
+		if(strcmp(Scores[i].name, wolfDefaults[i]) != 0 || Scores[i].score != 10000 ||
+			Scores[i].completed.Compare("1") != 0)
+			return;
+	}
+
+	static const char *corridor7Defaults[MaxScores] = {
+		"Capstone 94", "Les", "Joe", "Jeff", "Ruben", "Carlos", "David"
+	};
+	for(unsigned int i = 0;i < MaxScores;++i)
+	{
+		strncpy(Scores[i].name, corridor7Defaults[i], MaxHighName);
+		Scores[i].name[MaxHighName] = 0;
+		Scores[i].score = 10000;
+		Scores[i].completed = "1";
+		Scores[i].graphic[0] = 0;
+	}
+}
+
 void DrawHighScores (void)
 {
+	PrepareCorridor7HighScores();
 	FString buffer;
 
 	word i, w, h;
@@ -934,32 +1044,29 @@ void DrawHighScores (void)
 	FFont *font = V_GetFont(gameinfo.HighScoresFont);
 
 	if(IWad::CheckGameFilter("Corridor7"))
-		CA_CacheScreen(TexMan("C7G0015"));
+		CA_CacheScreen(TexMan("C7G0016"));
 	else
 		ClearMScreen ();
 	if(IWad::CheckGameFilter("Corridor7"))
 	{
-		PrintX = 112;
-		PrintY = 24;
-		US_Print(font, "HIGH SCORES", CR_WHITE);
-		PrintX = 24;
-		PrintY = 56;
-		US_Print(font, "NAME", CR_WHITE);
-		PrintX = 176;
-		US_Print(font, "FLOOR", CR_WHITE);
-		PrintX = 240;
-		US_Print(font, "SCORE", CR_WHITE);
+		word titleWidth, titleHeight;
+		VW_MeasurePropString(font, "HIGH SCORES", titleWidth, titleHeight);
+		C7StencilPrintAt(font, 160-titleWidth/2, 20, "HIGH SCORES", 0xB7);
+		C7StencilPrintAt(font, 24, 43, "NAME", 0x24);
+		C7StencilPrintAt(font, 210, 43, "L", 0x24);
+		C7StencilPrintAt(font, 246, 43, "SCORE", 0x24);
 		for(i = 0, s = Scores; i < MaxScores; ++i, ++s)
 		{
-			PrintY = 76 + ((font->GetHeight() + 3) * i);
-			PrintX = 24;
-			US_Print(font, s->name, gameinfo.FontColors[GameInfo::HIGHSCORES]);
-			PrintX = 184;
-			US_Print(font, s->completed.GetChars(), gameinfo.FontColors[GameInfo::HIGHSCORES]);
+			PrintY = 62 + 18*i;
+			buffer.Format("%u.", i+1);
+			const BYTE rowColor = static_cast<BYTE>(0x57-2*i);
+			const BYTE levelColor = static_cast<BYTE>(0x6F-2*i);
+			C7StencilPrintAt(font, 6, PrintY, buffer, rowColor);
+			C7StencilPrintAt(font, 24, PrintY, s->name, rowColor);
+			C7StencilPrintAt(font, 210, PrintY, s->completed.GetChars(), levelColor);
 			buffer.Format("%d", s->score);
 			VW_MeasurePropString(font, buffer, w, h);
-			PrintX = 296 - w;
-			US_Print(font, buffer, gameinfo.FontColors[GameInfo::HIGHSCORES]);
+			C7StencilPrintAt(font, 300-w, PrintY, buffer, rowColor);
 		}
 		VW_UpdateScreen();
 		return;
@@ -1042,6 +1149,7 @@ void CheckHighScore (int32_t score, const LevelInfo *levelInfo)
 {
 	if (!gameinfo.TrackHighScores || Net::InitVars.mode != Net::MODE_SinglePlayer)
 		return;
+	PrepareCorridor7HighScores();
 
 	word i, j;
 	int n;

@@ -124,17 +124,23 @@ actor C7Static010
 	}
 }
 
-// Object-table slots 9 and 10 are invisible electric-field markers in the
-// released maps. Their associated thin post art is never drawn by DOS.
+// Object-table slots 9 and 10 are invisible electric-field markers in normal
+// vision. Infrared exposes their associated field art in the DOS renderer;
+// C7VisorCanSeeActor performs that conditional draw.
 actor C7DamageField
 {
 	radius 32
 	states
 	{
 		Spawn:
-			TNT1 A 7 A_C7DamageField
+			C010 A 7 A_C7DamageField
 			loop
 	}
+}
+
+actor C7DamageFieldAlt : C7DamageField
+{
+	states { Spawn: C011 A 7 A_C7DamageField loop }
 }
 
 actor C7Static011

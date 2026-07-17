@@ -139,6 +139,44 @@ static void GiveAllWeaponsAndAmmo(player_t &player)
 		player.PendingWeapon = WP_NOCHANGE;
 }
 
+static void GiveCorridor7Cheat(player_t &player)
+{
+	GiveAllWeaponsAndAmmo(player);
+	player.health = player.mo->health = player.mo->maxhealth;
+	P_GiveKeys(player.mo, 1);
+	P_GiveKeys(player.mo, 2);
+
+	const ClassDef *floorPlan = ClassDef::FindClass("C7FloorPlan");
+	if(floorPlan && !player.mo->FindInventory(floorPlan))
+		player.mo->GiveInventory(floorPlan);
+	gamestate.fullmap = true;
+
+	const ClassDef *armorClass = ClassDef::FindClass("C7BodyArmor");
+	AInventory *armor = armorClass ? player.mo->FindInventory(armorClass) : NULL;
+	if(!armor && armorClass)
+	{
+		player.mo->GiveInventory(armorClass, 200);
+		armor = player.mo->FindInventory(armorClass);
+	}
+	if(armor)
+		armor->amount = MAX<unsigned int>(armor->amount, 200);
+
+	// Giving all ammo fills every C7 pool. Keep the alien charge within its
+	// capacity and reset the visor to its normal view at a full battery.
+	AInventory *energy = player.mo->FindInventory(ClassDef::FindClass("C7Energy"));
+	AInventory *capacity = player.mo->FindInventory(ClassDef::FindClass("C7EnergyCapacity"));
+	if(energy && capacity)
+		energy->amount = capacity->amount = capacity->maxamount;
+	AInventory *visor = player.mo->FindInventory(ClassDef::FindClass("C7VisorCharge"));
+	AInventory *visorMode = player.mo->FindInventory(ClassDef::FindClass("C7VisorMode"));
+	if(visor)
+		visor->amount = visor->maxamount;
+	if(visorMode)
+		visorMode->amount = 1;
+	StatusBar->UpdateFace(-1);
+	StatusBar->DrawStatusBar();
+}
+
 /*
 ================
 =
@@ -610,9 +648,21 @@ static void DebugGod(bool noah)
 void CheckDebugKeys()
 {
 	static bool DebugOk = false;
-
+	static bool corridor7CheatHeld = false;
 	if (screenfaded || demoplayback) // don't do anything with a faded screen
 		return;
+
+	if(IWad::CheckGameFilter("Corridor7"))
+	{
+		const bool wax = Keyboard[sc_W] && Keyboard[sc_A] && Keyboard[sc_X];
+		if(wax && !corridor7CheatHeld && Net::IsArbiter())
+		{
+			DebugCmd cmd = {DEBUG_GiveItems};
+			Net::DebugKey(cmd);
+			StatusBar->SetTopMessage("CHEAT ACTIVATED: FULL EQUIPMENT", 4*TICRATE);
+		}
+		corridor7CheatHeld = wax;
+	}
 
 	if(IWad::CheckGameFilter(NAME_Wolf3D))
 	{
@@ -739,10 +789,15 @@ void DoDebugKey(int player, const DebugCmd &cmd)
 			break;
 
 		case DEBUG_GiveItems:
-			GiveAllWeaponsAndAmmo(players[player]);
-			players[player].GivePoints(100000);
-			players[player].health = 100;
-			StatusBar->DrawStatusBar();
+			if(IWad::CheckGameFilter("Corridor7"))
+				GiveCorridor7Cheat(players[player]);
+			else
+			{
+				GiveAllWeaponsAndAmmo(players[player]);
+				players[player].GivePoints(100000);
+				players[player].health = players[player].mo->health = 100;
+				StatusBar->DrawStatusBar();
+			}
 			break;
 
 		case DEBUG_GiveKey:

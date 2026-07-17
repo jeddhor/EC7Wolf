@@ -83,16 +83,23 @@ static bool C7VisorCanSeeActor(AActor *actor)
 {
 	if(!IWad::CheckGameFilter("Corridor7"))
 		return true;
+	AActor *camera = players[ConsolePlayer].camera;
+	AInventory *mode = camera ? camera->FindInventory(ClassDef::FindClass("C7VisorMode")) : NULL;
+	const bool infrared = mode && mode->amount == 3;
+
+	const ClassDef *field = ClassDef::FindClass("C7DamageField");
+	if(field && actor->IsA(field))
+		return infrared;
 
 	const ClassDef *eniram = ClassDef::FindClass("C7SpaceMarine");
 	if(!eniram || !actor->IsA(eniram))
 		return true;
-	if(actor->MissileState && actor->InStateSequence(actor->MissileState))
+	const Frame *deathState = actor->FindState(NAME_Death);
+	if((actor->MissileState && actor->InStateSequence(actor->MissileState)) ||
+		(actor->PainState && actor->InStateSequence(actor->PainState)) ||
+		(deathState && actor->InStateSequence(deathState)))
 		return true;
-
-	AActor *camera = players[ConsolePlayer].camera;
-	AInventory *mode = camera ? camera->FindInventory(ClassDef::FindClass("C7VisorMode")) : NULL;
-	return mode && mode->amount == 3;
+	return infrared;
 }
 
 bool R_CheckSpriteValid(unsigned int spr)

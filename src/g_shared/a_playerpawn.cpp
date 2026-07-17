@@ -297,76 +297,37 @@ void APlayerPawn::SetupWeaponSlots()
 	player->weapons.StandardSetup(GetClass());
 }
 
-static bool IsInC7HealthChamber(const APlayerPawn *player)
-{
-	// Released chambers are identified by their HEALTH CHAMBER wall (ID 2).
-	// The healing side is the open side of that sign; this distinguishes the
-	// chamber interior from the corridor immediately outside it.
-	const int px = player->tilex;
-	const int py = player->tiley;
-	for(int y = py-4;y <= py+4;++y)
-	{
-		for(int x = px-4;x <= px+4;++x)
-		{
-			if(x < 0 || y < 0 ||
-				!map->IsValidTileCoordinate(static_cast<unsigned>(x), static_cast<unsigned>(y), 0))
-				continue;
-			MapSpot sign = map->GetSpot(x, y, 0);
-			if(!sign->tile || sign->corridor7WallID != 2)
-				continue;
-
-			MapSpot side = sign->GetAdjacent(MapTile::East);
-			if(side && !side->tile && px > x)
-				return true;
-			side = sign->GetAdjacent(MapTile::West);
-			if(side && !side->tile && px < x)
-				return true;
-			side = sign->GetAdjacent(MapTile::South);
-			if(side && !side->tile && py > y)
-				return true;
-			side = sign->GetAdjacent(MapTile::North);
-			if(side && !side->tile && py < y)
-				return true;
-		}
-	}
-	return false;
-}
-
-static MapSpot FindC7HealthChamberDoor(const APlayerPawn *pawn, bool openOnly)
-{
-	MapSpot closest = NULL;
-	unsigned int closestDistance = UINT_MAX;
-	for(int y = pawn->tiley-3;y <= pawn->tiley+3;++y)
-	{
-		for(int x = pawn->tilex-3;x <= pawn->tilex+3;++x)
-		{
-			if(x < 0 || y < 0 ||
-				!map->IsValidTileCoordinate(static_cast<unsigned>(x), static_cast<unsigned>(y), 0))
-				continue;
-			MapSpot spot = map->GetSpot(x, y, 0);
-			if(!spot->tile || spot->corridor7WallID != 53 ||
-				(openOnly && spot->corridor7WallMarker != 107))
-				continue;
-			const unsigned int distance = abs(x-pawn->tilex) + abs(y-pawn->tiley);
-			if(distance < closestDistance)
-			{
-				closest = spot;
-				closestDistance = distance;
-			}
-		}
-	}
-	return closest;
-}
-
 bool APlayerPawn::TryUseC7HealthChamber()
 {
-	if(!IWad::CheckGameFilter("Corridor7") || player->c7ChamberState ||
-		!IsInC7HealthChamber(this))
+	if(!IWad::CheckGameFilter("Corridor7") || player->c7ChamberState)
 		return false;
 
-	MapSpot door = FindC7HealthChamberDoor(this, true);
-	if(!door)
+	// A released health chamber is exactly one walkable cell deep. The use
+	// panel is wall 35 at its rear and the four-page aperture (wall 53,
+	// marker 107 while open) is one cell behind the player. Decorative HEALTH
+	// CHAMBER signs use wall 2 and must never activate the unit.
+	int dx = 0, dy = 0;
+	if(angle < ANGLE_45 || angle > 7*ANGLE_45)
+		dx = 1;
+	else if(angle < 3*ANGLE_45)
+		dy = -1;
+	else if(angle < 5*ANGLE_45)
+		dx = -1;
+	else
+		dy = 1;
+
+	MapSpot panel = map->GetSpot(tilex+dx, tiley+dy, 0);
+	MapSpot door = map->GetSpot(tilex-dx, tiley-dy, 0);
+	if(!panel || !panel->tile || panel->corridor7WallID != 35 ||
+		!door || !door->tile || door->corridor7WallID != 53 ||
+		door->corridor7WallMarker != 107)
 		return false;
+	if(player->health >= maxhealth)
+	{
+		if(player->GetPlayerNum() == ConsolePlayer)
+			StatusBar->SetTopMessage("FULL HEALTH");
+		return true;
+	}
 
 	player->c7ChamberX = static_cast<int16_t>(door->GetX());
 	player->c7ChamberY = static_cast<int16_t>(door->GetY());

@@ -338,9 +338,10 @@ private:
 };
 IMPLEMENT_INTERNAL_CLASS(C7HealthDispenser)
 
-// Corridor 7 has two consumable wall units. Wall 85 animates through 88,
-// where a second use supplies 25 health and leaves empty wall 89. Wall 111
-// supplies a 50-round clip and immediately changes to empty wall 112.
+// Corridor 7 has two consumable wall units and a reusable visor charger. Wall
+// 85 animates through 88, where a second use supplies 25 health and leaves
+// empty wall 89. Wall 111 supplies a 50-round clip and immediately changes to
+// empty wall 112. Wall 110 refills the visor without consuming the station.
 FUNC(C7_Dispenser)
 {
 	if(!spot || !spot->tile || !activator)
@@ -358,6 +359,12 @@ FUNC(C7_Dispenser)
 			return 0;
 		if(spot->texture[0] == ready)
 		{
+			if(activator->player && activator->player->health >= activator->player->mo->maxhealth)
+			{
+				if(activator == players[ConsolePlayer].camera)
+					StatusBar->SetTopMessage("FULL HEALTH");
+				return 1;
+			}
 			const ClassDef *health = ClassDef::FindClass("C7MedicPack");
 			if(!health || !activator->GiveInventory(health))
 				return 0;
@@ -383,12 +390,37 @@ FUNC(C7_Dispenser)
 			return 0;
 
 		const ClassDef *ammo = ClassDef::FindClass("C7Bullets");
+		AInventory *heldAmmo = ammo ? activator->FindInventory(ammo) : NULL;
+		if(heldAmmo && heldAmmo->amount >= heldAmmo->maxamount)
+		{
+			if(activator == players[ConsolePlayer].camera)
+				StatusBar->SetTopMessage("FULL AMMO");
+			return 1;
+		}
 		if(!ammo || !activator->GiveInventory(ammo, 50))
 			return 0;
 		SetC7WallTexture(spot, 112);
 		PlaySoundLocMapSpot("misc/ammo_pkup", spot);
 		if(activator == players[ConsolePlayer].camera)
 			StatusBar->SetTopMessage("50 Rounds Acquired");
+		return 1;
+	}
+
+	if(args[0] == 3)
+	{
+		AInventory *visor = activator->FindInventory(ClassDef::FindClass("C7VisorCharge"));
+		if(!visor)
+			return 0;
+		if(visor->amount >= visor->maxamount)
+		{
+			if(activator == players[ConsolePlayer].camera)
+				StatusBar->SetTopMessage("FULL VISOR CHARGE");
+			return 1;
+		}
+		visor->amount = visor->maxamount;
+		PlaySoundLocMapSpot("misc/ammo_pkup", spot);
+		if(activator == players[ConsolePlayer].camera)
+			StatusBar->SetTopMessage("VISOR BATTERY RECHARGED");
 		return 1;
 	}
 

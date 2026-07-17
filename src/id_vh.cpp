@@ -226,7 +226,7 @@ void VH_Startup()
 
 FFizzleFader::FFizzleFader(int x1, int y1, unsigned width, unsigned height, unsigned frames, bool staticframes)
 : srcptr(NULL), x1(x1), y1(y1), width(width), height(height),
-  fadems(TICS2MS(frames)), startms(SDL_GetTicks()),
+  fadems(TICS2MS(frames)), startms(0),
   pixcovered(0), rndval(0), staticframes(staticframes)
 {
 	destptr = new byte[SCREENHEIGHT*SCREENPITCH];
@@ -260,6 +260,13 @@ void FFizzleFader::FadeToColor(int red, int green, int blue)
 
 bool FFizzleFader::Update()
 {
+	// Texture caching or drawing the destination can take longer than the
+	// requested dissolve (notably Corridor 7's uncached title background).
+	// Start the clock on the first presented fizzle frame, not in the
+	// constructor, or the first Update can incorrectly complete as a hard cut.
+	if(startms == 0)
+		startms = SDL_GetTicks();
+
 	if(staticframes)
 	{
 		// Screen buffer won't be refreshed so we need to capture instead of

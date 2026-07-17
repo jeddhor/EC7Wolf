@@ -563,7 +563,10 @@ void ClipMove (AActor *ob, int32_t xmove, int32_t ymove)
 		return;
 	}
 
-	if (!SD_SoundPlaying())
+	// Corridor 7 only plays its failure cue for an explicit Use action. The
+	// Wolf3D collision thump sounds like that cue and made every harmless bump
+	// into scenery produce a false alert.
+	if (!IWad::CheckGameFilter("Corridor7") && !SD_SoundPlaying())
 		PlaySoundLocActor ("world/hitwall", ob);
 
 	ob->x = basex+xmove;
@@ -1505,6 +1508,16 @@ ACTION_FUNCTION(A_C7DamageField)
 	return true;
 }
 
+// Ailoprobes are alarm creatures: once one acquires a target it propagates
+// that target to every dormant Corridor 7 monster, rather than merely making
+// a cosmetic attack noise.
+ACTION_FUNCTION(A_C7AlienAlarm)
+{
+	AActor *alertTarget = self->target;
+	P_AlertCorridor7Monsters(alertTarget ? alertTarget : self);
+	return true;
+}
+
 // Armed Corridor 7 mines use a square proximity check, matching the tile-based
 // distance convention used throughout the original engine. They also remain
 // shootable, so plasma and other weapon impacts can detonate them early.
@@ -1547,15 +1560,21 @@ ACTION_FUNCTION(A_FireCustomMissile)
 	ACTION_PARAM_INT(spawnheight, 4);
 	ACTION_PARAM_BOOL(aim, 5);
 
-	if(useammo && !self->player->ReadyWeapon->DepleteAmmo())
+	player_t *player = self->player;
+	if(!player || !player->ReadyWeapon)
+		return false;
+	if(useammo && !player->ReadyWeapon->DepleteAmmo())
 		return false;
 	if(useammo && IWad::CheckGameFilter("Corridor7") && missiletype.CompareNoCase("C7PlasmaBolt") == 0)
 	{
 		ConsumeC7AlienCharge(self, 33, 4);
-		++self->player->levelShotsFired;
+		++player->levelShotsFired;
+		player->c7MuzzleFlashTics = 5;
+		PlaySoundLocActor(player->ReadyWeapon->attacksound, self,
+			self == players[ConsolePlayer].camera ? SD_WEAPONS : SD_GENERIC);
 	}
 
-	if(!(self->player->ReadyWeapon->weaponFlags & WF_NOALERT))
+	if(!(player->ReadyWeapon->weaponFlags & WF_NOALERT))
 		madenoise = true;
 
 	if(self->MeleeState)

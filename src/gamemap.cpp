@@ -32,6 +32,7 @@
 **
 */
 
+#include <algorithm>
 #include <climits>
 #include "id_ca.h"
 #include "farchive.h"
@@ -54,6 +55,8 @@
 #include "doomerrors.h"
 #include "m_random.h"
 #include "g_mapinfo.h"
+#include "g_shared/a_inventory.h"
+#include "wl_iwad.h"
 
 const FName SpecialThingNames[SMT_NumThings] = {
 	"$Player1Start",
@@ -582,6 +585,51 @@ void GameMap::SetupLinks()
 }
 
 extern FRandom pr_spawnmobj;
+static FRandom pr_c7president("Corridor7President");
+
+static void RandomizeCorridor7PresidentThings(TArray<GameMap::Thing> &things)
+{
+	if(!IWad::CheckGameFilter("Corridor7") ||
+		SkillInfo::GetSkillIndex(*gamestate.difficulty) != 4)
+		return;
+
+	TArray<unsigned int> monsters;
+	TArray<unsigned int> pickups;
+	for(unsigned int i = 0;i < things.Size();++i)
+	{
+		GameMap::Thing &thing = things[i];
+		if(!thing.skill[gamestate.difficulty->SpawnFilter] ||
+			SpecialThingNamesLookup(thing.type) != SMT_NumThings)
+			continue;
+
+		const ClassDef *cls = ClassDef::FindClass(thing.type);
+		if(!cls)
+			continue;
+		if(cls->GetDefault()->flags & FL_ISMONSTER)
+			monsters.Push(i);
+		else if(cls->IsDescendantOf(NATIVE_CLASS(Inventory)))
+			pickups.Push(i);
+	}
+
+	// Fisher-Yates the authored locations, not the actors themselves. This
+	// keeps the exact President population and all actor-specific properties,
+	// while ensuring every new location was already valid for that category.
+	TArray<unsigned int> *groups[] = { &monsters, &pickups };
+	for(unsigned int group = 0;group < 2;++group)
+	{
+		TArray<unsigned int> &indices = *groups[group];
+		for(unsigned int remaining = indices.Size();remaining > 1;--remaining)
+		{
+			const unsigned int a = indices[remaining-1];
+			const unsigned int b = indices[pr_c7president.GenRand32()%remaining];
+			std::swap(things[a].x, things[b].x);
+			std::swap(things[a].y, things[b].y);
+			std::swap(things[a].z, things[b].z);
+			std::swap(things[a].angle, things[b].angle);
+		}
+	}
+}
+
 void GameMap::SpawnThings()
 {
 #if 0
@@ -591,6 +639,7 @@ void GameMap::SpawnThings()
 
 	playerStarts.Clear();
 	deathmatchStarts.Clear();
+	RandomizeCorridor7PresidentThings(things);
 
 	// Since vanilla didn't have deathmatch we can collect monster spawn points as a fallback.
 	TArray<PlayerSpawn> deathmatchFallbackStarts;

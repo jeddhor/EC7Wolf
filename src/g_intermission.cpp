@@ -252,9 +252,12 @@ static void ShowFader(FaderIntermissionAction *fader)
 			// Capture the currently displayed page, draw the destination under it,
 			// then randomly erase pixels from the old page. Corridor 7 uses this
 			// to dissolve only the title logo into its clean background plate.
+			// staticframes captures the old title in the constructor and the clean
+			// destination on the first Update. Using a transparent source here
+			// merely stopped repainting erased pixels and made the dissolve appear
+			// as a hard cut when the following page was drawn.
 			FFizzleFader dissolve(0, 0, screenWidth, screenHeight,
-				MAX(1U, fader->Time), false);
-			dissolve.CaptureFrame();
+				MAX(1U, fader->Time), true);
 			ShowImage(fader, true);
 			FizzleFade(dissolve);
 			break;

@@ -72,29 +72,40 @@ Append an output directory and `--all` to load-check every map in the archive.
   pixels, all four native 208..239 wall/force-field palette cycles, four-frame
   in-place force-field and animated-wall openings, four sliding door types with
   automatic orientation,
-  red/blue access cards, push walls, paired intralevel transporters, floor
-  exits, ordinary and marker-99 bonus elevators, and the level-30/40 exit vortex.
+  red/blue access cards, one-shot secret/disintegrating walls with correct
+  secret accounting, four-frame retracting barriers, paired intralevel
+  transporters, floor exits, ordinary and marker-99 bonus elevators, and the
+  level-30/40 exit vortex.
 - The executable's complete plane-1 dispatch table, including static objects,
   pickups, difficulty/direction actor variants, bosses, ignored markers, and
   the original sprite families.
 - A Corridor 7 player, the released eight-weapon arsenal (including the
   Ithaca shotgun's secondary animation), proximity mines, all weapon pickups,
-  ammunition/charge/health/armor items, monster combat, score, event sounds,
-  and native first-person weapon scaling.
+  ammunition/charge/health/armor items, non-wasteful health and ammunition
+  pickup rules, monster combat, projectile attacks, score, event sounds, and
+  native first-person weapon scaling. The original W+A+X equipment cheat and
+  full-floor-plan pickup are supported.
 - The original status bar art, number placement, segmented color gauges,
   aliens-remaining counter, M-16 start selection and native weapon anchoring,
-  a stable timed level-introduction objective prompt, the clean opening splash
-  and paced fading credit sequence,
-  episode and four rank choices, the documented 10/75/100/100-percent alien
-  objective gate, body armor, visor modes and charge, MAP01-MAP40 progression
-  and victory, six routed bonus maps, the released per-floor hit/miss award,
-  high scores, and ECWolf save/load.
+  a stable timed level-introduction objective prompt, the clean opening splash,
+  original pixel-dissolve title transition, and paced fading credit sequence;
+  episode and five rank choices (including randomized President placement),
+  the documented 10/75/100/100-percent alien objective gate, body armor,
+  normal/night/infrared visor modes and charge, infrared-only hazards and
+  cloaked enemies, MAP01-MAP40 progression and victory, six routed bonus maps,
+  the released per-floor hit/miss award, original loading/death/high-score
+  pages, and ECWolf save/load.
 - The executable's released campaign music selector, including its randomized
   late/bonus-floor behavior, with all 34 AdLib music chunks exposed directly
   from the original archive.
-- Released per-rank enemy health tables, directional/pain/death sprite
-  families, bosses and projectiles, alien energy regeneration/capacity, and
-  the level-30/40 exit-vortex behavior.
+- Released per-rank enemy health tables, distinct directional/attack/pain/death
+  sprite families, alarm and camouflage transformations, bosses and audible
+  projectiles, alien energy regeneration/capacity, persistent mines, and the
+  level-30/40 exit-vortex behavior.
+- Stateful access/alarm computers, health and ammunition dispensers, the
+  reusable visor charger, and health chambers that turn the player toward the
+  exit, close the chamber door, consume stored power, heal, and report the
+  remaining charge.
 
 ## Known deviations
 
@@ -106,8 +117,9 @@ reconstructions where the executable did not yield an unambiguous value.
 Masked screens preserve collision and sight behavior while transparent columns
 are composited with walls and actors at their actual depth. Plane-1 masked-wall
 configuration markers 86..88 are preserved distinctly, but their exact DOS
-state differences remain unresolved. The port uses a native ECWolf
-results/victory presentation rather than every DOS briefing. Plane 2 contains
+state differences remain unresolved. The final victory page remains an
+evidence-based ECWolf reconstruction because the installation does not contain
+the external cinematic files referenced by the executable. Plane 2 contains
 editor grouping values
 on two released maps and has no observed runtime effect. Original demos,
 network protocol, multiplayer rules, and other executable editions are

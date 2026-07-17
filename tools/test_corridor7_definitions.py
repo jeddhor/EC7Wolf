@@ -31,6 +31,12 @@ WL_DRAW = (ROOT / "src/wl_draw.cpp").read_text()
 WL_MAIN = (ROOT / "src/wl_main.cpp").read_text()
 WL_GAME = (ROOT / "src/wl_game.cpp").read_text()
 G_INTERMISSION = (ROOT / "src/g_intermission.cpp").read_text()
+ID_VH = (ROOT / "src/id_vh.cpp").read_text()
+GAMEMAP = (ROOT / "src/gamemap.cpp").read_text()
+INVENTORY = (ROOT / "src/g_shared/a_inventory.cpp").read_text()
+WL_DEBUG = (ROOT / "src/wl_debug.cpp").read_text()
+R_SPRITES = (ROOT / "src/r_sprites.cpp").read_text()
+NATIVE_ACTORS = (ROOT / "wadsrc/static/actors/native.txt").read_text()
 LOCKDEFS = (ROOT / "wadsrc/static/lockdefs.txt").read_text()
 
 
@@ -71,14 +77,12 @@ for ignored_id in (93,):
         f"internal object {ignored_id} must not spawn a graphics-page sprite",
     )
 
-for field_id in (32, 33):
-    require(
-        rf"^\s*\{{{field_id},\s*C7DamageField,",
-        XLAT,
-        f"electric-field object {field_id} must use the invisible damage actor",
-    )
-require(r"actor\s+C7DamageField\s*\{.*?TNT1\s+A\s+7\s+A_C7DamageField", STATICS,
-        "electric fields must remain invisible while applying contact damage")
+require(r"^\s*\{32,\s*C7DamageField,", XLAT,
+        "electric-field object 32 must use the damage actor")
+require(r"^\s*\{33,\s*C7DamageFieldAlt,", XLAT,
+        "electric-field object 33 must preserve its alternate field art")
+require(r"actor\s+C7DamageField\s*\{.*?C010\s+A\s+7\s+A_C7DamageField", STATICS,
+        "electric fields must apply contact damage while retaining infrared art")
 
 require(r"actor\s+C7Static003\s*\{", STATICS, "object 26 must not be a key")
 require(r'player\.startitem\s+"C7M16".*?player\.startitem\s+"C7Bayonet"', PLAYER, "M-16 is readied before the backup Bayonet")
@@ -127,6 +131,8 @@ require(r'oldplane\[i\]\s*==\s*106.*?Wall_AnimateRemove.*?maskedWallType\s*=\s*1
 require(r'oldplane\[i\]\s*==\s*107.*?sideSolid\[0\].*?false.*?maskedWallType\s*=\s*1', GAMEMAP_PLANES, "marker-107 walls start permanently open and masked")
 require(r'class\s+C7AnimatedWall.*?\+\+frame\s*>\s*3.*?corridor7WallID-1\+frame.*?frame\s*==\s*3.*?OpenWallCell\(spot,\s*false\)', LNSPEC, "Corridor 7 animated walls retain their final aperture")
 require(r'class\s+C7AnimatedWall.*?\+\+tics\s*<\s*8.*?\+\+frame', LNSPEC, "Corridor 7 chamber doors visibly advance their opening frames")
+require(r'ActivateTrigger.*?trig\.active\s*&&\s*trig\.isSecret.*?\+\+gamestate\.secretcount.*?trig\.active\s*=\s*false',
+        GAMEMAP, "successful secret walls count exactly once")
 require(r'color\s*>=\s*208\s*&&\s*color\s*<=\s*239.*?color\s*&\s*~7.*?TimeCount\s*>>\s*3', WL_DRAW, "all four Corridor 7 VGA palette ramps cycle every eight tics")
 require(r'IsMaskedWallPassSide.*?CheckGameFilter\("Corridor7"\).*?return\s+true.*?RecordMaskedWallHit.*?maskedWallHits\.Push.*?DrawMaskedWall.*?hitFirst.*?hitLast', WL_DRAW, "masked Corridor 7 rays cross adjacent glass and retain their exact surface spans")
 require(r'IsConnectedMaskedWall.*?corridor7WallID.*?IsMaskedWallRenderSide.*?horizontalRun.*?verticalRun.*?RecordMaskedWallHit', WL_DRAW, "adjacent masked walls suppress internal end faces while rays continue through them")
@@ -141,19 +147,41 @@ for wall_id, result_id, kind in ((9, 10, 1), (11, 12, 2), (30, 31, 3)):
 require(r'FUNC\(C7_WallSwitch\).*?C7Static001.*?C7Static002.*?GiveInventory.*?P_AlertCorridor7Monsters', LNSPEC, "Corridor 7 terminals grant access cards or raise the intruder alert")
 require(r'RED Access Granted.*?BLUE Access Granted', LNSPEC, "access terminals display their released grant messages")
 require(r'Lock\s+1\s+Corridor7.*?BLUE Access Required.*?Lock\s+2\s+Corridor7.*?RED Access Required', LOCKDEFS, "locked doors display their released access requirements")
-for wall_id, kind in ((85, 1), (88, 1), (111, 2)):
+for wall_id, kind in ((85, 1), (88, 1), (111, 2), (110, 3)):
     require(
         rf'trigger\s+{wall_id}\s*\{{.*?action\s*=\s*"C7_Dispenser".*?arg0\s*=\s*{kind}.*?playeruse\s*=\s*true.*?repeatable\s*=\s*true',
         XLAT,
         f"Corridor 7 dispenser wall {wall_id}",
     )
 require(r'FUNC\(C7_Dispenser\).*?C7MedicPack.*?GiveInventory.*?SetC7WallTexture\(spot,\s*89\).*?C7Bullets.*?GiveInventory\(ammo,\s*50\).*?SetC7WallTexture\(spot,\s*112\)', LNSPEC, "Corridor 7 wall dispensers grant 25 health or 50 bullets and become empty")
+require(r'args\[0\]\s*==\s*3.*?C7VisorCharge.*?FULL VISOR CHARGE.*?visor->amount\s*=\s*visor->maxamount.*?VISOR BATTERY RECHARGED',
+        LNSPEC, "wall 110 is a non-wasteful reusable visor charger")
+require(r'FULL HEALTH.*?return\s+false', INVENTORY,
+        "health packs remain in the world when the player is full")
+require(r'amount\s*<\s*maxamount.*?else.*?FULL AMMO.*?return\s+true', INVENTORY,
+        "ammo packs remain in the world when the player is full")
+require(r'FUNC\(C7_Dispenser\).*?FULL HEALTH.*?SetC7WallTexture\(spot,\s*89\).*?FULL AMMO.*?SetC7WallTexture\(spot,\s*112\)',
+        LNSPEC, "full players cannot waste wall health or ammunition")
 require(r'actor\s+C7MedicPack\s*:\s*Health.*?inventory\.amount\s+25', PLAYER, "Corridor 7 health dispensers supply 25 health")
+require(r'skill\s+nightmare\s*\{.*?name\s*=\s*"President".*?spawnfilter\s*=\s*4',
+        MAPINFO, "Presidential difficulty is exposed")
+require(r'RandomizeCorridor7PresidentThings.*?FL_ISMONSTER.*?NATIVE_CLASS\(Inventory\).*?pr_c7president',
+        GAMEMAP, "President relocates monsters and pickups")
 require(r'P_AlertCorridor7Monsters.*?AActor::GetIterator.*?FL_SHOOTABLE.*?FirstSighting', WL_STATE, "intruder alert wakes every live monster")
 require(r'void\s+WolfStatusBar::DrawTopOverlay.*?TimeCount\s*<\s*5\*TICRATE.*?Eliminate Aliens To Secure Floor', WOLF_SBAR, "Corridor 7 objective is a timed top overlay")
 require(r'SetTopMessage.*?topMessageUntil.*?DrawTopOverlay', WOLF_SBAR, "Corridor 7 transient gameplay messages draw above the view")
 require(r'TryUseC7HealthChamber.*?c7ChamberState\s*=\s*1.*?TickC7HealthChamber.*?C7ChamberExitAngle.*?SetC7HealthChamberPower',
         PLAYERPAWN, "health chambers turn the player, close, heal, and show remaining power")
+require(r'TryUseC7HealthChamber.*?MapSpot\s+panel.*?MapSpot\s+door.*?panel->corridor7WallID\s*!=\s*35.*?door->corridor7WallID\s*!=\s*53.*?door->corridor7WallMarker\s*!=\s*107',
+        PLAYERPAWN, "health chambers activate at the rear panel with the open door opposite")
+require(r'actor\s+C7FloorPlan\s*:\s*MapRevealer', PLAYER,
+        "the floor-plan pickup uses the native full-map inventory path")
+require(r'class\s+AMapRevealer.*?TryPickup.*?gamestate\.fullmap\s*=\s*true.*?CheckGameFilter\("Corridor7"\).*?Super::TryPickup',
+        INVENTORY, "Corridor 7 keeps the floor-plan HUD token after revealing the map")
+require(r'Keyboard\[sc_W\].*?Keyboard\[sc_A\].*?Keyboard\[sc_X\].*?GiveCorridor7Cheat',
+        WL_DEBUG, "holding W+A+X activates the Corridor 7 equipment cheat")
+require(r'GiveCorridor7Cheat.*?GiveAllWeaponsAndAmmo.*?P_GiveKeys.*?gamestate\.fullmap\s*=\s*true.*?C7VisorCharge',
+        WL_DEBUG, "the WAX cheat grants weapons, access, map, health, armor, and visor charge")
 require(r'ThreeDRefresh\s*\(\s*\).*?DrawTopOverlay\s*\(\s*\)', WL_PLAY, "top overlay redraws every rendered frame")
 require(r'hasSignon\s*&&\s*IWad::CheckGameFilter\("Corridor7"\).*?VH_UpdateScreen\(\).*?return\s+false', WL_MAIN, "Corridor 7 startup keeps its splash free of ECWolf initialization text")
 if len(re.findall(r'Time\s*=\s*-4', MAPINFO)) != 5 or len(re.findall(r'FadeType\s*=\s*FadeOut', MAPINFO)) < 6:
@@ -173,10 +201,20 @@ require(r'case\s+ex_died:.*?CheckGameFilter\("Corridor7"\).*?Corridor7Death.*?Ch
         WL_GAME, "Corridor 7 death must show its report and return to high scores/title without retrying")
 require(r'Background\s*=\s*"C7G0006".*?FadeType\s*=\s*Fizzle', MAPINFO,
         "the Corridor 7 logo must fizzle into the clean title background")
-require(r'FFizzleFader\s+dissolve.*?CaptureFrame.*?ShowImage.*?FizzleFade', G_INTERMISSION,
-        "intermission fizzle must reveal its destination page")
-require(r'CheckGameFilter\("Corridor7"\).*?C7G0006.*?Loading\.\.\..*?PreloadUpdate', WL_INTER,
-        "Corridor 7 level loads must show the progress screen")
+require(r'FFizzleFader\s+dissolve.*?MAX\(1U,\s*fader->Time\),\s*true\).*?ShowImage.*?FizzleFade', G_INTERMISSION,
+        "intermission fizzle captures both the title and destination pages")
+require(r'fadems\(TICS2MS\(frames\)\),\s*startms\(0\).*?if\(startms\s*==\s*0\).*?startms\s*=\s*SDL_GetTicks',
+        ID_VH, "fizzle timing starts after the destination page is ready")
+require(r'CheckGameFilter\("Corridor7"\).*?C7G0004.*?C7G0073.*?PreloadUpdate', WL_INTER,
+        "Corridor 7 level loads must show the original loading plate and progress screen")
+require(r'Corridor7Death.*?C7G0004.*?C7G0003.*?Total floors secured.*?Alien kill ratio.*?Overall rating',
+        WL_INTER, "Corridor 7 death uses its original report artwork and fields")
+require(r'DrawHighScores.*?CheckGameFilter\("Corridor7"\).*?C7G0016.*?HIGH SCORES',
+        WL_INTER, "Corridor 7 high scores use the original portrait page")
+require(r'PrepareCorridor7HighScores.*?id software-.*?Capstone 94.*?Les.*?Joe.*?Jeff.*?Ruben.*?Carlos.*?David',
+        WL_INTER, "fresh Corridor 7 high scores use the original Capstone names")
+require(r'C7StencilPrintAt.*?HIGH SCORES.*?0xB7.*?NAME.*?0x24.*?0x57-2\*i.*?0x6F-2\*i',
+        WL_INTER, "high scores use the executable's exact VGA text colors")
 require(r'CONGRATULATIONS!.*?destroyed the vortex.*?Total floors secured', WL_INTER, "Corridor 7 victory presentation")
 require(r'IWad::CheckGameFilter\("Corridor7"\).*?HIGH SCORES', WL_INTER, "Corridor 7 high scores avoid Wolf-only art")
 require(r'LevelBonus\s*==\s*-1.*?ForceTally.*?!\(IWad::CheckGameFilter\("Corridor7"\)\s*&&\s*levelInfo->BonusLevel\)', WL_INTER, "bonus floors stay out of forty-floor victory averages")
@@ -199,6 +237,18 @@ require(r'"AILOA1".*?"AILOA8"', CO7MAP, "Ailoprobe directional sprite set")
 require(r'"EITKA1".*?"EITKA8"', CO7MAP, "Eitak directional sprite set")
 require(r"actor\s+C7Semaj\s*:.*?A_MeleeAttack", MONSTERS, "Semaj melee-only attack")
 require(r'actor\s+C7SkullBoss\s*:.*?A_CustomMissile\("C7BossEnergyBolt"\)', MONSTERS, "Solrac energy projectile")
+require(r'actor\s+C7SpaceMarine\s*:.*?Missile:.*?C676.*?C678.*?A_WolfAttack.*?C681.*?A_WolfAttack.*?Pain:.*?C684',
+        MONSTERS, "Eniram attack and pain animations use separate released frame ranges")
+require(r'actor\s+C7Ugly\s*:.*?Missile:.*?C233.*?C238.*?Pain:.*?C225.*?C226',
+        MONSTERS, "Rodex attack no longer reuses its hurt frames")
+require(r'A_CustomMissile\("C7BossEnergyBolt"\).*?A_PlaySound\("c7/monster/attack"\)|A_PlaySound\("c7/monster/attack"\).*?A_CustomMissile\("C7BossEnergyBolt"\)',
+        MONSTERS, "projectile bosses play their attack sound")
+require(r'A_FireCustomMissile.*?C7PlasmaBolt.*?c7MuzzleFlashTics\s*=\s*5.*?PlaySoundLocActor',
+        WL_AGENT, "the player plasma projectile has firing audio and muzzle lighting")
+require(r'action\s+native\s+A_C7AlienAlarm', NATIVE_ACTORS,
+        "the Ailoprobe alarm action is registered")
+require(r'C7VisorCanSeeActor.*?C7DamageField.*?C7SpaceMarine.*?infrared',
+        R_SPRITES, "infrared alone reveals damage fields and cloaked Eniram actors")
 require(r'"Drop Mine".*?"Visor Mode"', WL_PLAY, "configuration-safe Corridor 7 control labels")
 
 if "Reload / Drop Mine" in WL_PLAY or "Zoom / Visor Mode" in WL_PLAY:

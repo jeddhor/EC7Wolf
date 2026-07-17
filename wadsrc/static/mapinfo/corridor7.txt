@@ -184,6 +184,14 @@ skill hard
 	lives = 0
 }
 
+skill nightmare
+{
+	name = "President"
+	spawnfilter = 4
+	fastmonsters
+	lives = 0
+}
+
 defaultmap
 {
 	music = "C7MUS00"

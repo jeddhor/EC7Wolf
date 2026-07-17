@@ -52,6 +52,13 @@ tiles
 		playeruse = true;
 		repeatable = true;
 	}
+	trigger 110
+	{
+		action = "C7_Dispenser";
+		arg0 = 3;
+		playeruse = true;
+		repeatable = true;
+	}
 
 	// Wall 63 is Corridor 7's normal elevator switch. arg0 distinguishes it
 	// from floor/vortex exits so the two boss floors can disable the elevator.
@@ -2044,10 +2051,10 @@ things
 	{29, C7M343, 0, 0, 0}
 	{30, C7Static007, 0, 0, 0}
 	{31, C7Static008, 0, 0, 0}
-	// Invisible damaging electric-field markers. The corresponding C010/C011
-	// pages are implementation art and are not rendered by the DOS game.
+	// Damaging electric-field markers. Their C010/C011 art is hidden during
+	// normal/night vision and exposed only by the infrared visor mode.
 	{32, C7DamageField, 0, 0, 0}
-	{33, C7DamageField, 0, 0, 0}
+	{33, C7DamageFieldAlt, 0, 0, 0}
 	{34, C7Static011, 0, 0, 0}
 	{35, C7Static012, 0, 0, 0}
 	{36, C7Static013, 0, 0, 0}

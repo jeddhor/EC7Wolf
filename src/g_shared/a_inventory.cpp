@@ -337,7 +337,12 @@ bool AHealth::TryPickup(AActor *toucher)
 			max = toucher->player->mo->maxhealth;
 
 		if(toucher->player->health >= max)
+		{
+			if(IWad::CheckGameFilter("Corridor7") &&
+				toucher->player == &players[ConsolePlayer])
+				StatusBar->SetTopMessage("FULL HEALTH");
 			return false;
+		}
 
 		toucher->player->health += amount;
 		if(toucher->player->health > max)
@@ -411,7 +416,12 @@ bool AAmmo::HandlePickup(AInventory *item, bool &good)
 			}
 		}
 		else
+		{
 			good = false;
+			if(IWad::CheckGameFilter("Corridor7") && owner &&
+				owner->player == &players[ConsolePlayer])
+				StatusBar->SetTopMessage("FULL AMMO");
+		}
 		return true;
 	}
 	return Super::HandlePickup(item, good);
@@ -980,6 +990,11 @@ class AMapRevealer : public AInventory
 		bool TryPickup(AActor *toucher)
 		{
 			gamestate.fullmap = true;
+			// Corridor 7 displays the acquired floor plan in the ITEMS area of
+			// its status bar. Keep its one-unit inventory token while retaining
+			// the traditional consume-on-pickup behavior for other games.
+			if(IWad::CheckGameFilter("Corridor7"))
+				return Super::TryPickup(toucher);
 			GoAwayAndDie();
 			return true;
 		}

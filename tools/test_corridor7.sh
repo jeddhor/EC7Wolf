@@ -35,9 +35,23 @@ trap cleanup EXIT HUP INT TERM
 set +e
 (
 	cd "$data_dir"
-	timeout 8s env SDL_AUDIODRIVER=dummy \
-		xvfb-run -a stdbuf -oL -eL "$ecwolf" --data CO7 --config "$config_file" \
-		--savedir "$savedir" --nowait --tedlevel MAP01 --skill 2
+	# stdbuf works by preloading libstdbuf. That puts it ahead of libasan and
+	# causes AddressSanitizer to abort before main(), so sanitizer builds must
+	# run without it. A pseudo-terminal preserves line-buffered logs without an
+	# injected library. Normal builds retain the lighter stdbuf path.
+	if ldd "$ecwolf" 2>/dev/null | grep -q 'libasan'; then
+		export C7_SMOKE_ECWOLF="$ecwolf"
+		export C7_SMOKE_CONFIG="$config_file"
+		export C7_SMOKE_SAVEDIR="$savedir"
+		timeout 8s env SDL_AUDIODRIVER=dummy \
+			xvfb-run -a script -qefc \
+			'exec "$C7_SMOKE_ECWOLF" --data CO7 --config "$C7_SMOKE_CONFIG" --savedir "$C7_SMOKE_SAVEDIR" --nowait --tedlevel MAP01 --skill 2' \
+			/dev/null
+	else
+		timeout 8s env SDL_AUDIODRIVER=dummy \
+			xvfb-run -a stdbuf -oL -eL "$ecwolf" --data CO7 --config "$config_file" \
+			--savedir "$savedir" --nowait --tedlevel MAP01 --skill 2
+	fi
 ) >"$log_file" 2>&1
 status=$?
 set -e
@@ -64,7 +78,7 @@ if ! grep -q 'MAP01 - Corridor 7 Level 1' "$log_file"; then
 	exit 1
 fi
 
-if grep -Eqi 'Unknown old type|invalid TED5|parser error|fatal error|segmentation fault|assertion.*failed' "$log_file"; then
+if grep -Eqi 'Unknown old type|invalid TED5|parser error|fatal error|segmentation fault|assertion.*failed|ERROR: AddressSanitizer|AddressSanitizer:DEADLYSIGNAL|runtime error:' "$log_file"; then
 	printf 'A parser/runtime failure was logged; see %s\n' "$log_file" >&2
 	exit 1
 fi

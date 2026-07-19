@@ -38,7 +38,9 @@
 #include "g_mapinfo.h"
 #include "g_shared/a_keys.h"
 #include "id_ca.h"
+#include "id_sd.h"
 #include "lnspec.h"
+#include "m_random.h"
 #include "thingdef/thingdef.h"
 #include "wl_agent.h"
 #include "wl_game.h"
@@ -328,11 +330,21 @@ bool APlayerPawn::TryUseC7HealthChamber()
 			StatusBar->SetTopMessage("FULL HEALTH");
 		return true;
 	}
+	if(door->corridor7ChamberUses == 0)
+	{
+		if(player->GetPlayerNum() == ConsolePlayer)
+		{
+			StatusBar->SetTopMessage("HEALTH CHAMBER DEPLETED");
+			StatusBar->SetC7HealthChamberPower(0, 4*TICRATE);
+		}
+		return true;
+	}
 
 	player->c7ChamberX = static_cast<int16_t>(door->GetX());
 	player->c7ChamberY = static_cast<int16_t>(door->GetY());
 	player->c7ChamberTics = 0;
 	player->c7ChamberState = 1;
+	SD_PlaySound("c7/chamber/activate");
 	return true;
 }
 
@@ -397,7 +409,9 @@ static bool TickC7HealthChamber(APlayerPawn *pawn)
 		{
 			for(unsigned int side = 0;side < 4;++side)
 				door->sideSolid[side] = true;
-			door->corridor7SightTransparent = false;
+			// The closed door remains movement-solid, but keyed glass pixels must
+			// still trace the room beyond instead of exposing an old framebuffer.
+			door->corridor7SightTransparent = true;
 			door->corridor7WallMarker = 106;
 			for(unsigned int trigger = 0;trigger < door->triggers.Size();++trigger)
 			{
@@ -408,19 +422,27 @@ static bool TickC7HealthChamber(APlayerPawn *pawn)
 				}
 			}
 
-			// pushAmount is otherwise unused by these stationary wall cells and is
-			// already save-serialized. Store power+1 so zero can mean an untouched,
-			// fully charged chamber and one can represent an exhausted chamber.
-			unsigned int chamberPower = door->pushAmount ? door->pushAmount-1 : 100;
+			const unsigned int uses = MIN<unsigned int>(door->corridor7ChamberUses, 3);
+			if(uses == 0)
+			{
+				if(player->GetPlayerNum() == ConsolePlayer)
+					StatusBar->SetTopMessage("HEALTH CHAMBER DEPLETED");
+				player->c7ChamberPower = 0;
+				StatusBar->SetC7HealthChamberPower(0, 4*TICRATE);
+				player->c7ChamberState = 0;
+				player->c7ChamberTics = 0;
+				return false;
+			}
+
+			// One medkit-sized treatment per use and exactly three uses per unit.
 			const unsigned int missing = pawn->maxhealth > player->health ?
 				pawn->maxhealth-player->health : 0;
-			const unsigned int restored = MIN<unsigned int>(missing, chamberPower);
+			const unsigned int restored = MIN<unsigned int>(missing, 25);
 			player->health += restored;
 			pawn->health = player->health;
-			chamberPower -= restored;
-			door->pushAmount = chamberPower+1;
-			player->c7ChamberPower = chamberPower;
-			StartBonusFlash();
+			door->corridor7ChamberUses = uses-1;
+			player->c7ChamberPower = ((uses-1)*100)/3;
+			StartC7ChamberFlash();
 			StatusBar->UpdateFace(-1);
 			StatusBar->SetC7HealthChamberPower(player->c7ChamberPower, 4*TICRATE);
 			player->c7ChamberState = 0;
@@ -428,6 +450,40 @@ static bool TickC7HealthChamber(APlayerPawn *pawn)
 		}
 	}
 	return true;
+}
+
+static FRandom pr_c7apparition("Corridor7Apparition");
+static void TickC7Apparition(APlayerPawn *pawn)
+{
+	player_t *player = pawn->player;
+	// CORR7CD.EXE tests this timer after 0x800 70 Hz tics, then requires a
+	// zero from its byte RNG. The apparition is a non-kill-counting actor two
+	// tiles in front of the player, travelling back toward them at 0x300 map
+	// units per tic while frames C718..C725 play.
+	if(++player->c7ApparitionTics <= 0x800)
+		return;
+	player->c7ApparitionTics = 0;
+	if(pr_c7apparition() != 0 || player->state != player_t::PST_LIVE)
+		return;
+
+	const ClassDef *apparitionClass = ClassDef::FindClass("C7SkullApparition");
+	if(!apparitionClass)
+		return;
+	const unsigned int fineangle = pawn->angle >> ANGLETOFINESHIFT;
+	const fixed distance = 2*TILEGLOBAL;
+	AActor *apparition = AActor::Spawn(apparitionClass,
+		pawn->x + FixedMul(distance, finecosine[fineangle]),
+		pawn->y - FixedMul(distance, finesine[fineangle]), 0,
+		SPAWN_AllowReplacement);
+	if(!apparition)
+		return;
+
+	apparition->angle = pawn->angle + ANGLE_180;
+	const unsigned int returnAngle = apparition->angle >> ANGLETOFINESHIFT;
+	apparition->velx = FixedMul(0x300, finecosine[returnAngle]);
+	apparition->vely = -FixedMul(0x300, finesine[returnAngle]);
+	apparition->target = NULL;
+	SD_PlaySound("c7/apparition");
 }
 
 void APlayerPawn::Tick()
@@ -439,6 +495,7 @@ void APlayerPawn::Tick()
 	if(IWad::CheckGameFilter("Corridor7"))
 	{
 		const bool chamberBusy = TickC7HealthChamber(this);
+		TickC7Apparition(this);
 
 		AInventory *invulnerability = FindInventory(ClassDef::FindClass("C7Invulnerability"));
 		if(invulnerability && invulnerability->amount > 0 && --invulnerability->amount == 0)
@@ -464,6 +521,10 @@ void APlayerPawn::Tick()
 		if(player->c7MuzzleFlashTics)
 			--player->c7MuzzleFlashTics;
 
+		// The infrared laser barrier statics (map objects 28/84) apply
+		// their contact damage from TryMove's solid-actor check
+		// (DamageC7LaserBarrier in wl_agent.cpp).
+
 		AInventory *energy = FindInventory(ClassDef::FindClass("C7Energy"));
 		AInventory *capacity = FindInventory(ClassDef::FindClass("C7EnergyCapacity"));
 		if(energy && capacity)
@@ -488,11 +549,24 @@ void APlayerPawn::Tick()
 			if(mines && mines->amount > 0 && mineClass)
 			{
 				const unsigned fineangle = angle >> ANGLETOFINESHIFT;
-				const fixed distance = 40 * FRACUNIT;
-				AActor *mine = AActor::Spawn(mineClass,
-					x + FixedMul(distance, finecosine[fineangle]),
-					y - FixedMul(distance, finesine[fineangle]), 0,
+				// Actor dimensions and DECORATE offsets use 64 world units per
+				// tile. Using 40 * FRACUNIT here placed the mine 40 whole tiles
+				// away, which could send its coordinates outside the map and make
+				// AActor::Spawn index beyond the map plane. Drop it 40/64 of a
+				// tile in front of the player instead.
+				const fixed distance = 40 * (FRACUNIT / 64);
+				fixed mineX = x + FixedMul(distance, finecosine[fineangle]);
+				fixed mineY = y - FixedMul(distance, finesine[fineangle]);
+				if(!map->IsValidTileCoordinate(mineX >> FRACBITS,
+					mineY >> FRACBITS, 0))
+				{
+					mineX = x;
+					mineY = y;
+				}
+				AActor *mine = AActor::Spawn(mineClass, mineX, mineY, 0,
 					SPAWN_AllowReplacement);
+				if(!mine)
+					return;
 				mine->target = this;
 				mine->angle = angle;
 				if(--mines->amount == 0)
@@ -512,13 +586,19 @@ void APlayerPawn::Tick()
 				player->c7FloorSecuredNotified = true;
 				player->c7ClearanceNotified = true;
 				if(player->GetPlayerNum() == ConsolePlayer)
+				{
 					StatusBar->SetTopMessage("FLOOR SECURED", 4*TICRATE);
+					SD_PlaySound("c7/announcement/secured");
+				}
 			}
 			else if(!player->c7ClearanceNotified && destroyed >= clearance[skill])
 			{
 				player->c7ClearanceNotified = true;
 				if(player->GetPlayerNum() == ConsolePlayer)
+				{
 					StatusBar->SetTopMessage("ELEVATOR CLEARANCE ACQUIRED", 4*TICRATE);
+					SD_PlaySound("c7/announcement/clearance");
+				}
 			}
 		}
 
@@ -589,7 +669,10 @@ void APlayerPawn::Tick()
 
 	TicCmd_t &cmd = control[player->GetPlayerNum()];
 
-	if(cmd.buttonstate[bt_use])
+	// Use is an edge-triggered action. Running it on every tic while the key is
+	// held makes a successful one-shot switch immediately fall through to the
+	// generic "nothing here" sound on the following tic.
+	if(cmd.buttonstate[bt_use] && !cmd.buttonheld[bt_use])
 		Cmd_Use();
 
 	if((player->flags & (player_t::PF_WEAPONREADY|player_t::PF_WEAPONREADYALT)))

@@ -27,6 +27,7 @@
 #include "id_in.h"
 #include "id_vh.h"
 #include "id_us.h"
+#include "v_video.h"
 
 #if _MSC_VER == 1200            // Visual C++ 6
 	#define vsnprintf _vsnprintf
@@ -235,6 +236,17 @@ void US_DrawWindow(word x,word y,word w,word h)
 	w += 2;
 	h += 2;
 
+	// Corridor 7's archives carry no TILE8/IFNT chunk, so there is no border
+	// font. Fall back to the bare window area instead of dereferencing null
+	// for every debug/diagnostic prompt.
+	if(!Tile8Font)
+	{
+		int cx = WindowX, cy = WindowY, cw = WindowW, ch = WindowH;
+		MenuToRealCoords(cx, cy, cw, ch, MENU_CENTER);
+		VWB_Clear(GPalette.WhiteIndex, cx, cy, cx+cw, cy+ch);
+		return;
+	}
+
 	const unsigned int strSize = w*h + h;
 	char* windowString = new char[strSize];
 	memset(windowString, ' ', strSize);
@@ -384,7 +396,14 @@ bool US_LineInput(FFont *font, int x,int y,char *buf,const char *def,bool escok,
 		Net::BlockPlaysim();
 
 	double clearx = x-1, cleary = y, clearw = maxwidth, clearh = font->GetHeight();
-	MenuToRealCoords(clearx, cleary, clearw, clearh, MENU_CENTER);
+	if(pa == MENU_NONE)
+	{
+		// Text is drawn in the stretched 320x200 space (full-screen picture
+		// pages), so the erase rectangle must use the same mapping.
+		screen->VirtualToRealCoords(clearx, cleary, clearw, clearh, 320, 200, true, true);
+	}
+	else
+		MenuToRealCoords(clearx, cleary, clearw, clearh, MENU_CENTER);
 
 	if (def)
 		strcpy(s,def);

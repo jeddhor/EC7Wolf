@@ -554,27 +554,126 @@ crawlerbeast/death		{ DSLCNDTH ALLCNDTH PCLCNDTH }
 
 liquidalien/death		{ DSLIQDTH ALLIQDTH PCLIQDTH }
 
-// Corridor 7's released AUDIOHED/AUDIOT archive has 100 PC-speaker sounds,
-// 100 AdLib sounds, and no digitized sample payloads. NULL preserves the
-// digital/AdLib/PC-speaker positions expected by the sound loader.
+// Corridor 7 keeps its 100 unsigned 8-bit, 9009 Hz digitized samples in the
+// separate AUDIOMUS.CO7 page archive.  The three slots below select the
+// original digital, AdLib, and PC-speaker versions in that order.
 $ifcorridor7
-doors/open				{ NULL C7AL0018 C7PC0018 }
-doors/close				{ NULL C7AL0019 C7PC0019 }
-world/hitwall			{ NULL C7AL0000 C7PC0000 }
-world/pushwall			{ NULL C7AL0046 C7PC0046 }
-misc/ammo_pkup			{ NULL C7AL0031 C7PC0031 }
-misc/health_pkup		{ NULL C7AL0033 C7PC0033 }
-misc/medkit_pkup		{ NULL C7AL0034 C7PC0034 }
-misc/k_pkup				{ NULL C7AL0012 C7PC0012 }
-c7/weapon/fire			{ NULL C7AL0024 C7PC0024 }
-c7/weapon/bayonet		{ NULL C7AL0023 C7PC0023 }
-c7/weapon/machinegun		{ NULL C7AL0026 C7PC0026 }
-c7/weapon/shotgun		{ NULL C7AL0032 C7PC0032 }
-c7/mine/arm			{ NULL C7AL0018 C7PC0018 }
-c7/player/death			{ NULL C7AL0009 C7PC0009 }
-c7/player/pain			{ NULL C7AL0016 C7PC0016 }
-c7/teleport			{ NULL C7AL0040 C7PC0040 }
-c7/monster/sight		{ NULL C7AL0021 C7PC0021 }
-c7/monster/attack		{ NULL C7AL0058 C7PC0058 }
-c7/monster/death		{ NULL C7AL0022 C7PC0022 }
+// These numbers are the values passed by CORR7CD.EXE to SD_PlaySound. They
+// must not be inherited from Blake Stone: its archive uses different slots.
+// DMA-captured from the original menu (instrumented DOSBox-X, 2026-07-17):
+// every cursor move plays 9, leaving a submenu back to the main menu plays
+// 33, and the quit/confirm dialog announces itself with 31. Activating a
+// main-menu entry is silent in the original; the engine suppresses the
+// activate sound there, so menu/activate below only affects ECWolf-specific
+// submenu widgets and is mapped to the neutral cursor click.
+menu/move1			{ C7DS0009 C7AL0009 C7PC0009 }
+menu/move2			{ C7DS0009 C7AL0009 C7PC0009 }
+menu/activate			{ C7DS0009 C7AL0009 C7PC0009 }
+menu/escape			{ C7DS0033 C7AL0033 C7PC0033 }
+c7/menu/prompt			{ C7DS0031 C7AL0031 C7PC0031 }
+doors/open				{ C7DS0010 C7AL0010 C7PC0010 }
+doors/close				{ C7DS0011 C7AL0011 C7PC0011 }
+world/hitwall			{ C7DS0000 C7AL0000 C7PC0000 }
+c7/world/oof1			{ C7DS0069 C7AL0069 C7PC0069 }
+c7/world/oof2			{ C7DS0070 C7AL0070 C7PC0070 }
+$random misc/do_nothing { c7/world/oof1 c7/world/oof2 }
+c7/world/pushwall		{ C7DS0017 C7AL0017 C7PC0017 }
+c7/apparition			{ C7DS0046 C7AL0046 C7PC0046 }
+c7/weapon/bayonet		{ C7DS0049 C7AL0049 C7PC0049 }
+c7/weapon/shotgun		{ C7DS0091 C7AL0091 C7PC0091 }
+c7/weapon/m16			{ C7DS0022 C7AL0022 C7PC0022 }
+c7/weapon/m343			{ C7DS0064 C7AL0064 C7PC0064 }
+c7/weapon/dualblaster	{ C7DS0041 C7AL0041 C7PC0041 }
+c7/weapon/plasma		{ C7DS0078 C7AL0078 C7PC0078 }
+c7/weapon/assault		{ C7DS0023 C7AL0023 C7PC0023 }
+c7/weapon/disintegrator	{ C7DS0050 C7AL0050 C7PC0050 }
+c7/player/pain1			{ C7DS0083 C7AL0083 C7PC0083 }
+c7/player/pain2			{ C7DS0086 C7AL0086 C7PC0086 }
+$random c7/player/pain { c7/player/pain1 c7/player/pain2 }
+c7/player/death			{ C7DS0006 C7AL0006 C7PC0006 }
+c7/teleport			{ C7DS0001 C7AL0001 C7PC0001 }
+c7/vortex/ambient		{ C7DS0065 C7AL0065 C7PC0065 }
+// Alien combat audio is dispatched by actor class in CORR7CD.EXE.  Keep the
+// class-specific sounds here instead of falling back to a single Wolf-style
+// sight/attack/death set (sample 22, in particular, is the player's M-16).
+c7/monster/attack/class3	{ C7DS0009 C7AL0009 C7PC0009 }
+c7/monster/attack/class4	{ C7DS0048 C7AL0048 C7PC0048 }
+c7/monster/attack/class5	{ C7DS0008 C7AL0008 C7PC0008 }
+c7/monster/attack/class6	{ C7DS0024 C7AL0024 C7PC0024 }
+c7/monster/attack/class7	{ C7DS0056 C7AL0056 C7PC0056 }
+c7/monster/attack/class8	{ C7DS0008 C7AL0008 C7PC0008 }
+c7/monster/attack/class10	{ C7DS0008 C7AL0008 C7PC0008 }
+c7/monster/attack/class13	{ C7DS0023 C7AL0023 C7PC0023 }
+c7/monster/attack/class17	{ C7DS0051 C7AL0051 C7PC0051 }
+c7/monster/attack/class18	{ C7DS0024 C7AL0024 C7PC0024 }
+c7/monster/attack/class19	{ C7DS0051 C7AL0051 C7PC0051 }
+c7/monster/attack/class20	{ C7DS0051 C7AL0051 C7PC0051 }
+c7/monster/active/class6	{ C7DS0055 C7AL0055 C7PC0055 }
+c7/monster/active/class13	{ C7DS0057 C7AL0057 C7PC0057 }
+c7/monster/active/class20	{ C7DS0068 C7AL0068 C7PC0068 }
+c7/monster/active/class21	{ C7DS0068 C7AL0068 C7PC0068 }
+c7/monster/active/class25	{ C7DS0021 C7AL0021 C7PC0021 }
+c7/monster/attack/class25	{ C7DS0024 C7AL0024 C7PC0024 }
+c7/monster/cloak/materialize	{ C7DS0035 C7AL0035 C7PC0035 }
+c7/monster/cloak/fire		{ C7DS0036 C7AL0036 C7PC0036 }
+
+c7/monster/death/003a	{ C7DS0096 C7AL0096 C7PC0096 }
+c7/monster/death/003b	{ C7DS0097 C7AL0097 C7PC0097 }
+c7/monster/death/003c	{ C7DS0005 C7AL0005 C7PC0005 }
+c7/monster/death/003d	{ C7DS0038 C7AL0038 C7PC0038 }
+$random c7/monster/death/class3 { c7/monster/death/003a c7/monster/death/003b c7/monster/death/003c c7/monster/death/003d }
+c7/monster/death/004a	{ C7DS0000 C7AL0000 C7PC0000 }
+c7/monster/death/004b	{ C7DS0028 C7AL0028 C7PC0028 }
+c7/monster/death/004c	{ C7DS0029 C7AL0029 C7PC0029 }
+c7/monster/death/004d	{ C7DS0030 C7AL0030 C7PC0030 }
+$random c7/monster/death/class4 { c7/monster/death/004a c7/monster/death/004b c7/monster/death/004c c7/monster/death/004d }
+c7/monster/death/005a	{ C7DS0037 C7AL0037 C7PC0037 }
+c7/monster/death/005b	{ C7DS0044 C7AL0044 C7PC0044 }
+$random c7/monster/death/class5 { c7/monster/death/005a c7/monster/death/005b }
+c7/monster/death/006a	{ C7DS0059 C7AL0059 C7PC0059 }
+c7/monster/death/006b	{ C7DS0066 C7AL0066 C7PC0066 }
+c7/monster/death/006c	{ C7DS0075 C7AL0075 C7PC0075 }
+c7/monster/death/006d	{ C7DS0079 C7AL0079 C7PC0079 }
+$random c7/monster/death/class6 { c7/monster/death/006a c7/monster/death/006b c7/monster/death/006c c7/monster/death/006d }
+c7/monster/death/007a	{ C7DS0004 C7AL0004 C7PC0004 }
+c7/monster/death/007b	{ C7DS0042 C7AL0042 C7PC0042 }
+c7/monster/death/007c	{ C7DS0043 C7AL0043 C7PC0043 }
+$random c7/monster/death/class7 { c7/monster/death/007a c7/monster/death/007b c7/monster/death/007c }
+c7/monster/death/008a	{ C7DS0052 C7AL0052 C7PC0052 }
+c7/monster/death/008b	{ C7DS0039 C7AL0039 C7PC0039 }
+c7/monster/death/008c	{ C7DS0081 C7AL0081 C7PC0081 }
+$random c7/monster/death/class8 { c7/monster/death/008a c7/monster/death/008b c7/monster/death/008c }
+c7/monster/death/013a	{ C7DS0058 C7AL0058 C7PC0058 }
+c7/monster/death/013b	{ C7DS0071 C7AL0071 C7PC0071 }
+c7/monster/death/013c	{ C7DS0077 C7AL0077 C7PC0077 }
+$random c7/monster/death/class13 { c7/monster/death/013a c7/monster/death/013b c7/monster/death/013c }
+c7/monster/death/014a	{ C7DS0094 C7AL0094 C7PC0094 }
+c7/monster/death/014b	{ C7DS0095 C7AL0095 C7PC0095 }
+$random c7/monster/death/class14 { c7/monster/death/014a c7/monster/death/014b }
+c7/monster/death/class16	{ C7DS0098 C7AL0098 C7PC0098 }
+c7/monster/death/018a	{ C7DS0099 C7AL0099 C7PC0099 }
+c7/monster/death/018b	{ C7DS0085 C7AL0085 C7PC0085 }
+$random c7/monster/death/class18 { c7/monster/death/018a c7/monster/death/018b }
+c7/monster/death/class19	{ C7DS0067 C7AL0067 C7PC0067 }
+c7/monster/death/class20	{ C7DS0079 C7AL0079 C7PC0079 }
+c7/monster/death/022a	{ C7DS0072 C7AL0072 C7PC0072 }
+c7/monster/death/022b	{ C7DS0073 C7AL0073 C7PC0073 }
+c7/monster/death/022c	{ C7DS0003 C7AL0003 C7PC0003 }
+$random c7/monster/death/class22 { c7/monster/death/022a c7/monster/death/022b c7/monster/death/022c }
+c7/electric/damage		{ C7DS0013 C7AL0013 C7PC0013 }
+c7/forcefield/deactivate/53	{ C7DS0015 C7AL0015 C7PC0015 }
+c7/forcefield/deactivate/73	{ C7DS0014 C7AL0014 C7PC0014 }
+c7/forcefield/deactivate/81	{ C7DS0013 C7AL0013 C7PC0013 }
+c7/panel/access		{ C7DS0034 C7AL0034 C7PC0034 }
+c7/panel/intruder1		{ C7DS0031 C7AL0031 C7PC0031 }
+c7/panel/intruder2		{ C7DS0032 C7AL0032 C7PC0032 }
+$random c7/panel/intruder	{ c7/panel/intruder1 c7/panel/intruder2 }
+c7/announcement/secured	{ C7DS0061 C7AL0061 C7PC0061 }
+c7/announcement/clearance	{ C7DS0080 C7AL0080 C7PC0080 }
+c7/chamber/activate		{ C7DS0018 C7AL0018 C7PC0018 }
+c7/elevator/denied		{ C7DS0045 C7AL0045 C7PC0045 }
+c7/elevator/activate		{ C7DS0047 C7AL0047 C7PC0047 }
+c7/elevator/secret		{ C7DS0050 C7AL0050 C7PC0050 }
+c7/dispenser/ammo		{ C7DS0026 C7AL0026 C7PC0026 }
+c7/dispenser/visor		{ C7DS0074 C7AL0074 C7PC0074 }
 $endif

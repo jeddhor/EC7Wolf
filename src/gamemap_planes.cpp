@@ -1087,6 +1087,15 @@ void GameMap::ReadPlanesData()
 						oldplane[i] >= 1 && oldplane[i] <= 250)
 					{
 						mapPlane.map[i].corridor7WallID = oldplane[i];
+
+						// A diagnostic-mode probe of the released game reads
+						// runtime tile 0 inside its wall-237 cell (the core
+						// of MAP01's glass-pane assembly): the DOS engine
+						// erases it at load, so it neither renders nor
+						// blocks. The flanking 57/61 glass panes keep their
+						// ordinary, always-visible masked artwork.
+						if(oldplane[i] == 237)
+							mapPlane.map[i].SetTile(NULL);
 					}
 
 					// Corridor 7 pairs 0x117..0x11e warp-floor cells by

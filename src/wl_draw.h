@@ -42,4 +42,10 @@ typedef struct
 
 extern bool UseWolf4SDL3DSpriteScaler;
 
+// Corridor 7 laser barrier statics (map objects 28 and 84, the strategy
+// guide's "Infrared Invisible Barrier"): solid, drawn only under the
+// infrared visor, and damaging on contact. Implemented in r_sprites.cpp.
+class AActor;
+bool Corridor7IsLaserBarrierActor(AActor *actor);
+
 #endif

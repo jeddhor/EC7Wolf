@@ -117,6 +117,7 @@ extern class player_t
 		// Native Corridor 7 feedback and health-chamber state. Keeping this on
 		// the player makes save/load and level transitions deterministic.
 		uint16_t	c7MuzzleFlashTics;
+		uint16_t	c7ApparitionTics;
 		int16_t		c7ChamberX, c7ChamberY;
 		uint16_t	c7ChamberPower;
 		uint16_t	c7ChamberTics;

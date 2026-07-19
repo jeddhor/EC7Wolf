@@ -61,15 +61,14 @@ static void Erase (int x, int y, const char *string, bool rightAlign=false)
 	VWB_DrawFill(TexMan(levelInfo->GetBorderTexture()), nx, ny, nx+fw, ny+fh);
 }
 
-static void Write (int x, int y, const char *string, bool rightAlign=false, bool bonusfont=false)
+static void WritePixel (int nx, int ny, const char *string, bool rightAlign=false, bool bonusfont=false)
 {
 	FFont *font = IWad::CheckGameFilter("Corridor7") ? SmallFont :
 		(bonusfont ? V_GetFont("BonusFont") : IntermissionFont);
 	FRemapTable *remap = font->GetColorTranslation(
 		IWad::CheckGameFilter("Corridor7") ? CR_YELLOW : CR_UNTRANSLATED);
 
-	int nx = x*8;
-	int ny = y*8;
+	const int x = nx;
 
 	if(rightAlign)
 	{
@@ -90,11 +89,16 @@ static void Write (int x, int y, const char *string, bool rightAlign=false, bool
 		}
 		else
 		{
-			nx = x*8;
+			nx = x;
 			ny += font->GetHeight();
 		}
 		++string;
 	}
+}
+
+static void Write (int x, int y, const char *string, bool rightAlign=false, bool bonusfont=false)
+{
+	WritePixel(x*8, y*8, string, rightAlign, bonusfont);
 }
 
 
@@ -570,25 +574,28 @@ static void InterDoCorridor7(bool died=false)
 
 	CA_CacheScreen(TexMan("C7G0014"));
 	if(died)
-		Write(14, 2, "YOU'RE DEAD");
+		WritePixel(112, 16, "YOU'RE DEAD");
 
 	const unsigned int aliens = gamestate.killtotal ?
 		(static_cast<unsigned int>(gamestate.killcount)*100)/gamestate.killtotal : 100;
 	const unsigned int restricted = gamestate.secrettotal ?
 		(static_cast<unsigned int>(gamestate.secretcount)*100)/gamestate.secrettotal : 100;
+	// The report picture paints its labels right-aligned to the colon column
+	// at x=200 with text rows at y=71/86/101/127/141/155; the font's glyph ink
+	// starts one row into the cell, so writing at row-1 sits on each label.
 	FString value;
 	value.Format("%s", died ? "UNSECURED" : "SECURED");
-	Write(25, 8, value);
+	WritePixel(208, 70, value);
 	value.Format("%u%%", aliens);
-	Write(25, 11, value);
+	WritePixel(208, 85, value);
 	value.Format("%u%%", restricted);
-	Write(25, 13, value);
+	WritePixel(208, 100, value);
 	value.Format("%u%%", accuracy);
-	Write(25, 16, value);
+	WritePixel(208, 126, value);
 	value.Format("%u", InterState.bonus);
-	Write(25, 18, value);
+	WritePixel(208, 140, value);
 	value.Format("%d", players[ConsolePlayer].score);
-	Write(25, 20, value);
+	WritePixel(208, 154, value);
 
 	VW_UpdateScreen();
 	VW_FadeIn();
@@ -623,6 +630,11 @@ void Corridor7Death(void)
 	IN_ClearKeysDown();
 	IN_StartAck(ACK_Any);
 
+	// Full-screen picture page: all text shares the picture's stretched
+	// 320x200 mapping rather than the menu scaling.
+	const int oldpa = pa;
+	pa = MENU_NONE;
+
 	// The DOS death report uses the small repeating skull tile and the
 	// centered 128x120 death plate, not the per-floor status-report artwork.
 	VWB_DrawFill(TexMan("C7G0004"), 0, 0, screenWidth, screenHeight);
@@ -638,28 +650,32 @@ void Corridor7Death(void)
 	const unsigned int secrets = (LevelRatios.secretsratio+thisSecrets)/divisor;
 	const unsigned int rating = (aliens+secrets)/2;
 
+	// The released page centers the large-font title over the death plate.
 	word titleWidth, titleHeight;
-	VW_MeasurePropString(SmallFont, "YOU'RE DEAD", titleWidth, titleHeight);
-	C7PrintAt(SmallFont, 160-titleWidth/2, 70, "YOU'RE DEAD", CR_RED);
+	VW_MeasurePropString(BigFont, "YOU'RE DEAD", titleWidth, titleHeight);
+	C7PrintAt(BigFont, 160-titleWidth/2, 70, "YOU'RE DEAD", CR_RED);
+	// Measured from the released death report: labels at x=80 on rows ten
+	// pixels apart from y=90, values in a fixed column at x=240.
 	static const char *labels[] = {
 		"Total floors secured", "Alien kill ratio", "Secret room ratio",
 		"Total score", "Overall rating"
 	};
 	for(unsigned int i = 0;i < countof(labels);++i)
-		C7PrintAt(SmallFont, 80, 90+i*16, labels[i], CR_TAN);
+		C7PrintAt(SmallFont, 80, 90+i*10, labels[i], CR_TAN);
 
 	FString value;
 	value.Format("%u", floors);
 	C7PrintAt(SmallFont, 240, 90, value, CR_TAN);
 	value.Format("%u%%", aliens);
-	C7PrintAt(SmallFont, 240, 106, value, CR_TAN);
+	C7PrintAt(SmallFont, 240, 100, value, CR_TAN);
 	value.Format("%u%%", secrets);
-	C7PrintAt(SmallFont, 240, 122, value, CR_TAN);
+	C7PrintAt(SmallFont, 240, 110, value, CR_TAN);
 	value.Format("%d", players[ConsolePlayer].score);
-	C7PrintAt(SmallFont, 240, 138, value, CR_TAN);
+	C7PrintAt(SmallFont, 240, 120, value, CR_TAN);
 	value.Format("%u%%", rating);
-	C7PrintAt(SmallFont, 240, 154, value, CR_TAN);
+	C7PrintAt(SmallFont, 240, 130, value, CR_TAN);
 	VW_UpdateScreen();
+	pa = oldpa;
 	VW_FadeIn();
 	InterWaitForAck();
 	VW_FadeOut();
@@ -1049,6 +1065,10 @@ void DrawHighScores (void)
 		ClearMScreen ();
 	if(IWad::CheckGameFilter("Corridor7"))
 	{
+		// This page is a full-screen picture, so all of its text must use the
+		// same stretched 320x200 mapping as the picture, not the menu scaling.
+		const int oldpa = pa;
+		pa = MENU_NONE;
 		word titleWidth, titleHeight;
 		VW_MeasurePropString(font, "HIGH SCORES", titleWidth, titleHeight);
 		C7StencilPrintAt(font, 160-titleWidth/2, 20, "HIGH SCORES", 0xB7);
@@ -1057,7 +1077,7 @@ void DrawHighScores (void)
 		C7StencilPrintAt(font, 246, 43, "SCORE", 0x24);
 		for(i = 0, s = Scores; i < MaxScores; ++i, ++s)
 		{
-			PrintY = 62 + 18*i;
+			PrintY = 80 + 18*i;
 			buffer.Format("%u.", i+1);
 			const BYTE rowColor = static_cast<BYTE>(0x57-2*i);
 			const BYTE levelColor = static_cast<BYTE>(0x6F-2*i);
@@ -1068,6 +1088,7 @@ void DrawHighScores (void)
 			VW_MeasurePropString(font, buffer, w, h);
 			C7StencilPrintAt(font, 300-w, PrintY, buffer, rowColor);
 		}
+		pa = oldpa;
 		VW_UpdateScreen();
 		return;
 	}
@@ -1191,9 +1212,23 @@ void CheckHighScore (int32_t score, const LevelInfo *levelInfo)
 		//
 		// got a high score
 		//
-		PrintY = 76 + ((font->GetHeight() + 3) * n);
-		PrintX = 16;
-		US_LineInput (font,PrintX, PrintY, Scores[n].name, 0, true, MaxHighName, 130, BKGDCOLOR, CR_WHITE);
+		if(IWad::CheckGameFilter("Corridor7"))
+		{
+			// Type into the earned row of the picture page, in its own
+			// stretched coordinate space.
+			const int oldpa = pa;
+			pa = MENU_NONE;
+			PrintY = 80 + 18*n;
+			PrintX = 24;
+			US_LineInput (font,PrintX, PrintY, Scores[n].name, 0, true, MaxHighName, 160, BKGDCOLOR, CR_WHITE);
+			pa = oldpa;
+		}
+		else
+		{
+			PrintY = 76 + ((font->GetHeight() + 3) * n);
+			PrintX = 16;
+			US_LineInput (font,PrintX, PrintY, Scores[n].name, 0, true, MaxHighName, 130, BKGDCOLOR, CR_WHITE);
+		}
 	}
 	else
 	{

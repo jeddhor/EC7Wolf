@@ -874,6 +874,7 @@ void ContinueMusic (int offs)
 #define WHITETICS       6
 
 int damagecount, bonuscount;
+static int c7ChamberFlashCount, c7ElectricFlashCount;
 bool palshifted;
 
 /*
@@ -886,7 +887,8 @@ bool palshifted;
 
 void ClearPaletteShifts (void)
 {
-	bonuscount = damagecount = 0;
+	bonuscount = damagecount = c7ChamberFlashCount = c7ElectricFlashCount = 0;
+	V_SetCorridor7PaletteMode(0);
 	palshifted = false;
 }
 
@@ -918,6 +920,18 @@ void StartDamageFlash (int damage)
 	damagecount += damage;
 }
 
+void StartC7ChamberFlash (void)
+{
+	// Long and strong enough to be unmistakable, while retaining the native
+	// yellow treatment flash instead of replacing it with a white pickup blink.
+	c7ChamberFlashCount = 24;
+}
+
+void StartC7ElectricFlash (void)
+{
+	c7ElectricFlashCount = 18;
+}
+
 
 /*
 =====================
@@ -930,6 +944,21 @@ void StartDamageFlash (int damage)
 void UpdatePaletteShifts (void)
 {
 	int red, white;
+	int visorMode = 0;
+	if(IWad::CheckGameFilter("Corridor7") && players[ConsolePlayer].mo)
+	{
+		AInventory *mode = players[ConsolePlayer].mo->FindInventory(
+			ClassDef::FindClass("C7VisorMode"));
+		if(mode)
+			visorMode = mode->amount == 2 ? 1 : (mode->amount == 3 ? 2 : 0);
+	}
+	if(c7ElectricFlashCount > 0)
+	{
+		c7ElectricFlashCount = MAX(0, c7ElectricFlashCount-static_cast<int>(tics));
+		V_SetCorridor7PaletteMode(3, gamestate.TimeCount>>1);
+	}
+	else
+		V_SetCorridor7PaletteMode(visorMode);
 
 	if (bonuscount)
 	{
@@ -964,6 +993,12 @@ void UpdatePaletteShifts (void)
                              BPART(players[ConsolePlayer].mo->damagecolor), red*(174/NUMREDSHIFTS));
 		palshifted = true;
 	}
+	else if(c7ChamberFlashCount > 0)
+	{
+		c7ChamberFlashCount = MAX(0, c7ChamberFlashCount-static_cast<int>(tics));
+		V_SetBlend(0xFF, 0xF0, 0x00, 192);
+		palshifted = true;
+	}
 	else if (white)
 	{
 		// [BL] More of a yellow if you ask me.
@@ -990,8 +1025,8 @@ void UpdatePaletteShifts (void)
 
 void FinishPaletteShifts (void)
 {
-	damagecount = 0;
-	bonuscount = 0;
+	damagecount = bonuscount = c7ChamberFlashCount = c7ElectricFlashCount = 0;
+	V_SetCorridor7PaletteMode(0);
 
 	if (palshifted)
 	{

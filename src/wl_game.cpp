@@ -309,7 +309,8 @@ void SetupGameLevel (void)
 		{
 			players[i].killerobj = NULL;
 			players[i].levelShotsFired = players[i].levelShotsHit = 0;
-			players[i].c7MuzzleFlashTics = players[i].c7ChamberTics = players[i].c7ChamberState = 0;
+			players[i].c7MuzzleFlashTics = players[i].c7ApparitionTics =
+				players[i].c7ChamberTics = players[i].c7ChamberState = 0;
 			players[i].c7ChamberX = players[i].c7ChamberY = -1;
 			players[i].c7ChamberPower = 100;
 			players[i].c7ClearanceNotified = players[i].c7FloorSecuredNotified = false;

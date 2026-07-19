@@ -34,6 +34,8 @@
 
 #include "textures/textures.h"
 #include "c_cvars.h"
+#include "colormatcher.h"
+#include "wl_game.h"
 #include "r_sprites.h"
 #include "linkedlist.h"
 #include "tarray.h"
@@ -79,6 +81,22 @@ struct Sprite
 static TArray<Sprite> spriteFrames;
 static TArray<SpriteInfo> loadedSprites;
 
+// Map objects 28 and 84 are the strategy guide's "Infrared Invisible
+// Barrier": floor-to-ceiling laser statics (the three-rod C006 sprite and
+// the C062 energy ring) placed across doorways, invisible outside the
+// infrared visor, solid, and damaging on contact. The released executable's
+// 10-point invisible-barrier routine keys on exactly these two object IDs.
+// On MAP01 both traps are object 28, in the corridor pinch beside each
+// health-unit wall.
+bool Corridor7IsLaserBarrierActor(AActor *actor)
+{
+	if(!actor || !IWad::CheckGameFilter("Corridor7"))
+		return false;
+	const ClassDef *rods = ClassDef::FindClass("C7Static005");
+	const ClassDef *ring = ClassDef::FindClass("C7Static061");
+	return (rods && actor->IsA(rods)) || (ring && actor->IsA(ring));
+}
+
 static bool C7VisorCanSeeActor(AActor *actor)
 {
 	if(!IWad::CheckGameFilter("Corridor7"))
@@ -87,10 +105,13 @@ static bool C7VisorCanSeeActor(AActor *actor)
 	AInventory *mode = camera ? camera->FindInventory(ClassDef::FindClass("C7VisorMode")) : NULL;
 	const bool infrared = mode && mode->amount == 3;
 
-	const ClassDef *field = ClassDef::FindClass("C7DamageField");
-	if(field && actor->IsA(field))
+	// A controlled DOSBox run of the released game shows the C010 posts and
+	// the related C011/C012 statics plainly in normal visor mode (the two
+	// white posts flank the MAP01 start gate from the first frame). The only
+	// visor-gated statics are the laser barrier objects 28/84, which the
+	// released game draws exclusively under infrared.
+	if(Corridor7IsLaserBarrierActor(actor))
 		return infrared;
-
 	const ClassDef *eniram = ClassDef::FindClass("C7SpaceMarine");
 	if(!eniram || !actor->IsA(eniram))
 		return true;
@@ -404,6 +425,23 @@ extern unsigned vbufPitch;
 extern int viewshift;
 extern fixed viewz;
 
+// Under infrared the released game does not draw the laser barrier's dark
+// artwork. It paints the silhouette as bright energy behind an animated
+// dissolve, so each rod reads as dashed segments whose layout crawls over
+// time (side-by-side DOSBox captures of the same barrier show different
+// segment patterns a moment apart). A hashed on/off mask over 8-texel
+// vertical blocks reproduces the segment size and motion; the brightest
+// palette entry displays as full red under the infrared palette.
+static bool C7LaserDissolveLit(unsigned int u, unsigned int v)
+{
+	const unsigned int phase = gamestate.TimeCount >> 3;
+	unsigned int h = u*73856093u ^ (v>>3)*19349663u ^ phase*83492791u;
+	h ^= h >> 13;
+	h *= 0x9E3779B1u;
+	h ^= h >> 16;
+	return h % 3u != 0;
+}
+
 void ScaleSprite(AActor *actor, int xcenter, const Frame *frame, unsigned height)
 {
 	if(!C7VisorCanSeeActor(actor))
@@ -466,6 +504,8 @@ void ScaleSprite(AActor *actor, int xcenter, const Frame *frame, unsigned height
 	byte *dest = destBase;
 	unsigned int i;
 	fixed x, y;
+	const bool laserBarrier = Corridor7IsLaserBarrierActor(actor);
+	const byte laserColor = laserBarrier ? ColorMatcher.Pick(0xFF, 0xFF, 0xFF) : 0;
 	for(i = actx+startX, x = startX*xStep;x < xRun;x += xStep, ++i, dest = ++destBase)
 	{
 		if(wallheight[i] > (signed)height)
@@ -476,7 +516,15 @@ void ScaleSprite(AActor *actor, int xcenter, const Frame *frame, unsigned height
 		for(y = startY*yStep;y < yRun;y += yStep)
 		{
 			if(src[y>>FRACBITS])
-				*dest = colormap[src[y>>FRACBITS]];
+			{
+				if(laserBarrier)
+				{
+					if(C7LaserDissolveLit(x>>FRACBITS, y>>FRACBITS))
+						*dest = laserColor;
+				}
+				else
+					*dest = colormap[src[y>>FRACBITS]];
+			}
 			dest += vbufPitch;
 		}
 	}
@@ -521,6 +569,8 @@ void Scale3DSpriter(AActor *actor, int x1, int x2, FTexture *tex, bool flip, con
 	byte *dest;
 	int i;
 	unsigned int x;
+	const bool laserBarrier = Corridor7IsLaserBarrierActor(actor);
+	const byte laserColor = laserBarrier ? ColorMatcher.Pick(0xFF, 0xFF, 0xFF) : 0;
 
 	//printf("%f, %f, %f, %f\n", FIXED2FLOAT(ny1), FIXED2FLOAT(ny2), FIXED2FLOAT(nx1), FIXED2FLOAT(nx1));
 	fixed dxx=(ny2-ny1)<<8,dzz=(nx2-nx1)<<8;
@@ -557,7 +607,15 @@ void Scale3DSpriter(AActor *actor, int x1, int x2, FTexture *tex, bool flip, con
 		for(fixed y = startY*yStep;y < endY;y += yStep)
 		{
 			if(src[y>>FRACBITS])
-				*dest = colormap[src[y>>FRACBITS]];
+			{
+				if(laserBarrier)
+				{
+					if(C7LaserDissolveLit(x, y>>FRACBITS))
+						*dest = laserColor;
+				}
+				else
+					*dest = colormap[src[y>>FRACBITS]];
+			}
 			dest += vbufPitch;
 		}
 

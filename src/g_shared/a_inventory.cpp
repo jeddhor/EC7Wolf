@@ -235,7 +235,12 @@ void AInventory::Touch(AActor *toucher)
 	if(flags & FL_COUNTSECRET)
 		++gamestate.secretcount;
 
-	PlaySoundLocActor(pickupsound, toucher);
+	// Corridor 7's native GetBonus dispatcher updates the inventory, prints the
+	// item name, and refreshes the status bar without calling SD_PlaySound.
+	// Playing ECWolf's inherited Wolf pickup aliases here turns access/alarm
+	// voices into apparently random noises while walking over supplies.
+	if(!IWad::CheckGameFilter("Corridor7"))
+		PlaySoundLocActor(pickupsound, toucher);
 	if(toucher->player == &players[ConsolePlayer])
 	{
 		StartBonusFlash();

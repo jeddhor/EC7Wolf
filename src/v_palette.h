@@ -122,6 +122,11 @@ void V_SetBlend (int blendr, int blendg, int blendb, int blenda);
 // even if the blend hasn't changed.
 void V_ForceBlend (int blendr, int blendg, int blendb, int blenda);
 
+// Corridor 7 changes the actual DAC palette for its visor and electrical
+// shock effects. Mode 0 restores the palette captured when the effect began;
+// 1/2 are monochrome green/red and 3 is the animated shock palette.
+void V_SetCorridor7PaletteMode (int mode, unsigned int phase=0);
+
 
 // Colorspace conversion RGB <-> HSV
 void RGBtoHSV (float r, float g, float b, float *h, float *s, float *v);

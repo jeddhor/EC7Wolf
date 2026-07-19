@@ -41,6 +41,8 @@ class MenuItem
 		int			pictureY;
 		char		string[80];
 		bool		visible;
+		bool		textVisible; // False for menus whose labels are part of a background picture.
+		bool		activateSoundEnabled;
 		const Menu	*menu;
 		FString		activateSound;
 
@@ -60,18 +62,21 @@ class MenuItem
 		bool		isVisible() const { return visible; }
 		void		setActivateListener(MENU_LISTENER_PROTOTYPE(activateListener)) { this->activateListener = activateListener; }
 		void		setActivateSound(FString sound) { activateSound = sound; }
+		void		setActivateSoundEnabled(bool enabled=true) { activateSoundEnabled = enabled; }
 		void		setEnabled(bool enabled=true) { this->enabled = enabled; }
+		void		setHeight(int height) { this->height = height; }
 		void		setHighlighted(int highlight=1) { this->highlight = highlight; }
 		void		setMenu(const Menu *menu) { this->menu = menu; }
 		void		setPicture(const char* picture, int x=-1, int y=-1);
 		void		setText(const char string[80]);
+		void		setTextVisible(bool textVisible=true) { this->textVisible = textVisible; }
 		void		setVisible(bool visible=true) { this->visible = visible; }
 
 		virtual void	activate();
 		virtual void	draw();
 		virtual void	left() {}
 		virtual void	right() {}
-		virtual bool	playActivateSound() { return true; }
+		virtual bool	playActivateSound() { return activateSoundEnabled; }
 };
 
 class LabelMenuItem : public MenuItem
@@ -193,6 +198,12 @@ class Menu
 		char				headText[36];
 		bool				headTextInStripes;
 		bool				headPictureIsAlternate;
+		// Fullscreen picture that already contains the window and item labels
+		// (Corridor 7 style). When set, draw() paints only it plus the cursor.
+		FTexture			*backgroundPicture;
+		int					backgroundCursorX;
+		int					backgroundCursorY;
+		FString				escapeSound;
 		int					height;
 		const int			indent;
 		TArray<MenuItem *>	items;
@@ -233,7 +244,9 @@ class Menu
 		int				getX() const { return x; }
 		int				getY() const { return y; }
 		bool			isAnimating() const { return animating; }
+		void			setBackground(const char* picture, int cursorX, int cursorY);
 		void			setCurrentPosition(int position);
+		void			setEscapeSound(FString sound) { escapeSound = sound; }
 		void			setHeadPicture(const char* picture, bool isAlt=false);
 		void			setHeadText(const char text[36], bool drawInStripes=false);
 		void			show();

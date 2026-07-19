@@ -55,6 +55,8 @@ void    StartMusic(void);
 void    ContinueMusic(int offs);
 void    StartDamageFlash (int damage);
 void    StartBonusFlash (void);
+void    StartC7ChamberFlash (void);
+void    StartC7ElectricFlash (void);
 
 void CalcTics();
 void Delay(int wolfticks);

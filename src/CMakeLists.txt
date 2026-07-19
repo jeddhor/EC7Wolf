@@ -37,6 +37,7 @@ initial_sources(
 	resourcefiles/ancientzip.cpp
 	resourcefiles/file_7z.cpp
 	resourcefiles/file_audiot.cpp
+	resourcefiles/file_audiomus.cpp
 	resourcefiles/file_directory.cpp
 	resourcefiles/file_gamemaps.cpp
 	resourcefiles/file_grp.cpp

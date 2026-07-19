@@ -19,13 +19,16 @@ GAMEMAP_PLANES = (ROOT / "src/gamemap_planes.cpp").read_text()
 MAPINFO = (ROOT / "wadsrc/static/mapinfo/corridor7.txt").read_text()
 PLAYERPAWN = (ROOT / "src/g_shared/a_playerpawn.cpp").read_text()
 WL_AGENT = (ROOT / "src/wl_agent.cpp").read_text()
+WL_ACT2 = (ROOT / "src/wl_act2.cpp").read_text()
 WL_INTER = (ROOT / "src/wl_inter.cpp").read_text()
 WOLF_SBAR = (ROOT / "src/g_wolf/wolf_sbar.cpp").read_text()
 SNDINFO = (ROOT / "wadsrc/static/sndinfo.txt").read_text()
+SNDSEQ = (ROOT / "wadsrc/static/sndseq.txt").read_text()
 M_CLASSES = (ROOT / "src/m_classes.cpp").read_text()
 FLAT_TEXTURE = (ROOT / "src/textures/flattexture.cpp").read_text()
 FLOOR_CEILING = (ROOT / "src/wl_floorceiling.cpp").read_text()
 VSWAP = (ROOT / "src/resourcefiles/file_vswap.cpp").read_text()
+AUDIO_MUS = (ROOT / "src/resourcefiles/file_audiomus.cpp").read_text()
 WOLF_SHAPE = (ROOT / "src/textures/wolfshapetexture.cpp").read_text()
 WL_DRAW = (ROOT / "src/wl_draw.cpp").read_text()
 WL_MAIN = (ROOT / "src/wl_main.cpp").read_text()
@@ -38,6 +41,7 @@ WL_DEBUG = (ROOT / "src/wl_debug.cpp").read_text()
 R_SPRITES = (ROOT / "src/r_sprites.cpp").read_text()
 NATIVE_ACTORS = (ROOT / "wadsrc/static/actors/native.txt").read_text()
 LOCKDEFS = (ROOT / "wadsrc/static/lockdefs.txt").read_text()
+THINGDEF_CODEPTR = (ROOT / "src/thingdef/thingdef_codeptr.cpp").read_text()
 
 
 def require(pattern: str, text: str, description: str) -> None:
@@ -78,11 +82,17 @@ for ignored_id in (93,):
     )
 
 require(r"^\s*\{32,\s*C7DamageField,", XLAT,
-        "electric-field object 32 must use the damage actor")
+        "object 32 must use the normally visible lightpost actor")
 require(r"^\s*\{33,\s*C7DamageFieldAlt,", XLAT,
         "electric-field object 33 must preserve its alternate field art")
-require(r"actor\s+C7DamageField\s*\{.*?C010\s+A\s+7\s+A_C7DamageField", STATICS,
-        "electric fields must apply contact damage while retaining infrared art")
+require(r"actor\s+C7DamageField\s*\{.*?C010\s+A\s+-1", STATICS,
+        "normally visible Corridor 7 lightposts remain harmless")
+require(r"actor\s+C7DamageField\s*\{.*?\+SOLID.*?C010\s+A\s+-1", STATICS,
+        "Corridor 7 lightposts preserve their original solid static type")
+require(r"actor\s+C7DamageFieldAlt.*?C011\s+A\s+-1", STATICS,
+        "infrared C011 statics remain inert instead of creating inferred beams")
+if "A_C7DamageField" in STATICS or "A_C7DamageField" in WL_AGENT:
+    raise SystemExit("Corridor 7 definition check failed: C011 statics must not infer paired damage beams")
 
 require(r"actor\s+C7Static003\s*\{", STATICS, "object 26 must not be a key")
 require(r'player\.startitem\s+"C7M16".*?player\.startitem\s+"C7Bayonet"', PLAYER, "M-16 is readied before the backup Bayonet")
@@ -123,9 +133,9 @@ require(r'corridor7SightTransparent\s*=\s*oldplane\[i\]\s*==\s*105', GAMEMAP_PLA
 require(r'else if \(!spot->tile->sightTransparent\s*&&\s*!spot->corridor7SightTransparent\)', WL_STATE, "sight checks distinguish markers 104 and 105")
 require(r'oldplane\[i\]\s*>=\s*86\s*&&\s*oldplane\[i\]\s*<=\s*88.*?corridor7WallMarker\s*=\s*oldplane\[i\]-85', GAMEMAP_PLANES, "animated-wall phase markers 86..88 are preserved")
 require(r'CheckGameFilter\("Corridor7"\).*?DrawWindow\(x,\s*y,\s*9,\s*9', M_CLASSES, "palette-safe Corridor 7 checkbox")
-require(r'trigger\s+98\s*\{.*?action\s*=\s*"Wall_Remove".*?secret\s*=\s*true', XLAT, "marker-98 secret walls disintegrate")
-require(r'trigger\s+101\s*\{.*?action\s*=\s*"Wall_Remove"', XLAT, "marker-101 walls disintegrate")
-require(r'trigger\s+102\s*\{.*?action\s*=\s*"Wall_Remove"', XLAT, "marker-102 walls disintegrate")
+require(r'trigger\s+98\s*\{.*?action\s*=\s*"Pushwall_Move".*?arg1\s*=\s*8.*?arg2\s*=\s*2.*?arg3\s*=\s*2.*?secret\s*=\s*true', XLAT, "marker-98 secret walls visibly slide two tiles")
+require(r'trigger\s+101\s*\{.*?action\s*=\s*"Pushwall_Move".*?arg1\s*=\s*8.*?arg2\s*=\s*2.*?arg3\s*=\s*2', XLAT, "marker-101 walls visibly slide two tiles")
+require(r'trigger\s+102\s*\{.*?action\s*=\s*"Pushwall_Move".*?arg1\s*=\s*8.*?arg2\s*=\s*2.*?arg3\s*=\s*2', XLAT, "marker-102 walls visibly slide two tiles")
 require(r'trigger\s+106\s*\{.*?action\s*=\s*"Wall_AnimateRemove".*?repeatable\s*=\s*false', XLAT, "marker-106 walls use their native four-frame opening")
 require(r'oldplane\[i\]\s*==\s*106.*?Wall_AnimateRemove.*?maskedWallType\s*=\s*1.*?corridor7WallMarker\s*=\s*106', GAMEMAP_PLANES, "marker-106 animated walls use masked in-place geometry")
 require(r'oldplane\[i\]\s*==\s*107.*?sideSolid\[0\].*?false.*?maskedWallType\s*=\s*1', GAMEMAP_PLANES, "marker-107 walls start permanently open and masked")
@@ -165,13 +175,23 @@ require(r'FUNC\(C7_Dispenser\).*?FULL HEALTH.*?SetC7WallTexture\(spot,\s*89\).*?
 require(r'actor\s+C7MedicPack\s*:\s*Health.*?inventory\.amount\s+25', PLAYER, "Corridor 7 health dispensers supply 25 health")
 require(r'skill\s+nightmare\s*\{.*?name\s*=\s*"President".*?spawnfilter\s*=\s*4',
         MAPINFO, "Presidential difficulty is exposed")
+require(r'skill\s+easy\s*\{.*?name\s*=\s*"Lieutenant".*?spawnfilter\s*=\s*2',
+        MAPINFO, "the second Corridor 7 rank uses its original Lieutenant label")
+if "2nd Lieutenant" in MAPINFO:
+    raise SystemExit("Corridor 7 definition check failed: non-original 2nd Lieutenant label remains")
 require(r'RandomizeCorridor7PresidentThings.*?FL_ISMONSTER.*?NATIVE_CLASS\(Inventory\).*?pr_c7president',
         GAMEMAP, "President relocates monsters and pickups")
 require(r'P_AlertCorridor7Monsters.*?AActor::GetIterator.*?FL_SHOOTABLE.*?FirstSighting', WL_STATE, "intruder alert wakes every live monster")
-require(r'void\s+WolfStatusBar::DrawTopOverlay.*?TimeCount\s*<\s*5\*TICRATE.*?Eliminate Aliens To Secure Floor', WOLF_SBAR, "Corridor 7 objective is a timed top overlay")
+require(r'DrawC7TopMessage.*?CR_BLACK,\s*5,\s*5.*?DTA_FillColor.*?BlackIndex.*?CR_YELLOW,\s*4,\s*4.*?DTA_FillColor.*?BaseColors\[3\]', WOLF_SBAR,
+        "Corridor 7 top notifications use a full-bright yellow stencil and one-pixel black drop shadow")
+require(r'void\s+WolfStatusBar::DrawTopOverlay.*?TimeCount\s*<\s*5\*TICRATE.*?DrawC7TopMessage\("Eliminate Aliens To Secure Floor"\)', WOLF_SBAR, "Corridor 7 objective is a timed top overlay")
 require(r'SetTopMessage.*?topMessageUntil.*?DrawTopOverlay', WOLF_SBAR, "Corridor 7 transient gameplay messages draw above the view")
 require(r'TryUseC7HealthChamber.*?c7ChamberState\s*=\s*1.*?TickC7HealthChamber.*?C7ChamberExitAngle.*?SetC7HealthChamberPower',
         PLAYERPAWN, "health chambers turn the player, close, heal, and show remaining power")
+require(r'buttonstate\[bt_use\]\s*&&\s*!cmd\.buttonheld\[bt_use\].*?Cmd_Use\(\)',
+        PLAYERPAWN, "Use actions run once per key press instead of grunting every tic")
+require(r'corridor7ChamberUses.*?MIN<unsigned int>\(missing,\s*25\).*?corridor7ChamberUses\s*=\s*uses-1.*?\(\(uses-1\)\*100\)/3.*?StartC7ChamberFlash',
+        PLAYERPAWN, "health chambers deliver three visible 25-point treatments")
 require(r'TryUseC7HealthChamber.*?MapSpot\s+panel.*?MapSpot\s+door.*?panel->corridor7WallID\s*!=\s*35.*?door->corridor7WallID\s*!=\s*53.*?door->corridor7WallMarker\s*!=\s*107',
         PLAYERPAWN, "health chambers activate at the rear panel with the open door opposite")
 require(r'actor\s+C7FloorPlan\s*:\s*MapRevealer', PLAYER,
@@ -191,9 +211,103 @@ require(r'!levelInfo->BonusLevel\s*&&\s*gamestate\.killtotal', LNSPEC, "bonus el
 require(r'health<=0\s*&&\s*IWad::CheckGameFilter\("Corridor7"\)\s*&&\s*levelInfo->BonusLevel', WL_AGENT, "bonus health expiration is intercepted before death")
 require(r'health\s*=\s*mo->health\s*=\s*mo->SpawnHealth\(\).*?playstate\s*=\s*ex_completed', WL_AGENT, "bonus completion revives and advances the travelling pawn")
 require(r'levelShotsFired.*?levelShotsHit', WL_AGENT, "save-backed Corridor 7 hit/miss statistics")
-require(r'c7/teleport\s+\{\s+NULL\s+C7AL0040\s+C7PC0040\s+\}', SNDINFO, "Corridor 7 vortex completion sound")
-require(r'painsound\s+"c7/player/pain".*?deathsound\s+"c7/player/death"', PLAYER, "Corridor 7 player pain and death audio")
-require(r'ACTION_FUNCTION\(A_C7GunAttack\).*?DepleteAmmo.*?PlaySoundLocActor.*?if\(!closest\)\s*return\s+true.*?return\s+true', WL_AGENT, "missed Corridor 7 shots consume ammo, play audio, and finish their weapon state")
+require(r'c7/teleport\s+\{\s+C7DS0001\s+C7AL0001\s+C7PC0001\s+\}', SNDINFO, "Corridor 7 vortex completion sound")
+require(r'c7/world/oof1\s+\{\s+C7DS0069.*?c7/world/oof2\s+\{\s+C7DS0070.*?'
+        r'\$random\s+misc/do_nothing\s+\{\s*c7/world/oof1\s+c7/world/oof2\s*\}',
+        SNDINFO, "unusable walls select the released Corridor 7 impact grunts")
+require(r'doors/open\s+\{\s+C7DS0010.*?doors/close\s+\{\s+C7DS0011', SNDINFO,
+        "door opening and closing use the native Corridor 7 sound IDs")
+# DMA-captured original menu behavior (2026-07-17): moves play 9, backing out
+# of a submenu plays 33, and the quit/confirm prompt announces itself with 31.
+# Main-menu activation is silent; menu/activate only reaches ECWolf-specific
+# submenu widgets and clicks like the cursor.
+require(r'menu/move1\s+\{\s+C7DS0009.*?menu/move2\s+\{\s+C7DS0009.*?'
+        r'menu/activate\s+\{\s+C7DS0009.*?menu/escape\s+\{\s+C7DS0033.*?'
+        r'c7/menu/prompt\s+\{\s+C7DS0031',
+        SNDINFO, "menu movement, cancellation, and the quit prompt use the DMA-confirmed sounds")
+require(r'c7/electric/damage\s+\{\s+C7DS0013', SNDINFO,
+        "electrified walls use the released contact sound")
+require(r'corridor7WallID\s*==\s*6\s*\|\|\s*spot->corridor7WallID\s*==\s*14.*?DamageC7ElectricField',
+        WL_AGENT, "original wall IDs 6 and 14 apply electric-fence damage")
+require(r'c7/forcefield/deactivate/53\s+\{\s+C7DS0015.*?'
+        r'c7/forcefield/deactivate/73\s+\{\s+C7DS0014.*?'
+        r'c7/forcefield/deactivate/81\s+\{\s+C7DS0013', SNDINFO,
+        "force-field wall families use their executable- and DMA-confirmed sounds")
+require(r'Wall_AnimateRemove.*?new\s+C7AnimatedWall\(spot\).*?'
+        r'case\s+73:.*?case\s+229:.*?deactivate/73.*?case\s+81:.*?deactivate/81.*?'
+        r'PlaySoundLocMapSpot\(sound,\s*spot\)', LNSPEC,
+        "force-field shutdown dispatch follows its native wall family")
+require(r'c7/dispenser/ammo\s+\{\s+C7DS0026.*?c7/dispenser/visor\s+\{\s+C7DS0074',
+        SNDINFO, "ammo and visor dispensers use their released sounds")
+if "c7/dispenser/healthstart" in SNDINFO or "c7/dispenser/healthstart" in LNSPEC:
+    raise SystemExit("Corridor 7 definition check failed: the original health dispenser is silent")
+require(r'c7/chamber/activate\s+\{\s+C7DS0018', SNDINFO,
+        "health-chamber activation uses the released sound")
+require(r'TryUseC7HealthChamber.*?SD_PlaySound\("c7/chamber/activate"\)', PLAYERPAWN,
+        "health-chamber activation dispatches its released sound")
+require(r':C7Pushwall\s+play\s+c7/world/pushwall\s+end', SNDSEQ,
+        "Corridor 7 secret walls play the executable- and DMA-confirmed sample")
+require(r'pushwallsoundsequence\s*=\s*"C7Pushwall"', MAPINFO,
+        "Corridor 7 selects its native pushwall sequence")
+require(r'c7/world/pushwall\s+\{\s+C7DS0017', SNDINFO,
+        "Corridor 7 secret walls use released sample 17")
+if re.search(r'^world/pushwall\s+\{\s+C7DS0046', SNDINFO, re.MULTILINE):
+    raise SystemExit("Corridor 7 definition check failed: sample 46 belongs to the skull apparition, not pushwalls")
+require(r'c7/apparition\s+\{\s+C7DS0046', SNDINFO,
+        "the red-skull apparition uses the released ominous sound")
+require(r'c7/vortex/ambient\s+\{\s+C7DS0065', SNDINFO,
+        "the exit vortex uses its released ambient sound")
+require(r'actor\s+C7ExitVortex.*?C738\s+A\s+0\s+A_C7VortexSound.*?'
+        r'C738\s+A\s+5.*?C739\s+A\s+5.*?C740\s+A\s+5.*?C741\s+A\s+5',
+        MONSTERS, "the exit vortex preserves its released four-frame loop")
+require(r'ACTION_FUNCTION\(A_C7VortexSound\).*?!SD_AnySoundPlaying\(\).*?'
+        r'PlaySoundLocActor\("c7/vortex/ambient",\s*self\)', WL_AGENT,
+        "the vortex waits for a prior digitized sample before restarting its ambience")
+require(r'actor\s+C7SkullApparition.*?\+MISSILE.*?C718\s+A\s+10.*?C725\s+A\s+1.*?stop',
+        STATICS, "the red-skull apparition uses all eight released animation frames")
+if re.search(r'actor\s+C7SkullApparition.*?\+(?:COUNTKILL|ISMONSTER|SHOOTABLE)', STATICS, re.DOTALL):
+    raise SystemExit("Corridor 7 definition check failed: the red-skull apparition must not count as an alien")
+require(r'c7ApparitionTics\s*<=\s*0x800.*?pr_c7apparition\(\)\s*!=\s*0.*?'
+        r'2\*TILEGLOBAL.*?Spawn\(apparitionClass.*?0x300.*?SD_PlaySound\("c7/apparition"\)',
+        PLAYERPAWN, "the rare red-skull taunt preserves its native timer, chance, placement, speed, and sound")
+require(r'C7SkullApparition.*?T_ExplodeProjectile\(self,\s*NULL\).*?return;.*?DamageActor',
+        WL_ACT2, "the red-skull apparition vanishes on contact without damaging or stunning the player")
+require(r'C7_SOUND_COUNT\s*=\s*100.*?C7_SAMPLE_RATE\s*=\s*9009|C7_SAMPLE_RATE\s*=\s*9009.*?C7_SOUND_COUNT\s*=\s*100', AUDIO_MUS,
+        "AUDIOMUS exposes the 100 original 9009 Hz digitized samples")
+require(r'lengths\[pageCount\s*-\s*1\]\s*!=\s*C7_SOUND_COUNT\s*\*\s*8.*?C7DS%04u', AUDIO_MUS,
+        "AUDIOMUS validates its sound map and publishes named sound lumps")
+require(r'painsound\s+"c7/player/pain"', PLAYER, "Corridor 7 player pain audio")
+require(r'deathsound\s+"c7/player/death"', PLAYER,
+        "Corridor 7 player death uses released sample 6")
+require(r'CheckGameFilter\("Corridor7"\)\)\s*\n\s*PlaySoundLocActor\(pickupsound, toucher\)',
+        INVENTORY, "native Corridor 7 pickups do not play inherited Wolf sounds")
+if re.search(r'c7/mine/arm|C063\s+A\s+12\s+A_PlaySound', PLAYER):
+    raise SystemExit("Corridor 7 definition check failed: native mine arming must remain silent")
+require(r'actor\s+C7Shotgun.*?C810\s+A\s+12.*?C813\s+A\s+12\s+goto\s+Ready',
+        PLAYER, "Ithaca reload ends before the C814 Tebazile sprite")
+shotgun = re.search(r'actor\s+C7Shotgun(.*?)actor\s+C7PlasmaRifle', PLAYER, re.DOTALL)
+if shotgun is None or "C814" in shotgun.group(1):
+    raise SystemExit("Corridor 7 definition check failed: Ithaca reload leaks into Tebazile art")
+require(r'actor\s+C7ProximityMine.*?Spawn:.*?C001\s+A\s+36.*?Armed:.*?C001\s+A\s+1\s+A_C7MineThink',
+        PLAYER, "placed mines use the released floor-mine sprite, not the pickup crate")
+require(r'ACTION_FUNCTION\(A_C7MineThink\).*?32\s*\*\s*\(FRACUNIT\s*/\s*64\).*?self->temp1\s*==\s*0.*?self->temp1\s*=\s*1.*?check->player.*?FL_ISMONSTER.*?DamageActor\(self,\s*self->target,\s*self->health\)',
+        WL_AGENT, "mines arm persistently and trigger on nearby players or monsters")
+require(r'ACTION_FUNCTION\(A_Explode\).*?attacker\s*=\s*self->target.*?XF_HURTSOURCE.*?target\s*==\s*self->target.*?attacker\s*=\s*self.*?DamageActor\(target,\s*attacker',
+        THINGDEF_CODEPTR, "source-hurting explosions bypass player self-friendly-fire suppression")
+require(r'ACTION_FUNCTION\(A_C7GunAttack\).*?DepleteAmmo.*?if\(!closest\)\s*return\s+true.*?return\s+true', WL_AGENT, "missed Corridor 7 shots consume ammo and finish their weapon state")
+gun_attack = re.search(r'ACTION_FUNCTION\(A_C7GunAttack\)(.*?)ACTION_FUNCTION\(A_C7AlienAlarm\)', WL_AGENT, re.DOTALL)
+if gun_attack is None or "PlaySoundLocActor" not in gun_attack.group(1):
+    raise SystemExit("Corridor 7 definition check failed: Corridor 7 weapon attacks must play their native sounds")
+weapon_sounds = {
+    "bayonet": 49, "shotgun": 91, "m16": 22, "m343": 64,
+    "dualblaster": 41, "plasma": 78, "assault": 23,
+    "disintegrator": 50,
+}
+for name, sound_id in weapon_sounds.items():
+    require(rf'c7/weapon/{name}\s+\{{\s+C7DS{sound_id:04d}', SNDINFO,
+            f"native Corridor 7 {name} weapon sound mapping")
+    require(rf'attacksound\s+"c7/weapon/{name}"', PLAYER,
+            f"Corridor 7 {name} native attack sound assignment")
 require(r'accuracy\s*\*\s*\(shots\s*/\s*100\s*\+\s*1\)\s*\*\s*10', WL_INTER, "released hit/miss bonus equation")
 require(r'CA_CacheScreen\(TexMan\("C7G0014"\)\).*?SECURED.*?aliens.*?restricted.*?accuracy.*?InterState\.bonus',
         WL_INTER, "Corridor 7 floor tally uses the original status-report screen")
@@ -241,15 +355,71 @@ require(r'actor\s+C7SpaceMarine\s*:.*?Missile:.*?C676.*?C678.*?A_WolfAttack.*?C6
         MONSTERS, "Eniram attack and pain animations use separate released frame ranges")
 require(r'actor\s+C7Ugly\s*:.*?Missile:.*?C233.*?C238.*?Pain:.*?C225.*?C226',
         MONSTERS, "Rodex attack no longer reuses its hurt frames")
-require(r'A_CustomMissile\("C7BossEnergyBolt"\).*?A_PlaySound\("c7/monster/attack"\)|A_PlaySound\("c7/monster/attack"\).*?A_CustomMissile\("C7BossEnergyBolt"\)',
-        MONSTERS, "projectile bosses play their attack sound")
-require(r'A_FireCustomMissile.*?C7PlasmaBolt.*?c7MuzzleFlashTics\s*=\s*5.*?PlaySoundLocActor',
-        WL_AGENT, "the player plasma projectile has firing audio and muzzle lighting")
+require(r'A_PlaySound\("c7/monster/attack/class17"\).*?A_CustomMissile\("C7BossEnergyBolt"\)',
+        MONSTERS, "Solrac plays its released class-17 projectile sound")
+require(r'actor\s+C7PurpleBoss.*?activesound\s+"c7/monster/active/class25".*?'
+        r'A_PlaySound\("c7/weapon/plasma"\).*?A_CustomMissile\("C7BossPlasmaBolt"\).*?'
+        r'A_PlaySound\("c7/monster/attack/class25"\)', MONSTERS,
+        "the purple boss preserves its controlled-trace active and two attack sounds")
+require(r'^\s*\{196,\s*C7IronFoot,.*?actor\s+C7IronFoot.*?'
+        r'activesound\s+"c7/monster/active/class20".*?'
+        r'A_PlaySound\("c7/weapon/plasma"\).*?A_CustomMissile\("C7BossPlasmaBolt"\)',
+        XLAT + MONSTERS,
+        "object 196 uses its C690 IronFoot art and controlled-trace audio")
+require(r'c7/monster/active/class6\s+\{\s+C7DS0055.*?'
+        r'c7/monster/active/class13\s+\{\s+C7DS0057.*?'
+        r'c7/monster/active/class20\s+\{\s+C7DS0068.*?'
+        r'c7/monster/active/class21\s+\{\s+C7DS0068.*?'
+        r'c7/monster/active/class25\s+\{\s+C7DS0021', SNDINFO,
+        "original class-specific alien active sounds")
+require(r'CheckGameFilter\("Corridor7"\).*?pr_chase\(7\)\s*==\s*0.*?'
+        r'class13Active.*?pr_chase\(9\)\s*==\s*0', WL_ACT2,
+        "original active-sound random cadence")
+if '"c7/monster/attack"' in MONSTERS or '"c7/monster/death"' in MONSTERS:
+    raise SystemExit(
+        "Corridor 7 definition check failed: aliens must not use guessed generic combat sounds"
+    )
+require(r'A_FireCustomMissile.*?C7PlasmaBolt.*?c7MuzzleFlashTics\s*=\s*5',
+        WL_AGENT, "the player plasma projectile has original muzzle lighting")
 require(r'action\s+native\s+A_C7AlienAlarm', NATIVE_ACTORS,
         "the Ailoprobe alarm action is registered")
-require(r'C7VisorCanSeeActor.*?C7DamageField.*?C7SpaceMarine.*?infrared',
-        R_SPRITES, "infrared alone reveals damage fields and cloaked Eniram actors")
+require(r'C7VisorCanSeeActor.*?C7SpaceMarine.*?infrared',
+		R_SPRITES, "infrared reveals cloaked Eniram actors")
+# A controlled DOSBox run shows the decorative statics (C010 posts, C011
+# rods, C012 strands) plainly in normal visor mode, so those classes may not
+# be gated on the visor. The strategy guide's "Infrared Invisible Barrier"
+# is the laser barrier static pair (map objects 28/84 = C7Static005 and
+# C7Static061): walk-through, drawn only under infrared with an animated
+# bright dissolve, and 10 points of contact damage on a cooldown.
+for cls in ("C7DamageField", "C7Static011", "C7Static009"):
+	if re.search(r'C7VisorCanSeeActor.*?FindClass\("%s"\).*?return\s+infrared' % cls, R_SPRITES, re.S):
+		raise SystemExit(
+			"Corridor 7 definition check failed: %s statics must remain visible in every visor mode" % cls)
+WL_DRAW = (ROOT / "src/wl_draw.cpp").read_text()
+if re.search(r'Corridor7IsLaserWall|C7LaserBarrierHidden', WL_DRAW):
+	raise SystemExit(
+		"Corridor 7 definition check failed: masked walls must not be visor-gated (the laser barrier is the object 28/84 static pair)")
+require(r'Corridor7IsLaserBarrierActor.*?FindClass\("C7Static005"\).*?FindClass\("C7Static061"\)',
+		R_SPRITES, "the laser barrier is the object 28/84 static pair")
+require(r'C7VisorCanSeeActor.*?Corridor7IsLaserBarrierActor\(actor\)\s*\)\s*return\s+infrared',
+		R_SPRITES, "the laser barrier statics render only under the infrared visor")
+require(r'C7LaserDissolveLit', R_SPRITES,
+		"the laser barrier draws with the released game's animated dissolve")
+for cls in ("C7Static005", "C7Static061"):
+	if re.search(r'actor\s+%s\s*\{[^}]*?\+SOLID' % cls, STATICS, re.S):
+		raise SystemExit(
+			"Corridor 7 definition check failed: %s must not block movement (the released game lets the player walk through the beams)" % cls)
+	require(r'actor\s+%s\s*\{[^}]*?radius\s+32' % cls, STATICS,
+			"the laser barrier %s keeps its touch-zone radius" % cls)
+require(r'DamageC7LaserBarrier.*?TakeDamage\(10,\s*NULL\)', WL_AGENT,
+		"beam barrier contact deals the executable's 10 points on a cooldown")
+require(r'Corridor7IsLaserBarrierActor\(check\).*?DamageC7LaserBarrier', WL_AGENT,
+		"pressing into the beam barrier zaps the player")
 require(r'"Drop Mine".*?"Visor Mode"', WL_PLAY, "configuration-safe Corridor 7 control labels")
+require(r'const fixed distance = 40 \* \(FRACUNIT / 64\);', PLAYERPAWN,
+        "proximity-mine drop distance uses Corridor 7 world-unit scaling")
+require(r'IsValidTileCoordinate\(mineX >> FRACBITS,\s*mineY >> FRACBITS, 0\)',
+        PLAYERPAWN, "proximity-mine spawn coordinates are map-bounds checked")
 
 if "Reload / Drop Mine" in WL_PLAY or "Zoom / Visor Mode" in WL_PLAY:
     raise SystemExit("Corridor 7 definition check failed: control name would corrupt the saved config")

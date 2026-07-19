@@ -54,6 +54,10 @@ end
 	nostopcutoff
 end
 
+:C7Pushwall
+	play c7/world/pushwall
+end
+
 :PushwallHeavy
 	play world/pushwall_heavy
 	nostopcutoff

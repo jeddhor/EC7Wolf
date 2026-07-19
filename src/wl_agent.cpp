@@ -399,6 +399,71 @@ void player_t::TakeDamage (int points, AActor *attacker)
 ===================
 */
 
+static int32_t c7LastElectricDamageTic[MAXPLAYERS];
+
+static void DamageC7ElectricField(APlayerPawn *pawn, AActor *source)
+{
+	if(!pawn || !pawn->player || pawn->player->health <= 0)
+		return;
+	const int playerNumber = pawn->player->GetPlayerNum();
+	// A controlled DOSBox capture of the released game measured sample-13
+	// zaps roughly twice per second while the player pushed through an
+	// energized barrier, each removing 2 points. Match that cadence instead
+	// of retriggering every game tic.
+	static const int32_t C7_ELECTRIC_DAMAGE_INTERVAL = 35;
+	if(playerNumber < 0 || playerNumber >= MAXPLAYERS)
+		return;
+	const int32_t sinceLastZap =
+		gamestate.TimeCount - c7LastElectricDamageTic[playerNumber];
+	if(c7LastElectricDamageTic[playerNumber] != 0 &&
+		sinceLastZap >= 0 && sinceLastZap < C7_ELECTRIC_DAMAGE_INTERVAL)
+	{
+		return;
+	}
+
+	c7LastElectricDamageTic[playerNumber] = gamestate.TimeCount;
+	PlaySoundLocActor("c7/electric/damage", pawn);
+	// The released executable subtracts a flat 2 points per zap directly from
+	// the health counter, before and independent of the rank multiplier and
+	// body armor, honoring only god mode. Routing this through DamageActor
+	// with the pawn as its own attacker also tripped the friendly-fire guard,
+	// which silently discarded the damage entirely.
+	if(!godmode)
+	{
+		pawn->player->mo->health = pawn->player->health -= 2;
+		if(pawn->player->health <= 0)
+			pawn->player->TakeDamage(0, NULL);
+	}
+	if(static_cast<unsigned int>(playerNumber) == ConsolePlayer)
+		StartC7ElectricFlash();
+}
+
+static int32_t c7LastLaserDamageTic[MAXPLAYERS];
+
+// Contact with a laser barrier static (map objects 28/84, the strategy
+// guide's "Infrared Invisible Barrier") deals the released executable's
+// 10-point invisible-barrier damage through the standard rank/armor path,
+// repeating on a cooldown while the player keeps pressing into the beams.
+static void DamageC7LaserBarrier(APlayerPawn *pawn)
+{
+	if(!pawn || !pawn->player || pawn->player->health <= 0)
+		return;
+	static const int32_t C7_LASER_DAMAGE_INTERVAL = 64;
+	const int playerNumber = pawn->player->GetPlayerNum();
+	if(playerNumber < 0 || playerNumber >= MAXPLAYERS)
+		return;
+	const int32_t sinceLastZap =
+		gamestate.TimeCount - c7LastLaserDamageTic[playerNumber];
+	if(c7LastLaserDamageTic[playerNumber] != 0 &&
+		sinceLastZap >= 0 && sinceLastZap < C7_LASER_DAMAGE_INTERVAL)
+	{
+		return;
+	}
+	c7LastLaserDamageTic[playerNumber] = gamestate.TimeCount;
+	PlaySoundLocActor("c7/electric/damage", pawn);
+	pawn->player->TakeDamage(10, NULL);
+}
+
 static bool TryMove (AActor *ob)
 {
 	if (noclip)
@@ -461,7 +526,20 @@ static bool TryMove (AActor *ob)
 					for(unsigned short i = 0;i < 4;++i)
 					{
 						if(spot->sideSolid[i] && spot->slideAmount[i] != 0xffff && checkLines[i])
+						{
+							// Corridor 7's original collision routine applies the
+							// electric contact effect to wall tile IDs 6 and 14.  The
+							// plane-one marker is not part of that decision.  The
+							// barriers stay solid: pressing against one zaps the
+							// player on contact, and again on every repeated
+							// contact, but never lets them through.
+							if(IWad::CheckGameFilter("Corridor7") && ob->player &&
+								(spot->corridor7WallID == 6 || spot->corridor7WallID == 14))
+							{
+								DamageC7ElectricField(static_cast<APlayerPawn *>(ob), ob);
+							}
 							return false;
+						}
 					}
 				}
 			}
@@ -497,7 +575,15 @@ static bool TryMove (AActor *ob)
 		{
 			if(abs(ob->x - check->x) <= r &&
 				abs(ob->y - check->y) <= r)
+			{
+				// The laser barrier statics (map objects 28/84) never
+				// block movement: walking through the hidden beams zaps
+				// the player through the standard rank/armor damage path
+				// on a cooldown, exactly as the released game does.
+				if(ob->player && Corridor7IsLaserBarrierActor(check))
+					DamageC7LaserBarrier(static_cast<APlayerPawn *>(ob));
 				check->Touch(ob);
+			}
 		}
 	}
 
@@ -713,6 +799,7 @@ void APlayerPawn::Cmd_Use()
 */
 
 player_t::player_t() : levelShotsFired(0), levelShotsHit(0), c7MuzzleFlashTics(0),
+	c7ApparitionTics(0),
 	c7ChamberX(-1), c7ChamberY(-1), c7ChamberPower(100), c7ChamberTics(0),
 	c7ChamberState(0), c7ClearanceNotified(false), c7FloorSecuredNotified(false),
 	FOV(90), DesiredFOV(90), bob(0), attackheld(false)
@@ -985,6 +1072,7 @@ void player_t::Reborn()
 	FOV = DesiredFOV;
 	RespawnEligible = -1;
 	c7MuzzleFlashTics = 0;
+	c7ApparitionTics = 0;
 	c7ChamberState = 0;
 	c7ChamberTics = 0;
 
@@ -1061,6 +1149,11 @@ void player_t::Serialize(FArchive &arc)
 		c7ChamberPower = 100;
 		c7ClearanceNotified = c7FloorSecuredNotified = false;
 	}
+
+	if(GameSave::SaveVersion >= 1784319000ULL)
+		arc << c7ApparitionTics;
+	else
+		c7ApparitionTics = 0;
 
 	if(arc.IsLoading())
 	{
@@ -1416,6 +1509,8 @@ ACTION_FUNCTION(A_C7GunAttack)
 
 	if(!player || !player->ReadyWeapon->DepleteAmmo())
 		return false;
+	PlaySoundLocActor(player->ReadyWeapon->attacksound, self,
+		self == players[ConsolePlayer].camera ? SD_WEAPONS : SD_GENERIC);
 	player->c7MuzzleFlashTics = 5;
 	++player->levelShotsFired;
 	if(weapon == 4)
@@ -1425,8 +1520,6 @@ ACTION_FUNCTION(A_C7GunAttack)
 	else if(weapon == 7)
 		ConsumeC7AlienCharge(self, 50, 45);
 
-	PlaySoundLocActor(player->ReadyWeapon->attacksound, self,
-		self == players[ConsolePlayer].camera ? SD_WEAPONS : SD_GENERIC);
 	if(self->MeleeState)
 		self->SetState(self->MeleeState);
 	if(!(player->ReadyWeapon->weaponFlags & WF_NOALERT))
@@ -1491,23 +1584,6 @@ ACTION_FUNCTION(A_C7GunAttack)
 	return true;
 }
 
-// Corridor 7's object-plane values 32/33 form invisible electrical barriers.
-// They are intentionally passable, but crossing a marker delivers repeated
-// contact damage at the original 10 Hz gameplay cadence.
-ACTION_FUNCTION(A_C7DamageField)
-{
-	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
-	{
-		APlayerPawn *pawn = players[i].mo;
-		if(!pawn || players[i].state != player_t::PST_LIVE || players[i].health <= 0)
-			continue;
-		if(abs(pawn->x-self->x) <= 36*FRACUNIT &&
-			abs(pawn->y-self->y) <= 36*FRACUNIT)
-			DamageActor(pawn, self, 5);
-	}
-	return true;
-}
-
 // Ailoprobes are alarm creatures: once one acquires a target it propagates
 // that target to every dormant Corridor 7 monster, rather than merely making
 // a cosmetic attack noise.
@@ -1519,16 +1595,28 @@ ACTION_FUNCTION(A_C7AlienAlarm)
 }
 
 // Armed Corridor 7 mines use a square proximity check, matching the tile-based
-// distance convention used throughout the original engine. They also remain
-// shootable, so plasma and other weapon impacts can detonate them early.
+// distance convention used throughout the original engine. The mine first
+// waits for its owner to clear the trigger zone, then reacts to either a player
+// or a living monster. It remains shootable, so plasma and other weapon impacts
+// can detonate it early.
 ACTION_FUNCTION(A_C7MineThink)
 {
+	const fixed triggerDistance = 32 * (FRACUNIT / 64);
+	if(self->temp1 == 0)
+	{
+		AActor *owner = self->target;
+		if(owner && MAX(abs(owner->x - self->x), abs(owner->y - self->y)) <= triggerDistance)
+			return false;
+		self->temp1 = 1;
+		return false;
+	}
+
 	for(AActor::Iterator check = AActor::GetIterator(); check.Next();)
 	{
-		if(check == self || check == self->target ||
-			!(check->flags & FL_SHOOTABLE) || !(check->flags & FL_ISMONSTER))
+		if(check == self || !(check->flags & FL_SHOOTABLE) ||
+			(!check->player && !(check->flags & FL_ISMONSTER)))
 			continue;
-		if(MAX(abs(check->x - self->x), abs(check->y - self->y)) <= 96 * FRACUNIT)
+		if(MAX(abs(check->x - self->x), abs(check->y - self->y)) <= triggerDistance)
 		{
 			DamageActor(self, self->target, self->health);
 			return true;
@@ -1551,6 +1639,16 @@ ACTION_FUNCTION(A_C7TebazileMorph)
 	return true;
 }
 
+// The released vortex state calls its positioned sample only when no other
+// digitized sample is active. This lets the 3.15-second sound finish instead
+// of restarting it on every animation cycle.
+ACTION_FUNCTION(A_C7VortexSound)
+{
+	if(!SD_AnySoundPlaying())
+		PlaySoundLocActor("c7/vortex/ambient", self);
+	return true;
+}
+
 ACTION_FUNCTION(A_FireCustomMissile)
 {
 	ACTION_PARAM_STRING(missiletype, 0);
@@ -1567,11 +1665,11 @@ ACTION_FUNCTION(A_FireCustomMissile)
 		return false;
 	if(useammo && IWad::CheckGameFilter("Corridor7") && missiletype.CompareNoCase("C7PlasmaBolt") == 0)
 	{
+		PlaySoundLocActor(player->ReadyWeapon->attacksound, self,
+			self == players[ConsolePlayer].camera ? SD_WEAPONS : SD_GENERIC);
 		ConsumeC7AlienCharge(self, 33, 4);
 		++player->levelShotsFired;
 		player->c7MuzzleFlashTics = 5;
-		PlaySoundLocActor(player->ReadyWeapon->attacksound, self,
-			self == players[ConsolePlayer].camera ? SD_WEAPONS : SD_GENERIC);
 	}
 
 	if(!(player->ReadyWeapon->weaponFlags & WF_NOALERT))

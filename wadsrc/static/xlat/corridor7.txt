@@ -2011,24 +2011,34 @@ things
 	}
 	ignore 107;
 
-	// These internal wall markers route through Corridor 7's disintegration
-	// routine. Value 98 also contributes to the native secret-room total.
+	// Marker 98 retains Wolf3D's visible two-tile sliding secret-wall motion.
 	trigger 98
 	{
-		action = "Wall_Remove";
+		action = "Pushwall_Move";
+		arg1 = 8;
+		arg2 = 2;
+		arg3 = 2;
 		playeruse = true;
 		repeatable = false;
 		secret = true;
 	}
+	// The released maps also use 101/102 for ordinary moving walls. Unlike 98,
+	// they do not contribute to the restricted-area (secret) total.
 	trigger 101
 	{
-		action = "Wall_Remove";
+		action = "Pushwall_Move";
+		arg1 = 8;
+		arg2 = 2;
+		arg3 = 2;
 		playeruse = true;
 		repeatable = false;
 	}
 	trigger 102
 	{
-		action = "Wall_Remove";
+		action = "Pushwall_Move";
+		arg1 = 8;
+		arg2 = 2;
+		arg3 = 2;
 		playeruse = true;
 		repeatable = false;
 	}
@@ -2051,8 +2061,8 @@ things
 	{29, C7M343, 0, 0, 0}
 	{30, C7Static007, 0, 0, 0}
 	{31, C7Static008, 0, 0, 0}
-	// Damaging electric-field markers. Their C010/C011 art is hidden during
-	// normal/night vision and exposed only by the infrared visor mode.
+	// C010 is a normally visible lightpost. C011 is its infrared-revealed
+	// counterpart. Electric contact damage is encoded by wall IDs 6 and 14.
 	{32, C7DamageField, 0, 0, 0}
 	{33, C7DamageFieldAlt, 0, 0, 0}
 	{34, C7Static011, 0, 0, 0}
@@ -2130,7 +2140,7 @@ things
 	// map setup promotes that wall's elevator trigger to a bonus exit.
 	ignore 99;
 	ignore 100;
-	// 101 and 102 are declared as disintegrating walls above.
+	// 98, 101, and 102 are declared as moving walls above.
 	ignore 103;
 	ignore 104;
 	ignore 105;
@@ -2181,7 +2191,10 @@ things
 	{184, C7OrganicEye, 4, PATHING, 3}
 	{188, C7ProbeEye, 4, 0, 3}
 	{192, C7ProbeEye, 4, PATHING, 3}
-	{196, C7EniramBoss, 0, 0, 3}
+	// The singleton used on floors 5/10 and the boss gauntlets is the
+	// C690-series IronFoot. A controlled original-game substitution confirms
+	// both the artwork and its class-21 sound dispatcher.
+	{196, C7IronFoot, 0, 0, 3}
 	{198, C7MorphChair, 4, 0, 3}
 	{202, C7MorphFile, 4, 0, 3}
 	{206, C7MorphPlant, 4, 0, 3}

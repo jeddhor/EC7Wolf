@@ -8,14 +8,13 @@ actor C7Monster : WolfensteinMonster
 	health 25, 25, 25, 100
 	speed 1, 3
 	sighttime 1, 5
-	attacksound "c7/monster/attack"
-	seesound "c7/monster/sight"
-	deathsound "c7/monster/death"
 }
 
 actor C7OrganicEye : C7Monster
 {
-	// Ailoprobe (released executable class 0)
+	// Ailoprobe / ORGANIC EYE (released executable class 3).
+	attacksound "c7/monster/attack/class3"
+	deathsound "c7/monster/death/class3"
 	points 100
 	health 25, 25, 25, 100
 	states
@@ -48,7 +47,9 @@ actor C7OrganicEye : C7Monster
 
 actor C7ProbeEye : C7Monster
 {
-	// Animated Probe (class 1)
+	// Animated Probe / PROBE EYE (class 4).
+	attacksound "c7/monster/attack/class4"
+	deathsound "c7/monster/death/class4"
 	points 400
 	health 25, 50, 100, 150
 	states
@@ -82,7 +83,9 @@ actor C7ProbeEye : C7Monster
 
 actor C7Technician : C7Monster
 {
-	// Tenaj (class 2)
+	// Tenaj / TECHNICIAN (class 5).
+	attacksound "c7/monster/attack/class5"
+	deathsound "c7/monster/death/class5"
 	points 700
 	health 50, 50, 150, 300
 	dropitem "C7ChargePack"
@@ -117,7 +120,9 @@ actor C7Technician : C7Monster
 
 actor C7MorphChair : C7Technician
 {
-	// Bandor furniture disguises (classes 5-8)
+	// Bandor furniture disguises occupy released classes 8-11.
+	attacksound "c7/monster/attack/class8"
+	deathsound "c7/monster/death/class8"
 	points 500
 	health 25, 25, 50, 100
 	dropitem "C7ChargePack", 64
@@ -135,6 +140,8 @@ actor C7MorphChair : C7Technician
 
 actor C7MorphFile : C7Technician
 {
+	attacksound "c7/monster/attack/class8"
+	deathsound "c7/monster/death/class8"
 	points 500
 	health 25, 25, 50, 100
 	dropitem "C7ChargePack", 64
@@ -152,6 +159,8 @@ actor C7MorphFile : C7Technician
 
 actor C7MorphPlant : C7Technician
 {
+	attacksound "c7/monster/attack/class10"
+	deathsound "c7/monster/death/class8"
 	points 500
 	health 25, 25, 50, 100
 	dropitem "C7ChargePack", 64
@@ -169,6 +178,8 @@ actor C7MorphPlant : C7Technician
 
 actor C7MorphBarrel : C7Technician
 {
+	attacksound "c7/monster/attack/class8"
+	deathsound "c7/monster/death/class8"
 	points 500
 	health 25, 25, 50, 100
 	dropitem "C7ChargePack", 64
@@ -186,7 +197,10 @@ actor C7MorphBarrel : C7Technician
 
 actor C7Ugly : C7Monster
 {
-	// Rodex (class 4)
+	// Rodex / UGLY (class 6).
+	activesound "c7/monster/active/class6"
+	attacksound "c7/monster/attack/class6"
+	deathsound "c7/monster/death/class6"
 	points 700
 	health 25, 25, 50, 100
 	states
@@ -195,10 +209,12 @@ actor C7Ugly : C7Monster
 			RODX A -1 NOP A_Look
 			stop
 		Path:
-			RODX ABCD 7 NOP A_Chase
+			RODX A 7 NOP A_Chase
+			RODX BCD 7 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
 			loop
 		See:
-			RODX ABCD 5 NOP A_Chase
+			RODX A 5 NOP A_Chase
+			RODX BCD 5 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
 			loop
 		Missile:
 			C233 A 5 A_FaceTarget
@@ -225,7 +241,9 @@ actor C7Ugly : C7Monster
 
 actor C7Grunt : C7Monster
 {
-	// Ttocs (class 3)
+	// Ttocs / GRUNT (class 7).
+	attacksound "c7/monster/attack/class7"
+	deathsound "c7/monster/death/class7"
 	points 700
 	health 50, 50, 150, 300
 	states
@@ -262,7 +280,7 @@ actor C7Grunt : C7Monster
 
 actor C7Morph : C7Monster
 {
-	// The released class-19 sub-boss uses the Ttocs body with tougher stats.
+	// Released UNDEFINED MORPH class 12; its combat voice dispatcher is silent.
 	points 700
 	health 50, 50, 200, 500
 	states
@@ -299,6 +317,10 @@ actor C7Morph : C7Monster
 
 actor C7RedHelmet : C7Monster
 {
+	// Released RED HELMET class 13 (retained for the original actor slot).
+	activesound "c7/monster/active/class13"
+	attacksound "c7/monster/attack/class13"
+	deathsound "c7/monster/death/class13"
 	points 4000
 	health 45, 90, 175, 225
 	states
@@ -308,9 +330,9 @@ actor C7RedHelmet : C7Monster
 			stop
 		See:
 			C467 A 5 NOP A_Chase
-			C468 A 5 NOP A_Chase
-			C469 A 5 NOP A_Chase
-			C470 A 5 NOP A_Chase
+			C468 A 5 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
+			C469 A 5 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
+			C470 A 5 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
 			loop
 		Missile:
 			C520 A 5 A_FaceTarget
@@ -332,7 +354,8 @@ actor C7RedHelmet : C7Monster
 
 actor C7SpaceSeal : C7Monster
 {
-	// Released executable class 14 (object 324 band).
+	// Released SPACE SEAL class 15 (object 324 band).
+	deathsound "c7/monster/death/class14"
 	points 800
 	health 25, 25, 50, 100
 	states
@@ -369,7 +392,8 @@ actor C7SpaceSeal : C7Monster
 
 actor C7SpaceMarine : C7Monster
 {
-	// Eniram (class 10)
+	// Eniram / SPACE MARINE (class 14).
+	deathsound "c7/monster/death/class14"
 	points 1000
 	health 50, 50, 200, 300
 	states
@@ -437,7 +461,8 @@ actor C7Boss : C7Monster
 
 actor C7HungryPuddle : C7Boss
 {
-	// Eitak / released executable class 15 (object 328 band).
+	// Eitak / HUNGRY PUDDLE (released executable class 16).
+	deathsound "c7/monster/death/class16"
 	points 100
 	health 75, 75, 225, 450
 }
@@ -445,6 +470,9 @@ actor C7HungryPuddle : C7Boss
 actor C7Semaj : C7Monster
 {
 	// Purple slime guard, released executable class 13 (object 300 band).
+	activesound "c7/monster/active/class13"
+	attacksound "c7/monster/attack/class13"
+	deathsound "c7/monster/death/class13"
 	points 100
 	health 25, 25, 50, 100
 	speed 1, 4
@@ -455,9 +483,9 @@ actor C7Semaj : C7Monster
 			stop
 		See:
 			C561 A 5 NOP A_Chase
-			C562 A 5 NOP A_Chase
-			C563 A 5 NOP A_Chase
-			C564 A 5 NOP A_Chase
+			C562 A 5 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
+			C563 A 5 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
+			C564 A 5 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
 			loop
 		Missile:
 			C565 A 4 A_FaceTarget
@@ -478,6 +506,8 @@ actor C7Semaj : C7Monster
 actor C7SkullBoss : C7Boss
 {
 	// Solrac (class 17)
+	attacksound "c7/monster/attack/class17"
+	deathsound "c7/monster/death/class14"
 	points 2500
 	health 1000, 1500, 3000, 5000
 	states
@@ -493,7 +523,7 @@ actor C7SkullBoss : C7Boss
 			loop
 		Missile:
 			C642 A 5 A_FaceTarget
-			C643 A 0 A_PlaySound("c7/monster/attack")
+			C643 A 0 A_PlaySound("c7/monster/attack/class17")
 			C643 A 4 bright A_CustomMissile("C7BossEnergyBolt")
 			C644 A 4
 			goto See
@@ -514,19 +544,30 @@ actor C7SkullBoss : C7Boss
 
 actor C7EniramBoss : C7SpaceMarine
 {
+	// Cloaked boss Eniram / INVISO (released executable class 19).
+	activesound "c7/monster/active/class21"
+	deathsound "c7/monster/death/class19"
 	points 2500
 	health 1000, 1500, 2000, 4000
 	states
 	{
+		See:
+			C653 A 5 NOP A_Chase
+			C654 A 5 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
+			C655 A 5 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
+			C656 A 5 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
+			loop
 		Missile:
-			C676 A 4 A_FaceTarget
-			C677 A 4
-			C678 A 0 A_PlaySound("c7/monster/attack")
-			C678 A 4 bright A_CustomMissile("C7BossPlasmaBolt")
-			C679 A 4
-			C680 A 4
-			C681 A 4
-			C682 A 4
+			C669 A 0 A_PlaySound("c7/monster/cloak/materialize")
+			C669 A 10 A_FaceTarget
+			C670 A 10
+			C671 A 10
+			C672 A 0 A_PlaySound("c7/monster/cloak/fire")
+			C672 A 0 A_PlaySound("c7/weapon/plasma")
+			C672 A 10 bright A_CustomMissile("C7BossPlasmaBolt")
+			C673 A 10
+			C674 A 10
+			C675 A 10
 			goto See
 	}
 }
@@ -534,6 +575,8 @@ actor C7EniramBoss : C7SpaceMarine
 actor C7PurpleBoss : C7Boss
 {
 	// Tymok (class 22)
+	activesound "c7/monster/active/class25"
+	deathsound "c7/monster/death/class22"
 	points 2500
 	health 1000, 1500, 2000, 4000
 	dropitem "C7PlasmaRifle"
@@ -544,14 +587,15 @@ actor C7PurpleBoss : C7Boss
 			stop
 		See:
 			C726 A 6 NOP A_Chase
-			C727 A 6 NOP A_Chase
-			C728 A 6 NOP A_Chase
-			C729 A 6 NOP A_Chase
+			C727 A 6 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
+			C728 A 6 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
+			C729 A 6 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
 			loop
 		Missile:
 			C730 A 5 A_FaceTarget
-			C731 A 0 A_PlaySound("c7/monster/attack")
+			C731 A 0 A_PlaySound("c7/weapon/plasma")
 			C731 A 4 bright A_CustomMissile("C7BossPlasmaBolt")
+			C732 A 0 A_PlaySound("c7/monster/attack/class25")
 			C732 A 4
 			C733 A 4
 			goto See
@@ -567,6 +611,8 @@ actor C7PurpleBoss : C7Boss
 actor C7IronFoot : C7Boss
 {
 	// Mechanoid Warrior (class 20)
+	activesound "c7/monster/active/class20"
+	deathsound "c7/monster/death/class20"
 	points 2500
 	health 500, 500, 1000, 1500
 	dropitem "C7DualBlaster"
@@ -577,14 +623,15 @@ actor C7IronFoot : C7Boss
 			stop
 		See:
 			C690 A 7 NOP A_Chase
-			C691 A 7 NOP A_Chase
-			C692 A 7 NOP A_Chase
-			C693 A 7 NOP A_Chase
+			C691 A 7 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
+			C692 A 7 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
+			C693 A 7 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
 			loop
 		Missile:
 			C694 A 6 A_FaceTarget
-			C695 A 5 bright A_WolfAttack
-			C696 A 5 bright A_WolfAttack
+			C695 A 0 A_PlaySound("c7/weapon/plasma")
+			C695 A 5 bright A_CustomMissile("C7BossPlasmaBolt")
+			C696 A 5 bright
 			goto See
 		Death:
 			C699 A 0 A_Fall
@@ -600,7 +647,7 @@ actor C7IronFoot : C7Boss
 
 actor C7HornedBoss : C7Boss
 {
-	// Tebazile (class 16)
+	// Tebazile / MESSIAH (class 24); its native death dispatcher is silent.
 	points 10000
 	health 5000, 6000, 7000, 9000
 	states
@@ -630,7 +677,6 @@ actor C7HornedBoss : C7Boss
 		EniramAttack:
 			C676 A 4 A_FaceTarget
 			C677 A 4
-			C678 A 0 A_PlaySound("c7/monster/attack")
 			C678 A 4 bright A_CustomMissile("C7BossPlasmaBolt")
 			C679 A 4
 			C680 A 4
@@ -646,7 +692,6 @@ actor C7HornedBoss : C7Boss
 			loop
 		TymokAttack:
 			C730 A 5 A_FaceTarget
-			C731 A 0 A_PlaySound("c7/monster/attack")
 			C731 A 4 bright A_CustomMissile("C7BossPlasmaBolt")
 			C732 A 4
 			C733 A 4
@@ -660,7 +705,6 @@ actor C7HornedBoss : C7Boss
 			loop
 		SolracAttack:
 			C642 A 5 A_FaceTarget
-			C643 A 0 A_PlaySound("c7/monster/attack")
 			C643 A 4 bright A_CustomMissile("C7BossEnergyBolt")
 			goto PhaseSolrac
 		PhaseFinal:
@@ -698,6 +742,7 @@ actor C7BossEnergyBolt
 			C706 A 2 bright
 			loop
 		Death:
+			C707 A 0 bright A_PlaySound("c7/teleport")
 			C707 A 4 bright
 			C708 A 4 bright
 			C709 A 4 bright
@@ -753,10 +798,11 @@ actor C7ExitVortex : CustomInventory
 	states
 	{
 		Spawn:
+			C738 A 0 A_C7VortexSound
+			C738 A 5
+			C739 A 5
 			C740 A 5
 			C741 A 5
-			C742 A 5
-			C743 A 5
 			loop
 		Pickup:
 			TNT1 A 0 Exit_Normal

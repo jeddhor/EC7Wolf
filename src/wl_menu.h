@@ -10,7 +10,8 @@
 extern enum EMenuStyle
 {
 	MENUSTYLE_Wolf,
-	MENUSTYLE_Blake
+	MENUSTYLE_Blake,
+	MENUSTYLE_Corridor7
 } MenuStyle;
 
 extern int BORDCOLOR, BORD2COLOR, BORD3COLOR, BKGDCOLOR, STRIPE,

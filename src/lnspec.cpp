@@ -225,6 +225,20 @@ FUNC(Wall_AnimateRemove)
 	}
 
 	new C7AnimatedWall(spot);
+	const char *sound = "c7/forcefield/deactivate/53";
+	switch(spot->corridor7WallID)
+	{
+		case 73:
+		case 229:
+			sound = "c7/forcefield/deactivate/73";
+			break;
+		case 81:
+			sound = "c7/forcefield/deactivate/81";
+			break;
+		default:
+			break;
+	}
+	PlaySoundLocMapSpot(sound, spot);
 	return 1;
 }
 
@@ -263,7 +277,8 @@ FUNC(C7_WallSwitch)
 		P_AlertCorridor7Monsters(activator);
 	}
 
-	PlaySoundLocMapSpot("switches/normbutn", spot);
+	PlaySoundLocMapSpot(args[1] == 3 ? "c7/panel/intruder" :
+		"c7/panel/access", spot);
 	return 1;
 }
 
@@ -369,7 +384,6 @@ FUNC(C7_Dispenser)
 			if(!health || !activator->GiveInventory(health))
 				return 0;
 			SetC7WallTexture(spot, 89);
-			PlaySoundLocMapSpot("misc/health_pkup", spot);
 			if(activator == players[ConsolePlayer].camera)
 				StatusBar->SetTopMessage("25 Health Restored");
 			return 1;
@@ -378,7 +392,6 @@ FUNC(C7_Dispenser)
 			return 0;
 
 		new C7HealthDispenser(spot);
-		PlaySoundLocMapSpot("switches/normbutn", spot);
 		return 1;
 	}
 
@@ -400,7 +413,7 @@ FUNC(C7_Dispenser)
 		if(!ammo || !activator->GiveInventory(ammo, 50))
 			return 0;
 		SetC7WallTexture(spot, 112);
-		PlaySoundLocMapSpot("misc/ammo_pkup", spot);
+		PlaySoundLocMapSpot("c7/dispenser/ammo", spot);
 		if(activator == players[ConsolePlayer].camera)
 			StatusBar->SetTopMessage("50 Rounds Acquired");
 		return 1;
@@ -418,7 +431,7 @@ FUNC(C7_Dispenser)
 			return 1;
 		}
 		visor->amount = visor->maxamount;
-		PlaySoundLocMapSpot("misc/ammo_pkup", spot);
+		PlaySoundLocMapSpot("c7/dispenser/visor", spot);
 		if(activator == players[ConsolePlayer].camera)
 			StatusBar->SetTopMessage("VISOR BATTERY RECHARGED");
 		return 1;
@@ -1270,7 +1283,10 @@ FUNC(Exit_Normal)
 		if(destroyed < clearance[skill])
 		{
 			if(activator == players[ConsolePlayer].camera)
+			{
+				SD_PlaySound("c7/elevator/denied");
 				StatusBar->SetTopMessage("FLOOR NOT SECURED");
+			}
 			Printf("Elevator clearance denied: %u%% of aliens destroyed; %u%% required.\n",
 				destroyed, clearance[skill]);
 			return 0;
@@ -1290,6 +1306,12 @@ FUNC(Exit_Normal)
 		playstate = ex_secretlevel;
 	else
 		playstate = ex_completed;
+	if(IWad::CheckGameFilter("Corridor7") &&
+		activator == players[ConsolePlayer].camera)
+	{
+		SD_PlaySound(args[0] == 2 ? "c7/elevator/secret" :
+			"c7/elevator/activate");
+	}
 	SD_WaitSoundDone();
 	return 1;
 }

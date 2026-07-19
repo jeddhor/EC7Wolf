@@ -281,6 +281,16 @@ void T_Projectile (AActor *self)
 					lastHit = check;
 					if(check->flags & FL_SHOOTABLE)
 					{
+						// The Corridor 7 red-skull taunt is implemented as a moving
+						// projectile-shaped actor, but original class 27 vanishes on
+						// contact without entering the player's pain path or dealing
+						// even a zero-point hit.
+						const ClassDef *c7Apparition = ClassDef::FindClass("C7SkullApparition");
+						if(c7Apparition && self->IsA(c7Apparition))
+						{
+							T_ExplodeProjectile(self, NULL);
+							return;
+						}
 						DamageActor(check, self->target, self->GetDamage());
 
 						if(!(self->flags & FL_RIPPER) || (check->flags & FL_DONTRIP))
@@ -690,8 +700,23 @@ ACTION_FUNCTION(A_Chase)
 	}
 	while(move);
 
-	if(!(flags & CHF_NOPLAYACTIVE) &&
-		self->activesound != NAME_None && pr_chase.RandomOld(false) < 3)
+	bool playActive = false;
+	if(!(flags & CHF_NOPLAYACTIVE) && self->activesound != NAME_None)
+	{
+		if(IWad::CheckGameFilter("Corridor7"))
+		{
+			// Corridor 7's native actor thinker rolls once in seven for the
+			// handful of classes which have an ambient/active sound. Class 13
+			// performs a second one-in-nine roll before playing its voice.
+			playActive = pr_chase(7) == 0;
+			static const FName class13Active("c7/monster/active/class13");
+			if(playActive && self->activesound == class13Active)
+				playActive = pr_chase(9) == 0;
+		}
+		else
+			playActive = pr_chase.RandomOld(false) < 3;
+	}
+	if(playActive)
 	{
 		PlaySoundLocActor(self->activesound, self);
 	}

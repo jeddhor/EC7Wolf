@@ -169,7 +169,7 @@ class GameMap
 					amFlags(0), thinker(NULL), slideStyle(0),
 					pushDirection(Tile::East), pushAmount(0),
 					pushReceptor(NULL), maskedWallType(0),
-					corridor7WallMarker(0), corridor7WallID(0),
+					corridor7WallMarker(0), corridor7ChamberUses(3), corridor7WallID(0),
 					corridor7SightTransparent(false), tag(0), nexttag(NULL)
 				{
 					slideAmount[0] = slideAmount[1] = slideAmount[2] = slideAmount[3] = 0;
@@ -205,6 +205,8 @@ class GameMap
 				// maskedWallType is derived independently from index-255 art.
 				BYTE			maskedWallType;
 				BYTE			corridor7WallMarker;
+				// Health-chamber charge is map state, not pushwall movement.
+				BYTE			corridor7ChamberUses;
 				WORD			corridor7WallID;
 				bool			corridor7SightTransparent;
 

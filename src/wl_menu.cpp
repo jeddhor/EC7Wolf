@@ -103,6 +103,38 @@ MENU_LISTENER(ViewScoresOrEndGame)
 	}
 	return true;
 }
+// Corridor 7's main menu splits ECWolf's dual-purpose entries: HIGH SCORES
+// always shows the table and ABORT CURRENT MISSION always ends the game.
+MENU_LISTENER(C7ViewHighScores)
+{
+	if (gameinfo.TrackHighScores == true && Net::InitVars.mode == Net::MODE_SinglePlayer)
+	{
+		MenuFadeOut();
+
+		StartCPMusic(gameinfo.ScoresMusic);
+
+		DrawHighScores();
+		VW_UpdateScreen();
+		MenuFadeIn();
+
+		IN_Ack(ACK_Local);
+
+		StartCPMusic(gameinfo.MenuMusic);
+		MenuFadeOut();
+		mainMenu.draw();
+		MenuFadeIn ();
+	}
+	return true;
+}
+MENU_LISTENER(C7AbortMission)
+{
+	if (ingame)
+	{
+		if(CP_EndGame(0))
+			Menu::closeMenus();
+	}
+	return true;
+}
 MENU_LISTENER(QuitGame)
 {
 	FString endString = gameinfo.QuitMessages[M_Random()%gameinfo.QuitMessages.Size()];
@@ -223,7 +255,8 @@ MENU_LISTENER(StartNewGame)
 	//
 	// CHANGE "READ THIS!" TO NORMAL COLOR
 	//
-	readThis->setHighlighted(false);
+	if(readThis)
+		readThis->setHighlighted(false);
 
 	return true;
 }
@@ -235,7 +268,8 @@ MENU_LISTENER(JoinNetGame)
 	//
 	// CHANGE "READ THIS!" TO NORMAL COLOR
 	//
-	readThis->setHighlighted(false);
+	if(readThis)
+		readThis->setHighlighted(false);
 
 	return true;
 }
@@ -363,6 +397,8 @@ void CreateMenus()
 	// HACK: Determine menu style by IWAD
 	if(IWad::CheckGameFilter("Blake"))
 		MenuStyle = MENUSTYLE_Blake;
+	else if(IWad::CheckGameFilter("Corridor7"))
+		MenuStyle = MENUSTYLE_Corridor7;
 
 	// Extract the palette
 	BORDCOLOR = ColorMatcher.Pick(RPART(gameinfo.MenuColors[0]), GPART(gameinfo.MenuColors[0]), BPART(gameinfo.MenuColors[0]));
@@ -387,6 +423,47 @@ void CreateMenus()
 	mainMenu.setHeadPicture("M_OPTION");
 
 	const bool useEpisodeMenu = EpisodeInfo::GetNumEpisodes() > 1;
+	if(MenuStyle == MENUSTYLE_Corridor7)
+	{
+		// The whole main menu screen ships as one picture (chunk 12) with the
+		// labels painted in; only the arrow cursor is drawn by the engine at
+		// x=56, one column of item text tops measured from that picture:
+		// 58, 74, 83, 101, 110, 128, 137, 155, 172.
+		static const int itemHeights[9] = { 16, 9, 18, 9, 18, 9, 18, 17, 14 };
+		mainMenu.setBackground("C7G0012", 56, 58);
+		// Escape from the main menu triggers the quit prompt, which carries
+		// its own sound in Confirm(); the original plays nothing here.
+		mainMenu.setEscapeSound("");
+
+		MenuItem *items[9];
+		if(gameinfo.PlayerClasses.Size() > 1)
+			items[0] = new MenuSwitcherMenuItem("New Mission", playerClasses);
+		else if(!Net::IsArbiter())
+			items[0] = new MenuItem("New Mission", JoinNetGame);
+		else if(useEpisodeMenu)
+			items[0] = new MenuSwitcherMenuItem("New Mission", episodes);
+		else
+			items[0] = new MenuSwitcherMenuItem("New Mission", skills);
+		items[1] = new MenuSwitcherMenuItem("Adjust Audio", soundBase);
+		items[2] = new MenuSwitcherMenuItem("Adjust Visual", displayMenu);
+		items[3] = GameSave::GetLoadMenuItem();   // Retrieve Mission
+		items[4] = GameSave::GetSaveMenuItem();   // Store Mission
+		items[5] = new MenuItem("Resume Current Mission", PlayDemosOrReturnToGame);
+		items[6] = new MenuItem("Abort Current Mission", C7AbortMission);
+		items[7] = new MenuItem("High Scores", C7ViewHighScores);
+		items[8] = new MenuItem("Exit Building", QuitGame);
+		// Activating an entry is silent in the original; the quit prompt's
+		// sound is played by Confirm() when the dialog appears.
+		for(int i = 0;i < 9;++i)
+		{
+			items[i]->setTextVisible(false);
+			items[i]->setActivateSoundEnabled(false);
+			items[i]->setHeight(itemHeights[i]);
+			mainMenu.addItem(items[i]);
+		}
+	}
+	else
+	{
 	if(gameinfo.PlayerClasses.Size() > 1)
 		mainMenu.addItem(new MenuSwitcherMenuItem(language["STR_NG"], playerClasses));
 	else if(!Net::IsArbiter())
@@ -406,6 +483,7 @@ void CreateMenus()
 	mainMenu.addItem(new MenuItem(language["STR_VS"], ViewScoresOrEndGame));
 	mainMenu.addItem(new MenuItem(language["STR_BD"], PlayDemosOrReturnToGame));
 	mainMenu.addItem(new MenuItem(language["STR_QT"], QuitGame));
+	}
 
 	playerClasses.setHeadText(language["STR_PLAYERCLASS"]);
 	for(unsigned int i = 0;i < gameinfo.PlayerClasses.Size();++i)
@@ -662,7 +740,29 @@ void US_ControlPanel (ScanCode scancode)
 			break;
 	}
 
-	if(ingame)
+	if(MenuStyle == MENUSTYLE_Corridor7)
+	{
+		// Fixed layout painted into the background picture:
+		// 0=New Mission 1=Adjust Audio 2=Adjust Visual 3=Retrieve Mission
+		// 4=Store Mission 5=Resume Current Mission 6=Abort Current Mission
+		// 7=High Scores 8=Exit Building
+		if(ingame)
+		{
+			mainMenu[0]->setEnabled(Net::InitVars.mode == Net::MODE_SinglePlayer); // Require explicit end game for net games
+			mainMenu[4]->setEnabled(Net::InitVars.mode == Net::MODE_SinglePlayer && players[ConsolePlayer].state != player_t::PST_DEAD);
+			mainMenu[5]->setEnabled(true);
+			mainMenu[6]->setEnabled(Net::IsArbiter());
+		}
+		else
+		{
+			mainMenu[0]->setEnabled(true);
+			mainMenu[4]->setEnabled(false);
+			mainMenu[5]->setEnabled(Net::InitVars.mode == Net::MODE_SinglePlayer);
+			mainMenu[6]->setEnabled(false);
+		}
+		mainMenu[7]->setEnabled(gameinfo.TrackHighScores == true && Net::InitVars.mode == Net::MODE_SinglePlayer);
+	}
+	else if(ingame)
 	{
 		mainMenu[0]->setEnabled(Net::InitVars.mode == Net::MODE_SinglePlayer); // Require explicit end game for net games
 		mainMenu[mainMenu.countItems()-3]->setText(language["STR_EG"]);
@@ -1063,6 +1163,9 @@ bool Confirm (const char *string)
 #endif
 
 	Message (string);
+	// Corridor 7 announces the dialog itself and stays silent on the answer.
+	if(MenuStyle == MENUSTYLE_Corridor7)
+		SD_PlaySound ("c7/menu/prompt");
 	IN_ClearKeysDown ();
 	WaitKeyUp ();
 
@@ -1108,13 +1211,15 @@ bool Confirm (const char *string)
 	if (Keyboard[sc_S] || Keyboard[sc_Y] || Keyboard[sc_Return] || ci.button0)
 	{
 		xit = true;
-		ShootSnd ();
+		if(MenuStyle != MENUSTYLE_Corridor7)
+			ShootSnd ();
 	}
 
 	IN_ClearKeysDown ();
 	WaitKeyUp ();
 
-	SD_PlaySound (whichsnd[xit]);
+	if(MenuStyle != MENUSTYLE_Corridor7)
+		SD_PlaySound (whichsnd[xit]);
 
 #ifdef __ANDROID__
 	inConfirm = false;

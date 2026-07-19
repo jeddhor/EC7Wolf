@@ -653,6 +653,20 @@ void WolfStatusBar::DrawStatusBar()
 	DrawItems ();
 }
 
+static void DrawC7TopMessage(const char *message)
+{
+	// The DOS notification renderer offsets a black copy by one virtual pixel
+	// before painting a solid, full-bright yellow stencil. Using the regular
+	// font color ramp preserved the font's dark shades, which made the letters
+	// look smoke-stained by the scene lighting.
+	screen->DrawText(SmallFont, CR_BLACK, 5, 5, message,
+		DTA_FillColor, GPalette.BaseColors[GPalette.BlackIndex].d,
+		DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
+	screen->DrawText(SmallFont, CR_YELLOW, 4, 4, message,
+		DTA_FillColor, GPalette.BaseColors[3].d,
+		DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
+}
+
 void WolfStatusBar::DrawTopOverlay()
 {
 	if(corridor7 && gamestate.TimeCount < c7ChamberPowerUntil)
@@ -666,8 +680,7 @@ void WolfStatusBar::DrawTopOverlay()
 
 	if(corridor7 && !topMessage.IsEmpty() && gamestate.TimeCount < topMessageUntil)
 	{
-		screen->DrawText(SmallFont, CR_YELLOW, 4, 4, topMessage.GetChars(),
-			DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
+		DrawC7TopMessage(topMessage.GetChars());
 		return;
 	}
 
@@ -675,11 +688,7 @@ void WolfStatusBar::DrawTopOverlay()
 	// status-bar content. Drawing it every rendered frame also prevents the
 	// alternating-frame flicker caused by the status bar's update cadence.
 	if(corridor7 && gamestate.TimeCount < 5*TICRATE)
-	{
-		screen->DrawText(SmallFont, CR_YELLOW, 4, 4,
-			"Eliminate Aliens To Secure Floor",
-			DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
-	}
+		DrawC7TopMessage("Eliminate Aliens To Secure Floor");
 }
 
 void WolfStatusBar::SetTopMessage(const char *message, unsigned int duration)

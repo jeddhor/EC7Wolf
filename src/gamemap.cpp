@@ -887,6 +887,13 @@ FArchive &operator<< (FArchive &arc, GameMap *&gm)
 			if(GameSave::SaveProdVersion >= 0x001002FF && GameSave::SaveVersion >= 1375246092)
 				arc << plane.map[i].slideStyle;
 
+			// Older Corridor 7 builds stored chamber charge in pushAmount,
+			// accidentally turning the stationary door into a moving pushwall.
+			if(GameSave::SaveVersion > 1784264250ULL)
+				arc << plane.map[i].corridor7ChamberUses;
+			else if(!arc.IsStoring())
+				plane.map[i].corridor7ChamberUses = 3;
+
 			if(!arc.IsStoring())
 				plane.map[i].plane = &plane;
 		}

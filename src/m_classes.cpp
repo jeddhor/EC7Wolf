@@ -1,5 +1,6 @@
 #include "c_cvars.h"
 #include "m_classes.h"
+#include "id_ca.h"
 #include "wl_def.h"
 #include "wl_menu.h"
 #include "wl_play.h"
@@ -30,6 +31,7 @@ EColorRange MenuItem::getTextColor() const
 MenuItem::MenuItem(const char string[80], MENU_LISTENER_PROTOTYPE(activateListener)) :
 	activateListener(activateListener), enabled(true), highlight(false),
 	picture(NULL), pictureX(-1), pictureY(-1), visible(true),
+	textVisible(true), activateSoundEnabled(true),
 	activateSound("menu/activate")
 {
 	setText(string);
@@ -43,6 +45,9 @@ void MenuItem::activate()
 
 void MenuItem::draw()
 {
+	if(!textVisible)
+		return;
+
 	if(picture)
 		VWB_DrawGraphic(picture, pictureX == -1 ? menu->getX() + 32 : pictureX, pictureY == -1 ? PrintY : pictureY, MENU_CENTER);
 
@@ -547,7 +552,8 @@ void ControlMenuItem::right()
 
 void Menu::drawGunHalfStep(int x, int y)
 {
-	if(MenuStyle != MENUSTYLE_Blake)
+	// Corridor 7's arrow jumps directly between items with a single sound.
+	if(MenuStyle == MENUSTYLE_Wolf)
 	{
 		VWB_DrawGraphic (cursor, x, y-2, MENU_CENTER);
 		VW_UpdateScreen ();
@@ -558,7 +564,7 @@ void Menu::drawGunHalfStep(int x, int y)
 
 void Menu::eraseGun(int x, int y)
 {
-	if(MenuStyle != MENUSTYLE_Blake)
+	if(MenuStyle == MENUSTYLE_Wolf)
 	{
 		int gx = x, gy = y, gw = cursor->GetScaledWidth(), gh = cursor->GetScaledHeight();
 		MenuToRealCoords(gx, gy, gw, gh, MENU_CENTER);
@@ -569,7 +575,9 @@ void Menu::eraseGun(int x, int y)
 Menu::Menu(int x, int y, int w, int indent, MENU_LISTENER_PROTOTYPE(entryListener)) :
 	entryListener(entryListener), animating(false), controlHeaders(false),
 	curPos(0), headPicture(NULL), headTextInStripes(false),
-	headPictureIsAlternate(false), height(0), indent(indent), x(x), y(y), w(w),
+	headPictureIsAlternate(false), backgroundPicture(NULL),
+	backgroundCursorX(0), backgroundCursorY(0), escapeSound("menu/escape"),
+	height(0), indent(indent), x(x), y(y), w(w),
 	itemOffset(0)
 {
 	for(unsigned int i = 0;i < 36;i++)
@@ -719,6 +727,20 @@ void Menu::drawMenu() const
 
 void Menu::draw() const
 {
+	if(backgroundPicture)
+	{
+		// The picture holds the window and every label; only the cursor moves.
+		// The cursor must use the same full-screen 320x200 stretch as
+		// CA_CacheScreen (MENU_NONE), not the letterboxed menu scaling, or it
+		// drifts off the picture's rows as the window aspect changes.
+		CA_CacheScreen(backgroundPicture);
+		drawMenu();
+		if(cursor && !isAnimating() && countItems() > 0)
+			VWB_DrawGraphic(cursor, backgroundCursorX, backgroundCursorY + getHeight(curPos), MENU_NONE);
+		VW_UpdateScreen();
+		return;
+	}
+
 	static FTextureID mcontrolID = TexMan.CheckForTexture("M_MCONTL", FTexture::TEX_Any);
 	ClearMScreen();
 	if(headPicture && !headPictureIsAlternate)
@@ -1030,7 +1052,8 @@ int Menu::handle()
 			return curPos;
 
 		case 2:
-			SD_PlaySound("menu/escape");
+			if(!escapeSound.IsEmpty())
+				SD_PlaySound(escapeSound);
 
 			// Check for mouse up
 			do { ReadAnyControl(&ci); } while(ci.button1);
@@ -1086,6 +1109,17 @@ void Menu::setCurrentPosition(int position)
 		}
 		if(accumulatedHeight >= 200)
 			++itemOffset;
+	}
+}
+
+void Menu::setBackground(const char* picture, int cursorX, int cursorY)
+{
+	FTextureID picID = TexMan.CheckForTexture(picture, FTexture::TEX_Any);
+	if(picID.isValid())
+	{
+		backgroundPicture = TexMan(picID);
+		backgroundCursorX = cursorX;
+		backgroundCursorY = cursorY;
 	}
 }
 

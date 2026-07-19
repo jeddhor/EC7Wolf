@@ -94,7 +94,6 @@ actor C7Player : PlayerPawn
 
 actor C7Weapon : Weapon
 {
-	attacksound "c7/weapon/fire"
 	weapon.yadjust 32
 	+WEAPON.DONTBOB
 	states
@@ -111,8 +110,8 @@ actor C7Weapon : Weapon
 actor C7Bayonet : C7Weapon
 {
 	// The shipped game calls this the self-powered security Taser.
-	weapon.ammouse1 0
 	attacksound "c7/weapon/bayonet"
+	weapon.ammouse1 0
 	+WEAPON.NOAUTOFIRE
 	states
 	{
@@ -134,6 +133,7 @@ actor C7Bayonet : C7Weapon
 
 actor C7M16 : C7Weapon
 {
+	attacksound "c7/weapon/m16"
 	weapon.ammotype1 "C7Bullets"
 	weapon.ammouse1 1
 	weapon.ammogive1 100
@@ -158,10 +158,10 @@ actor C7M16 : C7Weapon
 
 actor C7M343 : C7Weapon
 {
+	attacksound "c7/weapon/m343"
 	weapon.ammotype1 "C7Bullets"
 	weapon.ammouse1 1
 	weapon.ammogive1 100
-	attacksound "c7/weapon/machinegun"
 	states
 	{
 		Ready:
@@ -183,6 +183,7 @@ actor C7M343 : C7Weapon
 
 actor C7DualBlaster : C7Weapon
 {
+	attacksound "c7/weapon/dualblaster"
 	weapon.ammotype1 "C7Energy"
 	weapon.ammouse1 1
 	weapon.ammogive1 100
@@ -207,6 +208,7 @@ actor C7DualBlaster : C7Weapon
 
 actor C7Disintegrator : C7Weapon
 {
+	attacksound "c7/weapon/disintegrator"
 	weapon.ammotype1 "C7Energy"
 	weapon.ammouse1 1
 	weapon.ammogive1 100
@@ -231,10 +233,10 @@ actor C7Disintegrator : C7Weapon
 
 actor C7Shotgun : C7Weapon
 {
+	attacksound "c7/weapon/shotgun"
 	weapon.ammotype1 "C7Bullets"
 	weapon.ammouse1 5
 	weapon.ammogive1 100
-	attacksound "c7/weapon/shotgun"
 	+WEAPON.NOAUTOFIRE
 	states
 	{
@@ -251,7 +253,6 @@ actor C7Shotgun : C7Weapon
 			C811 A 12
 			C812 A 12
 			C813 A 12
-			C814 A 6
 			goto Ready
 		Spawn:
 			C450 A -1
@@ -261,6 +262,7 @@ actor C7Shotgun : C7Weapon
 
 actor C7PlasmaRifle : C7Weapon
 {
+	attacksound "c7/weapon/plasma"
 	weapon.ammotype1 "C7Energy"
 	weapon.ammouse1 1
 	weapon.ammogive1 100
@@ -285,6 +287,7 @@ actor C7PlasmaRifle : C7Weapon
 
 actor C7AssaultCannon : C7Weapon
 {
+	attacksound "c7/weapon/assault"
 	weapon.ammotype1 "C7Energy"
 	weapon.ammouse1 1
 	weapon.ammogive1 100
@@ -393,11 +396,12 @@ actor C7ProximityMine
 	states
 	{
 		Spawn:
-			C063 A 12 A_PlaySound("c7/mine/arm")
-			C063 A 12 A_PlaySound("c7/mine/arm")
-			C063 A 12 A_PlaySound("c7/mine/arm")
+			// The native mine-drop/arming path does not call SD_PlaySound.
+			// C001 is the released mine lying on the floor. C063 is the
+			// green 25-mine pickup crate and must never be used here.
+			C001 A 36
 		Armed:
-			C063 A 1 A_C7MineThink
+			C001 A 1 A_C7MineThink
 			loop
 		Death:
 			C068 A 3 bright A_Explode(random(102, 500), 128, 1, true)

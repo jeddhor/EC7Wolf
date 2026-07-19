@@ -258,16 +258,17 @@ enum
 	FILE_VGAHEAD,
 	FILE_VGAGRAPH,
 	FILE_VSWAP,
+	FILE_AUDIOMUS,
 
 	BASEFILES,
 
-	FILE_REQMASK = (1<<BASEFILES)-1
+	FILE_REQMASK = ((1<<BASEFILES)-1) & ~(1<<FILE_AUDIOMUS)
 };
 struct BaseFile
 {
 	FString	extension;
 	FString	filename[BASEFILES];
-	BYTE	isValid;
+	unsigned int	isValid;
 };
 /* Steam ships Spear of Destiny in the mission pack 3 state, so we need to go
  * and correct steam installs.
@@ -320,12 +321,12 @@ static bool VerifySpearInstall(const char* directory)
  */
 static void LookForGameData(FResourceFile *res, TArray<WadStuff> &iwads, const char* directory)
 {
-	static const unsigned int LoadableBaseFiles[] = { FILE_AUDIOT, FILE_GAMEMAPS, FILE_VGAGRAPH, FILE_VSWAP, BASEFILES };
+	static const unsigned int LoadableBaseFiles[] = { FILE_AUDIOT, FILE_GAMEMAPS, FILE_VGAGRAPH, FILE_VSWAP, FILE_AUDIOMUS, BASEFILES };
 	static const char* const BaseFileNames[BASEFILES][3] = {
 		{"audiohed", NULL}, {"audiot", NULL},
 		{"gamemaps", "maptemp", NULL}, {"maphead", NULL},
 		{"vgadict", NULL}, {"vgahead", NULL}, {"vgagraph", NULL},
-		{"vswap", "gfxtiles", NULL}
+		{"vswap", "gfxtiles", NULL}, {"audiomus", NULL}
 	};
 	TArray<BaseFile> foundFiles;
 

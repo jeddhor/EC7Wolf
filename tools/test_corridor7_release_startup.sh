@@ -77,6 +77,12 @@ xvfb-run -a sh -c '
 	attempt=0
 	while [ -z "$window" ]; do
 		window=$(xdotool search --pid "$pid" --onlyvisible 2>/dev/null | sed -n "1p")
+		# Some SDL/X11 combinations do not set _NET_WM_PID on the game
+		# window. The isolated Xvfb server contains only this ECWolf instance,
+		# so its window title is a safe deterministic fallback.
+		if [ -z "$window" ]; then
+			window=$(xdotool search --onlyvisible --name "ECWolf" 2>/dev/null | sed -n "1p")
+		fi
 		attempt=$((attempt + 1))
 		[ "$attempt" -lt 50 ] || exit 12
 		[ -n "$window" ] || sleep 0.1
@@ -91,7 +97,7 @@ xvfb-run -a sh -c '
 	# that the packaged menu is rendered, accepts input, and reaches MAP01.
 	env SDL_AUDIODRIVER=dummy \
 		ECWOLF_CONFIG="$C7_CONFIG_FILE" ECWOLF_SAVEDIR="$C7_SAVE_DIR" \
-		stdbuf -oL -eL ./run-corridor7.sh --nowait \
+		stdbuf -oL -eL ./run-corridor7.sh --nowait --debugnet \
 		>>"$C7_STARTUP_LOG" 2>&1 &
 	pid=$!
 	attempt=0
@@ -105,6 +111,9 @@ xvfb-run -a sh -c '
 	attempt=0
 	while [ -z "$window" ]; do
 		window=$(xdotool search --pid "$pid" --onlyvisible 2>/dev/null | sed -n "1p")
+		if [ -z "$window" ]; then
+			window=$(xdotool search --onlyvisible --name "ECWolf" 2>/dev/null | sed -n "1p")
+		fi
 		attempt=$((attempt + 1))
 		[ "$attempt" -lt 50 ] || exit 18
 		[ -n "$window" ] || sleep 0.1
@@ -153,6 +162,45 @@ xvfb-run -a sh -c '
 	kill -0 "$pid" 2>/dev/null || exit 22
 	import -window "$window" "$C7_GAME_SHOT"
 	[ "$(convert "$C7_GAME_SHOT" -colorspace Gray -format "%[fx:mean>0.01]" info:)" = 1 ] || exit 23
+	# The original proximity-mine implementation accidentally treated 40
+	# Corridor 7 world units as 40 whole tiles. Turn away from the eastern
+	# start direction, use WAX to grant mines, and drop one. This reliably sent
+	# the old spawn coordinates outside the map and crashed in AActor::Spawn.
+	xdotool keydown --window "$window" Left
+	sleep 1
+	xdotool keyup --window "$window" Left
+	xdotool keydown --window "$window" w
+	xdotool keydown --window "$window" a
+	xdotool keydown --window "$window" x
+	sleep 0.1
+	xdotool keyup --window "$window" x
+	xdotool keyup --window "$window" a
+	xdotool keyup --window "$window" w
+	sleep 0.2
+	# Exercise the complete Ithaca firing/reload sequence. Its old final state
+	# crossed the player-sprite boundary into the first Tebazile boss frame.
+	xdotool key --window "$window" 2
+	sleep 0.2
+	xdotool keydown --window "$window" Control_L
+	sleep 0.2
+	xdotool keyup --window "$window" Control_L
+	sleep 3
+	kill -0 "$pid" 2>/dev/null || exit 24
+	if grep -q "TakeDamage " "$C7_STARTUP_LOG"; then
+		exit 25
+	fi
+	# Drop a mine in front of the player, let it arm, then walk onto it. The
+	# explosion must route damage back to the owner instead of ignoring players.
+	xdotool keydown --window "$window" m
+	sleep 0.2
+	xdotool keyup --window "$window" m
+	sleep 1.2
+	xdotool keydown --window "$window" Up
+	sleep 0.3
+	xdotool keyup --window "$window" Up
+	sleep 0.5
+	kill -0 "$pid" 2>/dev/null || exit 26
+	grep -q "TakeDamage " "$C7_STARTUP_LOG" || exit 27
 	cleanup_child
 	pid=0
 ' 

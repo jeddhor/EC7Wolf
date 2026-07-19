@@ -14,13 +14,17 @@ gameinfo
 	intermissionmusic = "C7MUS00"
 	victorymusic = "C7MUS00"
 	scoresmusic = "C7MUS00"
-	highscoresfont = "SmallFont"
+	// The released high-score page writes with the large 13-row archive font
+	// (glyph ink rows 1..10, matching the captured original page).
+	highscoresfont = "BigFont"
 	highscoresfontcolor = "White"
 	trackhighscores = true
 	menufade = "00 00 00"
 	menucolors = "00 50 70", "00 A0 D0", "00 30 50", "00 10 18", "00 80 A0", "00 00 00"
 	menuwindowcolors = "00 30 48", "00 C0 E0", "00 08 10", "80 70 00", "FF E0 00", "20 18 00"
-	messagecolors = "00 30 48", "00 C0 E0", "00 08 10"
+	// The original prompt window is dark grey with a near-black outline
+	// (measured from the released game's "Exit building?" dialog).
+	messagecolors = "30 30 30", "18 18 18", "18 18 18"
 	menufontcolor_title = "Gold"
 	menufontcolor_label = "Grey"
 	menufontcolor_selection = "White"
@@ -32,9 +36,10 @@ gameinfo
 	messagefontcolor = "White"
 	dialogcolor = "White"
 	drawreadthis = false
-	quitmessages = "Quit Corridor 7?"
+	// The released game asks exactly this when leaving from the main menu.
+	quitmessages = "Exit building?"
 	doorsoundsequence = "DoorNormal"
-	pushwallsoundsequence = "PushwallNormal"
+	pushwallsoundsequence = "C7Pushwall"
 	deathtransition = "Fizzle"
 }
 
@@ -165,7 +170,7 @@ skill baby
 
 skill easy
 {
-	name = "2nd Lieutenant"
+	name = "Lieutenant"
 	spawnfilter = 2
 	lives = 0
 }

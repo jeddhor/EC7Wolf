@@ -59,6 +59,11 @@ FColorMatcher ColorMatcher;
 /* Current color blending values */
 int		BlendR, BlendG, BlendB, BlendA;
 
+static PalEntry Corridor7BasePalette[256];
+static int Corridor7PaletteMode;
+static unsigned int Corridor7PalettePhase;
+static bool Corridor7PaletteSaved;
+
 static int STACK_ARGS sortforremap (const void *a, const void *b);
 static int STACK_ARGS sortforremap2 (const void *a, const void *b);
 
@@ -489,6 +494,63 @@ void V_ForceBlend (int blendr, int blendg, int blendb, int blenda)
 	BlendA = blenda;
 
 	screen->SetFlash (PalEntry (BlendR, BlendG, BlendB), BlendA);
+}
+
+void V_SetCorridor7PaletteMode (int mode, unsigned int phase)
+{
+	if(screen == NULL)
+		return;
+	phase &= 7;
+	if(mode == Corridor7PaletteMode && (mode != 3 || phase == Corridor7PalettePhase))
+		return;
+
+	PalEntry *palette = screen->GetPalette();
+	if(mode != 0 && !Corridor7PaletteSaved)
+	{
+		memcpy(Corridor7BasePalette, palette, sizeof(Corridor7BasePalette));
+		Corridor7PaletteSaved = true;
+	}
+
+	if(mode == 0)
+	{
+		if(Corridor7PaletteSaved)
+			memcpy(palette, Corridor7BasePalette, sizeof(Corridor7BasePalette));
+		Corridor7PaletteSaved = false;
+	}
+	else
+	{
+		for(unsigned int i = 0;i < 256;++i)
+		{
+			const PalEntry source = Corridor7BasePalette[i];
+			// The DOS visor palettes are monochrome DAC rewrites, not translucent
+			// overlays. Luminance preserves scene detail while zeroing the two
+			// unused channels exactly as the original captures show.
+			const BYTE luminance = static_cast<BYTE>(
+				(77*source.r + 150*source.g + 29*source.b) >> 8);
+			if(mode == 1)
+				palette[i] = PalEntry(0, luminance, 0);
+			else if(mode == 2)
+				palette[i] = PalEntry(luminance, 0, 0);
+			else
+			{
+				// Electric fields rapidly rotate, invert, and quantize the DAC.
+				// Advancing the phase every other tic recreates the flashing
+				// high-contrast psychedelic shock sequence without touching pixels.
+				const BYTE channels[3] = { source.r, source.g, source.b };
+				const BYTE a = channels[phase%3];
+				const BYTE b = channels[(phase+1)%3];
+				const BYTE c = channels[(phase+2)%3];
+				palette[i] = PalEntry(
+					static_cast<BYTE>((phase&1 ? 255-a : a) & 0xF8),
+					static_cast<BYTE>((phase&2 ? 255-b : b) & 0xF8),
+					static_cast<BYTE>((phase&4 ? 255-c : c) & 0xF8));
+			}
+		}
+	}
+
+	Corridor7PaletteMode = mode;
+	Corridor7PalettePhase = phase;
+	screen->UpdatePalette();
 }
 
 /*CCMD (testblend)

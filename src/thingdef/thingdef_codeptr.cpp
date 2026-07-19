@@ -349,7 +349,14 @@ ACTION_FUNCTION(A_Explode)
 		if(output <= 0.0)
 			continue;
 
-		DamageActor(target, self->target, static_cast<unsigned int>(output));
+		// A source-hurting blast still credits ordinary victims to the actor
+		// that launched it, but must attribute damage to the blast itself when
+		// it reaches that source. Passing the source player as both victim and
+		// attacker made DamageActor's friendly-fire guard discard self-damage.
+		AActor *attacker = self->target;
+		if((flags&XF_HURTSOURCE) && target == self->target)
+			attacker = self;
+		DamageActor(target, attacker, static_cast<unsigned int>(output));
 	}
 	return true;
 }

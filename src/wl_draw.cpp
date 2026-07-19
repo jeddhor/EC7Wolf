@@ -1754,6 +1754,14 @@ void    ThreeDRefresh (void)
 
 	vbuf += screenofs;
 	vbufPitch = SCREENPITCH;
+	if(IWad::CheckGameFilter("Corridor7"))
+	{
+		// Masked walls intentionally leave keyed pixels untouched. Start every
+		// 3D frame from a known background so the loading plate (or an earlier
+		// camera view) can never survive through glass on the first frame.
+		for(int y = 0;y < viewheight;++y)
+			memset(vbuf+y*vbufPitch, GPalette.Remap[0], viewwidth);
+	}
 
 	R_RenderView();
 

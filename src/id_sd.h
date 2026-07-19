@@ -163,6 +163,10 @@ extern  bool	SD_MusicPlaying(void);
 extern  bool	SD_SetSoundMode(SDMode mode);
 extern  bool	SD_SetMusicMode(SMMode mode);
 extern  bool    SD_SoundPlaying(void);
+// Unlike SD_SoundPlaying(), this includes the digitized channel. Corridor 7
+// uses that test to restart long ambient samples only after the prior sample
+// has completed.
+extern  bool    SD_AnySoundPlaying(void);
 
 extern  void    SD_SetDigiDevice(SDSMode);
 extern  struct Mix_Chunk *SD_PrepareSound(int which);

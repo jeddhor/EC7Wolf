@@ -56,8 +56,14 @@ actor C7Static004
 	}
 }
 
+// Map object 28: the strategy guide's "Infrared Invisible Barrier" (three
+// floor-to-ceiling laser rods). Drawn only under the infrared visor with
+// the released game's animated bright dissolve; never blocks movement, but
+// walking through the beams zaps the player 10 points on a cooldown
+// (r_sprites.cpp and wl_agent.cpp). The radius sets the touch zone.
 actor C7Static005
 {
+	radius 32
 	states
 	{
 		Spawn:
@@ -124,23 +130,48 @@ actor C7Static010
 	}
 }
 
-// Object-table slots 9 and 10 are invisible electric-field markers in normal
-// vision. Infrared exposes their associated field art in the DOS renderer;
-// C7VisorCanSeeActor performs that conditional draw.
+// Object-table slot 9 is the normally visible, harmless white lightpost.
 actor C7DamageField
 {
 	radius 32
+	+SOLID
 	states
 	{
 		Spawn:
-			C010 A 7 A_C7DamageField
-			loop
+			C010 A -1
+			stop
 	}
 }
 
 actor C7DamageFieldAlt : C7DamageField
 {
-	states { Spawn: C011 A 7 A_C7DamageField loop }
+	// Slot 10 is a solid infrared-revealed post. Electric contact damage comes
+	// from wall tile IDs 6 and 14, not from an inferred beam between posts.
+	states { Spawn: C011 A -1 stop }
+}
+
+// CORR7CD.EXE class 27: the rare red-skull taunt. It is deliberately neither
+// shootable nor a monster, so it never contributes to the floor alien count.
+actor C7SkullApparition
+{
+	radius 4
+	damage 0
+	+MISSILE
+	states
+	{
+		Spawn:
+			C718 A 10
+			C719 A 10
+			C720 A 10
+			C721 A 10
+			C722 A 10
+			C723 A 10
+			C724 A 10
+			// The original C725 state's thinker immediately nulls the actor's
+			// state pointer; retain a single visible tic before removal.
+			C725 A 1
+			stop
+	}
 }
 
 actor C7Static011
@@ -701,8 +732,12 @@ actor C7Static060
 	}
 }
 
+// Map object 84: the energy-ring form of the infrared laser barrier. Same
+// visor gating, pass-through behavior, and 10-point contact damage as
+// object 28.
 actor C7Static061
 {
+	radius 32
 	states
 	{
 		Spawn:

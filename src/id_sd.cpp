@@ -1394,6 +1394,11 @@ bool SD_SoundPlaying(void)
 		return false;
 }
 
+bool SD_AnySoundPlaying(void)
+{
+	return !SoundPlaying.IsNull();
+}
+
 ///////////////////////////////////////////////////////////////////////////
 //
 //      SD_StopSound() - if a sound is playing, stops it

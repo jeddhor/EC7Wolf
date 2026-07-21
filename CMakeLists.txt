@@ -140,6 +140,16 @@ set(OUTPUT_DIR ${CMAKE_BINARY_DIR} CACHE PATH "Directory in which to build EC7Wo
 option(GPL "Build GPL edition" ON)
 option(USE_LIBTEXTSCREEN "Use libtextscreen instead of console iwad picker." OFF)
 
+# Renderer backends (renderer redesign). The software renderer is the reference
+# path and is always built. OpenGL is enabled once its backend lands (Phase 4);
+# Vulkan is a later optional milestone.
+option(ECWOLF_RENDERER_SOFTWARE "Build the reference software renderer" ON)
+option(ECWOLF_RENDERER_OPENGL "Build the OpenGL renderer backend" OFF)
+option(ECWOLF_RENDERER_VULKAN "Build the Vulkan renderer backend" OFF)
+if(NOT ECWOLF_RENDERER_SOFTWARE)
+	message(FATAL_ERROR "ECWOLF_RENDERER_SOFTWARE must stay ON: it is the reference/fallback renderer.")
+endif()
+
 option(INTERNAL_ZLIB "Force build with internal zlib" OFF)
 option(INTERNAL_BZIP2 "Force build with internal bzip2" OFF)
 option(INTERNAL_JPEG "Force build with internal libjpeg" OFF)

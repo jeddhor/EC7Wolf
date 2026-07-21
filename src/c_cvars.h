@@ -39,6 +39,7 @@
 #define __C_CVARS__
 
 #include "wl_def.h"
+#include "zstring.h"
 
 void FinalReadConfig();
 void ReadConfig();
@@ -61,6 +62,7 @@ extern bool		r_depthfog;
 extern bool		vid_fullscreen;
 extern Aspect	vid_aspect;
 extern bool		vid_vsync;
+extern FString	vid_renderer;	// "software" | "opengl" | "vulkan"
 extern bool		quitonescape;
 extern fixed	movebob;
 

@@ -341,13 +341,25 @@ target_include_directories(engine PRIVATE
 )
 
 set_target_properties(engine PROPERTIES
-	CXX_STANDARD 98
+	CXX_STANDARD 17
+	CXX_STANDARD_REQUIRED ON
 	OUTPUT_NAME "${ENGINE_BINARY_NAME}"
 	RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
 	# On Linux look for any libraries we link against in the executable directory.
 	INSTALL_RPATH "\$ORIGIN"
 	BUILD_WITH_INSTALL_RPATH ON
 )
+
+# Renderer-backend selection (see top-level ECWOLF_RENDERER_* options).
+if(ECWOLF_RENDERER_SOFTWARE)
+	target_compile_definitions(engine PRIVATE ECWOLF_RENDERER_SOFTWARE=1)
+endif()
+if(ECWOLF_RENDERER_OPENGL)
+	target_compile_definitions(engine PRIVATE ECWOLF_RENDERER_OPENGL=1)
+endif()
+if(ECWOLF_RENDERER_VULKAN)
+	target_compile_definitions(engine PRIVATE ECWOLF_RENDERER_VULKAN=1)
+endif()
 
 # Windows console wrapper
 if(WIN32)

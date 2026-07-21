@@ -27,4 +27,4 @@ if(SDL_LIBRARY)
 	string(REPLACE "-framework Cocoa" "" DIRS ${SDL_LIBRARY})
 endif()
 
-install(CODE "include(BundleUtilities)\nfixup_bundle(\"${OUTPUT_DIR}/ecwolf.app\" \"\" \"${DIRS}\")" COMPONENT Runtime)
+install(CODE "include(BundleUtilities)\nfixup_bundle(\"${OUTPUT_DIR}/${ENGINE_BINARY_NAME}.app\" \"\" \"${DIRS}\")" COMPONENT Runtime)

@@ -2,7 +2,7 @@
 Version=1.0
 Type=Application
 Name=@PRODUCT_NAME@
-Comment=Advanced Wolfenstein 3D source port
+Comment=Corridor 7: Alien Invasion source port
 Exec=@ENGINE_BINARY_NAME@
 Icon=@PRODUCT_IDENTIFIER@
 Categories=Game

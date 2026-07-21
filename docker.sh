@@ -1,578 +1,302 @@
-#!/bin/bash
-# shellcheck disable=SC2155
+#!/usr/bin/env bash
+# Build a portable EC7Wolf Release inside an Ubuntu 20.04 container.
+#
+# Why 20.04?  A binary is linked against its build host's glibc.  Building on a
+# very recent distro (e.g. Ubuntu 26.04) produces a binary whose required glibc
+# symbol versions are too new to run on older / rolling distros (Arch, Debian
+# stable, older Ubuntu).  Ubuntu 20.04 ships glibc 2.31, old enough that the
+# result runs on essentially any modern desktop Linux.  The Linux build also
+# uses -DNO_GTK=ON and static libstdc++/libgcc so only glibc + the SDL2/audio
+# stack (present on every desktop) remain as runtime dependencies.
+#
+# Usage:
+#   ./docker.sh --linux                 Native Linux build (SDL2 from apt)
+#   ./docker.sh --windows               MinGW-w64 cross-compile for 64-bit Windows
+#   ./docker.sh --linux --windows       Both
+#   REBUILD_IMAGE=1 ./docker.sh --linux Force a rebuild of the builder image
+#
+# Outputs (each a self-contained release folder):
+#   release/ec7wolf              release/ec7wolf.pk3
+#   release/windows/ec7wolf.exe  release/windows/ec7wolf.pk3  release/windows/*.dll
+#
+# The Linux release/ folder can be fed straight to
+# tools/package_corridor7_release.sh together with your legally-owned Corridor 7
+# data to produce a fully playable package.
 
-# This script is primarily for checking and handling releases. If you are
-# looking to build ECWolf then you should build manually.
+set -euo pipefail
 
-# This script takes a single argument which specifies which configuration to
-# use. Running with no arguments will list out config names, but you can also
-# look at the bottom of this script.
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+IMAGE=ec7wolf-build:20.04
+BUILD_LINUX=0
+BUILD_WINDOWS=0
 
-# Anything that the configs write out to /results (logs, build artifacts) will
-# be copied back to the hosts results directory.
+usage() {
+	cat <<'EOF'
+Usage: ./docker.sh [--linux] [--windows]
 
-# Infrastructure ---------------------------------------------------------------
+Build a Release EC7Wolf binary inside an Ubuntu 20.04 container.
 
-# Build our clean environment if we don't have one built already
-check_environment() {
-	declare -n Config=$1
-	shift
+  --linux     Native Linux build (SDL2 from apt), NO_GTK + static libstdc++
+  --windows   MinGW-w64 cross-compile for 64-bit Windows
 
-	declare DockerTag="${Config[dockerimage]}:${Config[dockertag]}"
-
-	if ! docker image inspect "$DockerTag" &> /dev/null; then
-		declare Dockerfile=$(mktemp -p .)
-		"${Config[dockerfile]}" > "${Dockerfile}"
-		docker build --arch "${Config[dockerarch]}" -t "$DockerTag" -f "$Dockerfile" . || {
-			rm "$Dockerfile"
-			echo 'Failed to create build environment' >&2
-			return 1
-		}
-		rm "$Dockerfile"
-	fi
-	return 0
+Outputs:
+  release/ec7wolf
+  release/ec7wolf.pk3
+  release/windows/ec7wolf.exe
+  release/windows/ec7wolf.pk3
+  release/windows/*.dll
+EOF
 }
 
-# Recursively build docker environments
-check_environment_prereq() {
-	declare ConfigName=$1
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		--linux)   BUILD_LINUX=1 ;;
+		--windows) BUILD_WINDOWS=1 ;;
+		-h|--help) usage; exit 0 ;;
+		*)
+			printf 'unknown argument: %s\n\n' "$1" >&2
+			usage >&2
+			exit 2
+			;;
+	esac
 	shift
+done
 
-	[[ $ConfigName ]] || return 0
+if [[ $BUILD_LINUX -eq 0 && $BUILD_WINDOWS -eq 0 ]]; then
+	usage >&2
+	exit 2
+fi
 
-	declare -n Config=$ConfigName
-	if [[ ${Config[prereq]} ]]; then
-		check_environment_prereq "${Config[prereq]}" || return
-	fi
+if command -v docker >/dev/null 2>&1; then
+	: # use docker as-is
+elif command -v podman >/dev/null 2>&1; then
+	docker() { podman "$@"; }
+else
+	echo 'error: docker or podman is required' >&2
+	exit 1
+fi
 
-	check_environment "$ConfigName"
-}
+# ---------------------------------------------------------------------------
+# Build image
+# ---------------------------------------------------------------------------
+if [[ ${REBUILD_IMAGE:-0} == 1 ]] || ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+	echo "==> Building build image $IMAGE"
+	CONTEXT=$(mktemp -d)
+	cleanup_context() { rmdir "$CONTEXT" 2>/dev/null || true; }
+	trap cleanup_context EXIT
+	docker build -t "$IMAGE" -f- "$CONTEXT" <<'EOF'
+FROM ubuntu:20.04
 
-run_config() {
-	declare ConfigName=$1
-	shift
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
 
-	declare -n Config=$ConfigName
+RUN apt-get update && apt-get install -y --no-install-recommends \
+		binutils \
+		build-essential \
+		ca-certificates \
+		cmake \
+		curl \
+		file \
+		g++-mingw-w64-x86-64 \
+		git \
+		libbz2-dev \
+		libjpeg-dev \
+		libsdl2-dev \
+		libsdl2-mixer-dev \
+		libsdl2-net-dev \
+		ninja-build \
+		pkg-config \
+		unzip \
+		zlib1g-dev \
+	&& rm -rf /var/lib/apt/lists/* \
+	&& update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix \
+	&& update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
 
-	check_environment_prereq "$ConfigName" || return
+# Official MinGW SDL2 development packages for the Windows cross-build.
+# (This tree does not vendor the optional SDL git submodules.)
+ARG SDL2_VER=2.28.5
+ARG SDL2_MIXER_VER=2.6.3
+ARG SDL2_NET_VER=2.2.0
+RUN mkdir -p /opt/mingw-sdl && cd /tmp \
+	&& curl -fsSL "https://www.libsdl.org/release/SDL2-devel-${SDL2_VER}-mingw.tar.gz" \
+		| tar xz \
+	&& curl -fsSL "https://www.libsdl.org/projects/SDL_mixer/release/SDL2_mixer-devel-${SDL2_MIXER_VER}-mingw.tar.gz" \
+		| tar xz \
+	&& curl -fsSL "https://www.libsdl.org/projects/SDL_net/release/SDL2_net-devel-${SDL2_NET_VER}-mingw.tar.gz" \
+		| tar xz \
+	&& cp -a "SDL2-${SDL2_VER}/x86_64-w64-mingw32/." /opt/mingw-sdl/ \
+	&& cp -a "SDL2_mixer-${SDL2_MIXER_VER}/x86_64-w64-mingw32/." /opt/mingw-sdl/ \
+	&& cp -a "SDL2_net-${SDL2_NET_VER}/x86_64-w64-mingw32/." /opt/mingw-sdl/ \
+	&& rm -rf /tmp/SDL2-* /tmp/SDL2_mixer-* /tmp/SDL2_net-*
 
-	declare Container
-	Container=$(docker create -i -v "$(pwd):/mnt:ro" --arch "${Config[dockerarch]}" "${Config[dockerimage]}:${Config[dockertag]}" bash -s --) || return
-	{
-		declare -fx
-		echo "\"${Config[entrypoint]}\" \"\$@\""
-	} | docker start -i -a "$Container"
-	declare Ret=$?
+WORKDIR /src
+EOF
+	cleanup_context
+	trap - EXIT
+fi
 
-	# Copy out any logs or build artifacts we might be interested in
-	mkdir -p "results/${ConfigName}"
-	docker cp "$Container:/results/." "results/${ConfigName}"
+# ---------------------------------------------------------------------------
+# Run a build target inside the container.
+#   $1 = linux|windows   $2 = host output dir (mounted at /out)
+# ---------------------------------------------------------------------------
+run_build() {
+	local target=$1 out_host=$2
+	mkdir -p "$out_host"
+	echo "==> Building EC7Wolf ($target Release)"
+	docker run --rm -i \
+		-e TARGET="$target" \
+		-e HOST_UID="$(id -u)" \
+		-e HOST_GID="$(id -g)" \
+		-v "$ROOT:/src:ro" \
+		-v "$out_host:/out" \
+		"$IMAGE" \
+		bash -s <<'EOF'
+set -euo pipefail
 
-	docker rm "$Container" > /dev/null
+export HOME=/tmp
+# git (used for the revision header) refuses to touch a tree owned by another
+# user; the source is bind-mounted read-only which is fine for reads.
+git config --global --add safe.directory '*'
 
-	return "$Ret"
-}
+SRC=/src
+BUILD=/tmp/ec7wolf-build
+rm -rf "$BUILD"
+mkdir -p "$BUILD"
 
-main() {
-	declare SelectedConfig=$1
-	shift
+export CLICOLOR_FORCE=1
 
-	declare ConfigName
+verify_linux() {
+	local bin=$1
+	local fail=0
+	echo
+	echo "==> Verifying $bin"
+	command -v file >/dev/null 2>&1 && file "$bin"
 
-	# Determine if we should use podman instead of docker
-	if command -v podman &>/dev/null; then
-		docker() {
-			podman "$@"
-		}
-	fi
+	# Inspect the binary's *direct* DT_NEEDED entries only. The full recursive
+	# ldd tree pulls in libstdc++/libgcc transitively via C++ system libraries
+	# (libjack, libfluidsynth, ...), which is expected and harmless; what must
+	# be static is the engine's own dependency on the C++ runtime.
+	local needed
+	needed=$(readelf -d "$bin" | sed -n 's/.*NEEDED.*\[\(.*\)\]/\1/p')
+	echo "--- direct NEEDED ---"
+	echo "$needed"
 
-	# List out configs
-	if [[ -z $SelectedConfig ]]; then
-		declare -A ConfigGroups=([all]=1)
-		for ConfigName in "${ConfigList[@]}"; do
-			declare -n Config=$ConfigName
-			ConfigGroups[${Config[type]}]=1
-		done
-
-		echo 'Config list:'
-		printf '%s\n' "${ConfigList[@]}" | sort
-
-		echo
-		echo 'Config groups:'
-		printf '%s\n' "${!ConfigGroups[@]}" | sort
-		return 0
-	fi
-
-	declare ConfigName
-	if [[ -v "$SelectedConfig""[@]" ]]; then
-		# Full name
-		ConfigName=$SelectedConfig
+	if echo "$needed" | grep -qiE 'libstdc\+\+|libgcc_s'; then
+		echo "FAIL: libstdc++/libgcc is a direct dependency (expected static)" >&2; fail=1
 	else
-		# Short name
-		ConfigName=${ConfigList[$SelectedConfig]}
+		echo "OK: libstdc++/libgcc statically linked (not a direct dependency)"
 	fi
-
-	# Run by type
-	if [[ -z $ConfigName ]]; then
-		declare -a FailedCfgs=()
-		for ConfigName in "${ConfigList[@]}"; do
-			declare -n Config=$ConfigName
-			if [[ $SelectedConfig == "${Config[type]}" || $SelectedConfig == 'all' ]]; then
-				run_config "${ConfigName}" || FailedCfgs+=("$ConfigName")
-			fi
-		done
-
-		if (( ${#FailedCfgs} > 0 )); then
-			echo 'Failed configs:'
-			printf '%s\n' "${FailedCfgs[@]}"
-			return 1
-		else
-			echo 'All configs passed!'
-			return 0
-		fi
-	fi
-
-	# Run the specific config
-	run_config "${ConfigName}"
-}
-
-# Minimum supported configuration ----------------------------------------------
-
-dockerfile_ubuntu_minimum() {
-	cat <<-'EOF'
-		FROM docker.io/ubuntu:18.04
-
-		RUN apt-get update && \
-		apt-get install g++ cmake git pax-utils lintian sudo \
-			libsdl1.2-dev libsdl-net1.2-dev \
-			libsdl2-dev libsdl2-net-dev \
-			libflac-dev libogg-dev libopus-dev libopusfile-dev libfluidsynth-dev libxmp-dev \
-			zlib1g-dev libbz2-dev libgtk-3-dev -y && \
-		useradd -rm ecwolf && \
-		echo "ecwolf ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
-		mkdir /home/ecwolf/results && \
-		chown ecwolf:ecwolf /home/ecwolf/results && \
-		ln -s /home/ecwolf/results /results
-
-		USER ecwolf
-		RUN git config --global --add safe.directory /mnt
-	EOF
-}
-
-dockerfile_ubuntu_minimum_i386() {
-	dockerfile_ubuntu_minimum | sed 's,FROM docker.io/,FROM docker.io/i386/,'
-}
-
-dockerfile_ubuntu_minimum_armhf() {
-	dockerfile_ubuntu_minimum | sed 's,FROM docker.io/,FROM docker.io/arm32v7/,'
-}
-
-dockerfile_ubuntu_minimum_arm64() {
-	dockerfile_ubuntu_minimum | sed 's,FROM docker.io/,FROM docker.io/arm64v8/,'
-}
-
-# Performs a build of ECWolf. Extra CMake args can be passed as args.
-build_ecwolf() {
-	declare SrcDir=/mnt
-
-	cd ~ || return
-
-	# Check for previous invocation
-	if [[ -d build ]]; then
-		rm -rf build
-	fi
-
-	# Only matters on CMake 3.5+
-	export CLICOLOR_FORCE=1
-
-	mkdir build &&
-	cd build &&
-	cmake "$SrcDir" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr "$@" &&
-	touch install_manifest.txt && # Prevent root from owning this file
-	make -j "$(nproc)" || return
-}
-export -f build_ecwolf
-
-test_build_ecwolf_cfg() {
-	declare BuildCfg=$1
-	shift
-
-	build_ecwolf "$@" 2>&1 | tee "/results/buildlog-$BuildCfg.log"
-	(( PIPESTATUS[0] == 0 )) || return "${PIPESTATUS[0]}"
-
-	cd ~/build &&
-	sudo make install/strip 2>&1 | tee "/results/installlog-$BuildCfg.log"
-	(( PIPESTATUS[0] == 0 )) || return "${PIPESTATUS[0]}"
-
-	lddtree /usr/games/ecwolf | tee "/results/lddtree-$BuildCfg.txt"
-}
-export -f test_build_ecwolf_cfg
-
-# Tests that supported configs compile and install
-test_build_ecwolf() {
-	declare -a FailedCfgs=()
-
-	test_build_ecwolf_cfg SDL2 || FailedCfgs+=(SDL2)
-
-	test_build_ecwolf_cfg SDL1 -DFORCE_SDL12=ON -DINTERNAL_SDL_MIXER=ON || FailedCfgs+=(SDL1)
-
-	if (( ${#FailedCfgs} > 0 )); then
-		echo 'Failed builds:'
-		printf '%s\n' "${FailedCfgs[@]}"
-		return 1
+	if echo "$needed" | grep -qi 'libgtk'; then
+		echo "FAIL: depends on GTK (expected NO_GTK build)" >&2; fail=1
 	else
-		echo 'All passed!'
+		echo "OK: no GTK dependency"
 	fi
-}
-export -f test_build_ecwolf
+	if echo "$needed" | grep -qi 'libSDL2-2.0'; then
+		echo "OK: dynamically links system SDL2"
+	else
+		echo "FAIL: SDL2 not linked as expected" >&2; fail=1
+	fi
 
-# shellcheck disable=SC2034
-declare -A ConfigUbuntuMinimum=(
-	[dockerfile]=dockerfile_ubuntu_minimum
-	[dockerimage]='ecwolf-ubuntu'
-	[dockertag]=7
-	[dockerarch]=amd64
-	[entrypoint]=test_build_ecwolf
-	[prereq]=''
-	[type]=test
-)
-
-# shellcheck disable=SC2034
-declare -A ConfigUbuntuMinimumI386=(
-	[dockerfile]=dockerfile_ubuntu_minimum_i386
-	[dockerimage]='ecwolf-ubuntu-i386'
-	[dockertag]=7
-	[dockerarch]=i386
-	[entrypoint]=test_build_ecwolf
-	[prereq]=''
-	[type]=test
-)
-
-# shellcheck disable=SC2034
-declare -A ConfigUbuntuMinimumArmHf=(
-	[dockerfile]=dockerfile_ubuntu_minimum_armhf
-	[dockerimage]='ecwolf-ubuntu-armhf'
-	[dockertag]=3
-	[dockerarch]=arm
-	[entrypoint]=test_build_ecwolf
-	[prereq]=''
-	[type]=test
-)
-
-# shellcheck disable=SC2034
-declare -A ConfigUbuntuMinimumArm64=(
-	[dockerfile]=dockerfile_ubuntu_minimum_arm64
-	[dockerimage]='ecwolf-ubuntu-arm64'
-	[dockertag]=3
-	[dockerarch]=arm64
-	[entrypoint]=test_build_ecwolf
-	[prereq]=''
-	[type]=test
-)
-
-# Ubuntu packaging -------------------------------------------------------------
-
-dockerfile_ubuntu_package() {
-	declare -n PrereqConfig=${Config[prereq]}
-
-	echo "FROM ${PrereqConfig[dockerimage]}:${PrereqConfig[dockertag]}"
-
-	# Packaging requires CMake 3.11 or newer
-	# Static link libFLAC due to ABI 8 -> 12 transition
-	cat <<-'EOF'
-		RUN cd ~ && \
-		curl https://cmake.org/files/v4.1/cmake-4.1.1.tar.gz | tar xz && \
-		cd cmake-4.1.1 && \
-			./configure --parallel="$(nproc)" --prefix=/usr && \
-			make -j "$(nproc)" && \
-			sudo make install/strip && \
-		cd .. && \
-		rm -rf cmake-4.1.1 && \
-		curl https://ftp.osuosl.org/pub/xiph/releases/flac/flac-1.5.0.tar.xz | tar xJ && \
-		mkdir flac-1.5.0/build && \
-		cd flac-1.5.0/build && \
-			cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUILD_CXXLIBS=OFF -DBUILD_DOCS=OFF \
-			         -DBUILD_DOXYGEN=OFF -DBUILD_EXAMPLES=OFF -DBUILD_PROGRAMS=OFF -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF -DBUILD_UTILS=OFF \
-			         -DINSTALL_CMAKE_CONFIG_MODULE=OFF -DINSTALL_MANPAGES=OFF && \
-			make -j "$(nproc)" && \
-			sudo make install/strip && \
-		cd ../.. && \
-		rm -rf flac-1.5.0 && \
-		sudo rm /usr/lib/*/libFLAC.so
-	EOF
+	local maxglibc
+	maxglibc=$(objdump -T "$bin" \
+		| grep -oE 'GLIBC_[0-9]+\.[0-9]+(\.[0-9]+)?' \
+		| sed 's/GLIBC_//' | sort -V | tail -n1)
+	echo "Max required glibc symbol version: ${maxglibc:-none}"
+	if [[ -n "$maxglibc" && "$(printf '%s\n2.31\n' "$maxglibc" | sort -V | tail -n1)" != "2.31" ]]; then
+		echo "FAIL: requires glibc > 2.31 ($maxglibc)" >&2; fail=1
+	else
+		echo "OK: requires glibc <= 2.31"
+	fi
+	return $fail
 }
 
-dockerfile_ubuntu_package_i386() {
-	dockerfile_ubuntu_package | sed 's,FROM docker.io/,FROM docker.io/i386/,'
+if [[ $TARGET == linux ]]; then
+	cmake "$SRC" -G Ninja -B "$BUILD/linux" \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DNO_GTK=ON \
+		-DGPL=ON \
+		-DCMAKE_EXE_LINKER_FLAGS='-static-libgcc -static-libstdc++'
+	# Second pass folds a freshly-generated revision header into the binary.
+	cmake --build "$BUILD/linux"
+	cmake --build "$BUILD/linux"
+
+	test -f "$BUILD/linux/ec7wolf"     || { echo 'FAIL: ec7wolf not produced' >&2; exit 1; }
+	test -f "$BUILD/linux/ec7wolf.pk3" || { echo 'FAIL: ec7wolf.pk3 not produced' >&2; exit 1; }
+	strip "$BUILD/linux/ec7wolf"
+
+	verify_linux "$BUILD/linux/ec7wolf" || { echo '==> Verification FAILED' >&2; exit 1; }
+
+	rm -f /out/ec7wolf /out/ec7wolf.pk3
+	install -m 755 "$BUILD/linux/ec7wolf"     /out/ec7wolf
+	install -m 644 "$BUILD/linux/ec7wolf.pk3" /out/ec7wolf.pk3
+else
+	# Native host tools (zipdir / needexe) must be built first, then imported.
+	cmake "$SRC" -G Ninja -B "$BUILD/tools" \
+		-DCMAKE_BUILD_TYPE=Release -DTOOLS_ONLY=ON
+	cmake --build "$BUILD/tools"
+
+	cmake "$SRC" -G Ninja -B "$BUILD/win64" \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DFORCE_CROSSCOMPILE=ON \
+		-DIMPORT_EXECUTABLES="$BUILD/tools/ImportExecutables.cmake" \
+		-DCMAKE_SYSTEM_NAME=Windows \
+		-DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
+		-DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
+		-DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres \
+		-DCMAKE_FIND_ROOT_PATH='/usr/x86_64-w64-mingw32;/opt/mingw-sdl' \
+		-DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
+		-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
+		-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
+		-DCMAKE_PREFIX_PATH=/opt/mingw-sdl \
+		-DINTERNAL_ZLIB=ON \
+		-DINTERNAL_BZIP2=ON \
+		-DINTERNAL_JPEG=ON \
+		-DCMAKE_EXE_LINKER_FLAGS='-static-libgcc -static-libstdc++ -Wl,-Bstatic,--whole-archive -lpthread -Wl,-Bdynamic,--no-whole-archive'
+	cmake --build "$BUILD/win64"
+	cmake --build "$BUILD/win64"
+
+	test -f "$BUILD/win64/ec7wolf.exe"     || { echo 'FAIL: ec7wolf.exe not produced' >&2; exit 1; }
+	test -f "$BUILD/win64/ec7wolf.pk3"     || { echo 'FAIL: ec7wolf.pk3 not produced' >&2; exit 1; }
+	echo
+	echo "==> Verifying ec7wolf.exe"
+	x86_64-w64-mingw32-objdump -f "$BUILD/win64/ec7wolf.exe" | grep -i 'file format'
+	x86_64-w64-mingw32-objdump -f "$BUILD/win64/ec7wolf.exe" | grep -qi 'pei-x86-64' \
+		|| { echo 'FAIL: ec7wolf.exe is not a 64-bit PE executable' >&2; exit 1; }
+	echo 'OK: 64-bit PE (pei-x86-64) Windows executable'
+
+	find /out -mindepth 1 -delete
+	install -m 755 "$BUILD/win64/ec7wolf.exe" /out/ec7wolf.exe
+	install -m 644 "$BUILD/win64/ec7wolf.pk3" /out/ec7wolf.pk3
+	# Runtime DLLs from the MinGW SDL packages.
+	cp -a /opt/mingw-sdl/bin/*.dll /out/
+	ls /out/*.dll >/dev/null 2>&1 || { echo 'FAIL: no runtime DLLs copied' >&2; exit 1; }
+	echo "OK: runtime DLLs present"
+fi
+
+chown -R "$HOST_UID:$HOST_GID" /out
+echo
+echo "Build complete. Artifacts:"
+ls -la /out
+EOF
 }
 
-dockerfile_ubuntu_package_armhf() {
-	dockerfile_ubuntu_package | sed 's,FROM docker.io/,FROM docker.io/arm32v7/,'
-}
+if [[ $BUILD_LINUX -eq 1 ]]; then
+	run_build linux "$ROOT/release"
+fi
+if [[ $BUILD_WINDOWS -eq 1 ]]; then
+	run_build windows "$ROOT/release/windows"
+fi
 
-dockerfile_ubuntu_package_arm64() {
-	dockerfile_ubuntu_package | sed 's,FROM docker.io/,FROM docker.io/arm64v8/,'
-}
-
-package_ecwolf() {
-	{
-		build_ecwolf &&
-
-		make package &&
-		lddtree _CPack_Packages/Linux/DEB/ecwolf-*/usr/games/ecwolf &&
-		lintian --suppress-tags embedded-library ecwolf_*.deb &&
-		cp ecwolf_*.deb /results/
-	} 2>&1 | tee '/results/build.log'
-	return "${PIPESTATUS[0]}"
-}
-export -f package_ecwolf
-
-# shellcheck disable=SC2034
-declare -A ConfigUbuntuPackage=(
-	[dockerfile]=dockerfile_ubuntu_package
-	[dockerimage]='ecwolf-ubuntu-package'
-	[dockertag]=7
-	[dockerarch]=amd64
-	[entrypoint]=package_ecwolf
-	[prereq]=ConfigUbuntuMinimum
-	[type]=build
-)
-
-# shellcheck disable=SC2034
-declare -A ConfigUbuntuPackageI386=(
-	[dockerfile]=dockerfile_ubuntu_package_i386
-	[dockerimage]='ecwolf-ubuntu-package-i386'
-	[dockertag]=7
-	[dockerarch]=i386
-	[entrypoint]=package_ecwolf
-	[prereq]=ConfigUbuntuMinimumI386
-	[type]=build
-)
-
-# shellcheck disable=SC2034
-declare -A ConfigUbuntuPackageArmHf=(
-	[dockerfile]=dockerfile_ubuntu_package_armhf
-	[dockerimage]='ecwolf-ubuntu-package-armhf'
-	[dockertag]=3
-	[dockerarch]=arm
-	[entrypoint]=package_ecwolf
-	[prereq]=ConfigUbuntuMinimumArmHf
-	[type]=build
-)
-
-# shellcheck disable=SC2034
-declare -A ConfigUbuntuPackageArm64=(
-	[dockerfile]=dockerfile_ubuntu_package_arm64
-	[dockerimage]='ecwolf-ubuntu-package-arm64'
-	[dockertag]=3
-	[dockerarch]=arm64
-	[entrypoint]=package_ecwolf
-	[prereq]=ConfigUbuntuMinimumArm64
-	[type]=build
-)
-
-# Clang ------------------------------------------------------------------------
-
-dockerfile_clang() {
-	cat <<-'EOF'
-		FROM ubuntu:20.04
-
-		RUN apt-get update && \
-		TZ=America/New_York DEBIAN_FRONTEND=noninteractive apt-get install \
-			clang-12 libc++-12-dev libc++abi-12-dev cmake git pax-utils lintian sudo \
-			libsdl2-dev libsdl2-net-dev \
-			libflac-dev libogg-dev libopus-dev libopusfile-dev libmodplug-dev libfluidsynth-dev libxmp-dev \
-			zlib1g-dev libbz2-dev libgtk-3-dev -y && \
-		useradd -rm ecwolf && \
-		echo "ecwolf ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
-		mkdir /home/ecwolf/results && \
-		chown ecwolf:ecwolf /home/ecwolf/results && \
-		ln -s /home/ecwolf/results /results
-
-		USER ecwolf
-		RUN git config --global --add safe.directory /mnt
-	EOF
-}
-
-# Test that ECWolf is buildable with Clang and libc++
-clang_build_ecwolf() {
-	CC=clang-12 CXX=clang++-12 build_ecwolf -DCMAKE_CXX_FLAGS="-stdlib=libc++" 2>&1 | tee "/results/buildlog.log"
-	(( PIPESTATUS[0] == 0 )) || return "${PIPESTATUS[0]}"
-
-	cd ~/build &&
-	sudo make install/strip 2>&1 | tee "/results/installlog.log"
-	(( PIPESTATUS[0] == 0 )) || return "${PIPESTATUS[0]}"
-
-	lddtree /usr/games/ecwolf | tee "/results/lddtree.txt"
-}
-export -f clang_build_ecwolf
-
-# shellcheck disable=SC2034
-declare -A ConfigClang=(
-	[dockerfile]=dockerfile_clang
-	[dockerimage]='ecwolf-clang'
-	[dockertag]=8
-	[dockerarch]=amd64
-	[entrypoint]=clang_build_ecwolf
-	[prereq]=''
-	[type]=test
-)
-
-# Ubuntu MinGW-w64 -------------------------------------------------------------
-
-dockerfile_mingw() {
-	cat <<-'EOF'
-		FROM ubuntu:24.04
-
-		RUN apt-get update && \
-		apt-get install g++ cmake git g++-mingw-w64-i686 g++-mingw-w64-x86-64 \
-			zlib1g-dev libbz2-dev -y && \
-		useradd -rm ecwolf && \
-		echo "ecwolf ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
-		mkdir /home/ecwolf/results && \
-		chown ecwolf:ecwolf /home/ecwolf/results && \
-		ln -s /home/ecwolf/results /results
-
-		USER ecwolf
-		RUN git config --global --add safe.directory /mnt
-	EOF
-}
-
-build_mingw() {
-	declare SrcDir=/mnt
-
-	# Build native tools
-	build_ecwolf -DTOOLS_ONLY=ON || return
-
-	declare Arch
-	for Arch in i686 x86_64; do
-		{
-			mkdir ~/build-mgw-"$Arch" &&
-			cd ~/build-mgw-"$Arch" &&
-			CXX="$Arch-w64-mingw32-g++-posix" CC="$Arch-w64-mingw32-gcc-posix" cmake "$SrcDir" \
-				-DCMAKE_BUILD_TYPE=Release \
-				-DFORCE_CROSSCOMPILE=ON \
-				-DIMPORT_EXECUTABLES=../build/ImportExecutables.cmake \
-				-DINTERNAL_SDL{_MIXER,_MIXER_CODECS,_NET}=ON \
-				-DCMAKE_SYSTEM_NAME=Windows \
-				-DCMAKE_FIND_ROOT_PATH="/usr/$Arch-w64-mingw32" \
-				-DCMAKE_RC_COMPILER="$Arch-w64-mingw32-windres" \
-				-DCMAKE_EXE_LINKER_FLAGS="-static-libgcc -static-libstdc++ -Wl,-Bstatic,--whole-archive -lpthread -Wl,-Bdynamic,--no-whole-archive" &&
-			make -j "$(nproc)" -O &&
-			make package &&
-			cp ecwolf-*.zip /results/
-		} 2>&1 | tee "/results/build-$Arch.log"
-		(( PIPESTATUS[0] == 0 )) || return "${PIPESTATUS[0]}"
-	done
-}
-export -f build_mingw
-
-# shellcheck disable=SC2034
-declare -A ConfigMinGW=(
-	[dockerfile]=dockerfile_mingw
-	[dockerimage]='ecwolf-mingw'
-	[dockertag]=5
-	[dockerarch]=amd64
-	[entrypoint]=build_mingw
-	[prereq]=''
-	[type]=build
-)
-
-# Ubuntu Android ---------------------------------------------------------------
-
-dockerfile_android() {
-	cat <<-'EOF'
-		FROM ubuntu:24.04
-
-		RUN apt-get update && \
-		apt-get install cmake curl g++ git openjdk-21-jdk-headless zlib1g-dev libbz2-dev -y && \
-		rm -rf /var/lib/apt/lists/* && \
-		useradd -rm ecwolf && \
-		echo "ecwolf ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
-		mkdir /home/ecwolf/results && \
-		chown ecwolf:ecwolf /home/ecwolf/results && \
-		ln -s /home/ecwolf/results /results && \
-		mkdir sdk && \
-		cd sdk && \
-		curl https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip -o commandlinetools-linux.zip && \
-		curl https://dl.google.com/android/repository/android-ndk-r17c-linux-x86_64.zip -o android-ndk.zip && \
-		cmake -E tar xf commandlinetools-linux.zip && \
-		cmake -E tar xf android-ndk.zip && \
-		rm commandlinetools-linux.zip android-ndk.zip && \
-		mv android-ndk-r17c ndk-bundle && \
-		mv cmdline-tools latest && \
-		mkdir cmdline-tools && \
-		mv latest cmdline-tools && \
-		yes | cmdline-tools/latest/bin/sdkmanager --licenses && \
-		cmdline-tools/latest/bin/sdkmanager 'platforms;android-31' 'build-tools;36.0.0' 'extras;android;m2repository' && \
-		keytool -genkey -keystore untrusted.keystore -storepass untrusted -keypass untrusted -alias untrusted -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Untrusted,OU=Untrusted,O=Untrusted,L=Untrusted,S=Untrusted,C=US" -noprompt
-
-		USER ecwolf
-		RUN git config --global --add safe.directory /mnt
-	EOF
-}
-
-build_android() {
-	declare SrcDir=/mnt
-
-	# Build native tools
-	build_ecwolf -DTOOLS_ONLY=ON || return
-
-	declare Arch
-	for Arch in x86 x86_64 armeabi-v7a arm64-v8a; do
-		{
-			declare NDKVersion=14
-			[[ $Arch =~ 64 ]] && NDKVersion=21
-
-			mkdir ~/build-android-"$Arch" &&
-			cd ~/build-android-"$Arch" &&
-			cmake "$SrcDir" \
-				-DCMAKE_SYSTEM_NAME=Android \
-				-DCMAKE_SYSTEM_VERSION="$NDKVersion" \
-				-DCMAKE_ANDROID_NDK=/sdk/ndk-bundle \
-				-DCMAKE_ANDROID_ARCH_ABI="$Arch" \
-				-DCMAKE_BUILD_TYPE=Release \
-				-DFORCE_CROSSCOMPILE=ON \
-				-DIMPORT_EXECUTABLES=~/build/ImportExecutables.cmake \
-				-DANDROID_SDK=/sdk/platforms/android-31 \
-				-DANDROID_SDK_TOOLS=/sdk/build-tools/36.0.0 \
-				-DANDROID_SIGN_KEYNAME=untrusted \
-				-DANDROID_SIGN_KEYSTORE=/sdk/untrusted.keystore \
-				-DANDROID_SIGN_STOREPASS=untrusted \
-				-DINTERNAL_SDL{,_MIXER,_MIXER_CODECS,_NET}=ON
-			make -j "$(nproc)" &&
-			cp ecwolf.apk /results/ecwolf-"$Arch".apk
-		} 2>&1 | tee "/results/build-$Arch.log"
-		(( PIPESTATUS[0] == 0 )) || return "${PIPESTATUS[0]}"
-	done
-}
-export -f build_android
-
-# shellcheck disable=SC2034
-declare -A ConfigAndroid=(
-	[dockerfile]=dockerfile_android
-	[dockerimage]='ecwolf-android'
-	[dockertag]=6
-	[dockerarch]=amd64
-	[entrypoint]=build_android
-	[prereq]=''
-	[type]=build
-)
-
-# ------------------------------------------------------------------------------
-
-declare -A ConfigList=(
-	[android]=ConfigAndroid
-	[clang]=ConfigClang
-	[mingw]=ConfigMinGW
-	[ubuntumin]=ConfigUbuntuMinimum
-	[ubuntumini386]=ConfigUbuntuMinimumI386
-	[ubuntuminarmhf]=ConfigUbuntuMinimumArmHf
-	[ubuntuminarm64]=ConfigUbuntuMinimumArm64
-	[ubuntupkg]=ConfigUbuntuPackage
-	[ubuntupkgi386]=ConfigUbuntuPackageI386
-	[ubuntupkgarmhf]=ConfigUbuntuPackageArmHf
-	[ubuntupkgarm64]=ConfigUbuntuPackageArm64
-)
-
-main "$@"; exit
+echo
+echo "Done."
+if [[ $BUILD_LINUX -eq 1 ]]; then
+	echo "  Linux:   $ROOT/release/ (ec7wolf, ec7wolf.pk3)"
+fi
+if [[ $BUILD_WINDOWS -eq 1 ]]; then
+	echo "  Windows: $ROOT/release/windows/ (ec7wolf.exe, ec7wolf.pk3, *.dll)"
+fi
+if [[ $BUILD_LINUX -eq 1 ]]; then
+	echo
+	echo "Package the Linux build with your Corridor 7 data:"
+	echo "  tools/package_corridor7_release.sh \"$ROOT/release\" /path/to/CO7 /path/to/package"
+fi

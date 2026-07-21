@@ -1,0 +1,32 @@
+.TH ec7wolf 6
+.SH NAME
+ec7wolf - Corridor 7: Alien Invasion source port
+
+.SH SYNOPSIS
+.B ec7wolf
+[\fIoptions\fR] [\fIfiles\fR ...]
+
+.SH DESCRIPTION
+.B ec7wolf
+is a sourceless source port of the 1994 Capstone FPS Corridor 7: Alien
+Invasion, built on a fork of the ECWolf engine (itself derived from Wolf4SDL).
+It reads the original Corridor 7 data files and reproduces the game's
+rendering, weapons, enemies, and mission progression on a modern engine, with
+modern control schemes, wide-screen support, and unlimited save slots.
+
+.SH OPTIONS
+Use the --help option for a complete list of options. To load a directory of
+Corridor 7 data files directly, use
+.BR "--data " \fIDIR\fR.
+
+.SH FILES
+The original Corridor 7 game data files are required for operation
+(CORR7CD.EXE, MAPTEMP.CO7, GFXTILES.CO7, the VGAGRAPH family and the AUDIO
+family). They may be placed in
+.IR ~/.config/ec7wolf
+or supplied with the
+.B --data
+option. No commercial game data is included with or redistributed by this port.
+
+.SH BUGS
+The bug tracker is located at https://github.com/jeddhor/EC7Wolf/issues

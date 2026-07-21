@@ -1,7 +1,7 @@
 # Variables for generating version.h
 
-set(PRODUCT_NAME "ECWolf")
-set(PRODUCT_IDENTIFIER "org.ecwolf.ECWolf")
+set(PRODUCT_NAME "EC7Wolf")
+set(PRODUCT_IDENTIFIER "org.ec7wolf.EC7Wolf")
 if(APPLE OR WIN32)
 	set(PRODUCT_DIRECTORY "${PRODUCT_NAME}")
 else()

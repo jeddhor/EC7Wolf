@@ -1,13 +1,13 @@
 #!/bin/sh
 
-# Build a single-directory Corridor 7 package from an ECWolf build tree and a
+# Build a single-directory Corridor 7 package from an EC7Wolf build tree and a
 # legally owned Corridor 7 installation. The output intentionally contains
 # commercial game data and must not be committed or redistributed.
 
 set -eu
 
 if [ "$#" -ne 3 ]; then
-	printf 'usage: %s ECWOLF_BUILD_DIR CORRIDOR7_DATA_DIR OUTPUT_DIR\n' "$0" >&2
+	printf 'usage: %s EC7WOLF_BUILD_DIR CORRIDOR7_DATA_DIR OUTPUT_DIR\n' "$0" >&2
 	exit 2
 fi
 
@@ -26,9 +26,9 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-for required in ecwolf ecwolf.pk3; do
+for required in ec7wolf ec7wolf.pk3; do
 	if [ ! -f "$build_dir/$required" ]; then
-		printf 'required ECWolf build artifact is missing: %s\n' "$build_dir/$required" >&2
+		printf 'required EC7Wolf build artifact is missing: %s\n' "$build_dir/$required" >&2
 		exit 1
 	fi
 done
@@ -41,17 +41,23 @@ for required in CORR7CD.EXE MAPTEMP.CO7 GFXTILES.CO7 \
 	fi
 done
 
-# The revision-header target is always run and can update its header after
-# Ninja has already evaluated dependencies. A second incremental pass ensures
-# that a newly committed revision is compiled into the packaged executable.
-cmake --build "$build_dir"
-cmake --build "$build_dir"
+# If the build directory is an actual CMake build tree, refresh it before
+# packaging. The revision-header target is always run and can update its header
+# after Ninja has already evaluated dependencies, so a second incremental pass
+# ensures a newly committed revision is compiled into the packaged executable.
+# When given a pre-built release folder (e.g. the release/ produced by
+# docker.sh, which contains only ec7wolf + ec7wolf.pk3), skip the rebuild and
+# package the artifacts as-is.
+if [ -f "$build_dir/CMakeCache.txt" ]; then
+	cmake --build "$build_dir"
+	cmake --build "$build_dir"
+fi
 
 rm -rf "$staging_dir"
 mkdir -p "$staging_dir/savegames"
 cp -a "$data_dir/." "$staging_dir/"
-install -m 755 "$build_dir/ecwolf" "$staging_dir/ecwolf"
-install -m 644 "$build_dir/ecwolf.pk3" "$staging_dir/ecwolf.pk3"
+install -m 755 "$build_dir/ec7wolf" "$staging_dir/ec7wolf"
+install -m 644 "$build_dir/ec7wolf.pk3" "$staging_dir/ec7wolf.pk3"
 install -m 755 "$script_dir/corridor7-release/run-corridor7.sh" \
 	"$staging_dir/run-corridor7.sh"
 install -m 644 "$script_dir/corridor7-release/README.txt" \

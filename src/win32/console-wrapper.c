@@ -158,9 +158,9 @@ static BOOL WriteConsole(HANDLE hConsoleOutput, const wchar_t* lpBuffer, DWORD n
 #define ECWOLF_EXTRA_COMMAND_LINE L" --console"
 #define GZDOOM_EXTRA_COMMAND_LINE L" -stdout"
 
-#define MAX_CANDIDATE_LENGTH 10
+#define MAX_CANDIDATE_LENGTH 12
 static const wchar_t* const EXECUTABLE_CANDIDATES[] = {
-	L"ecwolf.exe",
+	L"ec7wolf.exe",
 	L"gzdoom.exe",
 	L"lzwolf.exe",
 	L"raze.exe",

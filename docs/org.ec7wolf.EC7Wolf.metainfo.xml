@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.ec7wolf.EC7Wolf</id>
+
+  <name>EC7Wolf</name>
+  <summary>Corridor 7: Alien Invasion source port</summary>
+
+  <metadata_license>MIT</metadata_license>
+  <project_license>GPL-2.0+</project_license>
+
+  <developer id="org.ec7wolf">
+    <name>EC7Wolf contributors (ECWolf engine by Braden Obrzut and the ECWolf Team)</name>
+  </developer>
+
+  <url type="homepage">https://github.com/jeddhor/EC7Wolf</url>
+  <url type="vcs-browser">https://github.com/jeddhor/EC7Wolf</url>
+
+  <description>
+    <p><em>EC7Wolf</em> is a sourceless source port of the 1994 Capstone FPS <em>Corridor 7: Alien Invasion</em>, built on a fork of the <em>ECWolf</em> engine (itself derived from Wolf4SDL). It reads the original Corridor 7 data files and reproduces the game's rendering, weapons, enemies, and mission progression on a modern engine.</p>
+    <p>For players, EC7Wolf brings the classic experience to current systems with modern controls, widescreen support, and unlimited save slots, while remaining faithful to the original game.</p>
+    <p><em>Game Data:</em></p>
+    <p><em>EC7Wolf</em> requires the original Corridor 7 game files to run. It does not include or redistribute any commercial game assets.</p>
+  </description>
+
+  <launchable type="desktop-id">org.ec7wolf.EC7Wolf.desktop</launchable>
+
+  <content_rating type="oars-1.1">
+    <content_attribute id="violence-fantasy">mild</content_attribute>
+    <content_attribute id="violence-realistic">mild</content_attribute>
+    <content_attribute id="violence-bloodshed">mild</content_attribute>
+  </content_rating>
+
+</component>

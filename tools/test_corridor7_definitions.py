@@ -28,6 +28,7 @@ M_CLASSES = (ROOT / "src/m_classes.cpp").read_text()
 FLAT_TEXTURE = (ROOT / "src/textures/flattexture.cpp").read_text()
 FLOOR_CEILING = (ROOT / "src/wl_floorceiling.cpp").read_text()
 VSWAP = (ROOT / "src/resourcefiles/file_vswap.cpp").read_text()
+V_PALETTE = (ROOT / "src/v_palette.cpp").read_text()
 AUDIO_MUS = (ROOT / "src/resourcefiles/file_audiomus.cpp").read_text()
 WOLF_SHAPE = (ROOT / "src/textures/wolfshapetexture.cpp").read_text()
 WL_DRAW = (ROOT / "src/wl_draw.cpp").read_text()
@@ -120,18 +121,34 @@ for wall_id in range(1, 251):
         raise SystemExit(
             f"Corridor 7 definition check failed: wall {wall_id} must use page {expected}"
         )
+for door_id, page in ((251, 250), (252, 251), (253, 252), (254, 253)):
+    require(
+        rf'tile\s+{door_id}\s*\{{.*?texturenorth\s*=\s*"C7W0254".*?'
+        rf'texturesouth\s*=\s*"C7W0254".*?textureeast\s*=\s*"C7W{page:04d}".*?'
+        rf'texturewest\s*=\s*"C7W{page:04d}".*?autoorient\s*=\s*true',
+        XLAT,
+        f"door {door_id} uses the composite five-bank/track page 254 on its jamb faces",
+    )
+require(r'horizontal\.texture\[MapTile::North\].*?texture\[MapTile::East\].*?'
+        r'horizontal\.texture\[MapTile::East\].*?texture\[MapTile::North\]',
+        GAMEMAP_PLANES, "auto-oriented doors rotate face and jamb textures with their axis")
 require(r'bool\s+sightTransparent', GAMEMAP_H, "sight-transparent solid wall property")
 require(r'bool\s+renderMasked', GAMEMAP_H, "masked wall rendering property")
 require(r'for\(int candidate = 3;candidate <= 8;\+\+candidate\).*?\(1 << candidate\)\*\(1 << candidate\)\s*==\s*area', FLAT_TEXTURE, "Corridor 7 wall dimensions come from the VSWAP lump length")
 require(r'CheckGameFilter\("Corridor7"\).*?Pixels\[i\]\s*==\s*255.*?bMasked\s*=\s*true', FLAT_TEXTURE, "Corridor 7 wall pages detect index-255 transparency")
 require(r'source\s*==\s*255\s*\?\s*0\s*:\s*1.*?source\s*==\s*255\s*\?\s*0\s*:\s*source', FLAT_TEXTURE, "Corridor 7 index 255 normalizes to index 0 in a masked buffer with separate opacity")
+require(r'for\(unsigned int side = 0;side < 4;\+\+side\).*?texture\[side\].*?wall->bMasked.*?maskedWallType\s*=\s*1', GAMEMAP_PLANES,
+        "all directional faces, including auto-oriented door faces, participate in Corridor 7 transparency detection")
 require(r'bool\s+opaque\s*=\s*postopacity\s*==\s*NULL\s*\|\|\s*postopacity\[yw\]\s*!=\s*0.*?if\(opaque\).*?vbuf\[yendoffs\]', WL_DRAW, "solid walls and doors honor Corridor 7 opacity planes")
 require(r'postopacity\s*=\s*source->GetColumnOpacity\(column\)', WL_DRAW, "wall columns carry their matching opacity columns")
 require(r'corridor7\s*&&\s*source\s*==\s*255.*?source\s*=\s*0.*?GPalette\.Remap\[source\]', WOLF_SHAPE, "Corridor 7 sprite posts remap index 255 to 0 before palette injection")
 require(r'oldplane\[i\]\s*==\s*104\s*\|\|\s*oldplane\[i\]\s*==\s*105.*?corridor7WallID-1.*?maskedWallType\s*=\s*1', GAMEMAP_PLANES, "markers 104/105 select wall-ID-minus-one masked pages")
 require(r'corridor7SightTransparent\s*=\s*oldplane\[i\]\s*==\s*105', GAMEMAP_PLANES, "marker 105 alone is sight-transparent")
-require(r'else if \(!spot->tile->sightTransparent\s*&&\s*!spot->corridor7SightTransparent\)', WL_STATE, "sight checks distinguish markers 104 and 105")
+require(r'TileBlocksSight\(spot\)', WL_STATE,
+		"render-only masked-wall transparency is kept separate from line-of-sight")
 require(r'oldplane\[i\]\s*>=\s*86\s*&&\s*oldplane\[i\]\s*<=\s*88.*?corridor7WallMarker\s*=\s*oldplane\[i\]-85', GAMEMAP_PLANES, "animated-wall phase markers 86..88 are preserved")
+if re.search(r'oldplane\[i\]\s*==\s*237.*?SetTile\(NULL\)', GAMEMAP_PLANES, re.DOTALL):
+    raise SystemExit("Corridor 7 definition check failed: wall 237 must remain the solid planet-animation frame")
 require(r'CheckGameFilter\("Corridor7"\).*?DrawWindow\(x,\s*y,\s*9,\s*9', M_CLASSES, "palette-safe Corridor 7 checkbox")
 require(r'trigger\s+98\s*\{.*?action\s*=\s*"Pushwall_Move".*?arg1\s*=\s*8.*?arg2\s*=\s*2.*?arg3\s*=\s*2.*?secret\s*=\s*true', XLAT, "marker-98 secret walls visibly slide two tiles")
 require(r'trigger\s+101\s*\{.*?action\s*=\s*"Pushwall_Move".*?arg1\s*=\s*8.*?arg2\s*=\s*2.*?arg3\s*=\s*2', XLAT, "marker-101 walls visibly slide two tiles")
@@ -144,6 +161,18 @@ require(r'class\s+C7AnimatedWall.*?\+\+tics\s*<\s*8.*?\+\+frame', LNSPEC, "Corri
 require(r'ActivateTrigger.*?trig\.active\s*&&\s*trig\.isSecret.*?\+\+gamestate\.secretcount.*?trig\.active\s*=\s*false',
         GAMEMAP, "successful secret walls count exactly once")
 require(r'color\s*>=\s*208\s*&&\s*color\s*<=\s*239.*?color\s*&\s*~7.*?TimeCount\s*>>\s*3', WL_DRAW, "all four Corridor 7 VGA palette ramps cycle every eight tics")
+require(r'ShadeWallColor.*?GPalette\.Remap\[15\].*?GPalette\.Remap\[254\].*?GPalette\.Remap\[208\].*?GPalette\.Remap\[239\].*?NormalLight\.Maps\[color\]', WL_DRAW,
+        "Corridor 7 dedicated lamp whites and animated light ramps remain full-bright")
+if re.search(r'ShadeWallColor.*?GPalette\.Remap\[39\]', WL_DRAW, re.DOTALL):
+    raise SystemExit("Corridor 7 definition check failed: ordinary structural white 39 must remain shaded")
+require(r'mode\s*!=\s*3.*?i\s*==\s*15.*?i\s*==\s*254.*?palette\[i\]\s*=\s*source',
+        V_PALETTE, "night and infrared visor palettes preserve lamp-white source colors")
+if re.search(r'mode\s*!=\s*3.*?i\s*==\s*39', V_PALETTE, re.DOTALL):
+    raise SystemExit("Corridor 7 definition check failed: visor palettes must tint ordinary white 39")
+if len(re.findall(r'ShadeWallColor\((?:postsource|source)\[yw\],\s*curshades\)', WL_DRAW)) != 3:
+    raise SystemExit("Corridor 7 definition check failed: solid and masked wall posts must share emissive shading")
+require(r'actor\s+C7DamageField\s*\{.*?C010\s+A\s+-1\s+bright', STATICS,
+        "the normally visible C010 floor light keeps its source brightness")
 require(r'IsMaskedWallPassSide.*?CheckGameFilter\("Corridor7"\).*?return\s+true.*?RecordMaskedWallHit.*?maskedWallHits\.Push.*?DrawMaskedWall.*?hitFirst.*?hitLast', WL_DRAW, "masked Corridor 7 rays cross adjacent glass and retain their exact surface spans")
 require(r'IsConnectedMaskedWall.*?corridor7WallID.*?IsMaskedWallRenderSide.*?horizontalRun.*?verticalRun.*?RecordMaskedWallHit', WL_DRAW, "adjacent masked walls suppress internal end faces while rays continue through them")
 require(r'height\s*>=\s*maskedWallDepth\[depthIndex\].*?maskedWallDepth\[depthIndex\]\s*=\s*height', WL_DRAW, "overlapping masked walls use per-pixel depth compositing")
@@ -190,8 +219,18 @@ require(r'TryUseC7HealthChamber.*?c7ChamberState\s*=\s*1.*?TickC7HealthChamber.*
         PLAYERPAWN, "health chambers turn the player, close, heal, and show remaining power")
 require(r'buttonstate\[bt_use\]\s*&&\s*!cmd\.buttonheld\[bt_use\].*?Cmd_Use\(\)',
         PLAYERPAWN, "Use actions run once per key press instead of grunting every tic")
-require(r'corridor7ChamberUses.*?MIN<unsigned int>\(missing,\s*25\).*?corridor7ChamberUses\s*=\s*uses-1.*?\(\(uses-1\)\*100\)/3.*?StartC7ChamberFlash',
-        PLAYERPAWN, "health chambers deliver three visible 25-point treatments")
+require(r'corridor7ChamberPower.*?SetC7HealthChamberPower\(player->c7ChamberPower,\s*4\*TICRATE\).*?MIN<unsigned int>\(missing,\s*power\).*?corridor7ChamberPower\s*=\s*power-restored.*?StartC7ChamberFlash',
+		PLAYERPAWN, "health chambers immediately show and persist a proportional 100-point reservoir")
+require(r'DrawC7GradientBar.*?column\*paletteColors\)/fullWidth.*?paletteStart\+shade',
+		WOLF_SBAR, "wide gauges stretch a complete palette ramp across their authored well")
+require(r'C7G0062.*?meterLeft\s*=\s*3.*?meterRight\s*=\s*3.*?'
+		r'meterBottom\s*=\s*3.*?meterHeight\s*=\s*5.*?GetScaledWidth\(\).*?'
+		r'filledWidth\s*=\s*\(power\*meterWidth\+50\)/100.*?'
+		r'DrawC7GradientBar\(meterX,\s*meterY,\s*filledWidth,\s*meterWidth,.*?128,\s*8\)',
+		WOLF_SBAR,
+		"health chamber power fills C7G0062's 42x5 recessed well with the green ramp")
+require(r'storedPower.*?corridor7ChamberPower.*?0x80.*?corridor7ChamberPower\s*&=\s*0x7f.*?MIN<unsigned int>\(plane\.map\[i\]\.corridor7ChamberPower,\s*3\)\*100\)/3', GAMEMAP,
+		"health chamber reservoir saves are tagged while legacy three-use saves remain compatible")
 require(r'TryUseC7HealthChamber.*?MapSpot\s+panel.*?MapSpot\s+door.*?panel->corridor7WallID\s*!=\s*35.*?door->corridor7WallID\s*!=\s*53.*?door->corridor7WallMarker\s*!=\s*107',
         PLAYERPAWN, "health chambers activate at the rear panel with the open door opposite")
 require(r'actor\s+C7FloorPlan\s*:\s*MapRevealer', PLAYER,
@@ -203,7 +242,11 @@ require(r'Keyboard\[sc_W\].*?Keyboard\[sc_A\].*?Keyboard\[sc_X\].*?GiveCorridor7
 require(r'GiveCorridor7Cheat.*?GiveAllWeaponsAndAmmo.*?P_GiveKeys.*?gamestate\.fullmap\s*=\s*true.*?C7VisorCharge',
         WL_DEBUG, "the WAX cheat grants weapons, access, map, health, armor, and visor charge")
 require(r'ThreeDRefresh\s*\(\s*\).*?DrawTopOverlay\s*\(\s*\)', WL_PLAY, "top overlay redraws every rendered frame")
-require(r'hasSignon\s*&&\s*IWad::CheckGameFilter\("Corridor7"\).*?VH_UpdateScreen\(\).*?return\s+false', WL_MAIN, "Corridor 7 startup keeps its splash free of ECWolf initialization text")
+require(r'if\(Paused\s*&\s*1\).*?CheckGameFilter\("Corridor7"\).*?'
+        r'pauseText\s*=\s*"PAUSED".*?DrawText\(SmallFont.*?else\s*'
+        r'VWB_DrawGraphic\(TexMan\("PAUSED"\)', WL_PLAY,
+        "Corridor 7 pause uses text instead of absent Wolf PAUSED art")
+require(r'hasSignon\s*&&\s*IWad::CheckGameFilter\("Corridor7"\).*?VH_UpdateScreen\(\).*?return\s+false', WL_MAIN, "Corridor 7 startup keeps its splash free of EC7Wolf initialization text")
 if len(re.findall(r'Time\s*=\s*-4', MAPINFO)) != 5 or len(re.findall(r'FadeType\s*=\s*FadeOut', MAPINFO)) < 6:
     raise SystemExit("Corridor 7 definition check failed: credits must hold for four seconds and fade between slides")
 require(r'templateTrigger\.arg\[4\]\s*=\s*horizontal', GAMEMAP_PLANES, "door orientation must not overwrite lock IDs")
@@ -219,7 +262,7 @@ require(r'doors/open\s+\{\s+C7DS0010.*?doors/close\s+\{\s+C7DS0011', SNDINFO,
         "door opening and closing use the native Corridor 7 sound IDs")
 # DMA-captured original menu behavior (2026-07-17): moves play 9, backing out
 # of a submenu plays 33, and the quit/confirm prompt announces itself with 31.
-# Main-menu activation is silent; menu/activate only reaches ECWolf-specific
+# Main-menu activation is silent; menu/activate only reaches EC7Wolf-specific
 # submenu widgets and clicks like the cursor.
 require(r'menu/move1\s+\{\s+C7DS0009.*?menu/move2\s+\{\s+C7DS0009.*?'
         r'menu/activate\s+\{\s+C7DS0009.*?menu/escape\s+\{\s+C7DS0033.*?'
@@ -283,13 +326,23 @@ require(r'CheckGameFilter\("Corridor7"\)\)\s*\n\s*PlaySoundLocActor\(pickupsound
         INVENTORY, "native Corridor 7 pickups do not play inherited Wolf sounds")
 if re.search(r'c7/mine/arm|C063\s+A\s+12\s+A_PlaySound', PLAYER):
     raise SystemExit("Corridor 7 definition check failed: native mine arming must remain silent")
-require(r'actor\s+C7Shotgun.*?C810\s+A\s+12.*?C813\s+A\s+12\s+goto\s+Ready',
+require(r'actor\s+C7Shotgun.*?C810\s+A\s+12.*?C813\s+A\s+12.*?goto\s+Ready',
         PLAYER, "Ithaca reload ends before the C814 Tebazile sprite")
 shotgun = re.search(r'actor\s+C7Shotgun(.*?)actor\s+C7PlasmaRifle', PLAYER, re.DOTALL)
 if shotgun is None or "C814" in shotgun.group(1):
     raise SystemExit("Corridor 7 definition check failed: Ithaca reload leaks into Tebazile art")
-require(r'actor\s+C7ProximityMine.*?Spawn:.*?C001\s+A\s+36.*?Armed:.*?C001\s+A\s+1\s+A_C7MineThink',
+require(r'actor\s+C7ProximityMine.*?Spawn:.*?C067\s+A\s+36.*?Armed:.*?C067\s+A\s+1\s+A_C7MineThink',
         PLAYER, "placed mines use the released floor-mine sprite, not the pickup crate")
+require(r'actor\s+C7PlasmaBolt.*?speed\s+30.*?deathsound\s+"c7/teleport"'
+        r'.*?Spawn:.*?C706\s+A\s+2\s+bright\s+loop.*?Death:.*?'
+        r'C707\s+A\s+4\s+bright\s+A_Explode.*?C708\s+A\s+4\s+bright.*?'
+        r'C709\s+A\s+4\s+bright',
+        PLAYER, "plasma rifle uses the C706 blue bolt and C707-C709 impact sequence")
+plasma_bolt = re.search(r'actor\s+C7PlasmaBolt(.*?)(?=\nactor\s+|\Z)', PLAYER, re.DOTALL)
+if plasma_bolt is None or re.search(r'C(?:738|739|740|741|742|743|744|745)', plasma_bolt.group(1)):
+    raise SystemExit(
+        "Corridor 7 definition check failed: player plasma must not use exit-vortex sprites"
+    )
 require(r'ACTION_FUNCTION\(A_C7MineThink\).*?32\s*\*\s*\(FRACUNIT\s*/\s*64\).*?self->temp1\s*==\s*0.*?self->temp1\s*=\s*1.*?check->player.*?FL_ISMONSTER.*?DamageActor\(self,\s*self->target,\s*self->health\)',
         WL_AGENT, "mines arm persistently and trigger on nearby players or monsters")
 require(r'ACTION_FUNCTION\(A_Explode\).*?attacker\s*=\s*self->target.*?XF_HURTSOURCE.*?target\s*==\s*self->target.*?attacker\s*=\s*self.*?DamageActor\(target,\s*attacker',
@@ -329,6 +382,12 @@ require(r'PrepareCorridor7HighScores.*?id software-.*?Capstone 94.*?Les.*?Joe.*?
         WL_INTER, "fresh Corridor 7 high scores use the original Capstone names")
 require(r'C7StencilPrintAt.*?HIGH SCORES.*?0xB7.*?NAME.*?0x24.*?0x57-2\*i.*?0x6F-2\*i',
         WL_INTER, "high scores use the executable's exact VGA text colors")
+require(r'PrintY\s*=\s*62\s*\+\s*18\*i.*?PrintY\s*=\s*62\s*\+\s*18\*n',
+        WL_INTER, "high-score rows and name entry use the executable's unclipped coordinates")
+require(r'struct\s+FCorridor7PaletteLump.*?BYTE\s+Palette\[768\].*?'
+        r'FCorridor7PaletteLump\(const\s+BYTE\s*\*palette\).*?memcpy\(Cache,\s*Palette,\s*LumpSize\).*?'
+        r'new\s+FCorridor7PaletteLump\(palette\)',
+        VSWAP, "C7PAL reloads use captured data instead of reopening CORR7CD.EXE")
 require(r'CONGRATULATIONS!.*?destroyed the vortex.*?Total floors secured', WL_INTER, "Corridor 7 victory presentation")
 require(r'IWad::CheckGameFilter\("Corridor7"\).*?HIGH SCORES', WL_INTER, "Corridor 7 high scores avoid Wolf-only art")
 require(r'LevelBonus\s*==\s*-1.*?ForceTally.*?!\(IWad::CheckGameFilter\("Corridor7"\)\s*&&\s*levelInfo->BonusLevel\)', WL_INTER, "bonus floors stay out of forty-floor victory averages")
@@ -338,10 +397,92 @@ require(r'C7G0019.*?C7G0020.*?C7G0021.*?C7G0018.*?256\+\(slot\+\+\)\*8,\s*176', 
 require(r'component\s*<<\s*2.*?component\s*>>\s*4', VSWAP, "Corridor 7 VGA DAC palette expansion")
 require(r'PSPR_CORRIDOR7.*?TopOffset\s*=\s*-54.*?xScale\s*=\s*4\*FRACUNIT/5', WOLF_SHAPE, "native Corridor 7 weapon scale and anchor")
 require(r'actor\s+C7M16.*?Ready:\s*C761\s+A\s+1\s+A_WeaponReady', PLAYER, "M-16 uses its released stationary frame")
+weapon_blocks = {}
+for weapon in (
+	"C7Bayonet",
+    "C7Shotgun",
+    "C7M16",
+    "C7M343",
+    "C7DualBlaster",
+    "C7PlasmaRifle",
+    "C7AssaultCannon",
+    "C7Disintegrator",
+):
+    block = re.search(
+        rf'actor\s+{weapon}\s*:.*?\{{(.*?)(?=\nactor\s+|\Z)',
+        PLAYER,
+        re.DOTALL,
+    )
+    if block is None:
+        raise SystemExit(f"Corridor 7 definition check failed: missing {weapon}")
+    weapon_blocks[weapon] = block.group(1)
+    if "+WEAPON.NOAUTOFIRE" in block.group(1):
+        raise SystemExit(
+            f"Corridor 7 definition check failed: weapon {weapon} must support held fire"
+        )
+    if "A_ReFire" not in block.group(1):
+        raise SystemExit(
+            f"Corridor 7 definition check failed: weapon {weapon} has no held-fire branch"
+        )
+require(r'actor\s+C7Bayonet.*?Fire:\s*Hold:.*?C746\s+A\s+6.*?'
+        r'C748\s+A\s+6\s+bright\s+A_CustomPunch.*?C749\s+A\s+6\s*'
+        r'TNT1\s+A\s+0\s+A_ReFire', PLAYER,
+        "Taser held fire repeats its complete native attack sequence")
+require(r'actor\s+C7M16.*?C756\s+A\s+6\s+bright\s+A_C7GunAttack\(2\).*?'
+        r'C757\s+A\s+6\s+TNT1\s+A\s+0\s+A_ReFire', PLAYER,
+        "M-24 held fire draws both released jiggle frames before refiring")
+require(r'actor\s+C7M343.*?Fire:\s*Hold:.*?C762\s+A\s+6.*?C765\s+A\s+6\s*'
+        r'TNT1\s+A\s+0\s+A_ReFire', PLAYER,
+        "M-343 held bursts replay the muzzle flash and complete barrel cycle")
+for weapon, action_frame in {
+    "C7DualBlaster": "C773",
+    "C7PlasmaRifle": "C781",
+    "C7AssaultCannon": "C797",
+}.items():
+    require(rf'actor\s+{weapon}.*?{action_frame}\s+A\s+6(?:\s+bright)?\s*'
+            r'TNT1\s+A\s+0\s+A_ReFire', PLAYER,
+            f"{weapon} displays its final firing frame before held refire")
+require(r'actor\s+C7Disintegrator.*?Fire:.*?C802\s+A\s+6.*?C803\s+A\s+6.*?'
+        r'Hold:.*?C804\s+A\s+20\s+bright\s+A_C7GunAttack\(7\).*?'
+        r'C805\s+A\s+6\s+TNT1\s+A\s+0\s+A_ReFire', PLAYER,
+        "Disintegrator holds on its final two firing frames without showing its movement pose")
+require(r'actor\s+C7Shotgun.*?Fire:\s*Hold:.*?C810\s+A\s+12.*?'
+        r'C813\s+A\s+12\s+TNT1\s+A\s+0\s+A_ReFire', PLAYER,
+        "Ithaca held fire completes every pump frame before repeating")
+for weapon, movement_frame in {
+    "C7Shotgun": "C790",
+    "C7M16": "C758",
+    "C7M343": "C766",
+    "C7DualBlaster": "C774",
+    "C7PlasmaRifle": "C782",
+    "C7AssaultCannon": "C798",
+    "C7Disintegrator": "C806",
+}.items():
+    if movement_frame in weapon_blocks[weapon]:
+        raise SystemExit(
+            f"Corridor 7 definition check failed: {weapon} firing sequence displays movement frame {movement_frame}"
+        )
+if "C750" in weapon_blocks["C7Bayonet"]:
+    raise SystemExit("Corridor 7 definition check failed: Taser firing displays movement frame C750")
 require(r'0,\s*1,\s*2,\s*3,\s*4,\s*3,\s*2,\s*1,\s*0,\s*-1,\s*-2,\s*-3,\s*-4,\s*-3,\s*-2,\s*-1.*?if\(readyFrame\).*?xoffset\s*\+=\s*corridor7X\[phase\]', WL_DRAW, "released 16-step Corridor 7 stationary-frame weapon bob")
+require(r'readyBase\+\(\(phase&4\)\s*\?\s*4\s*:\s*7\).*?spriteOverride\s*=\s*R_GetSprite',
+        WL_DRAW, "weapon bob alternates only the moving and stationary pages")
+if "corridor7Poses" in WL_DRAW:
+    raise SystemExit("Corridor 7 definition check failed: weapon bob must not insert intermediate pose pages")
 if "corridor7Frame" in WL_DRAW:
     raise SystemExit("Corridor 7 definition check failed: weapon bob must not copy live Frames")
-require(r'CheckGameFilter\("Corridor7"\).*?curveStrength\s*=\s*floor\s*\?\s*40\s*:\s*24', FLOOR_CEILING, "Corridor 7 floor and ceiling depth ramps")
+require(r'C7CycleSpriteColor.*?color\s*>=\s*208\s*&&\s*color\s*<=\s*239.*?'
+        r'gamestate\.TimeCount\s*>>\s*3.*?C7ShadePlayerSpriteColor.*?'
+        r'color\s*>=\s*208\s*&&\s*color\s*<=\s*239.*?C7CycleSpriteColor\(color\).*?'
+        r'luminous\s*\?\s*NormalLight\.Maps\[color\]\s*:\s*colormap\[color\].*?'
+        r'R_DrawPlayerSprite.*?C7ShadePlayerSpriteColor\(src\[y>>FRACBITS\],\s*colormap\)',
+        R_SPRITES, "weapon instrumentation cycles at full brightness while the gun remains shaded")
+require(r'CheckGameFilter\("Corridor7"\).*?virtualEdgeRow.*?80.*?band\s*=\s*virtualEdgeRow/3.*?'
+        r'extraLight\s*=\s*MAX\(0,\s*r_extralight\).*?litBand.*?extraLight/8.*?firstShade.*?extraLight/16.*?'
+        r'virtualX.*?320.*?virtualX>>2.*?virtualEdgeRow%3\s*==\s*1.*?band&1.*?==\s*0',
+        FLOOR_CEILING, "Corridor 7 planes reproduce the native three-row/four-column VGA shade pattern")
+if "bayer4" in FLOOR_CEILING:
+    raise SystemExit("Corridor 7 definition check failed: floor/ceiling shading must not use resolution-dependent Bayer dithering")
 if len(re.findall(r'bonuslevel\s*=\s*true', MAPINFO, re.IGNORECASE)) != 6:
     raise SystemExit("Corridor 7 definition check failed: all six bonus maps must use bonus-level rules")
 require(r'map\s+"MAP40".*?forcetally\s*=\s*true', MAPINFO, "MAP40 must tally before victory")
@@ -350,22 +491,31 @@ require(r'^\s*\{300,\s*C7Semaj,', XLAT, "object 300 Semaj mapping")
 require(r'"AILOA1".*?"AILOA8"', CO7MAP, "Ailoprobe directional sprite set")
 require(r'"EITKA1".*?"EITKA8"', CO7MAP, "Eitak directional sprite set")
 require(r"actor\s+C7Semaj\s*:.*?A_MeleeAttack", MONSTERS, "Semaj melee-only attack")
-require(r'actor\s+C7SkullBoss\s*:.*?A_CustomMissile\("C7BossEnergyBolt"\)', MONSTERS, "Solrac energy projectile")
-require(r'actor\s+C7SpaceMarine\s*:.*?Missile:.*?C676.*?C678.*?A_WolfAttack.*?C681.*?A_WolfAttack.*?Pain:.*?C684',
-        MONSTERS, "Eniram attack and pain animations use separate released frame ranges")
-require(r'actor\s+C7Ugly\s*:.*?Missile:.*?C233.*?C238.*?Pain:.*?C225.*?C226',
+require(r'actor\s+C7Solrac\s*:.*?A_CustomMissile\("C7BossEnergyBolt"\)', MONSTERS, "Solrac energy projectile")
+require(r'actor\s+C7Eniram\s*:.*?Spawn:\s*C665.*?Missile:.*?C669.*?C672.*?A_WolfAttack.*?Pain:.*?C683.*?Death:.*?C684.*?C689',
+        MONSTERS, "ordinary Eniram uses its complete C665-C689 cloaking state family")
+require(r'actor\s+C7EniramBoss\s*:.*?Spawn:\s*C653.*?Missile:.*?C657.*?C658.*?A_CustomMissile.*?Death:.*?C659.*?C664',
+        MONSTERS, "golden-horned Eniram Boss uses C653-C664 and never uses cloak frames")
+require(r'actor\s+C7Rodex\s*:.*?Missile:.*?C233.*?C236.*?Pain:.*?C225.*?C226',
         MONSTERS, "Rodex attack no longer reuses its hurt frames")
-require(r'A_PlaySound\("c7/monster/attack/class17"\).*?A_CustomMissile\("C7BossEnergyBolt"\)',
+require(r'A_PlaySound\("c7/monster/attack/class20"\).*?A_CustomMissile\("C7BossEnergyBolt"\)',
         MONSTERS, "Solrac plays its released class-17 projectile sound")
-require(r'actor\s+C7PurpleBoss.*?activesound\s+"c7/monster/active/class25".*?'
+require(r'actor\s+C7Tymok.*?activesound\s+"c7/monster/active/class25".*?'
         r'A_PlaySound\("c7/weapon/plasma"\).*?A_CustomMissile\("C7BossPlasmaBolt"\).*?'
         r'A_PlaySound\("c7/monster/attack/class25"\)', MONSTERS,
         "the purple boss preserves its controlled-trace active and two attack sounds")
-require(r'^\s*\{196,\s*C7IronFoot,.*?actor\s+C7IronFoot.*?'
-        r'activesound\s+"c7/monster/active/class20".*?'
-        r'A_PlaySound\("c7/weapon/plasma"\).*?A_CustomMissile\("C7BossPlasmaBolt"\)',
+require(r'^\s*\{196,\s*C7EniramBoss,.*?actor\s+C7EniramBoss.*?'
+		r'activesound\s+"c7/monster/active/class21".*?C653.*?C664',
         XLAT + MONSTERS,
-        "object 196 uses its C690 IronFoot art and controlled-trace audio")
+        "object 196 uses the golden-horned C653 Eniram Boss and class-21 audio")
+for object_id, actor in {
+	142: "C7Eniram", 179: "C7Tymok", 214: "C7Solrac",
+	224: "C7Tenaj", 232: "C7Mechanoid", 270: "C7Ttocs",
+	278: "C7Otrebor", 300: "C7Semaj", 324: "C7Nerraw",
+	328: "C7Eitak", 336: "C7Tebazile",
+}.items():
+	require(rf'^\s*\{{{object_id},\s*{actor},', XLAT,
+			f"native object {object_id} maps to {actor}")
 require(r'c7/monster/active/class6\s+\{\s+C7DS0055.*?'
         r'c7/monster/active/class13\s+\{\s+C7DS0057.*?'
         r'c7/monster/active/class20\s+\{\s+C7DS0068.*?'
@@ -383,7 +533,12 @@ require(r'A_FireCustomMissile.*?C7PlasmaBolt.*?c7MuzzleFlashTics\s*=\s*5',
         WL_AGENT, "the player plasma projectile has original muzzle lighting")
 require(r'action\s+native\s+A_C7AlienAlarm', NATIVE_ACTORS,
         "the Ailoprobe alarm action is registered")
-require(r'C7VisorCanSeeActor.*?C7SpaceMarine.*?infrared',
+require(r'P_AlertCorridor7MonstersNear.*?12\*TILEGLOBAL', WL_AGENT,
+		"ordinary alien alarms wake a local group instead of the whole floor")
+require(r'TileBlocksSight.*?CheckGameFilter\("Corridor7"\).*?return\s+true.*?'
+		r'else if \(TileBlocksSight\(spot\)\)', WL_STATE,
+		"Corridor 7 glass remains opaque to alien line-of-sight")
+require(r'C7VisorCanSeeActor.*?C7Eniram.*?infrared',
 		R_SPRITES, "infrared reveals cloaked Eniram actors")
 # A controlled DOSBox run shows the decorative statics (C010 posts, C011
 # rods, C012 strands) plainly in normal visor mode, so those classes may not
@@ -447,21 +602,33 @@ if "C7Spinner" in PLAYER or "C7Needler" in PLAYER or "C7Stunner" in PLAYER:
 for actor, health in {
     "C7OrganicEye": "25, 25, 25, 100",
     "C7ProbeEye": "25, 50, 100, 150",
-    "C7Technician": "50, 50, 150, 300",
-    "C7Ugly": "25, 25, 50, 100",
-    "C7Grunt": "50, 50, 150, 300",
-    "C7Morph": "50, 50, 200, 500",
-    "C7SpaceMarine": "50, 50, 200, 300",
+    "C7Tenaj": "50, 50, 150, 300",
+    "C7Bandor": "25, 25, 50, 100",
+    "C7Rodex": "25, 25, 50, 100",
+    "C7Ttocs": "50, 50, 150, 300",
+    "C7Eniram": "50, 50, 200, 500",
+    "C7Otrebor": "50, 50, 200, 300",
+    "C7Semaj": "25, 25, 50, 100",
+    "C7Nerraw": "25, 25, 50, 100",
+    "C7Eitak": "75, 75, 225, 450",
     "C7EniramBoss": "1000, 1500, 2000, 4000",
-    "C7PurpleBoss": "1000, 1500, 2000, 4000",
-    "C7IronFoot": "500, 500, 1000, 1500",
-    "C7SkullBoss": "1000, 1500, 3000, 5000",
-    "C7HornedBoss": "5000, 6000, 7000, 9000",
+    "C7Tymok": "1000, 1500, 2000, 4000",
+    "C7Mechanoid": "500, 500, 1000, 1500",
+    "C7Solrac": "1000, 1500, 3000, 5000",
+    "C7Tebazile": "5000, 6000, 7000, 9000",
 }.items():
     require(
         rf"actor\s+{actor}\s*:.*?\{{.*?health\s+{re.escape(health)}",
         MONSTERS,
         f"{actor} health table",
     )
+
+require(r'actor\s+C7Tebazile.*?TransformEniram:.*?C822.*?C827.*?'
+		r'TransformTymok:.*?C828.*?C833.*?TransformSolrac:.*?C834.*?C839.*?'
+		r'TransformFinal:.*?C840.*?C845.*?Death:.*?C846.*?C857',
+		MONSTERS, "Tebazile plays all native transformation and final-death frames")
+require(r'actor\s+C7Mechanoid.*?C690.*?A_PlaySound.*?C692.*?A_PlaySound.*?'
+		r'Missile:.*?C694.*?C696.*?A_WolfAttack.*?C697.*?C696.*?A_WolfAttack',
+		MONSTERS, "Mechanoid has booming steps and two range-falling attacks")
 
 print("Corridor 7 definition checks passed")

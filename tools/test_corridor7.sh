@@ -1,31 +1,31 @@
 #!/bin/sh
 
-# Build ECWolf and smoke-test direct loading from an original Corridor 7 CD
+# Build EC7Wolf and smoke-test direct loading from an original Corridor 7 CD
 # installation. No game data is copied or modified.
 
 set -eu
 
 if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
-	printf 'usage: %s ECWOLF_BUILD_DIR CORRIDOR7_DATA_DIR [LOG_FILE]\n' "$0" >&2
+	printf 'usage: %s EC7WOLF_BUILD_DIR CORRIDOR7_DATA_DIR [LOG_FILE]\n' "$0" >&2
 	exit 2
 fi
 
 build_dir=$(cd "$1" && pwd)
 data_dir=$(cd "$2" && pwd)
 log_file=${3:-"$build_dir/corridor7-smoke.log"}
-ecwolf="$build_dir/ecwolf"
+ec7wolf="$build_dir/ec7wolf"
 
 python3 "$(dirname "$0")/test_corridor7_definitions.py"
 cmake --build "$build_dir"
 
-if [ ! -x "$ecwolf" ]; then
-	printf 'ECWolf executable not found: %s\n' "$ecwolf" >&2
+if [ ! -x "$ec7wolf" ]; then
+	printf 'EC7Wolf executable not found: %s\n' "$ec7wolf" >&2
 	exit 1
 fi
 
-config_dir=$(mktemp -d /tmp/ecwolf-corridor7-config.XXXXXX)
-config_file="$config_dir/ecwolf.cfg"
-savedir=$(mktemp -d /tmp/ecwolf-corridor7-save.XXXXXX)
+config_dir=$(mktemp -d /tmp/ec7wolf-corridor7-config.XXXXXX)
+config_file="$config_dir/ec7wolf.cfg"
+savedir=$(mktemp -d /tmp/ec7wolf-corridor7-save.XXXXXX)
 cleanup() {
 	rm -rf "$config_dir"
 	rm -rf "$savedir"
@@ -39,17 +39,17 @@ set +e
 	# causes AddressSanitizer to abort before main(), so sanitizer builds must
 	# run without it. A pseudo-terminal preserves line-buffered logs without an
 	# injected library. Normal builds retain the lighter stdbuf path.
-	if ldd "$ecwolf" 2>/dev/null | grep -q 'libasan'; then
-		export C7_SMOKE_ECWOLF="$ecwolf"
+	if ldd "$ec7wolf" 2>/dev/null | grep -q 'libasan'; then
+		export C7_SMOKE_EC7WOLF="$ec7wolf"
 		export C7_SMOKE_CONFIG="$config_file"
 		export C7_SMOKE_SAVEDIR="$savedir"
 		timeout 8s env SDL_AUDIODRIVER=dummy \
 			xvfb-run -a script -qefc \
-			'exec "$C7_SMOKE_ECWOLF" --data CO7 --config "$C7_SMOKE_CONFIG" --savedir "$C7_SMOKE_SAVEDIR" --nowait --tedlevel MAP01 --skill 2' \
+			'exec "$C7_SMOKE_EC7WOLF" --data CO7 --config "$C7_SMOKE_CONFIG" --savedir "$C7_SMOKE_SAVEDIR" --nowait --tedlevel MAP01 --skill 2' \
 			/dev/null
 	else
 		timeout 8s env SDL_AUDIODRIVER=dummy \
-			xvfb-run -a stdbuf -oL -eL "$ecwolf" --data CO7 --config "$config_file" \
+			xvfb-run -a stdbuf -oL -eL "$ec7wolf" --data CO7 --config "$config_file" \
 			--savedir "$savedir" --nowait --tedlevel MAP01 --skill 2
 	fi
 ) >"$log_file" 2>&1
@@ -59,7 +59,7 @@ set -e
 # A timeout is expected because this smoke test deliberately leaves the game
 # running after it enters the level. Any earlier process failure is not.
 if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
-	printf 'ECWolf exited unexpectedly (%d); see %s\n' "$status" "$log_file" >&2
+	printf 'EC7Wolf exited unexpectedly (%d); see %s\n' "$status" "$log_file" >&2
 	exit 1
 fi
 

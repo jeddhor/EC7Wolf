@@ -7,14 +7,14 @@
 set -eu
 
 if [ "$#" -lt 2 ] || [ "$#" -gt 4 ]; then
-	printf 'usage: %s ECWOLF_BUILD_DIR CORRIDOR7_DATA_DIR [LOG_DIR] [--all]\n' "$0" >&2
+	printf 'usage: %s EC7WOLF_BUILD_DIR CORRIDOR7_DATA_DIR [LOG_DIR] [--all]\n' "$0" >&2
 	exit 2
 fi
 
 build_dir=$(cd "$1" && pwd)
 data_dir=$(cd "$2" && pwd)
 log_dir=${3:-"$build_dir/corridor7-map-validation"}
-ecwolf="$build_dir/ecwolf"
+ec7wolf="$build_dir/ec7wolf"
 maps="MAP01 MAP10 MAP20 MAP29 MAP30 MAP31 MAP39 MAP40 MAP41 MAP46 MAP51 MAP60"
 validation_label="representative-map"
 validation_timeout=${CORRIDOR7_VALIDATION_TIMEOUT:-6}
@@ -29,7 +29,7 @@ fi
 cmake --build "$build_dir"
 mkdir -p "$log_dir"
 
-config_root=$(mktemp -d /tmp/ecwolf-corridor7-validation.XXXXXX)
+config_root=$(mktemp -d /tmp/ec7wolf-corridor7-validation.XXXXXX)
 cleanup() {
 	rm -rf "$config_root"
 }
@@ -44,7 +44,7 @@ for map in $maps; do
 	(
 		cd "$data_dir"
 		timeout "${validation_timeout}s" env SDL_AUDIODRIVER=dummy \
-			xvfb-run -a stdbuf -oL -eL "$ecwolf" --data CO7 --config "$config" \
+			xvfb-run -a stdbuf -oL -eL "$ec7wolf" --data CO7 --config "$config" \
 			--savedir "$save" --nowait --tedlevel "$map" --skill 2
 	) >"$log" 2>&1
 	status=$?

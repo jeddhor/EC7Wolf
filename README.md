@@ -4,13 +4,13 @@
   ▒▓█    ▄ ▒██░  ██▒▓██ ░▄█ ▒▓██ ░▄█ ▒▒██▒░██   █▌▒██░  ██▒▓██ ░▄█ ▒       ░██░
   ▒▓▓▄ ▄██▒▒██   ██░▒██▀▀█▄  ▒██▀▀█▄  ░██░░▓█▄   ▌▒██   ██░▒██▀▀█▄        ▓██▒
   ▒ ▓███▀ ░░ ████▓▒░░██▓ ▒██▒░██▓ ▒██▒░██░░▒████▓ ░ ████▓▒░░██▓ ▒██▒      ██▒▒
-              A L I E N   I N V A S I O N   —   on the ECWolf engine
+              A L I E N   I N V A S I O N   —   the EC7Wolf source port
 ```
 
-# Corridor 7: Alien Invasion — ECWolf Source Port
+# EC7Wolf — Corridor 7: Alien Invasion
 
-**A vibecoded, source-portless resurrection of a 1994 Capstone FPS, built on a
-fork of the ECWolf engine.**
+**EC7Wolf is a vibecoded, sourceless source port of the 1994 Capstone FPS
+*Corridor 7: Alien Invasion*, built on a fork of the ECWolf engine.**
 
 > ⚠️ **This is not stock ECWolf.** This fork exists for exactly one purpose: to
 > make **Corridor 7: Alien Invasion** run natively on a modern machine, reading
@@ -315,21 +315,21 @@ cd ECWolf
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 ninja -C build
 ```
-This produces `build/ecwolf` and `build/ecwolf.pk3`.
+This produces `build/ec7wolf` and `build/ec7wolf.pk3`.
 
 > 🛠 **Build gotcha:** the port's gameplay data (DECORATE actors, translations)
-> lives in **`ecwolf.pk3`**. Rebuilding just the binary does **not** rebuild the
+> lives in **`ec7wolf.pk3`**. Rebuilding just the binary does **not** rebuild the
 > pk3 — after editing anything under `wadsrc/`, build the `pk3` target
-> (`ninja -C build pk3` / `ninja -C build ecwolf pk3`) or your data changes
+> (`ninja -C build pk3` / `ninja -C build ec7wolf pk3`) or your data changes
 > silently do nothing.
 
 **Run** (point `--data` at the `CO7` folder you assembled):
 ```sh
-./build/ecwolf --data /path/to/CO7 --nowait
+./build/ec7wolf --data /path/to/CO7 --nowait
 ```
 Or start straight into the first floor for testing:
 ```sh
-./build/ecwolf --data /path/to/CO7 --nowait --tedlevel MAP01 --skill 2
+./build/ec7wolf --data /path/to/CO7 --nowait --tedlevel MAP01 --skill 2
 ```
 
 ### Windows
@@ -351,21 +351,37 @@ Or start straight into the first floor for testing:
    cmake --build build
    ```
    (Or open the folder in Visual Studio, which reads the CMake project directly.)
-4. Place `ecwolf.exe`, `ecwolf.pk3`, and the required **SDL2 `.dll`s** together,
+4. Place `ec7wolf.exe`, `ec7wolf.pk3`, and the required **SDL2 `.dll`s** together,
    then run:
    ```bat
-   ecwolf.exe --data C:\path\to\CO7 --nowait
+   ec7wolf.exe --data C:\path\to\CO7 --nowait
    ```
+
+### Portable, drop-anywhere build (`docker.sh`)
+
+A locally-built binary links against your distro's glibc, so a build from a very
+recent distribution won't start on an older one (or on rolling distros with a
+different libc build). To get a binary that runs on essentially any modern
+desktop Linux, build it inside the bundled **Ubuntu 20.04** container:
+
+```sh
+./docker.sh
+```
+
+This produces a `release/` folder containing `ec7wolf` and `ec7wolf.pk3`, built
+against an older glibc with the C++ runtime statically linked, and verifies the
+result before finishing. See the top of [`docker.sh`](docker.sh) for details.
 
 ### One-command playable release
 
-To bundle an optimized build together with a copy of your legally-owned game
-data into a single self-contained folder:
+To bundle a build together with a copy of your legally-owned game data into a
+single self-contained folder (feed it the `release/` folder from `docker.sh`, or
+any build directory):
 
 ```sh
-tools/package_corridor7_release.sh /path/to/ecwolf-build \
-    /path/to/CO7 /path/to/output/release
-/path/to/output/release/run-corridor7.sh
+tools/package_corridor7_release.sh ./release \
+    /path/to/CO7 /path/to/output/release-package
+/path/to/output/release-package/run-corridor7.sh
 ```
 
 The generated `run-corridor7.sh` launches the game and keeps its config and

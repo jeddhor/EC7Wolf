@@ -144,7 +144,7 @@ option(USE_LIBTEXTSCREEN "Use libtextscreen instead of console iwad picker." OFF
 # path and is always built. OpenGL is enabled once its backend lands (Phase 4);
 # Vulkan is a later optional milestone.
 option(ECWOLF_RENDERER_SOFTWARE "Build the reference software renderer" ON)
-option(ECWOLF_RENDERER_OPENGL "Build the OpenGL renderer backend" OFF)
+option(ECWOLF_RENDERER_OPENGL "Build the OpenGL renderer backend" ON)
 option(ECWOLF_RENDERER_VULKAN "Build the Vulkan renderer backend" OFF)
 if(NOT ECWOLF_RENDERER_SOFTWARE)
 	message(FATAL_ERROR "ECWOLF_RENDERER_SOFTWARE must stay ON: it is the reference/fallback renderer.")

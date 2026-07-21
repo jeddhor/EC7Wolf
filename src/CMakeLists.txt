@@ -358,7 +358,25 @@ if(ECWOLF_RENDERER_SOFTWARE)
 	target_compile_definitions(engine PRIVATE ECWOLF_RENDERER_SOFTWARE=1)
 endif()
 if(ECWOLF_RENDERER_OPENGL)
-	target_compile_definitions(engine PRIVATE ECWOLF_RENDERER_OPENGL=1)
+	# Desktop OpenGL with libepoxy for function loading (no init call needed).
+	# Disable gracefully rather than failing the build if the dependency is
+	# absent, so the software renderer always builds.
+	find_package(OpenGL)
+	find_path(EPOXY_INCLUDE_DIR epoxy/gl.h)
+	find_library(EPOXY_LIBRARY NAMES epoxy)
+	if(OPENGL_FOUND AND EPOXY_LIBRARY AND EPOXY_INCLUDE_DIR)
+		target_compile_definitions(engine PRIVATE ECWOLF_RENDERER_OPENGL=1)
+		target_include_directories(engine PRIVATE ${EPOXY_INCLUDE_DIR})
+		target_link_libraries(engine PRIVATE OpenGL::GL ${EPOXY_LIBRARY})
+		target_sources(engine PRIVATE
+			render/opengl/r_gldevice.cpp
+			render/opengl/r_glshader.cpp
+			render/opengl/r_glpalette.cpp
+			render/opengl/r_glrenderer.cpp
+		)
+	else()
+		message(WARNING "ECWOLF_RENDERER_OPENGL requested but OpenGL/libepoxy not found; building without the OpenGL backend.")
+	endif()
 endif()
 if(ECWOLF_RENDERER_VULKAN)
 	target_compile_definitions(engine PRIVATE ECWOLF_RENDERER_VULKAN=1)

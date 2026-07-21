@@ -38,6 +38,9 @@
 #include "wl_play.h"
 #include "r_capture.h"
 #include "render/r_renderer.h"
+#ifdef ECWOLF_RENDERER_OPENGL
+#include "render/opengl/r_glrenderer.h"
+#endif
 #include "wl_game.h"
 #include "wl_loadsave.h"
 #include "wl_net.h"
@@ -1306,6 +1309,21 @@ int WL_Main (int argc, char *argv[])
 		FileSys::SetupPaths(argc, argv);
 
 		Capture::ParseArgs(argc, argv); // deterministic capture/checksum harness
+
+#ifdef ECWOLF_RENDERER_OPENGL
+		// Standalone GL device + indexed-palette pipeline self-test. Runs before
+		// the game window is created and exits, so it is headless-safe.
+		for(int gi = 1; gi < argc; ++gi)
+		{
+			if(strcmp(argv[gi], "--gltest") == 0)
+			{
+				const char *out = (gi + 1 < argc) ? argv[gi + 1] : NULL;
+				const bool ok = R_GLRunSelfTest(out);
+				SDL_Quit();
+				return ok ? 0 : 1;
+			}
+		}
+#endif
 
 		// Find the program directory.
 		FString progdir(FileSys::GetDirectoryPath(FileSys::DIR_Program));

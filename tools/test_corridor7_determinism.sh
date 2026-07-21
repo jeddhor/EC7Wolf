@@ -47,13 +47,12 @@ cleanup() { rm -rf "$workdir"; }
 trap cleanup EXIT HUP INT TERM
 
 run_capture() {
-	# $1 = output checksum path
-	cfg=$(mktemp -d "$workdir/cfg.XXXXXX")
+	# $1 = output checksum path, $2 = config file to use
 	save=$(mktemp -d "$workdir/save.XXXXXX")
 	(
 		cd "$data_dir"
 		timeout 120s env SDL_AUDIODRIVER=dummy xvfb-run -a "$ec7wolf" \
-			--data CO7 --config "$cfg/ec7wolf.cfg" --savedir "$save" \
+			--data CO7 --config "$2" --savedir "$save" \
 			--nowait --tedlevel "$map" --skill 2 \
 			--capture-rngseed "$seed" --capture-checksum "$1" \
 			--capture-maxtics "$tics"
@@ -62,8 +61,10 @@ run_capture() {
 
 printf 'Determinism gate: map=%s seed=%s tics=%s\n' "$map" "$seed" "$tics"
 
-run_capture "$workdir/runA.txt"
-run_capture "$workdir/runB.txt"
+# Run A generates a fresh config (interpolation on by default).
+run_capture "$workdir/runA.txt" "$workdir/on.cfg"
+# Run B reuses the same config: proves run-to-run determinism.
+run_capture "$workdir/runB.txt" "$workdir/on.cfg"
 
 if [ ! -s "$workdir/runA.txt" ] || [ ! -s "$workdir/runB.txt" ]; then
 	printf 'FAIL: capture produced no checksum output (see %s.log)\n' \
@@ -74,11 +75,31 @@ fi
 
 summary=$(tail -n 1 "$workdir/runA.txt")
 
-if diff -q "$workdir/runA.txt" "$workdir/runB.txt" >/dev/null; then
-	printf 'PASS: simulation is deterministic (%s)\n' "$summary"
-	exit 0
-else
+if ! diff -q "$workdir/runA.txt" "$workdir/runB.txt" >/dev/null; then
 	printf 'FAIL: simulation diverged between identical runs\n' >&2
 	diff "$workdir/runA.txt" "$workdir/runB.txt" | head -n 20 >&2
 	exit 1
 fi
+printf 'PASS: run-to-run determinism (%s)\n' "$summary"
+
+# Interpolation invariant: motion interpolation must never change the
+# simulation, so an interpolation-OFF run must produce the identical checksum.
+if [ -f "$workdir/on.cfg" ] && grep -q 'R_Interpolate = 1;' "$workdir/on.cfg"; then
+	sed 's/R_Interpolate = 1;/R_Interpolate = 0;/' "$workdir/on.cfg" > "$workdir/off.cfg"
+	run_capture "$workdir/runC.txt" "$workdir/off.cfg"
+	if [ ! -s "$workdir/runC.txt" ]; then
+		printf 'FAIL: interpolation-off run produced no checksum output\n' >&2
+		exit 1
+	fi
+	if diff -q "$workdir/runA.txt" "$workdir/runC.txt" >/dev/null; then
+		printf 'PASS: interpolation on/off produce identical simulation\n'
+	else
+		printf 'FAIL: interpolation changed the simulation (on != off)\n' >&2
+		diff "$workdir/runA.txt" "$workdir/runC.txt" | head -n 20 >&2
+		exit 1
+	fi
+else
+	printf 'WARN: could not derive an interpolation-off config; skipped invariant\n'
+fi
+
+exit 0

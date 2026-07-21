@@ -211,6 +211,19 @@ class AActor : public Thinker,
 		static EmbeddedList<AActor>::List actors;
 		typedef EmbeddedList<AActor>::Iterator Iterator;
 		static Iterator GetIterator() { return Iterator(actors); }
+
+		// --- Render-only motion interpolation history (renderer redesign
+		// Phase 3). These are NOT serialized and are NEVER read by simulation,
+		// collision, hitscan, demo, or network code. They exist solely so the
+		// renderer can draw a smooth position between two 70 Hz simulation
+		// tics. See render/r_interpolation.*. renderInterpValid is false until
+		// the first post-tic capture (or after a teleport), which makes the
+		// actor render statically instead of smearing from a stale position.
+		fixed		renderPrevX, renderPrevY, renderPrevZ;
+		angle_t		renderPrevAngle, renderPrevPitch;
+		fixed		renderCurX, renderCurY, renderCurZ;
+		angle_t		renderCurAngle, renderCurPitch;
+		bool		renderInterpValid;
 	protected:
 		void	Init();
 

@@ -394,6 +394,10 @@ void AActor::Init()
 	soundZone = NULL;
 	inventory = NULL;
 
+	// Render interpolation history starts invalid so a freshly spawned actor
+	// renders statically until it has a real previous->current pair.
+	renderInterpValid = false;
+
 	actors.Push(this);
 	if(!loadedgame)
 		Activate();
@@ -578,6 +582,10 @@ bool AActor::Teleport(fixed x, fixed y, angle_t angle, bool nofog)
 	this->x = x;
 	this->y = y;
 	this->angle = angle;
+
+	// A teleport is a discontinuity: invalidate interpolation so the actor
+	// snaps to the destination instead of sweeping across the level.
+	renderInterpValid = false;
 
 	EnterZone(destination->zone);
 

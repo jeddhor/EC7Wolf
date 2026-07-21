@@ -53,6 +53,12 @@ bool forcegrabmouse = false;
 bool vid_fullscreen = false;
 bool vid_vsync = false;
 FString vid_renderer = "software";
+int vid_maxfps = 0;					// 0 = unlimited
+bool r_interpolate = true;
+bool r_interpolate_camera = true;
+bool r_interpolate_actors = true;
+bool r_interpolate_dynamicwalls = true;
+bool r_latelatch_mouse = false;
 bool quitonescape = false;
 fixed movebob = FRACUNIT;
 
@@ -202,6 +208,12 @@ void ReadConfig(void)
 	config.CreateSetting("Vid_Aspect", ASPECT_NONE);
 	config.CreateSetting("Vid_Vsync", false);
 	config.CreateSetting("Vid_Renderer", FString("software"));
+	config.CreateSetting("Vid_MaxFPS", 0);
+	config.CreateSetting("R_Interpolate", true);
+	config.CreateSetting("R_InterpolateCamera", true);
+	config.CreateSetting("R_InterpolateActors", true);
+	config.CreateSetting("R_InterpolateDynamicWalls", true);
+	config.CreateSetting("R_LateLatchMouse", false);
 	config.CreateSetting("FullScreenWidth", fullScreenWidth);
 	config.CreateSetting("FullScreenHeight", fullScreenHeight);
 	config.CreateSetting("WindowedScreenWidth", windowedScreenWidth);
@@ -269,6 +281,12 @@ void ReadConfig(void)
 	vid_aspect = static_cast<Aspect>(config.GetSetting("Vid_Aspect")->GetInteger());
 	vid_vsync = config.GetSetting("Vid_Vsync")->GetInteger() != 0;
 	vid_renderer = config.GetSetting("Vid_Renderer")->GetString();
+	vid_maxfps = config.GetSetting("Vid_MaxFPS")->GetInteger();
+	r_interpolate = config.GetSetting("R_Interpolate")->GetInteger() != 0;
+	r_interpolate_camera = config.GetSetting("R_InterpolateCamera")->GetInteger() != 0;
+	r_interpolate_actors = config.GetSetting("R_InterpolateActors")->GetInteger() != 0;
+	r_interpolate_dynamicwalls = config.GetSetting("R_InterpolateDynamicWalls")->GetInteger() != 0;
+	r_latelatch_mouse = config.GetSetting("R_LateLatchMouse")->GetInteger() != 0;
 	fullScreenWidth = config.GetSetting("FullScreenWidth")->GetInteger();
 	fullScreenHeight = config.GetSetting("FullScreenHeight")->GetInteger();
 	windowedScreenWidth = config.GetSetting("WindowedScreenWidth")->GetInteger();
@@ -424,6 +442,12 @@ void WriteConfig(void)
 	config.GetSetting("Vid_Aspect")->SetValue(vid_aspect);
 	config.GetSetting("Vid_Vsync")->SetValue(vid_vsync);
 	config.GetSetting("Vid_Renderer")->SetValue(vid_renderer);
+	config.GetSetting("Vid_MaxFPS")->SetValue(vid_maxfps);
+	config.GetSetting("R_Interpolate")->SetValue(r_interpolate);
+	config.GetSetting("R_InterpolateCamera")->SetValue(r_interpolate_camera);
+	config.GetSetting("R_InterpolateActors")->SetValue(r_interpolate_actors);
+	config.GetSetting("R_InterpolateDynamicWalls")->SetValue(r_interpolate_dynamicwalls);
+	config.GetSetting("R_LateLatchMouse")->SetValue(r_latelatch_mouse);
 	config.GetSetting("FullScreenWidth")->SetValue(fullScreenWidth);
 	config.GetSetting("FullScreenHeight")->SetValue(fullScreenHeight);
 	config.GetSetting("WindowedScreenWidth")->SetValue(windowedScreenWidth);

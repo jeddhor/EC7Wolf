@@ -18,6 +18,13 @@
 
 extern  bool noadaptive;
 extern  unsigned        tics;
+
+// Fixed-step frame pacing / motion interpolation (renderer redesign Phase 3).
+// When g_interpFrameTiming is set, CalcTics() decouples frame pacing from the
+// 70 Hz simulation and exposes the sub-tic fraction via R_GetInterpolationAlpha.
+extern  bool            g_interpFrameTiming;
+float   R_GetInterpolationAlpha();
+void    R_ResetFrameTiming();
 extern  int             viewsize;
 extern unsigned short Paused;
 

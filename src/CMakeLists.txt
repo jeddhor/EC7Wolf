@@ -118,6 +118,7 @@ initial_sources(
 	p_switch.cpp
 	r_capture.cpp
 	render/r_renderer.cpp
+	render/r_interpolation.cpp
 	render/software/r_swrenderer.cpp
 	r_sprites.cpp
 	scanner.cpp

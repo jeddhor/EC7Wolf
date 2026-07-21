@@ -4,6 +4,7 @@
 #include "wl_def.h"
 #include "r_capture.h"
 #include "render/r_renderer.h"
+#include "render/r_interpolation.h"
 #include "wl_menu.h"
 #include "id_ca.h"
 #include "id_sd.h"
@@ -190,9 +191,90 @@ void PlayLoop (void);
 
 static int32_t lasttimecount;
 
+// --- Fixed-step frame pacing (renderer redesign Phase 3) ------------------
+bool            g_interpFrameTiming = false;	// gameplay loop decoupled timing
+static uint64_t s_perfLast          = 0;		// high-res counter, last frame
+static double   s_accumulator        = 0.0;		// unspent sim time (seconds)
+static float    s_interpAlpha        = 0.0f;	// fraction into next tic [0,1)
+static uint64_t s_frameLimitMark     = 0;		// high-res counter for vid_maxfps
+
+static double PerfSeconds(uint64_t later, uint64_t earlier)
+{
+	return (double)(later - earlier) / (double)SDL_GetPerformanceFrequency();
+}
+
 int32_t GetTimeCount()
 {
 	return MS2TICS(SDL_GetTicks());
+}
+
+float R_GetInterpolationAlpha()
+{
+	return (g_interpFrameTiming && r_interpolate) ? s_interpAlpha : 0.0f;
+}
+
+void R_ResetFrameTiming()
+{
+	s_perfLast = SDL_GetPerformanceCounter();
+	s_frameLimitMark = s_perfLast;
+	s_accumulator = 0.0;
+	s_interpAlpha = 0.0f;
+}
+
+//
+// Decoupled frame pacing: render as often as the frame limit allows, running
+// 0..MAXTICS whole simulation tics per frame and exposing the residual as the
+// interpolation alpha. Used by the gameplay loop; the legacy blocking CalcTics
+// path is kept for intermission/animation loops.
+//
+static void CalcTicsInterpolated()
+{
+	const double TicSeconds = 1.0 / 70.0;
+
+	// Optional frame-rate cap. Sleeping here folds the wait into the elapsed
+	// time measured below, so the accumulator stays accurate.
+	if(vid_maxfps > 0)
+	{
+		const double minPeriod = 1.0 / (double)vid_maxfps;
+		double since = PerfSeconds(SDL_GetPerformanceCounter(), s_frameLimitMark);
+		while(since < minPeriod)
+		{
+			if(minPeriod - since > 0.0015)
+				SDL_Delay(1);
+			since = PerfSeconds(SDL_GetPerformanceCounter(), s_frameLimitMark);
+		}
+	}
+	s_frameLimitMark = SDL_GetPerformanceCounter();
+
+	const uint64_t now = SDL_GetPerformanceCounter();
+	if(s_perfLast == 0)
+		s_perfLast = now;
+	double elapsed = PerfSeconds(now, s_perfLast);
+	s_perfLast = now;
+
+	// Clamp catch-up so a long stall (load, pause, debugger) can't spiral.
+	const double maxElapsed = (double)MAXTICS * TicSeconds;
+	if(elapsed > maxElapsed) elapsed = maxElapsed;
+	if(elapsed < 0.0)        elapsed = 0.0;
+
+	s_accumulator += elapsed;
+
+	int wholeTics = (int)(s_accumulator / TicSeconds);
+	if(wholeTics > MAXTICS)
+		wholeTics = MAXTICS;
+	if(wholeTics < 0)
+		wholeTics = 0;
+
+	tics = (unsigned)wholeTics;
+	s_accumulator -= (double)wholeTics * TicSeconds;
+	// If we clamped tics, cap the residual so alpha never exceeds one tic.
+	if(s_accumulator >= TicSeconds)
+		s_accumulator = TicSeconds * 0.999;
+
+	s_interpAlpha = (float)(s_accumulator / TicSeconds);
+
+	// Keep the tic-based clock (texture animations etc.) monotonic.
+	lasttimecount = GetTimeCount();
 }
 
 /*
@@ -205,6 +287,14 @@ int32_t GetTimeCount()
 
 void CalcTics()
 {
+	// Gameplay loop uses decoupled frame pacing + interpolation; other loops
+	// (intermission, animation) keep the legacy blocking behavior below.
+	if(g_interpFrameTiming)
+	{
+		CalcTicsInterpolated();
+		return;
+	}
+
 //
 // calculate tics since last refresh for adaptive timing
 //
@@ -1058,9 +1148,19 @@ void FinishPaletteShifts (void)
 
 void PlayFrame()
 {
-	UpdatePaletteShifts ();
+	// Palette-flash decay is simulation-rate state: advance it only on frames
+	// where at least one tic elapsed so pure interpolation frames (tics == 0)
+	// don't accelerate damage/bonus fades at high refresh rates. The tint stays
+	// applied to the palette between updates.
+	if(tics)
+		UpdatePaletteShifts ();
 
+	// Interpolate actor/camera transforms for this frame, render, then restore
+	// the authoritative simulation state. Apply/Restore are no-ops when
+	// interpolation is disabled, so this path is unchanged in that case.
+	Interpolation::Apply(R_GetInterpolationAlpha());
 	Renderer->RenderScene(); // routed through the backend-neutral renderer seam
+	Interpolation::Restore();
 	StatusBar->DrawTopOverlay();
 
 	if(automap && !gamestate.victoryflag)
@@ -1093,7 +1193,9 @@ void PlayFrame()
 
 	if (!loadedgame)
 	{
-		StatusBar->Tick();
+		// Advance HUD animation at simulation rate; keep drawing every frame.
+		if(tics)
+			StatusBar->Tick();
 		if ((gamestate.TimeCount & 1) || !(tics & 1))
 			StatusBar->DrawStatusBar();
 	}
@@ -1126,6 +1228,11 @@ void PlayLoop (void)
 
 	playstate = ex_stillplaying;
 	ResetTimeCount();
+	// Decouple frame pacing from the 70 Hz simulation for smooth high-refresh
+	// motion. Disabled cleanly on exit so intermission/animation loops keep the
+	// legacy blocking timing.
+	g_interpFrameTiming = r_interpolate;
+	R_ResetFrameTiming();
 	frameon = 0;
 	funnyticount = 0;
 	memset (control[ConsolePlayer].buttonstate, 0, sizeof (control[ConsolePlayer].buttonstate));
@@ -1170,6 +1277,9 @@ void PlayLoop (void)
 			{
 				++gamestate.TimeCount;
 
+				// Snapshot render history around the tic (current -> previous).
+				Interpolation::BeginTic();
+
 				CheckSpawnPlayer();
 
 				// In single player if the player dies only tick the pawn
@@ -1179,6 +1289,11 @@ void PlayLoop (void)
 					thinkerList.Tick(ThinkerList::PLAYER);
 
 				AActor::FinishSpawningActors();
+
+				// Capture post-tic transforms for interpolation, then fold the
+				// deterministic state into the checksum (reads real, not
+				// interpolated, state).
+				Interpolation::EndTic();
 
 				Capture::PerTic(); // fold deterministic state into the checksum
 			}
@@ -1222,6 +1337,9 @@ void PlayLoop (void)
 		}
 	}
 	while (!playstate && !startgame);
+
+	// Restore legacy blocking timing for intermission/animation loops.
+	g_interpFrameTiming = false;
 
 	if (playstate != ex_died)
 		FinishPaletteShifts ();

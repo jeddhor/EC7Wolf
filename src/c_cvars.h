@@ -63,6 +63,12 @@ extern bool		vid_fullscreen;
 extern Aspect	vid_aspect;
 extern bool		vid_vsync;
 extern FString	vid_renderer;	// "software" | "opengl" | "vulkan"
+extern int		vid_maxfps;		// frame-rate cap; 0 = unlimited
+extern bool		r_interpolate;				// master motion interpolation switch
+extern bool		r_interpolate_camera;		// interpolate the player camera
+extern bool		r_interpolate_actors;		// interpolate non-camera actors
+extern bool		r_interpolate_dynamicwalls;	// interpolate doors/pushwalls (Phase 7)
+extern bool		r_latelatch_mouse;			// render-only mouse-look late latch
 extern bool		quitonescape;
 extern fixed	movebob;
 

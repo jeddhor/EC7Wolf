@@ -330,7 +330,7 @@ bool APlayerPawn::TryUseC7HealthChamber()
 			StatusBar->SetTopMessage("FULL HEALTH");
 		return true;
 	}
-	if(door->corridor7ChamberUses == 0)
+	if(door->corridor7ChamberPower == 0)
 	{
 		if(player->GetPlayerNum() == ConsolePlayer)
 		{
@@ -342,8 +342,11 @@ bool APlayerPawn::TryUseC7HealthChamber()
 
 	player->c7ChamberX = static_cast<int16_t>(door->GetX());
 	player->c7ChamberY = static_cast<int16_t>(door->GetY());
+	player->c7ChamberPower = door->corridor7ChamberPower;
 	player->c7ChamberTics = 0;
 	player->c7ChamberState = 1;
+	if(player->GetPlayerNum() == ConsolePlayer)
+		StatusBar->SetC7HealthChamberPower(player->c7ChamberPower, 4*TICRATE);
 	SD_PlaySound("c7/chamber/activate");
 	return true;
 }
@@ -422,8 +425,8 @@ static bool TickC7HealthChamber(APlayerPawn *pawn)
 				}
 			}
 
-			const unsigned int uses = MIN<unsigned int>(door->corridor7ChamberUses, 3);
-			if(uses == 0)
+			const unsigned int power = MIN<unsigned int>(door->corridor7ChamberPower, 100);
+			if(power == 0)
 			{
 				if(player->GetPlayerNum() == ConsolePlayer)
 					StatusBar->SetTopMessage("HEALTH CHAMBER DEPLETED");
@@ -434,14 +437,16 @@ static bool TickC7HealthChamber(APlayerPawn *pawn)
 				return false;
 			}
 
-			// One medkit-sized treatment per use and exactly three uses per unit.
+			// The chamber is a persistent 100-point reservoir. It spends only the
+			// health actually restored, so a six-point treatment leaves 94 points
+			// available for later visits instead of consuming a complete charge.
 			const unsigned int missing = pawn->maxhealth > player->health ?
 				pawn->maxhealth-player->health : 0;
-			const unsigned int restored = MIN<unsigned int>(missing, 25);
+			const unsigned int restored = MIN<unsigned int>(missing, power);
 			player->health += restored;
 			pawn->health = player->health;
-			door->corridor7ChamberUses = uses-1;
-			player->c7ChamberPower = ((uses-1)*100)/3;
+			door->corridor7ChamberPower = power-restored;
+			player->c7ChamberPower = door->corridor7ChamberPower;
 			StartC7ChamberFlash();
 			StatusBar->UpdateFace(-1);
 			StatusBar->SetC7HealthChamberPower(player->c7ChamberPower, 4*TICRATE);

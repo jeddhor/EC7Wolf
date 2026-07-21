@@ -1077,7 +1077,8 @@ void DrawHighScores (void)
 		C7StencilPrintAt(font, 246, 43, "SCORE", 0x24);
 		for(i = 0, s = Scores; i < MaxScores; ++i, ++s)
 		{
-			PrintY = 80 + 18*i;
+			// CORR7CD.EXE draws row i at (0x3c + 0x12*i) + 2.
+			PrintY = 62 + 18*i;
 			buffer.Format("%u.", i+1);
 			const BYTE rowColor = static_cast<BYTE>(0x57-2*i);
 			const BYTE levelColor = static_cast<BYTE>(0x6F-2*i);
@@ -1218,7 +1219,7 @@ void CheckHighScore (int32_t score, const LevelInfo *levelInfo)
 			// stretched coordinate space.
 			const int oldpa = pa;
 			pa = MENU_NONE;
-			PrintY = 80 + 18*n;
+			PrintY = 62 + 18*n;
 			PrintX = 24;
 			US_LineInput (font,PrintX, PrintY, Scores[n].name, 0, true, MaxHighName, 160, BKGDCOLOR, CR_WHITE);
 			pa = oldpa;

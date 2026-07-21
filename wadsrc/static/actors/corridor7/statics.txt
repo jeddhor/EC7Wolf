@@ -113,7 +113,7 @@ actor C7Static009
 	states
 	{
 		Spawn:
-			C010 A -1
+			C010 A -1 bright
 			stop
 	}
 }
@@ -138,7 +138,7 @@ actor C7DamageField
 	states
 	{
 		Spawn:
-			C010 A -1
+			C010 A -1 bright
 			stop
 	}
 }

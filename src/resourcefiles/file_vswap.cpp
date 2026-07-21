@@ -43,34 +43,24 @@
 
 struct FCorridor7PaletteLump : public FResourceLump
 {
-	FString Filename;
-	long Position;
+	BYTE Palette[768];
 
-	FCorridor7PaletteLump(const FString &filename, long position) : Filename(filename), Position(position)
+	FCorridor7PaletteLump(const BYTE *palette)
 	{
-		LumpSize = 768;
+		LumpSize = sizeof(Palette);
 		LumpNameSetup("C7PAL");
 		Namespace = ns_global;
+		for(int i = 0;i < LumpSize;++i)
+		{
+			const BYTE component = palette[i];
+			Palette[i] = (component << 2) | (component >> 4);
+		}
 	}
 
 	int FillCache()
 	{
-		FileReader reader;
-		if(!reader.Open(Filename))
-			return 0;
-		reader.Seek(Position, SEEK_SET);
 		Cache = new char[LumpSize];
-		if(reader.Read(Cache, LumpSize) != LumpSize)
-		{
-			delete[] Cache;
-			Cache = NULL;
-			return 0;
-		}
-		for(int i = 0;i < LumpSize;++i)
-		{
-			const BYTE component = reinterpret_cast<BYTE *>(Cache)[i];
-			reinterpret_cast<BYTE *>(Cache)[i] = (component << 2) | (component >> 4);
-		}
+		memcpy(Cache, Palette, LumpSize);
 		RefCount = 1;
 		return 1;
 	}
@@ -280,7 +270,10 @@ class FVSwap : public FResourceFile
 									if(palette[i] > 63) { valid = false; break; }
 								if(valid)
 								{
-									PaletteLump = new FCorridor7PaletteLump(executablePath, STEAM_CD_PALETTE_OFFSET);
+									// Keep the verified palette in the resource lump. Palette reloads
+									// happen during death/high-score/title transitions and must not
+									// depend on reopening a relative executable path later.
+									PaletteLump = new FCorridor7PaletteLump(palette);
 									PaletteLump->Owner = this;
 									++NumLumps;
 								}

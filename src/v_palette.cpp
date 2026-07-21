@@ -522,6 +522,16 @@ void V_SetCorridor7PaletteMode (int mode, unsigned int phase)
 		for(unsigned int i = 0;i < 256;++i)
 		{
 			const PalEntry source = Corridor7BasePalette[i];
+			// Corridor 7 leaves its dedicated lamp whites outside the
+			// night/infrared monochrome conversion. This is why the
+			// first-door jambs remain white in the released infrared view while
+			// the surrounding wall turns red. The electric-shock palette still
+			// transforms every entry.
+			if(mode != 3 && (i == 15 || i == 254))
+			{
+				palette[i] = source;
+				continue;
+			}
 			// The DOS visor palettes are monochrome DAC rewrites, not translucent
 			// overlays. Luminance preserves scene detail while zeroing the two
 			// unused channels exactly as the original captures show.

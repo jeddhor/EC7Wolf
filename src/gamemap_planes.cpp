@@ -1054,6 +1054,15 @@ void GameMap::ReadPlanesData()
 					tilePalette[i].offsetHorizontal = false;
 					horizontal.offsetVertical = false;
 					horizontal.offsetHorizontal = true;
+					// Auto-oriented doors describe the default vertical plane in
+					// XLAT. Rotate its directional textures with the geometry so
+					// the door face remains on the moving plane and the jamb/light
+					// graphic remains perpendicular to it. Corridor 7 uses this to
+					// select its composite light-bank/track jamb page beside every door.
+					horizontal.texture[MapTile::North] = tilePalette[i].texture[MapTile::East];
+					horizontal.texture[MapTile::South] = tilePalette[i].texture[MapTile::West];
+					horizontal.texture[MapTile::East] = tilePalette[i].texture[MapTile::North];
+					horizontal.texture[MapTile::West] = tilePalette[i].texture[MapTile::South];
 					horizontalDoorTiles[i] = tilePalette.Push(horizontal);
 				}
 
@@ -1088,14 +1097,6 @@ void GameMap::ReadPlanesData()
 					{
 						mapPlane.map[i].corridor7WallID = oldplane[i];
 
-						// A diagnostic-mode probe of the released game reads
-						// runtime tile 0 inside its wall-237 cell (the core
-						// of MAP01's glass-pane assembly): the DOS engine
-						// erases it at load, so it neither renders nor
-						// blocks. The flanking 57/61 glass panes keep their
-						// ordinary, always-visible masked artwork.
-						if(oldplane[i] == 237)
-							mapPlane.map[i].SetTile(NULL);
 					}
 
 					// Corridor 7 pairs 0x117..0x11e warp-floor cells by
@@ -1311,14 +1312,25 @@ void GameMap::ReadPlanesData()
 					// not only on explicit 104/105 map markers. Route every such wall
 					// through the masked-plane renderer so a fresh ray is drawn behind
 					// each transparent pixel instead of exposing the previous frame.
+					//
+					// Check every directional texture. Auto-oriented Corridor 7 doors
+					// use an opaque jamb page on the sides perpendicular to the moving
+					// plane and the door artwork on the other pair. Looking only at side
+					// zero therefore missed a masked door face for one of the two axes
+					// (notably the C7W0253 door near the MAP01 paintings).
 					if(IWad::CheckGameFilter("Corridor7") && mapPlane.map[i].tile)
 					{
-						FTexture *wall = TexMan(mapPlane.map[i].texture[0]);
-						if(wall)
+						for(unsigned int side = 0;side < 4;++side)
 						{
+							FTexture *wall = TexMan(mapPlane.map[i].texture[side]);
+							if(!wall)
+								continue;
 							wall->GetPixels();
 							if(wall->bMasked)
+							{
 								mapPlane.map[i].maskedWallType = 1;
+								break;
+							}
 						}
 					}
 

@@ -120,6 +120,9 @@ private:
 	static void LatchString (int x, int y, unsigned width, const FString &str);
 	static void DrawC7Gauge(int x, int y, unsigned int width, unsigned int height,
 		unsigned int paletteStart);
+	static void DrawC7GradientBar(int x, int y, unsigned int width,
+		unsigned int fullWidth, unsigned int height, unsigned int paletteStart,
+		unsigned int paletteColors);
 	static void StatusDrawFace(FTexture *pic);
 	static void StatusDrawPic(unsigned x, unsigned y, const char* pic);
 
@@ -369,6 +372,35 @@ void WolfStatusBar::DrawC7Gauge(int x, int y, unsigned int width, unsigned int h
 			320, 200, true, true);
 		const int color = GPalette.Remap[
 			MIN<unsigned int>(255, paletteStart+column/3)];
+		screen->Clear(realX, realY, realX + realWidth, realY + realHeight,
+			color, GPalette.BaseColors[color]);
+	}
+}
+
+void WolfStatusBar::DrawC7GradientBar(int x, int y, unsigned int width,
+	unsigned int fullWidth, unsigned int height, unsigned int paletteStart,
+	unsigned int paletteColors)
+{
+	if(width == 0 || fullWidth == 0 || height == 0 || paletteColors == 0)
+		return;
+
+	// Unlike the 25-column status-bar gauges, this meter stretches one complete
+	// palette ramp over the width of the artwork's recessed well. Keeping the
+	// shade tied to the original column also makes a depleted chamber reveal the
+	// red C7G0062 background from right to left without rescaling the gradient.
+	width = MIN(width, fullWidth);
+	for(unsigned int column = 0;column < width;++column)
+	{
+		int realX = x + column;
+		int realY = y;
+		int realWidth = 1;
+		int realHeight = height;
+		screen->VirtualToRealCoordsInt(realX, realY, realWidth, realHeight,
+			320, 200, true, true);
+		const unsigned int shade = MIN(paletteColors-1,
+			(column*paletteColors)/fullWidth);
+		const int color = GPalette.Remap[
+			MIN<unsigned int>(255, paletteStart+shade)];
 		screen->Clear(realX, realY, realX + realWidth, realY + realHeight,
 			color, GPalette.BaseColors[color]);
 	}
@@ -671,10 +703,29 @@ void WolfStatusBar::DrawTopOverlay()
 {
 	if(corridor7 && gamestate.TimeCount < c7ChamberPowerUntil)
 	{
-		// This is the original 32x15 VGA overlay. The DOS game replaces the
-		// red meter interior with the remaining blue charge after treatment.
-		VWB_DrawGraphic(TexMan("C7G0062"), 4, 4);
-		DrawC7Gauge(7, 15, (MIN(c7ChamberPower, 100U)*25)/100, 2, 96);
+		// The decoded 48x32 C7G0062 panel contains a 42x5 red meter well at
+		// (3,24). Derive that rectangle from the texture's rendered dimensions
+		// so both the panel and its fill use the same 320x200 virtual mapping at
+		// every output resolution.
+		FTexture *const panel = TexMan("C7G0062");
+		const int panelX = 4;
+		const int panelY = 4;
+		const unsigned int meterLeft = 3;
+		const unsigned int meterRight = 3;
+		const unsigned int meterBottom = 3;
+		const unsigned int meterHeight = 5;
+		VWB_DrawGraphic(panel, panelX, panelY);
+		if(panel != NULL && panel->GetScaledWidth() > int(meterLeft+meterRight) &&
+			panel->GetScaledHeight() > int(meterHeight+meterBottom))
+		{
+			const unsigned int meterWidth = panel->GetScaledWidth()-meterLeft-meterRight;
+			const unsigned int power = MIN(c7ChamberPower, 100U);
+			const unsigned int filledWidth = (power*meterWidth+50)/100;
+			const int meterX = panelX+meterLeft;
+			const int meterY = panelY+panel->GetScaledHeight()-meterBottom-meterHeight;
+			DrawC7GradientBar(meterX, meterY, filledWidth, meterWidth,
+				meterHeight, 128, 8);
+		}
 		return;
 	}
 

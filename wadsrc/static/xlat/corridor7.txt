@@ -1928,32 +1928,32 @@ tiles
 	}
 	tile 251
 	{
-		texturenorth = "C7W0250";
-		texturesouth = "C7W0250";
+		texturenorth = "C7W0254";
+		texturesouth = "C7W0254";
 		textureeast = "C7W0250";
 		texturewest = "C7W0250";
 		autoorient = true;
 	}
 	tile 252
 	{
-		texturenorth = "C7W0251";
-		texturesouth = "C7W0251";
+		texturenorth = "C7W0254";
+		texturesouth = "C7W0254";
 		textureeast = "C7W0251";
 		texturewest = "C7W0251";
 		autoorient = true;
 	}
 	tile 253
 	{
-		texturenorth = "C7W0252";
-		texturesouth = "C7W0252";
+		texturenorth = "C7W0254";
+		texturesouth = "C7W0254";
 		textureeast = "C7W0252";
 		texturewest = "C7W0252";
 		autoorient = true;
 	}
 	tile 254
 	{
-		texturenorth = "C7W0253";
-		texturesouth = "C7W0253";
+		texturenorth = "C7W0254";
+		texturesouth = "C7W0254";
 		textureeast = "C7W0253";
 		texturewest = "C7W0253";
 		autoorient = true;
@@ -2174,74 +2174,73 @@ things
 	{130, C7MorphFile, 4, 0, 1}
 	{134, C7MorphPlant, 4, 0, 1}
 	{138, C7MorphBarrel, 4, 0, 1}
-	{142, C7Morph, 0, 0, 1}
-	{143, C7Morph, 0, 0, 1}
+	{142, C7Eniram, 0, 0, 1}
+	{143, C7Eniram, 0, 0, 1}
 	{144, C7OrganicEye, 4, 0, 2}
 	{148, C7OrganicEye, 4, PATHING, 2}
 	{152, C7ProbeEye, 4, 0, 2}
 	{156, C7ProbeEye, 4, PATHING, 2}
-	{160, C7Morph, 0, 0, 2}
-	{161, C7Morph, 0, 0, 2}
+	{160, C7Eniram, 0, 0, 2}
+	{161, C7Eniram, 0, 0, 2}
 	{162, C7MorphChair, 4, 0, 2}
 	{166, C7MorphFile, 4, 0, 2}
 	{170, C7MorphPlant, 4, 0, 2}
 	{174, C7MorphBarrel, 4, 0, 2}
-	{179, C7PurpleBoss, 0, 0, 2}
+	{179, C7Tymok, 0, 0, 2}
 	{180, C7OrganicEye, 4, 0, 3}
 	{184, C7OrganicEye, 4, PATHING, 3}
 	{188, C7ProbeEye, 4, 0, 3}
 	{192, C7ProbeEye, 4, PATHING, 3}
-	// The singleton used on floors 5/10 and the boss gauntlets is the
-	// C690-series IronFoot. A controlled original-game substitution confirms
-	// both the artwork and its class-21 sound dispatcher.
-	{196, C7IronFoot, 0, 0, 3}
+	// Object 196 is the permanently visible, golden-horned Eniram Boss
+	// (C653-C664). The ordinary cloaking Eniram is object 142/143/160/161.
+	{196, C7EniramBoss, 0, 0, 3}
 	{198, C7MorphChair, 4, 0, 3}
 	{202, C7MorphFile, 4, 0, 3}
 	{206, C7MorphPlant, 4, 0, 3}
 	{210, C7MorphBarrel, 4, 0, 3}
-	{214, C7SkullBoss, 0, 0, 3}
-	{216, C7Ugly, 4, 0, 1}
-	{220, C7Ugly, 4, PATHING, 1}
-	{224, C7Technician, 4, 0, 1}
-	{228, C7Technician, 4, PATHING, 1}
-	{232, C7IronFoot, 0, 0, 1}
-	{233, C7IronFoot, 0, 0, 1}
-	{234, C7Ugly, 4, 0, 2}
-	{238, C7Ugly, 4, PATHING, 2}
-	{242, C7Technician, 4, 0, 2}
-	{246, C7Technician, 4, PATHING, 2}
-	{250, C7IronFoot, 0, 0, 2}
-	{251, C7IronFoot, 0, 0, 2}
-	{252, C7Ugly, 4, 0, 3}
-	{256, C7Ugly, 4, PATHING, 3}
-	{260, C7Technician, 4, 0, 3}
-	{264, C7Technician, 4, PATHING, 3}
+	{214, C7Solrac, 0, 0, 3}
+	{216, C7Rodex, 4, 0, 1}
+	{220, C7Rodex, 4, PATHING, 1}
+	{224, C7Tenaj, 4, 0, 1}
+	{228, C7Tenaj, 4, PATHING, 1}
+	{232, C7Mechanoid, 0, 0, 1}
+	{233, C7Mechanoid, 0, 0, 1}
+	{234, C7Rodex, 4, 0, 2}
+	{238, C7Rodex, 4, PATHING, 2}
+	{242, C7Tenaj, 4, 0, 2}
+	{246, C7Tenaj, 4, PATHING, 2}
+	{250, C7Mechanoid, 0, 0, 2}
+	{251, C7Mechanoid, 0, 0, 2}
+	{252, C7Rodex, 4, 0, 3}
+	{256, C7Rodex, 4, PATHING, 3}
+	{260, C7Tenaj, 4, 0, 3}
+	{264, C7Tenaj, 4, PATHING, 3}
 	{268, C7ExitVortex, 0, 0, 0}
-	{270, C7Grunt, 4, 0, 1}
-	{274, C7Grunt, 4, PATHING, 1}
-	{278, C7SpaceMarine, 4, 0, 1}
-	{288, C7Grunt, 4, 0, 2}
-	{292, C7Grunt, 4, PATHING, 2}
-	{296, C7SpaceMarine, 4, 0, 2}
+	{270, C7Ttocs, 4, 0, 1}
+	{274, C7Ttocs, 4, PATHING, 1}
+	{278, C7Otrebor, 4, 0, 1}
+	{288, C7Ttocs, 4, 0, 2}
+	{292, C7Ttocs, 4, PATHING, 2}
+	{296, C7Otrebor, 4, 0, 2}
 	{300, C7Semaj, 4, 0, 2}
-	{306, C7Grunt, 4, 0, 3}
-	{310, C7Grunt, 4, PATHING, 3}
-	{314, C7SpaceMarine, 4, 0, 3}
+	{306, C7Ttocs, 4, 0, 3}
+	{310, C7Ttocs, 4, PATHING, 3}
+	{314, C7Otrebor, 4, 0, 3}
 	{318, C7Shotgun, 0, 0, 0}
 	{319, C7AssaultCannon, 0, 0, 0}
 	{320, C7Disintegrator, 0, 0, 0}
 	{321, C7TransporterField, 0, 0, 0}
 	{322, C7TransporterExit, 0, 0, 0}
-	{324, C7SpaceSeal, 4, 0, 1}
-	{328, C7HungryPuddle, 4, 0, 1}
-	{332, C7HungryPuddle, 4, PATHING, 1}
-	{336, C7HornedBoss, 4, 0, 1}
-	{342, C7SpaceSeal, 4, 0, 2}
-	{346, C7HungryPuddle, 4, 0, 2}
-	{350, C7HungryPuddle, 4, PATHING, 2}
-	{354, C7HornedBoss, 4, 0, 2}
-	{360, C7SpaceSeal, 4, 0, 3}
-	{364, C7HungryPuddle, 4, 0, 3}
-	{368, C7HungryPuddle, 4, PATHING, 3}
-	{372, C7HornedBoss, 4, 0, 3}
+	{324, C7Nerraw, 4, 0, 1}
+	{328, C7Eitak, 4, 0, 1}
+	{332, C7Eitak, 4, PATHING, 1}
+	{336, C7Tebazile, 4, 0, 1}
+	{342, C7Nerraw, 4, 0, 2}
+	{346, C7Eitak, 4, 0, 2}
+	{350, C7Eitak, 4, PATHING, 2}
+	{354, C7Tebazile, 4, 0, 2}
+	{360, C7Nerraw, 4, 0, 3}
+	{364, C7Eitak, 4, 0, 3}
+	{368, C7Eitak, 4, PATHING, 3}
+	{372, C7Tebazile, 4, 0, 3}
 }

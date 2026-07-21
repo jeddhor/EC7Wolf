@@ -66,10 +66,16 @@ Append an output directory and `--all` to load-check every map in the archive.
   sprite, font, HUD, menu-cursor, sound-effect, and music resource exposure.
 - Zero-based wall pages (`map wall ID - 1`) across the complete solid-wall
   range, including marker-104/105 masked overrides,
-  Corridor 7 wall and plane depth ramps, exact six-bit VGA palette expansion,
+  Corridor 7 wall depth ramp and native-resolution-independent plane gradient
+  (three-row shade progression with alternating four-pixel VGA groups), exact
+  six-bit VGA palette expansion,
   solid and passable masked-wall behavior, collision-safe index-255-to-0
   normalization with freshly traced geometry behind transparent wall and door
-  pixels, all four native 208..239 wall/force-field palette cycles, four-frame
+  pixels, four-side transparency detection for auto-oriented doors (so masked
+  faces remain transparent on either map axis while jambs remain opaque),
+  unshaded C010 floor lamps, dedicated full-bright wall-lamp indices 15/254 and
+  animated 208..239 light ramps (applied in texture space at every output
+  resolution), all four native wall/force-field palette cycles, four-frame
   in-place force-field and animated-wall openings, four sliding door types with
   automatic orientation,
   red/blue access cards, one-shot secret and utility pushwalls with correct
@@ -81,16 +87,33 @@ Append an output directory and `--all` to load-check every map in the archive.
   the original sprite families.
 - A Corridor 7 player, the released eight-weapon arsenal (including the
   Ithaca shotgun's secondary animation), persistent proximity mines with the
-  released floor sprite, owner-safe arming, player/monster triggering, and
+  executable-selected silver floor sprite, owner-safe arming,
+  player/monster triggering, and
   self-damaging radial explosions, all weapon pickups,
   ammunition/charge/health/armor items, non-wasteful health and ammunition
   pickup rules, monster combat, projectile attacks, score, event sounds, and
   native first-person weapon scaling. The original W+A+X equipment cheat and
   full-floor-plan pickup are supported.
+- All eight weapons preserve the executable's 70 Hz frame cadence and support
+  held-trigger refire. The Taser repeats its complete C746-C749 attack cycle.
+  Refire branches occur after their visible frame instead
+  of suppressing it, so the M-24 jiggle, M-343 barrel cycle, alternating alien
+  muzzle flashes, and complete shotgun/disintegrator recovery sequences remain
+  visible and repeat smoothly. Zero-duration movement/return pages are not
+  inserted into firing sequences: the M-24 and most automatic alien weapons
+  loop their final two firing pages, while the M-343 rapidly cycles all four.
+  The plasma rifle emits the blue C706 traveling
+  bolt from GFXTILES chunk 962 and its C707-C709 impact sequence, without
+  borrowing the C738-C744 exit-vortex art. The native movement-pose table
+  is separate from continuously rotating palette ramps. Walking and running
+  alternate only each weapon family's base+4 moving pose and base+7 stationary
+  pose, while the Taser scanner, plasma rangefinder, energy effects, and other
+  instrument pixels continue animating at full brightness in dark rooms.
 - The original status bar art, number placement, segmented color gauges,
   aliens-remaining counter, M-16 start selection and native weapon anchoring,
   stable full-bright timed notifications with their original one-pixel drop
   shadow, the clean opening splash,
+  a Corridor 7-native text pause overlay (the game has no Wolf `PAUSED` art),
   original pixel-dissolve title transition, and paced fading credit sequence;
   episode and five rank choices (including randomized President placement),
   the documented 10/75/100/100-percent alien objective gate, body armor,
@@ -116,21 +139,33 @@ Append an output directory and `--all` to load-check every map in the archive.
   320x200 mapping as the picture itself, so the layouts hold at every window
   size. The menu arrow, the per-floor status report (values seated on the
   painted label rows at the colon column), the high-score page (large archive
-  font, title/headers/rows and the name-entry line at the captured original
-  positions), and the death report (large-font title, labels at x=80 every
+  font, title/headers/all seven rows and the name-entry line at the executable's
+  original positions), and the death report (large-font title, labels at x=80 every
   ten rows, values at x=240) were all verified against screenshots of the
   released game running in DOSBox.
+- The executable palette is captured in memory when the game data is opened;
+  palette changes across death, high scores, and title pages therefore do not
+  depend on reopening `CORR7CD.EXE` through a later relative path.
 - The executable's released campaign music selector, including its randomized
   late/bonus-floor behavior, with all 34 AdLib music chunks exposed directly
   from the original archive.
-- Released per-rank enemy health tables, distinct directional/attack/pain/death
-  sprite families, alarm and camouflage transformations, bosses and audible
-  projectiles, alien energy regeneration/capacity, persistent mines, and the
-  level-30/40 exit-vortex behavior.
+- Released per-rank enemy health tables and executable-derived object/state
+  mappings for the complete CD bestiary. Unique behavior includes local
+  Alioprobe/Eitak alerts, vulnerable Bandor camouflage morphs, retreating
+  Rodex/Tenaj, the melee-only Semaj, close-range-heavy Mechanoid fire and
+  footsteps, permanently visible C653-C664 Eniram Boss versus cloaking
+  C665-C689 ordinary Eniram, fast-dodging Tymok, sustained Solrac eye fire,
+  and Tebazile's five fully animated forms. Glass remains visually transparent
+  while blocking alien sight, and active alien-world enemies can cross paired
+  transporters. Audible projectiles, alien energy regeneration/capacity,
+  persistent mines, and the level-30/40 exit-vortex behavior are retained.
 - Stateful access/alarm computers, health and ammunition dispensers, the
   reusable visor charger, and health chambers that turn the player toward the
-  exit, close the chamber door, consume stored power, heal, and report the
-  remaining charge. Electric contact comes from the released wall IDs 6 and
+  exit, immediately show their green-to-red meter, close the chamber door,
+  heal from a persistent 100-point reservoir, and retain any unused charge.
+  The remaining-power gradient fills the complete 42x5 recessed well in the
+  original 48x32 panel and shares the panel's virtual-screen scaling.
+  Electric contact comes from the released wall IDs 6 and
   14; the C010/C011 lightposts do not create an inferred beam or an elevator
   hazard. Secret walls visibly slide but, as in the original executable, do
   not play sample 46.

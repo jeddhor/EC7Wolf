@@ -1584,13 +1584,13 @@ ACTION_FUNCTION(A_C7GunAttack)
 	return true;
 }
 
-// Ailoprobes are alarm creatures: once one acquires a target it propagates
-// that target to every dormant Corridor 7 monster, rather than merely making
-// a cosmetic attack noise.
+// Ailoprobes, Eitaks, and exposed Bandors alert their local group. The
+// Intruder Alert terminal intentionally uses the separate level-wide helper.
 ACTION_FUNCTION(A_C7AlienAlarm)
 {
 	AActor *alertTarget = self->target;
-	P_AlertCorridor7Monsters(alertTarget ? alertTarget : self);
+	P_AlertCorridor7MonstersNear(self, alertTarget ? alertTarget : self,
+		12*TILEGLOBAL);
 	return true;
 }
 
@@ -1629,11 +1629,20 @@ ACTION_FUNCTION(A_C7TebazileMorph)
 {
 	const int maximum = MAX(1, self->SpawnHealth());
 	const int fifth = (MAX(0, self->health) * 5) / maximum;
-	const char *label = fifth >= 4 ? "See" :
+	const char *stableLabel = fifth >= 4 ? "See" :
 		(fifth >= 3 ? "PhaseEniram" :
 		(fifth >= 2 ? "PhaseTymok" :
 		(fifth >= 1 ? "PhaseSolrac" : "PhaseFinal")));
-	const Frame *desired = self->FindState(FName(label));
+	const Frame *stable = self->FindState(FName(stableLabel));
+	if(stable && self->InStateSequence(stable))
+		return true;
+
+	const char *transitionLabel = fifth >= 3 ? "TransformEniram" :
+		(fifth >= 2 ? "TransformTymok" :
+		(fifth >= 1 ? "TransformSolrac" : "TransformFinal"));
+	const Frame *desired = self->FindState(FName(transitionLabel));
+	// Do not restart a transformation while its six native frames are still
+	// running. The action only appears at the head of a stable phase loop.
 	if(desired && desired != caller)
 		self->SetState(desired);
 	return true;

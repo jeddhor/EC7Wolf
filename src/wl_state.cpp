@@ -10,6 +10,7 @@
 #include "thingdef/thingdef.h"
 #include "wl_agent.h"
 #include "wl_game.h"
+#include "wl_iwad.h"
 #include "wl_net.h"
 #include "wl_play.h"
 #include "wl_state.h"
@@ -831,6 +832,18 @@ bool CheckSlidePass(unsigned int style, unsigned int intercept, unsigned int amo
 	}
 }
 
+static inline bool TileBlocksSight(MapSpot spot)
+{
+	if(!spot || !spot->tile)
+		return false;
+	// Corridor 7 renders glass and masked walls transparently but its aliens
+	// cannot acquire or shoot the player through them. Rendering transparency
+	// and AI line-of-sight are deliberately separate properties in that game.
+	if(IWad::CheckGameFilter("Corridor7"))
+		return true;
+	return !spot->tile->sightTransparent && !spot->corridor7SightTransparent;
+}
+
 // Helps prevent leakage cases in CheckLine
 static inline bool CheckAdjacentTileBlockage(int x, int y, int lastx, int lasty) {
 	int adjacentX, adjacentY;
@@ -842,10 +855,7 @@ static inline bool CheckAdjacentTileBlockage(int x, int y, int lastx, int lasty)
 
 	MapSpot adjacentSpot1 = map->GetSpot(adjacentX, y, 0);
 	MapSpot adjacentSpot2 = map->GetSpot(x, adjacentY, 0);
-	if (adjacentSpot1->tile && !adjacentSpot1->tile->sightTransparent &&
-		!adjacentSpot1->corridor7SightTransparent &&
-		adjacentSpot2->tile && !adjacentSpot2->tile->sightTransparent &&
-		!adjacentSpot2->corridor7SightTransparent)
+	if (TileBlocksSight(adjacentSpot1) && TileBlocksSight(adjacentSpot2))
 		return true;
 
 	return false;
@@ -930,7 +940,7 @@ bool CheckLine (const AActor *ob, const AActor *ob2)
 				if (CheckAdjacentTileBlockage(x, y, lastx, lasty))
 					return false;
 			}
-			else if (!spot->tile->sightTransparent && !spot->corridor7SightTransparent)
+			else if (TileBlocksSight(spot))
 			{
 				if (spot->slideAmount[direction] == 0)
 					return false;
@@ -996,7 +1006,7 @@ bool CheckLine (const AActor *ob, const AActor *ob2)
 				if (CheckAdjacentTileBlockage(x, y, lastx, lasty))
 					return false;
 			}
-			else if (!spot->tile->sightTransparent && !spot->corridor7SightTransparent)
+			else if (TileBlocksSight(spot))
 			{
 				if (spot->slideAmount[direction] == 0)
 					return false;
@@ -1141,6 +1151,31 @@ void P_AlertCorridor7Monsters(AActor *target)
 		if(actor == target || actor->player || actor->health <= 0 ||
 			!(actor->flags & FL_SHOOTABLE) || !actor->SeeState ||
 			(actor->flags & FL_ATTACKMODE))
+		{
+			continue;
+		}
+		actor->target = target;
+		actor->flags &= ~FL_AMBUSH;
+		FirstSighting(actor, actor->SeeState);
+	}
+}
+
+void P_AlertCorridor7MonstersNear(AActor *source, AActor *target, fixed radius)
+{
+	if(!source || !target)
+		return;
+
+	// Ailoprobes, Eitaks, and a discovered Bandor alert the nearby group, not
+	// the entire floor. Keep the level-wide wake-up above for the Intruder
+	// Alert wall panel. Requiring a clear trace keeps sealed rooms dormant.
+	for(AActor::Iterator iterator = AActor::GetIterator();iterator.Next();)
+	{
+		AActor *actor = iterator.Item();
+		if(actor == source || actor == target || actor->player || actor->health <= 0 ||
+			!(actor->flags & FL_ISMONSTER) || !(actor->flags & FL_SHOOTABLE) ||
+			!actor->SeeState || (actor->flags & FL_ATTACKMODE) ||
+			MAX(abs(actor->x-source->x), abs(actor->y-source->y)) > radius ||
+			!CheckLine(source, actor))
 		{
 			continue;
 		}

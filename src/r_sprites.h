@@ -54,7 +54,8 @@ void R_LoadSprite(const FString &name);
 
 void ScaleSprite(AActor *actor, int xcenter, const Frame *frame, unsigned height);
 void Scale3DSprite(AActor *actor, const Frame *frame, unsigned height);
-void R_DrawPlayerSprite(AActor *actor, const Frame *frame, fixed offsetX, fixed offsetY);
+void R_DrawPlayerSprite(AActor *actor, const Frame *frame, fixed offsetX, fixed offsetY,
+	unsigned int spriteOverride=SPR_NONE);
 
 // For FArchive
 unsigned int R_GetNumLoadedSprites();

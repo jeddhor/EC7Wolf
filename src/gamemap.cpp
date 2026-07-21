@@ -890,9 +890,32 @@ FArchive &operator<< (FArchive &arc, GameMap *&gm)
 			// Older Corridor 7 builds stored chamber charge in pushAmount,
 			// accidentally turning the stationary door into a moving pushwall.
 			if(GameSave::SaveVersion > 1784264250ULL)
-				arc << plane.map[i].corridor7ChamberUses;
+			{
+				if(arc.IsStoring())
+				{
+					// The high bit tags the reservoir representation. This remains
+					// reliable in dirty builds, whose save version is still derived
+					// from the preceding commit's timestamp.
+					BYTE storedPower = MIN<unsigned int>(
+						plane.map[i].corridor7ChamberPower, 100) | 0x80;
+					arc << storedPower;
+				}
+				else
+				{
+					arc << plane.map[i].corridor7ChamberPower;
+					if(plane.map[i].corridor7ChamberPower & 0x80)
+						plane.map[i].corridor7ChamberPower &= 0x7f;
+					else
+						{
+							// Builds before the reservoir fix serialized three fixed uses
+							// in this byte. Preserve their approximate remaining percentage.
+							plane.map[i].corridor7ChamberPower =
+								(MIN<unsigned int>(plane.map[i].corridor7ChamberPower, 3)*100)/3;
+						}
+				}
+			}
 			else if(!arc.IsStoring())
-				plane.map[i].corridor7ChamberUses = 3;
+				plane.map[i].corridor7ChamberPower = 100;
 
 			if(!arc.IsStoring())
 				plane.map[i].plane = &plane;

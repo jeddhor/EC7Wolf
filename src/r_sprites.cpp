@@ -112,7 +112,7 @@ static bool C7VisorCanSeeActor(AActor *actor)
 	// released game draws exclusively under infrared.
 	if(Corridor7IsLaserBarrierActor(actor))
 		return infrared;
-	const ClassDef *eniram = ClassDef::FindClass("C7SpaceMarine");
+	const ClassDef *eniram = ClassDef::FindClass("C7Eniram");
 	if(!eniram || !actor->IsA(eniram))
 		return true;
 	const Frame *deathState = actor->FindState(NAME_Death);
@@ -442,6 +442,31 @@ static bool C7LaserDissolveLit(unsigned int u, unsigned int v)
 	return h % 3u != 0;
 }
 
+// The released game rotates four dedicated eight-color VGA ramps continuously.
+// Weapon scanners, rangefinders, plasma energy, and selected world sprites use
+// these indices for animation without changing their shape frame.
+static BYTE C7CycleSpriteColor(BYTE color)
+{
+	if(IWad::CheckGameFilter("Corridor7") && color >= 208 && color <= 239)
+	{
+		const int base = color & ~7;
+		const int phase = (gamestate.TimeCount >> 3) & 7;
+		return base + ((color-base-phase) & 7);
+	}
+	return color;
+}
+
+// The four cycling ramps are luminous instrumentation when they occur on the
+// first-person weapon: scanners, rangefinders, charge lamps, and energy arcs
+// retain their palette brightness even when the rest of the gun is shaded.
+static BYTE C7ShadePlayerSpriteColor(BYTE color, const BYTE *colormap)
+{
+	const bool luminous = IWad::CheckGameFilter("Corridor7") &&
+		color >= 208 && color <= 239;
+	color = C7CycleSpriteColor(color);
+	return luminous ? NormalLight.Maps[color] : colormap[color];
+}
+
 void ScaleSprite(AActor *actor, int xcenter, const Frame *frame, unsigned height)
 {
 	if(!C7VisorCanSeeActor(actor))
@@ -523,7 +548,7 @@ void ScaleSprite(AActor *actor, int xcenter, const Frame *frame, unsigned height
 						*dest = laserColor;
 				}
 				else
-					*dest = colormap[src[y>>FRACBITS]];
+					*dest = colormap[C7CycleSpriteColor(src[y>>FRACBITS])];
 			}
 			dest += vbufPitch;
 		}
@@ -614,7 +639,7 @@ void Scale3DSpriter(AActor *actor, int x1, int x2, FTexture *tex, bool flip, con
 						*dest = laserColor;
 				}
 				else
-					*dest = colormap[src[y>>FRACBITS]];
+					*dest = colormap[C7CycleSpriteColor(src[y>>FRACBITS])];
 			}
 			dest += vbufPitch;
 		}
@@ -717,12 +742,15 @@ void Scale3DSprite(AActor *actor, const Frame *frame, unsigned height)
 	}
 }
 
-void R_DrawPlayerSprite(AActor *actor, const Frame *frame, fixed offsetX, fixed offsetY)
+void R_DrawPlayerSprite(AActor *actor, const Frame *frame, fixed offsetX, fixed offsetY,
+	unsigned int spriteOverride)
 {
-	if(frame->spriteInf == SPR_NONE || loadedSprites[frame->spriteInf].numFrames == 0)
+	const unsigned int spriteInf = spriteOverride == SPR_NONE ?
+		frame->spriteInf : spriteOverride;
+	if(spriteInf == SPR_NONE || loadedSprites[spriteInf].numFrames == 0)
 		return;
 
-	const Sprite &spr = spriteFrames[loadedSprites[frame->spriteInf].frames+frame->frame];
+	const Sprite &spr = spriteFrames[loadedSprites[spriteInf].frames+frame->frame];
 	FTexture *tex;
 	if(spr.rotations == 0)
 		tex = TexMan[spr.texture[0]];
@@ -774,7 +802,7 @@ void R_DrawPlayerSprite(AActor *actor, const Frame *frame, fixed offsetX, fixed 
 		for(y = startY*yStep;y < yRun;y += yStep)
 		{
 			if(src[y>>FRACBITS] != 0)
-				*dest = colormap[src[y>>FRACBITS]];
+				*dest = C7ShadePlayerSpriteColor(src[y>>FRACBITS], colormap);
 			dest += vbufPitch;
 		}
 

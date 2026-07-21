@@ -274,6 +274,26 @@ static inline BYTE Corridor7CycleColor(BYTE color)
 	return color;
 }
 
+static inline BYTE ShadeWallColor(BYTE color, const BYTE *shades)
+{
+	color = Corridor7CycleColor(color);
+	if(IWad::CheckGameFilter("Corridor7"))
+	{
+		// Corridor 7 reserves indices 15 and 254 for lamps embedded in wall
+		// graphics. Index 39 is the ordinary white used throughout structural
+		// artwork and must remain distance-shaded. It also uses the four
+		// rotating 208..239 ramps for illuminated animated pixels. The DOS
+		// renderer leaves both groups at source brightness while shading the
+		// rest of the wall by distance. Do this per texel so a lit panel keeps
+		// its shaded housing, and so the behavior is independent of viewport
+		// resolution and scaling.
+		if(color == GPalette.Remap[15] || color == GPalette.Remap[254] ||
+			(color >= GPalette.Remap[208] && color <= GPalette.Remap[239]))
+			return NormalLight.Maps[color];
+	}
+	return shades[color];
+}
+
 void ScalePost()
 {
 	if(postsource == NULL)
@@ -318,7 +338,7 @@ void ScalePost()
 	if(yw < 0)
 		yw = (texyscale>>2) - ((-yw) % (texyscale>>2));
 
-	col = curshades[Corridor7CycleColor(postsource[yw])];
+	col = ShadeWallColor(postsource[yw], curshades);
 	bool opaque = postopacity == NULL || postopacity[yw] != 0;
 	yendoffs = yendoffs * vbufPitch + postx;
 	while(yoffs <= yendoffs)
@@ -335,7 +355,7 @@ void ScalePost()
 			}
 			while(ywcount <= 0);
 			if(yw < 0) yw = (texyscale>>2)-1;
-			col = curshades[Corridor7CycleColor(postsource[yw])];
+			col = ShadeWallColor(postsource[yw], curshades);
 			opaque = postopacity == NULL || postopacity[yw] != 0;
 		}
 		yendoffs -= vbufPitch;
@@ -870,7 +890,7 @@ static void ScaleMaskedWallPost(const BYTE *source, const BYTE *opacity,
 		const unsigned int depthIndex = yend*viewwidth+screenx;
 		if(opaque && height >= maskedWallDepth[depthIndex])
 		{
-			vbuf[yendoffs] = curshades[Corridor7CycleColor(source[yw])];
+			vbuf[yendoffs] = ShadeWallColor(source[yw], curshades);
 			maskedWallDepth[depthIndex] = height;
 		}
 		ywcount -= textureYScale;
@@ -1092,7 +1112,7 @@ void DrawScaleds (void)
 
 void DrawPlayerWeapon (void)
 {
-	static const int corridor7Bases[] = { 746, 786, 754, 762, 770, 778, 794, 802, 810 };
+	static const int corridor7Bases[] = { 746, 786, 754, 762, 770, 778, 794, 802 };
 	static const int corridor7X[16] =
 		{ 0, 1, 2, 3, 4, 3, 2, 1, 0, -1, -2, -3, -4, -3, -2, -1 };
 	static int corridor7Phase[MAXPLAYERS] = { 0 };
@@ -1107,9 +1127,11 @@ void DrawPlayerWeapon (void)
 		players[ConsolePlayer].BobWeapon(&xoffset, &yoffset);
 
 		const Frame *frame = players[ConsolePlayer].psprite[i].frame;
+		unsigned int spriteOverride = SPR_NONE;
 		if(IWad::CheckGameFilter("Corridor7"))
 		{
 			bool readyFrame = false;
+			int readyBase = 0;
 			for(unsigned int weapon = 0;
 				weapon < sizeof(corridor7Bases)/sizeof(corridor7Bases[0]);++weapon)
 			{
@@ -1119,6 +1141,7 @@ void DrawPlayerWeapon (void)
 				if(frame->spriteInf == R_GetSprite(readyName))
 				{
 					readyFrame = true;
+					readyBase = corridor7Bases[weapon];
 					break;
 				}
 			}
@@ -1140,16 +1163,21 @@ void DrawPlayerWeapon (void)
 					corridor7LastTime[ConsolePlayer] = gamestate.TimeCount;
 				}
 				const int phase = corridor7Phase[ConsolePlayer]&15;
-				// The DOS walk cycle moves the stationary weapon image sideways.
-				// Cycling through the preceding entries in each sprite group would
-				// display the weapon's firing frames and produce severe flicker.
+				// Each eight-page weapon family has four firing pages, one moving
+				// pose at base+4, two unused transition pages, and its stationary
+				// pose at base+7. Alternate only the two actual movement poses;
+				// indexing through base+5/base+6 makes the gun visibly stutter.
 				xoffset += corridor7X[phase]<<FRACBITS;
+				char poseName[5];
+				mysnprintf(poseName, sizeof(poseName), "C%03d",
+					readyBase+((phase&4) ? 4 : 7));
+				spriteOverride = R_GetSprite(poseName);
 			}
 		}
 
 		R_DrawPlayerSprite(players[ConsolePlayer].ReadyWeapon, frame,
 			players[ConsolePlayer].psprite[i].sx+xoffset,
-			players[ConsolePlayer].psprite[i].sy+yoffset);
+			players[ConsolePlayer].psprite[i].sy+yoffset, spriteOverride);
 	}
 }
 

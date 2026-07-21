@@ -18,6 +18,7 @@
 #include "actor.h"
 #include "textures/textures.h"
 #include "v_video.h"
+#include "v_font.h"
 #include "wl_agent.h"
 #include "wl_debug.h"
 #include "wl_draw.h"
@@ -1063,7 +1064,24 @@ void PlayFrame()
 	if(automap && !gamestate.victoryflag)
 		BasicOverhead();
 	if(Paused & 1)
-		VWB_DrawGraphic(TexMan("PAUSED"), (20 - 4)*8, 80 - 2*8);
+	{
+		if(IWad::CheckGameFilter("Corridor7"))
+		{
+			// Corridor 7 has no Wolf3D PAUSED art chunk. Drawing that absent
+			// texture produced the checkerboard placeholder and an Unknown Texture
+			// warning. Render the pause label with the game's remapped font instead.
+			const char *pauseText = "PAUSED";
+			const int pauseX = 160-SmallFont->StringWidth(pauseText)/2;
+			screen->DrawText(SmallFont, CR_BLACK, pauseX+1, 73, pauseText,
+				DTA_FillColor, GPalette.BaseColors[GPalette.BlackIndex].d,
+				DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
+			screen->DrawText(SmallFont, CR_YELLOW, pauseX, 72, pauseText,
+				DTA_FillColor, GPalette.BaseColors[3].d,
+				DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
+		}
+		else
+			VWB_DrawGraphic(TexMan("PAUSED"), (20 - 4)*8, 80 - 2*8);
+	}
 
 	if(Net::IsBlocked())
 	{

@@ -20,6 +20,7 @@ void SelectWanderDir (AActor *ob);
 bool MoveObj (AActor *ob, int32_t move);
 bool SightPlayer (AActor *ob, double minseedist, double maxseedist, double maxheardist, double fov, const Frame *state);
 void P_AlertCorridor7Monsters(AActor *target);
+void P_AlertCorridor7MonstersNear(AActor *source, AActor *target, fixed radius);
 
 void    DamageActor (AActor *ob, AActor *attacker, unsigned damage);
 

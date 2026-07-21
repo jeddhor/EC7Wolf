@@ -65,8 +65,8 @@ static void R_DrawPlane(byte *vbuf, unsigned vbufPitch, int min_wallheight, int 
 
 	unsigned int oldmapx = INT_MAX, oldmapy = INT_MAX;
 	const byte* curshades = NormalLight.Maps;
-	byte c7DarkerShades[256];
-	unsigned int c7ShadeFraction = 0;
+	byte c7PlaneShades[256];
+	byte c7NextPlaneShades[256];
 	// draw horizontal lines
 	for(int y = y0;floor ? y+halfheight < viewheight : y < halfheight; ++y, tex_offset += tex_offsetPitch)
 	{
@@ -86,47 +86,56 @@ static void R_DrawPlane(byte *vbuf, unsigned vbufPitch, int min_wallheight, int 
 		gu -= (viewwidth >> 1) * du;
 		gv -= (viewwidth >> 1) * dv; // starting point (leftmost)
 
-		// Corridor 7's untextured planes use a much steeper VGA shade ramp
-		// than its walls. Preserve the bright near ceiling/floor while reaching
-		// the darkest ramp entries before the horizon, as in the DOS renderer.
+		// Corridor 7's untextured planes use a screen-space VGA pattern rather
+		// than Wolf's distance formula. Native 320x200 captures show that the
+		// renderer advances one visible palette step every three rows from the
+		// near edge toward the horizon. Each three-row band alternates adjacent
+		// steps in four-pixel groups; the middle row and successive bands reverse
+		// the groups. Measuring from each plane's near edge mirrors the pattern
+		// onto the floor. Reconstruct it in virtual
+		// 320x160 viewport coordinates so it scales cleanly at any resolution.
 		if(corridor7)
 		{
-			const int shade = LIGHT2SHADE(118 + r_extralight);
-			const int cutoff = (halfheight*19)/80;
-			const int range = MAX(1, halfheight-1-cutoff);
-			const int maxVisibility =
-				((NUMCOLORMAPS-1)-(4*LIGHTVISIBILITY_FACTOR))*FRACUNIT;
-			const int distance = MAX(0, y-cutoff);
-			const fixed linearVisibility =
-				fixed((int64_t(distance)*maxVisibility)/range);
-			const int curveStrength = floor ? 40 : 24;
-			const fixed curve = fixed((int64_t(curveStrength)*FRACUNIT*distance*
-				MAX(0, range-distance))/(range*range));
-			const fixed visibility = MAX<fixed>(0, linearVisibility-curve);
-			// The DOS VGA renderer ordered-dithers between adjacent shade rows.
-			// Keeping the fractional lookup prevents broad flat bands on modern
-			// high-resolution viewports while retaining the original palette.
-			const fixed limitedVisibility = MIN<fixed>(gLevelMaxLightVis, visibility);
-			const fixed lookup = MAX<fixed>(0, shade-limitedVisibility);
-			const unsigned int shadeIndex = MIN<unsigned int>(
-				lookup >> FRACBITS, NUMCOLORMAPS-1);
-			c7ShadeFraction = shadeIndex < NUMCOLORMAPS-1 ?
-				(static_cast<unsigned int>(lookup) & (FRACUNIT-1)) : 0;
-			curshades = &NormalLight.Maps[shadeIndex<<8];
+			const unsigned int virtualEdgeRow = MIN<unsigned int>(79,
+				(static_cast<uint64_t>(MAX(0, halfheight-1-y))*80)/MAX(1, halfheight));
+			const unsigned int band = virtualEdgeRow/3;
+			const unsigned int extraLight = MAX(0, r_extralight);
+			const unsigned int litBand = band > extraLight/8 ? band-extraLight/8 : 0;
+			const unsigned int firstShade = MIN<unsigned int>(NUMCOLORMAPS-1,
+				MAX(0, 5-static_cast<int>(extraLight/16)));
+
 			for(unsigned int color = 0;color < 256;++color)
 			{
-				c7DarkerShades[color] = curshades[color];
+				unsigned int shadeIndex = firstShade;
+				byte shadeColor = NormalLight.Maps[(shadeIndex<<8)+color];
+				for(unsigned int step = 0;step < litBand;++step)
+				{
+					for(unsigned int darker = shadeIndex+1;
+						darker < NUMCOLORMAPS;++darker)
+					{
+						const byte candidate = NormalLight.Maps[(darker<<8)+color];
+						if(candidate != shadeColor)
+						{
+							shadeIndex = darker;
+							shadeColor = candidate;
+							break;
+						}
+					}
+				}
+				c7PlaneShades[color] = shadeColor;
+				c7NextPlaneShades[color] = shadeColor;
 				for(unsigned int darker = shadeIndex+1;
 					darker < NUMCOLORMAPS;++darker)
 				{
 					const byte candidate = NormalLight.Maps[(darker<<8)+color];
-					if(candidate != curshades[color])
+					if(candidate != shadeColor)
 					{
-						c7DarkerShades[color] = candidate;
+						c7NextPlaneShades[color] = candidate;
 						break;
 					}
 				}
 			}
+			curshades = c7PlaneShades;
 		}
 		else
 		{
@@ -138,6 +147,14 @@ static void R_DrawPlane(byte *vbuf, unsigned vbufPitch, int min_wallheight, int 
 
 		for(unsigned int x = 0;x < (unsigned)viewwidth; ++x, ++tex_offset)
 		{
+			const unsigned int virtualX = corridor7 ?
+				MIN<unsigned int>(319, (static_cast<uint64_t>(x)*320)/MAX(1, viewwidth)) : 0;
+			const unsigned int virtualEdgeRow = corridor7 ? MIN<unsigned int>(79,
+				(static_cast<uint64_t>(MAX(0, halfheight-1-y))*80)/MAX(1, halfheight)) : 0;
+			const unsigned int band = virtualEdgeRow/3;
+			const bool c7UseNextShade = corridor7 &&
+				((((virtualX>>2)&1) ^ (virtualEdgeRow%3 == 1) ^
+				  (band&1)) == 0);
 			if(((wallheight[x]*heightFactor)>>FRACBITS) <= y)
 			{
 				unsigned int curx = viewxTile + (gu >> (TILESHIFT+8));
@@ -190,26 +207,12 @@ static void R_DrawPlane(byte *vbuf, unsigned vbufPitch, int min_wallheight, int 
 					if(isMasked)
 					{
 						if(const byte c = tex[texoffs])
-						{
-							static const BYTE bayer4[16] =
-								{ 0, 8, 2, 10, 12, 4, 14, 6,
-								  3, 11, 1, 9, 15, 7, 13, 5 };
-							const bool darker = corridor7 &&
-								c7ShadeFraction > (static_cast<unsigned int>(
-								bayer4[((y&3)<<2)|(x&3)]) << 12);
-							*tex_offset = darker ? c7DarkerShades[c] : curshades[c];
-						}
+							*tex_offset = c7UseNextShade ? c7NextPlaneShades[c] : curshades[c];
 					}
 					else
 					{
-						static const BYTE bayer4[16] =
-							{ 0, 8, 2, 10, 12, 4, 14, 6,
-							  3, 11, 1, 9, 15, 7, 13, 5 };
 						const byte c = tex[texoffs];
-						const bool darker = corridor7 &&
-							c7ShadeFraction > (static_cast<unsigned int>(
-							bayer4[((y&3)<<2)|(x&3)]) << 12);
-						*tex_offset = darker ? c7DarkerShades[c] : curshades[c];
+						*tex_offset = c7UseNextShade ? c7NextPlaneShades[c] : curshades[c];
 					}
 				}
 			}

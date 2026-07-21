@@ -1,0 +1,84 @@
+#!/bin/sh
+
+# Renderer-redesign determinism gate.
+#
+# Runs the deterministic capture harness (see src/r_capture.*) twice with a
+# pinned RNG seed and a fixed simulation-tic budget, then asserts the two
+# per-tic checksum logs are byte-identical. Because the run length is bounded by
+# tics rather than rendered frames, the result is independent of wall-clock
+# frame pacing and stays reproducible even under the current render-driven
+# timing loop.
+#
+# This is THE gate that later phases (fixed-step timing, interpolation, hardware
+# renderers) must keep green: interpolation and renderer changes may never alter
+# the simulation, so the checksum must not move.
+#
+# Usage: test_corridor7_determinism.sh EC7WOLF_BUILD_DIR CORRIDOR7_DATA_DIR \
+#            [MAP] [SEED] [TICS]
+
+set -eu
+
+if [ "$#" -lt 2 ] || [ "$#" -gt 5 ]; then
+	printf 'usage: %s BUILD_DIR DATA_DIR [MAP] [SEED] [TICS]\n' "$0" >&2
+	exit 2
+fi
+
+build_dir=$(cd "$1" && pwd)
+data_dir=$(cd "$2" && pwd)
+map=${3:-MAP01}
+seed=${4:-12345}
+tics=${5:-500}
+ec7wolf="$build_dir/ec7wolf"
+
+if [ ! -x "$ec7wolf" ]; then
+	printf 'EC7Wolf executable not found: %s\n' "$ec7wolf" >&2
+	exit 1
+fi
+
+for command in xvfb-run timeout; do
+	if ! command -v "$command" >/dev/null 2>&1; then
+		printf 'required command is missing: %s\n' "$command" >&2
+		exit 1
+	fi
+done
+
+workdir=$(mktemp -d /tmp/ec7wolf-determinism.XXXXXX)
+cleanup() { rm -rf "$workdir"; }
+trap cleanup EXIT HUP INT TERM
+
+run_capture() {
+	# $1 = output checksum path
+	cfg=$(mktemp -d "$workdir/cfg.XXXXXX")
+	save=$(mktemp -d "$workdir/save.XXXXXX")
+	(
+		cd "$data_dir"
+		timeout 120s env SDL_AUDIODRIVER=dummy xvfb-run -a "$ec7wolf" \
+			--data CO7 --config "$cfg/ec7wolf.cfg" --savedir "$save" \
+			--nowait --tedlevel "$map" --skill 2 \
+			--capture-rngseed "$seed" --capture-checksum "$1" \
+			--capture-maxtics "$tics"
+	) >"$1.log" 2>&1
+}
+
+printf 'Determinism gate: map=%s seed=%s tics=%s\n' "$map" "$seed" "$tics"
+
+run_capture "$workdir/runA.txt"
+run_capture "$workdir/runB.txt"
+
+if [ ! -s "$workdir/runA.txt" ] || [ ! -s "$workdir/runB.txt" ]; then
+	printf 'FAIL: capture produced no checksum output (see %s.log)\n' \
+		"$workdir/runA.txt" >&2
+	tail -n 20 "$workdir/runA.txt.log" >&2 || true
+	exit 1
+fi
+
+summary=$(tail -n 1 "$workdir/runA.txt")
+
+if diff -q "$workdir/runA.txt" "$workdir/runB.txt" >/dev/null; then
+	printf 'PASS: simulation is deterministic (%s)\n' "$summary"
+	exit 0
+else
+	printf 'FAIL: simulation diverged between identical runs\n' >&2
+	diff "$workdir/runA.txt" "$workdir/runB.txt" | head -n 20 >&2
+	exit 1
+fi

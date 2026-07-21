@@ -36,6 +36,7 @@
 #include "wl_inter.h"
 #include "wl_iwad.h"
 #include "wl_play.h"
+#include "r_capture.h"
 #include "wl_game.h"
 #include "wl_loadsave.h"
 #include "wl_net.h"
@@ -1128,6 +1129,15 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 		{
 			GameSave::param_foreginsave = true;
 		}
+		// Deterministic capture/checksum harness (see r_capture.*). Already
+		// parsed independently by Capture::ParseArgs; consume here (with the
+		// value token where present) so they are not misread as data files.
+		else IFARG("--capture-rngseed") { ++i; }
+		else IFARG("--capture-checksum") { ++i; }
+		else IFARG("--capture-frame") { ++i; }
+		else IFARG("--capture-file") { ++i; }
+		else IFARG("--capture-maxframes") { ++i; }
+		else IFARG("--capture-maxtics") { ++i; }
 		else
 			files.Push(argv[i]);
 	}
@@ -1287,6 +1297,8 @@ int WL_Main (int argc, char *argv[])
 
 		FileSys::SetupPaths(argc, argv);
 
+		Capture::ParseArgs(argc, argv); // deterministic capture/checksum harness
+
 		// Find the program directory.
 		FString progdir(FileSys::GetDirectoryPath(FileSys::DIR_Program));
 
@@ -1320,6 +1332,7 @@ int WL_Main (int argc, char *argv[])
 
 		printf("InitGame: Setting up the game...\n");
 		rngseed = I_MakeRNGSeed(); // May change after initializing a net game
+		Capture::OverrideRNGSeed(rngseed); // deterministic capture runs pin the seed
 		InitGame();
 
 		FRandom::StaticClearRandom();

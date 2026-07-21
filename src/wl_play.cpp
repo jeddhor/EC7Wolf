@@ -2,6 +2,7 @@
 
 #include "c_cvars.h"
 #include "wl_def.h"
+#include "r_capture.h"
 #include "wl_menu.h"
 #include "id_ca.h"
 #include "id_sd.h"
@@ -1177,10 +1178,14 @@ void PlayLoop (void)
 					thinkerList.Tick(ThinkerList::PLAYER);
 
 				AActor::FinishSpawningActors();
+
+				Capture::PerTic(); // fold deterministic state into the checksum
 			}
 		}
 
 		PlayFrame();
+
+		Capture::PostFrame(); // screenshot-on-frame-N and capture auto-quit
 
 		//
 		// MAKE FUNNY FACE IF BJ DOESN'T MOVE FOR AWHILE

@@ -117,6 +117,8 @@ initial_sources(
 	name.cpp
 	p_switch.cpp
 	r_capture.cpp
+	render/r_renderer.cpp
+	render/software/r_swrenderer.cpp
 	r_sprites.cpp
 	scanner.cpp
 	sdlvideo.cpp

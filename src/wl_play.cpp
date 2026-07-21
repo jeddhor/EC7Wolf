@@ -3,6 +3,7 @@
 #include "c_cvars.h"
 #include "wl_def.h"
 #include "r_capture.h"
+#include "render/r_renderer.h"
 #include "wl_menu.h"
 #include "id_ca.h"
 #include "id_sd.h"
@@ -1059,7 +1060,7 @@ void PlayFrame()
 {
 	UpdatePaletteShifts ();
 
-	ThreeDRefresh ();
+	Renderer->RenderScene(); // routed through the backend-neutral renderer seam
 	StatusBar->DrawTopOverlay();
 
 	if(automap && !gamestate.victoryflag)

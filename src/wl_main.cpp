@@ -37,6 +37,7 @@
 #include "wl_iwad.h"
 #include "wl_play.h"
 #include "r_capture.h"
+#include "render/r_renderer.h"
 #include "wl_game.h"
 #include "wl_loadsave.h"
 #include "wl_net.h"
@@ -541,6 +542,13 @@ static void InitGame()
 
 	if (Keyboard[sc_M])
 		DoJukebox();
+
+//
+// Select and initialize the renderer backend (software fallback guaranteed).
+// atterm ordering is LIFO, so this runs before I_ShutdownGraphics at exit.
+//
+	R_InitRendererBackend();
+	atterm(R_ShutdownRendererBackend);
 
 #ifdef NOTYET
 	vdisp = (byte *) (0xa0000+PAGE1START);

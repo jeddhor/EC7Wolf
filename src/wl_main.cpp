@@ -1149,6 +1149,7 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 		else IFARG("--capture-file") { ++i; }
 		else IFARG("--capture-maxframes") { ++i; }
 		else IFARG("--capture-maxtics") { ++i; }
+		else IFARG("--capture-glworld") { ++i; }
 		else
 			files.Push(argv[i]);
 	}

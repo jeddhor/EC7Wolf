@@ -23,6 +23,9 @@
 #include "v_video.h"
 #include "v_palette.h"
 #include "files.h"
+#ifdef ECWOLF_RENDERER_OPENGL
+#include "render/opengl/r_glworld.h"
+#endif
 
 namespace Capture
 {
@@ -39,6 +42,8 @@ namespace
 
 	int      g_captureFrame   = -1;      // 1-based rendered frame to shoot
 	FString  g_captureFile;
+
+	FString  g_glWorldPath;              // Phase 5 GL world offscreen capture
 
 	int      g_maxFrames      = -1;      // quit after this many rendered frames
 	int      g_maxTics        = -1;      // quit after this many simulation tics
@@ -176,6 +181,11 @@ void ParseArgs(int argc, char **argv)
 			g_maxTics = atoi(argv[++i]);
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-glworld") == 0 && i + 1 < argc)
+		{
+			g_glWorldPath = argv[++i];
+			g_armed = true;
+		}
 	}
 
 	if(g_captureFile.IsEmpty())
@@ -234,7 +244,15 @@ void PostFrame()
 	++g_frameCount;
 
 	if(g_captureFrame > 0 && (uint64_t)g_captureFrame == g_frameCount)
+	{
 		WriteScreenshot(g_captureFile.GetChars());
+#ifdef ECWOLF_RENDERER_OPENGL
+		// Render the same view with the GL static-world renderer for parity
+		// comparison against the software screenshot just taken.
+		if(!g_glWorldPath.IsEmpty())
+			R_GLWorldCapture(g_glWorldPath.GetChars());
+#endif
+	}
 
 	const bool hitFrameLimit =
 		(g_maxFrames > 0 && g_frameCount >= (uint64_t)g_maxFrames);

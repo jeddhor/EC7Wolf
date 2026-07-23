@@ -119,6 +119,7 @@ initial_sources(
 	r_capture.cpp
 	render/r_renderer.cpp
 	render/r_interpolation.cpp
+	render/r_worldbuilder.cpp
 	render/software/r_swrenderer.cpp
 	r_sprites.cpp
 	scanner.cpp
@@ -372,6 +373,7 @@ if(ECWOLF_RENDERER_OPENGL)
 			render/opengl/r_gldevice.cpp
 			render/opengl/r_glshader.cpp
 			render/opengl/r_glpalette.cpp
+			render/opengl/r_glworld.cpp
 			render/opengl/r_glrenderer.cpp
 		)
 	else()

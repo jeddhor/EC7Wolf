@@ -1,6 +1,14 @@
 // ===========================================================================
 //
-// r_glworld.cpp - GL static-world render + offscreen capture (Phase 5).
+// r_glworld.cpp - GL static-world render + offscreen capture.
+//
+// Phase 5 stood up the geometry/camera with a debug shader. Phase 6 replaces
+// the debug colours with real fidelity: each surface's FTexture is uploaded as
+// an 8-bit *index* texture, and the shader resolves colour exactly the way the
+// software renderer does -- index -> colormap[shadeRow] -> palette -- with the
+// shade row derived from ECWolf's own distance/light math, plus the Corridor 7
+// colour-cycle and full-bright rules. Palette effects (visor/electric/damage)
+// live entirely in the 256-entry palette texture, never in world pixels.
 //
 // ===========================================================================
 
@@ -17,10 +25,22 @@
 #include "zdoomsupport.h"
 #include "wl_main.h"
 #include "wl_play.h"
+#include "wl_game.h"
 #include "wl_agent.h"
+#include "wl_shade.h"
 #include "actor.h"
 #include "id_ca.h"
 #include "gamemap.h"
+#include "wl_iwad.h"
+#include "tarray.h"
+#include "textures/textures.h"
+#include "v_palette.h"
+#include "r_data/colormaps.h"
+
+// Distance-shade inputs owned by the software renderer.
+extern int r_extralight;
+extern fixed viewz;
+extern int viewshift;
 
 namespace
 {
@@ -83,27 +103,125 @@ namespace
 		return r;
 	}
 
+	// The world position (aPos) is carried into view space so the fragment
+	// shader can shade by perpendicular forward distance -- the same quantity
+	// the raycaster uses for its wall shade row.
 	const char *kVert =
 		"#version 330 core\n"
 		"layout(location=0) in vec3 aPos;\n"
 		"layout(location=1) in vec2 aUV;\n"
 		"layout(location=2) in float aTexKey;\n"
 		"layout(location=3) in float aShade;\n"
-		"uniform mat4 uMVP;\n"
-		"out vec2 vUV; out float vTexKey; out float vShade;\n"
-		"void main(){ gl_Position = uMVP * vec4(aPos,1.0); vUV=aUV; vTexKey=aTexKey; vShade=aShade; }\n";
+		"uniform mat4 uProj;\n"
+		"uniform mat4 uView;\n"
+		"out vec2 vUV; out vec3 vViewPos;\n"
+		"void main(){\n"
+		"    vec4 vp = uView * vec4(aPos,1.0);\n"
+		"    vViewPos = vp.xyz;\n"
+		"    gl_Position = uProj * vp;\n"
+		"    vUV = aUV;\n"
+		"}\n";
 
-	// Phase 5 debug shading: a stable pseudo-colour per texture index, shaded
-	// per face. Real indexed textures + palette land in Phase 6.
+	// index -> (Corridor7 cycle) -> colormap[shadeRow] -> palette. All fetches
+	// are integer/nearest: palette indices must never be linearly filtered.
 	const char *kFrag =
 		"#version 330 core\n"
-		"in vec2 vUV; in float vTexKey; in float vShade;\n"
+		"in vec2 vUV; in vec3 vViewPos;\n"
 		"out vec4 fragColor;\n"
+		"uniform usampler2D uIndexTex;\n"    // per-surface WxH, R8UI physical indices
+		"uniform usampler2D uOpacityTex;\n"  // per-surface WxH, R8UI (0 = transparent)
+		"uniform sampler2D  uPaletteTex;\n"  // 256x1 RGB8
+		"uniform usampler2D uColormapTex;\n" // 256xNUMCOLORMAPS R8UI
+		"uniform int   uHasOpacity;\n"
+		"uniform float uDepthVis;\n"
+		"uniform float uHeightNum;\n"
+		"uniform float uShade;\n"
+		"uniform float uMaxLightVis;\n"
+		"uniform float uPlaneHeight;\n"  // |planeheight| for the current surface (planes only)
+		"uniform float uHorizon;\n"      // screen row of the horizon, GL pixel coords
+		"uniform int   uSurfKind;\n"     // 0 floor, 1 ceiling, 2 wall
+		"uniform int   uNumColormaps;\n"
+		"uniform int   uCyclePhase;\n"
+		"uniform int   uRemap15;\n"
+		"uniform int   uRemap254;\n"
+		"uniform int   uRemap208;\n"
+		"uniform int   uRemap239;\n"
+		"uniform int   uCorridor7;\n"
+		"uniform int   uExtraLight;\n"
+		"uniform int   uViewW;\n"
+		"uniform int   uDither;\n"
+		"uniform int   uDebug;\n"           // 0 normal, 1 shade-row visualization
+		"const float FRACUNIT = 65536.0;\n"
+		"const float MINZ = 8192.0;\n"      // 2048*4
+		"float bayer4(ivec2 p){\n"
+		"    int m[16] = int[16](0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5);\n"
+		"    int i = (p.y & 3)*4 + (p.x & 3);\n"
+		"    return (float(m[i]) + 0.5) / 16.0;\n"
+		"}\n"
 		"void main(){\n"
-		"    float k = vTexKey;\n"
-		"    vec3 c = vec3(fract(k*0.1234+0.11), fract(k*0.2345+0.37), fract(k*0.3456+0.59));\n"
-		"    c = mix(vec3(0.55), c, 0.85) * vShade;\n"
-		"    fragColor = vec4(c, 1.0);\n"
+		"    ivec2 isz = textureSize(uIndexTex,0);\n"
+		"    ivec2 texel = ivec2(floor(vUV * vec2(isz)));\n"
+		"    texel = ((texel % isz) + isz) % isz;\n"   // tile (repeat) within one cell
+		"    // Explicit per-texel opacity (C7 grate/fence walls); never write\n"
+		"    // transparent texels, matching the software postopacity test.\n"
+		"    if(uHasOpacity == 1 && texelFetch(uOpacityTex, texel, 0).r == 0u)\n"
+		"        discard;\n"
+		"    int idx = int(texelFetch(uIndexTex, texel, 0).r);\n"
+		"    // Colour-cycle + full-bright are wall-only in the software renderer\n"
+		"    // (ShadeWallColor); planes draw c7PlaneShades[c] with neither.\n"
+		"    bool isWall = uSurfKind == 2;\n"
+		"    if(uCorridor7 == 1 && isWall && idx >= 208 && idx <= 239){\n"
+		"        int base = idx & ~7;\n"
+		"        idx = base + ((idx - base - uCyclePhase) & 7);\n"
+		"    }\n"
+		"    // Shade row selection mirrors the software renderer per surface type.\n"
+		"    int shadeRow;\n"
+		"    if(uSurfKind == 2){\n"
+		"        // Wall: perpendicular forward distance -> raycaster wallheight rule.\n"
+		"        float d = max(-vViewPos.z, 0.0001);\n"
+		"        float tz = (uDepthVis * uHeightNum) / (d * FRACUNIT);\n"
+		"        tz = max(tz, MINZ);\n"
+		"        float visv = min(uMaxLightVis, tz);\n"
+		"        float palf = (uShade - visv) / FRACUNIT;\n"
+		"        float dref = (uDither == 1) ? (bayer4(ivec2(gl_FragCoord.xy)) - 0.5) : 0.0;\n"
+		"        shadeRow = int(floor(palf + dref));\n"
+		"    } else if(uCorridor7 == 1){\n"
+		"        // Corridor 7 planes use a screen-space VGA band pattern, not the\n"
+		"        // distance formula (reconstruction of c7PlaneShades / R_DrawPlane).\n"
+		"        float rowFromHorizon = abs(gl_FragCoord.y - uHorizon);\n"
+		"        float edge = max(0.0, uHorizon - 1.0 - rowFromHorizon);\n"
+		"        int ver = int(min(79.0, edge * 80.0 / max(1.0, uHorizon)));\n"
+		"        int band = ver / 3;\n"
+		"        int firstShade = max(0, 5 - uExtraLight / 16);\n"
+		"        int litBand = band > uExtraLight / 8 ? band - uExtraLight / 8 : 0;\n"
+		"        shadeRow = firstShade + litBand;\n"
+		"        int virtualX = int(min(319.0, gl_FragCoord.x * 320.0 / float(uViewW)));\n"
+		"        int a = (virtualX >> 2) & 1;\n"
+		"        int b = (ver % 3 == 1) ? 1 : 0;\n"
+		"        int c = band & 1;\n"
+		"        if((a ^ b ^ c) == 0) shadeRow += 1;\n"   // four-pixel alternation dither
+		"    } else {\n"
+		"        // Generic (non-C7) plane distance formula.\n"
+		"        float rowFromHorizon = abs(gl_FragCoord.y - uHorizon);\n"
+		"        float tz = (uDepthVis * FRACUNIT / uPlaneHeight) * rowFromHorizon;\n"
+		"        float visv = min(uMaxLightVis, tz);\n"
+		"        float palf = (uShade - visv) / FRACUNIT;\n"
+		"        shadeRow = int(floor(palf));\n"
+		"    }\n"
+		"    // Corridor 7 full-bright reserved indices ignore distance shading\n"
+		"    // (walls only, matching ShadeWallColor).\n"
+		"    bool fullbright = uCorridor7 == 1 && isWall &&\n"
+		"        (idx == uRemap15 || idx == uRemap254 ||\n"
+		"        (idx >= uRemap208 && idx <= uRemap239));\n"
+		"    if(fullbright) shadeRow = 0;\n"
+		"    shadeRow = clamp(shadeRow, 0, uNumColormaps - 1);\n"
+		"    if(uDebug == 1){\n"
+		"        float g = float(shadeRow) / float(uNumColormaps - 1);\n"
+		"        fragColor = vec4(g, g, g, 1.0); return;\n"
+		"    }\n"
+		"    int shaded = int(texelFetch(uColormapTex, ivec2(idx, shadeRow), 0).r);\n"
+		"    vec3 rgb = texelFetch(uPaletteTex, ivec2(shaded, 0), 0).rgb;\n"
+		"    fragColor = vec4(rgb, 1.0);\n"
 		"}\n";
 
 	bool WritePPM(const char *path, const unsigned char *rgb, int w, int h)
@@ -114,6 +232,197 @@ namespace
 		fwrite(rgb, 1, (size_t)w * h * 3, f);
 		fclose(f);
 		return true;
+	}
+
+	// Upload the live 256-entry palette (post gamma/blend baked into BaseColors,
+	// the same buffer the software screenshot is written with) as a 256x1 RGB8
+	// texture. Palette effects only ever re-run this; world pixels never change.
+	GLuint CreatePaletteTexture()
+	{
+		unsigned char rgb[256 * 3];
+		for(int i = 0; i < 256; ++i)
+		{
+			rgb[i*3+0] = GPalette.BaseColors[i].r;
+			rgb[i*3+1] = GPalette.BaseColors[i].g;
+			rgb[i*3+2] = GPalette.BaseColors[i].b;
+		}
+		GLuint tex = 0;
+		glGenTextures(1, &tex);
+		glBindTexture(GL_TEXTURE_2D, tex);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 256, 1, 0, GL_RGB,
+			GL_UNSIGNED_BYTE, rgb);
+		return tex;
+	}
+
+	// Upload the distance colormap table (NormalLight.Maps) as a
+	// 256 x NUMCOLORMAPS R8UI texture: colormap[shadeRow][index].
+	GLuint CreateColormapTexture(int &rowsOut)
+	{
+		rowsOut = NUMCOLORMAPS;
+		GLuint tex = 0;
+		glGenTextures(1, &tex);
+		glBindTexture(GL_TEXTURE_2D, tex);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		// NormalLight.Maps is laid out row-major as Maps[(shadeRow<<8)+index],
+		// which matches a 256-wide x NUMCOLORMAPS-tall R8UI upload directly.
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, 256, NUMCOLORMAPS, 0,
+			GL_RED_INTEGER, GL_UNSIGNED_BYTE, NormalLight.Maps);
+		return tex;
+	}
+
+	// Build an R8UI index texture from an FTexture. GetPixels() is column-major
+	// (pixels[col*H + row]); GL wants row-major, so transpose into a scratch
+	// buffer. The values are already physical palette indices.
+	GLuint CreateIndexTextureFor(FTexture *tex)
+	{
+		if(tex == NULL)
+			return 0;
+		const int w = tex->GetWidth();
+		const int h = tex->GetHeight();
+		if(w <= 0 || h <= 0)
+			return 0;
+
+		const BYTE *pixels = tex->GetPixels();
+		if(pixels == NULL)
+			return 0;
+
+		TArray<unsigned char> rowmajor((unsigned)(w * h));
+		rowmajor.Resize((unsigned)(w * h));
+		for(int col = 0; col < w; ++col)
+			for(int row = 0; row < h; ++row)
+				rowmajor[row * w + col] = pixels[col * h + row];
+
+		GLuint id = 0;
+		glGenTextures(1, &id);
+		glBindTexture(GL_TEXTURE_2D, id);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, w, h, 0,
+			GL_RED_INTEGER, GL_UNSIGNED_BYTE, &rowmajor[0]);
+		return id;
+	}
+
+	// Build an R8UI opacity texture (0 = transparent) from GetColumnOpacity(),
+	// which C7's see-through wall textures (grates/fences) provide. Transparency
+	// is *explicit* here -- never inferred from index 0/255 -- matching the
+	// software renderer's postopacity test. Returns 0 when the texture is fully
+	// opaque (no column reports an opacity buffer).
+	GLuint CreateOpacityTextureFor(FTexture *tex)
+	{
+		if(tex == NULL)
+			return 0;
+		const int w = tex->GetWidth();
+		const int h = tex->GetHeight();
+		if(w <= 0 || h <= 0)
+			return 0;
+
+		TArray<unsigned char> rowmajor((unsigned)(w * h));
+		rowmajor.Resize((unsigned)(w * h));
+		bool anyTransparent = false;
+		for(int col = 0; col < w; ++col)
+		{
+			const BYTE *opac = tex->GetColumnOpacity((unsigned)col);
+			for(int row = 0; row < h; ++row)
+			{
+				unsigned char o = opac ? opac[row] : 255;
+				if(o == 0)
+					anyTransparent = true;
+				rowmajor[row * w + col] = o;
+			}
+		}
+		if(!anyTransparent)
+			return 0;	// fully opaque: no discard needed
+
+		GLuint id = 0;
+		glGenTextures(1, &id);
+		glBindTexture(GL_TEXTURE_2D, id);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, w, h, 0,
+			GL_RED_INTEGER, GL_UNSIGNED_BYTE, &rowmajor[0]);
+		return id;
+	}
+
+	// Render the world once with the given debug mode into the bound FBO and
+	// read it back to rgb. Assumes program/uniforms/textures already set up
+	// except uDebug, which is (re)set here.
+	struct SurfaceUniforms
+	{
+		GLint uIndexTex;
+		GLint uOpacityTex;
+		GLint uHasOpacity;
+		GLint uSurfKind;
+		GLint uPlaneHeight;
+		float floorPlaneH;
+		float ceilPlaneH;
+	};
+
+	void RenderPass(GLuint prog, GLint uDebug, int debugMode,
+		const WorldMesh &mesh, const TArray<GLuint> &surfaceTex,
+		const TArray<GLuint> &surfaceOpac, const SurfaceUniforms &su)
+	{
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glUniform1i(uDebug, debugMode);
+
+		GLuint boundTex = 0xffffffffu;
+		GLuint boundOpac = 0xffffffffu;
+		int boundKind = -100;
+		for(unsigned int i = 0; i < mesh.surfaces.Size(); ++i)
+		{
+			const WorldSurface &surf = mesh.surfaces[i];
+			const GLuint tex = surfaceTex[i];
+			if(tex == 0)
+				continue;
+			if(tex != boundTex)
+			{
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_2D, tex);
+				glUniform1i(su.uIndexTex, 0);
+				boundTex = tex;
+			}
+			const GLuint opac = surfaceOpac[i];
+			if(opac != boundOpac)
+			{
+				glUniform1i(su.uHasOpacity, opac ? 1 : 0);
+				if(opac)
+				{
+					glActiveTexture(GL_TEXTURE3);
+					glBindTexture(GL_TEXTURE_2D, opac);
+					glUniform1i(su.uOpacityTex, 3);
+				}
+				boundOpac = opac;
+			}
+			// surf.kind: WSURF_Floor=0, WSURF_Ceiling=1, WSURF_Wall=2 maps
+			// directly onto the shader's uSurfKind convention.
+			if(surf.kind != boundKind)
+			{
+				glUniform1i(su.uSurfKind, surf.kind);
+				if(surf.kind == WSURF_Floor)
+					glUniform1f(su.uPlaneHeight, su.floorPlaneH);
+				else if(surf.kind == WSURF_Ceiling)
+					glUniform1f(su.uPlaneHeight, su.ceilPlaneH);
+				boundKind = surf.kind;
+			}
+			glDrawArrays(GL_TRIANGLES, (GLint)surf.firstVertex,
+				(GLsizei)surf.vertexCount);
+		}
+		glFinish();
 	}
 }
 
@@ -141,7 +450,7 @@ bool R_GLWorldCapture(const char *outPath)
 	if(!dev.Create(W, H, false, /*hidden=*/true, "EC7Wolf GL world"))
 		return false;
 
-	GLuint prog = GLShader::Build(kVert, kFrag, "world-debug");
+	GLuint prog = GLShader::Build(kVert, kFrag, "world-indexed");
 	if(!prog) { dev.Destroy(); return false; }
 
 	GLuint vao = 0, vbo = 0;
@@ -161,6 +470,51 @@ bool R_GLWorldCapture(const char *outPath)
 	glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, stride, (void*)(5*sizeof(float)));
 	glEnableVertexAttribArray(3);
 	glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, stride, (void*)(6*sizeof(float)));
+
+	// --- palette + colormap (shared) and per-surface index textures ---
+	GLuint paletteTex = CreatePaletteTexture();
+	int colormapRows = 0;
+	GLuint colormapTex = CreateColormapTexture(colormapRows);
+
+	// Cache index + opacity textures per FTexture so shared textures upload once.
+	TMap<int, GLuint> texCache;
+	TMap<int, GLuint> opacCache;
+	TArray<GLuint> surfaceTex(mesh.surfaces.Size());
+	TArray<GLuint> surfaceOpac(mesh.surfaces.Size());
+	surfaceTex.Resize(mesh.surfaces.Size());
+	surfaceOpac.Resize(mesh.surfaces.Size());
+	unsigned int uniqueTextures = 0, maskedTextures = 0;
+	for(unsigned int i = 0; i < mesh.surfaces.Size(); ++i)
+	{
+		const FTextureID id = mesh.surfaces[i].texture;
+		if(!id.isValid())
+		{
+			surfaceTex[i] = 0;
+			surfaceOpac[i] = 0;
+			continue;
+		}
+		const int key = id.GetIndex();
+		GLuint *cached = texCache.CheckKey(key);
+		if(cached)
+		{
+			surfaceTex[i] = *cached;
+			surfaceOpac[i] = *opacCache.CheckKey(key);
+			continue;
+		}
+		FTexture *ftex = TexMan(id);
+		GLuint idxTex = CreateIndexTextureFor(ftex);
+		GLuint opacTex = CreateOpacityTextureFor(ftex);
+		texCache[key] = idxTex;
+		opacCache[key] = opacTex;
+		surfaceTex[i] = idxTex;
+		surfaceOpac[i] = opacTex;
+		if(idxTex)
+			++uniqueTextures;
+		if(opacTex)
+			++maskedTextures;
+	}
+	Printf("GL world: uploaded %u unique index textures (%u with opacity).\n",
+		uniqueTextures, maskedTextures);
 
 	// Offscreen colour + depth target.
 	GLuint fbo = 0, colorTex = 0, depthRb = 0;
@@ -209,25 +563,68 @@ bool R_GLWorldCapture(const char *outPath)
 
 	Mat4 proj = Perspective(vFov, aspect, 0.02f, 256.0f);
 	Mat4 view = LookAt(eye, fwd, up);
-	Mat4 mvp = Multiply(proj, view);
+
+	// --- shading uniforms mirror the software renderer exactly ---
+	const int shade = LIGHT2SHADE(gLevelLight + r_extralight);
+	const bool corridor7 = IWad::CheckGameFilter("Corridor7");
+	const int cyclePhase = (int)((gamestate.TimeCount >> 3) & 7);
+
+	// Plane heights exactly as R_DrawPlane receives them: floor = viewz, ceiling
+	// = viewz + level depth. The shader takes their magnitude.
+	const float floorPlaneH = fabsf((float)viewz);
+	const float ceilPlaneH  = fabsf((float)(viewz +
+		(map->GetPlane(0).depth << FRACBITS)));
 
 	glViewport(0, 0, W, H);
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
 	glDisable(GL_CULL_FACE);	// keep both faces during bring-up
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	glUseProgram(prog);
-	glUniformMatrix4fv(glGetUniformLocation(prog, "uMVP"), 1, GL_FALSE, mvp.m);
+	glUniformMatrix4fv(glGetUniformLocation(prog, "uProj"), 1, GL_FALSE, proj.m);
+	glUniformMatrix4fv(glGetUniformLocation(prog, "uView"), 1, GL_FALSE, view.m);
+	glUniform1f(glGetUniformLocation(prog, "uDepthVis"), (float)r_depthvisibility);
+	glUniform1f(glGetUniformLocation(prog, "uHeightNum"), (float)heightnumerator);
+	glUniform1f(glGetUniformLocation(prog, "uShade"), (float)shade);
+	glUniform1f(glGetUniformLocation(prog, "uMaxLightVis"), (float)gLevelMaxLightVis);
+	glUniform1i(glGetUniformLocation(prog, "uNumColormaps"), colormapRows);
+	glUniform1i(glGetUniformLocation(prog, "uCyclePhase"), cyclePhase);
+	glUniform1i(glGetUniformLocation(prog, "uRemap15"), (int)GPalette.Remap[15]);
+	glUniform1i(glGetUniformLocation(prog, "uRemap254"), (int)GPalette.Remap[254]);
+	glUniform1i(glGetUniformLocation(prog, "uRemap208"), (int)GPalette.Remap[208]);
+	glUniform1i(glGetUniformLocation(prog, "uRemap239"), (int)GPalette.Remap[239]);
+	glUniform1i(glGetUniformLocation(prog, "uCorridor7"), corridor7 ? 1 : 0);
+	glUniform1i(glGetUniformLocation(prog, "uExtraLight"), r_extralight);
+	glUniform1i(glGetUniformLocation(prog, "uViewW"), W);
+	glUniform1i(glGetUniformLocation(prog, "uDither"), 1);
+	glUniform1f(glGetUniformLocation(prog, "uHorizon"), (float)H * 0.5f);
+
+	SurfaceUniforms su;
+	su.uIndexTex    = glGetUniformLocation(prog, "uIndexTex");
+	su.uOpacityTex  = glGetUniformLocation(prog, "uOpacityTex");
+	su.uHasOpacity  = glGetUniformLocation(prog, "uHasOpacity");
+	su.uSurfKind    = glGetUniformLocation(prog, "uSurfKind");
+	su.uPlaneHeight = glGetUniformLocation(prog, "uPlaneHeight");
+	su.floorPlaneH  = floorPlaneH;
+	su.ceilPlaneH   = ceilPlaneH;
+	const GLint uDebug = glGetUniformLocation(prog, "uDebug");
+
+	// Palette (unit 1) and colormap (unit 2) are shared across every surface.
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, paletteTex);
+	glUniform1i(glGetUniformLocation(prog, "uPaletteTex"), 1);
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, colormapTex);
+	glUniform1i(glGetUniformLocation(prog, "uColormapTex"), 2);
+
 	glBindVertexArray(vao);
-	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)mesh.vertices.Size());
-	glFinish();
 
 	unsigned char *rgb = new unsigned char[(size_t)W * H * 3];
+
+	// Pass 1: full-fidelity colour.
+	RenderPass(prog, uDebug, 0, mesh, surfaceTex, surfaceOpac, su);
 	dev.ReadPixelsRGB(rgb, W, H);
 
-	// Diagnostic: how much of the frame is non-background.
 	size_t nonBg = 0;
 	for(int i = 0; i < W * H; ++i)
 		if(rgb[i*3] || rgb[i*3+1] || rgb[i*3+2]) ++nonBg;
@@ -240,7 +637,31 @@ bool R_GLWorldCapture(const char *outPath)
 	if(wrote)
 		Printf("GL world: wrote %s\n", outPath);
 
+	// Pass 2: shade-row debug visualization (exit-gate requirement).
+	if(outPath)
+	{
+		RenderPass(prog, uDebug, 1, mesh, surfaceTex, surfaceOpac, su);
+		dev.ReadPixelsRGB(rgb, W, H);
+		FString dbg;
+		dbg.Format("%s.shaderow.ppm", outPath);
+		if(WritePPM(dbg.GetChars(), rgb, W, H))
+			Printf("GL world: wrote %s\n", dbg.GetChars());
+	}
+
 	delete[] rgb;
+
+	// Cleanup.
+	TMapIterator<int, GLuint> it(texCache);
+	TMap<int, GLuint>::Pair *pair;
+	while(it.NextPair(pair))
+		if(pair->Value)
+			glDeleteTextures(1, &pair->Value);
+	TMapIterator<int, GLuint> ito(opacCache);
+	while(ito.NextPair(pair))
+		if(pair->Value)
+			glDeleteTextures(1, &pair->Value);
+	glDeleteTextures(1, &paletteTex);
+	glDeleteTextures(1, &colormapTex);
 	glDeleteRenderbuffers(1, &depthRb);
 	glDeleteTextures(1, &colorTex);
 	glDeleteFramebuffers(1, &fbo);

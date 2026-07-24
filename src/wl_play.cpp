@@ -1156,6 +1156,8 @@ void PlayFrame()
 	if(tics)
 		UpdatePaletteShifts ();
 
+	Capture::ApplyPaletteOverride(); // opt-in capture flash override (render test)
+
 	// Interpolate actor/camera transforms for this frame, render, then restore
 	// the authoritative simulation state. Apply/Restore are no-ops when
 	// interpolation is disabled, so this path is unchanged in that case.

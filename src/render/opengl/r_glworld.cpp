@@ -1484,12 +1484,25 @@ namespace
 
 	void UpdateLivePalette()
 	{
+		// The software renderer resolves every on-screen index through the
+		// *effective* palette at scanout: the working palette (which the
+		// Corridor 7 visor/infrared/electric modes rewrite in place via
+		// V_SetCorridor7PaletteMode) blended with the current full-screen flash
+		// (damage/bonus/whiteshift/fade, driven through V_SetBlend). Upload that
+		// same palette so full-screen effects appear under GL. GetFlashedPalette
+		// = GetPalette() folded with Flash/FlashAmount, exactly as the paletted
+		// scanout path computes it. (Gamma is applied by neither GL path.)
+		PalEntry pal[256];
+		if(screen != NULL)
+			screen->GetFlashedPalette(pal);
+		else
+			memcpy(pal, GPalette.BaseColors, sizeof(pal));
 		unsigned char rgb[256 * 3];
 		for(int i = 0; i < 256; ++i)
 		{
-			rgb[i*3+0] = GPalette.BaseColors[i].r;
-			rgb[i*3+1] = GPalette.BaseColors[i].g;
-			rgb[i*3+2] = GPalette.BaseColors[i].b;
+			rgb[i*3+0] = pal[i].r;
+			rgb[i*3+1] = pal[i].g;
+			rgb[i*3+2] = pal[i].b;
 		}
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D, gLive.paletteTex);
@@ -1532,6 +1545,12 @@ namespace
 			gLive.haveWorld = false;
 			return;
 		}
+
+		// The world is resolved to RGB inside the FBO here, before the present
+		// path runs, so refresh the palette texture with this frame's effective
+		// (flashed / C7-mode) palette now -- otherwise the world would bake with
+		// the previous frame's palette and full-screen effects would miss it.
+		UpdateLivePalette();
 
 		glBindFramebuffer(GL_FRAMEBUFFER, gLive.worldFbo);
 		glViewport(0, 0, vw, vh);

@@ -26,6 +26,9 @@
 //   --capture-open-doors N  Force every door to slide amount N (0..65535) each
 //                           tic, so a mid-slide door can be compared between the
 //                           software and GL renderers without scripted input.
+//   --capture-blend R G B A Force a full-screen palette flash (0..255 each, alpha
+//                           0..256) so a flashed frame can be captured to verify
+//                           the GL renderer applies full-screen palette effects.
 //
 // ===========================================================================
 
@@ -48,6 +51,12 @@ namespace Capture
 	// up by both the software render and the GL interpolation snapshots. No-op
 	// unless an override switch was supplied.
 	void PreTic();
+
+	// Force a full-screen palette blend (--capture-blend R G B A) just before the
+	// scene is rendered, after the gameplay palette shifts have run so it is not
+	// clobbered. Lets a flashed frame be captured deterministically to prove the
+	// GL renderer applies full-screen palette effects. No-op unless supplied.
+	void ApplyPaletteOverride();
 
 	// Fold this simulation tic's deterministic state into the running checksum.
 	// Call exactly once per executed 70 Hz tic, after the tic is simulated.

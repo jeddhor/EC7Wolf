@@ -60,6 +60,9 @@ namespace
 	int      g_pushAmount     = 0;       // forced push amount 0..64
 	MapSpot  g_pushOrigin      = NULL;   // synthetic pushwall origin (chosen once)
 
+	bool     g_haveBlend      = false;   // --capture-blend full-screen flash override
+	int      g_blendR = 0, g_blendG = 0, g_blendB = 0, g_blendA = 0;
+
 	// Running state.
 	uint64_t g_ticCount       = 0;
 	uint64_t g_frameCount     = 0;
@@ -224,6 +227,17 @@ void ParseArgs(int argc, char **argv)
 			g_havePush = true;
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-blend") == 0 && i + 4 < argc)
+		{
+			g_blendR = atoi(argv[++i]) & 0xFF;
+			g_blendG = atoi(argv[++i]) & 0xFF;
+			g_blendB = atoi(argv[++i]) & 0xFF;
+			g_blendA = atoi(argv[++i]);
+			if(g_blendA < 0)   g_blendA = 0;
+			if(g_blendA > 256) g_blendA = 256;
+			g_haveBlend = true;
+			g_armed = true;
+		}
 	}
 
 	if(g_captureFile.IsEmpty())
@@ -359,6 +373,19 @@ void PreTic()
 		if(g_pushOrigin != NULL)
 			g_pushOrigin->pushAmount = (unsigned int)g_pushAmount;
 	}
+}
+
+void ApplyPaletteOverride()
+{
+	if(!g_haveBlend)
+		return;
+
+	// Force the full-screen flash after UpdatePaletteShifts has run for this
+	// frame (so gameplay does not clobber it) and before the scene is rendered.
+	// Both renderers read this through the framebuffer's flash: the software
+	// scanout blends it into the palette, and the GL path uploads
+	// GetFlashedPalette() to its palette texture.
+	V_ForceBlend(g_blendR, g_blendG, g_blendB, g_blendA);
 }
 
 void PerTic()

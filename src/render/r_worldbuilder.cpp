@@ -34,17 +34,21 @@ namespace
 		float cx, float cy, float cz,
 		float dx, float dy, float dz,
 		const FTextureID &tex, int kind, int side, float shade,
-		int slideStyle = 0, unsigned int slideAmount = 0)
+		int slideStyle = 0, unsigned int slideAmount = 0, bool flipU = false)
 	{
 		const unsigned int first = mesh.vertices.Size();
 		const float texKey = (float)(tex.isValid() ? tex.GetIndex() : 0);
 
 		// Two triangles: a,b,c and a,c,d. UVs map the quad corners to [0,1].
+		// flipU mirrors the horizontal texture axis (corner U 0<->1) for faces
+		// whose winding runs opposite the software raycaster's texture column.
 		WorldVertex v[6];
 		const float px[6] = { ax, bx, cx, ax, cx, dx };
 		const float py[6] = { ay, by, cy, ay, cy, dy };
 		const float pz[6] = { az, bz, cz, az, cz, dz };
-		const float uu[6] = { 0,  1,  1,  0,  1,  0 };
+		const float uuN[6] = { 0,  1,  1,  0,  1,  0 };
+		const float uuF[6] = { 1,  0,  0,  1,  0,  1 };
+		const float *uu = flipU ? uuF : uuN;
 		const float vv[6] = { 1,  1,  0,  1,  0,  0 };
 		for(int i = 0; i < 6; ++i)
 		{
@@ -103,16 +107,18 @@ namespace
 		switch(side)
 		{
 			case MapTile::East:	// +X face at x+1
+				// East/West faces run opposite the raycaster's texture column
+				// (it flips texture-X when xtilestep==-1), so mirror U to match.
 				PushQuad(out,
 					bx+1, by,   0,  bx+1, by+1, 0,
 					bx+1, by+1, 1,  bx+1, by,   1,
-					tex, kind, side, sh);
+					tex, kind, side, sh, 0, 0, true);
 				break;
 			case MapTile::West:	// -X face at x
 				PushQuad(out,
 					bx, by+1, 0,  bx, by,   0,
 					bx, by,   1,  bx, by+1, 1,
-					tex, kind, side, sh);
+					tex, kind, side, sh, 0, 0, true);
 				break;
 			case MapTile::North:	// +Y face at y+1
 				PushQuad(out,

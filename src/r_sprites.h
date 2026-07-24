@@ -52,6 +52,25 @@ void R_GetSpriteHitlist(BYTE* hitlist);
 void R_InitSprites();
 void R_LoadSprite(const FString &name);
 
+// Backend-neutral sprite selection for the GPU renderer (Phase 9). Reproduces
+// the frame / rotation / mirror selection and the Corridor 7 visibility gating
+// that ScaleSprite() and Scale3DSprite() perform, without touching the software
+// scan-line scaler. The world builder turns the result into a billboard quad and
+// the GL backend shades it. Returns false when the actor must not be drawn (no
+// sprite, no frame, null texture, or visor-gated out this instant).
+//
+// CalcRotate() reads actor->viewx, so the caller must run TransformActor() on the
+// actor (to populate viewx) before calling this.
+struct SpriteRenderInfo
+{
+	FTexture *tex;			// selected rotation frame texture (never NULL on true)
+	bool      flip;			// horizontal mirror for this rotation
+	bool      fullbright;	// FL_BRIGHT or frame->fullbright: ignore distance shade
+	bool      worldAligned;	// FL_BILLBOARD: the sprite plane lies along actor->angle
+	bool      laserBarrier;	// Corridor 7 infrared laser-barrier dissolve sprite
+};
+bool R_GetSpriteRenderInfo(AActor *actor, SpriteRenderInfo &info);
+
 void ScaleSprite(AActor *actor, int xcenter, const Frame *frame, unsigned height);
 void Scale3DSprite(AActor *actor, const Frame *frame, unsigned height);
 void R_DrawPlayerSprite(AActor *actor, const Frame *frame, fixed offsetX, fixed offsetY,

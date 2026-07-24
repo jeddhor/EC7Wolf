@@ -22,6 +22,7 @@
 #include "render/opengl/r_glshader.h"
 #include "render/r_worldbuilder.h"
 #include "render/r_dynamicwalls.h"
+#include "render/r_interpolation.h"
 #include "wl_def.h"
 #include "zdoomsupport.h"
 #include "wl_main.h"
@@ -36,12 +37,18 @@
 #include "tarray.h"
 #include "textures/textures.h"
 #include "v_palette.h"
+#include "colormatcher.h"
 #include "r_data/colormaps.h"
 
 // Distance-shade inputs owned by the software renderer.
 extern int r_extralight;
 extern fixed viewz;
 extern int viewshift;
+
+// Recomputes viewx/viewy/viewsin/viewcos from the current camera transform
+// (no raycast); called after re-applying interpolation so the sprite builder's
+// view basis matches this frame's interpolated camera. Defined in wl_draw.cpp.
+void CalcViewVariables();
 
 namespace
 {
@@ -156,6 +163,11 @@ namespace
 		"uniform int   uSlide;\n"           // 1 = sliding door leaf
 		"uniform int   uSlideStyle;\n"      // SLIDE_Normal/Split/Invert
 		"uniform float uSlideAmount;\n"     // 0 closed .. 65535 fully open
+		"uniform int   uSprite;\n"          // 1 = billboard actor sprite
+		"uniform int   uSpriteFullbright;\n"// 1 = sprite ignores distance shade
+		"uniform int   uSpriteLaser;\n"     // 1 = C7 infrared laser-barrier dissolve
+		"uniform int   uPhase;\n"           // gamestate.TimeCount>>3 (cycle/dissolve)
+		"uniform int   uLaserColor;\n"      // physical index for lit laser texels
 		"uniform int   uDebug;\n"           // 0 normal, 1 shade-row visualization
 		"const float FRACUNIT = 65536.0;\n"
 		"const float MINZ = 8192.0;\n"      // 2048*4
@@ -163,6 +175,15 @@ namespace
 		"    int m[16] = int[16](0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5);\n"
 		"    int i = (p.y & 3)*4 + (p.x & 3);\n"
 		"    return (float(m[i]) + 0.5) / 16.0;\n"
+		"}\n"
+		// Corridor 7 infrared laser-barrier dissolve, mirroring C7LaserDissolveLit:\n"
+		"// a hashed on/off mask over 8-texel vertical blocks that crawls with the\n"
+		"// game clock, so each rod reads as moving dashed energy segments.\n"
+		"bool c7LaserLit(ivec2 t, int phase){\n"
+		"    uint u = uint(t.x); uint v = uint(t.y);\n"
+		"    uint h = u*73856093u ^ (v>>3u)*19349663u ^ uint(phase)*83492791u;\n"
+		"    h ^= h >> 13u; h *= 0x9E3779B1u; h ^= h >> 16u;\n"
+		"    return (h % 3u) != 0u;\n"
 		"}\n"
 		"void main(){\n"
 		"    // Door-leaf slide: reproduce the software CheckSlidePass /\n"
@@ -196,6 +217,15 @@ namespace
 		"        if(texelFetch(uOpacityTex, texel, 0).r == 0u) discard;\n"
 		"    } else if(uMasked == 1 && idx == uMaskColor){\n"
 		"        discard;\n"
+		"    } else if(uSprite == 1 && idx == 0){\n"
+		"        discard;\n"   // sprite silhouette: raw index 0 is transparent
+		"    }\n"
+		"    // Corridor 7 laser barrier: within the silhouette, paint animated\n"
+		"    // bright energy where the dissolve is lit and leave the rest clear.\n"
+		"    if(uSprite == 1 && uSpriteLaser == 1){\n"
+		"        if(!c7LaserLit(texel, uPhase)) discard;\n"
+		"        vec3 lc = texelFetch(uPaletteTex, ivec2(uLaserColor,0), 0).rgb;\n"
+		"        fragColor = vec4(lc, 1.0); return;\n"
 		"    }\n"
 		"    // Colour-cycle + full-bright are wall-only in the software renderer\n"
 		"    // (ShadeWallColor); planes draw c7PlaneShades[c] with neither.\n"
@@ -240,10 +270,13 @@ namespace
 		"    }\n"
 		"    // Corridor 7 full-bright reserved indices ignore distance shading\n"
 		"    // (walls only, matching ShadeWallColor).\n"
-		"    bool fullbright = uCorridor7 == 1 && isWall &&\n"
+		"    bool fullbright = uCorridor7 == 1 && isWall && uSprite == 0 &&\n"
 		"        (idx == uRemap15 || idx == uRemap254 ||\n"
 		"        (idx >= uRemap208 && idx <= uRemap239));\n"
 		"    if(fullbright) shadeRow = 0;\n"
+		"    // A full-bright sprite (FL_BRIGHT / frame->fullbright) ignores the\n"
+		"    // distance shade entirely, matching ScaleSprite's colormap=Maps path.\n"
+		"    if(uSprite == 1 && uSpriteFullbright == 1) shadeRow = 0;\n"
 		"    shadeRow = clamp(shadeRow, 0, uNumColormaps - 1);\n"
 		"    if(uDebug == 1){\n"
 		"        float g = float(shadeRow) / float(uNumColormaps - 1);\n"
@@ -402,6 +435,9 @@ namespace
 		GLint uSlide;
 		GLint uSlideStyle;
 		GLint uSlideAmount;
+		GLint uSprite;
+		GLint uSpriteFullbright;
+		GLint uSpriteLaser;
 		float floorPlaneH;
 		float ceilPlaneH;
 	};
@@ -429,6 +465,9 @@ namespace
 		GLuint boundOpac = 0xffffffffu;
 		int boundKind = -100;
 		int boundMasked = -100;
+		int boundSprite = -100;
+		int boundSpriteFb = -100;
+		int boundSpriteLaser = -100;
 		int boundSlideStyle = -100;
 		unsigned int boundSlideAmt = 0xffffffffu;
 		for(unsigned int i = 0; i < mesh.surfaces.Size(); ++i)
@@ -456,12 +495,15 @@ namespace
 				}
 				boundOpac = opac;
 			}
-			// Door leaves and masked walls are shaded as walls (perpendicular
-			// distance, C7 cycle / full-bright); both alpha-test the index-255
-			// colour key, and a door leaf additionally runs the slide.
+			// Door leaves, masked walls, and sprites all shade as walls
+			// (perpendicular distance, C7 cycle). Walls/doors/masked alpha-test the
+			// index-255 colour key; sprites key on raw index 0 instead. A door leaf
+			// additionally runs the slide.
 			const bool isDoor = surf.kind == WSURF_DoorLeaf;
 			const bool isMasked = surf.kind == WSURF_Masked;
-			const int shaderKind = (isDoor || isMasked) ? WSURF_Wall : surf.kind;
+			const bool isSprite = surf.kind == WSURF_Sprite;
+			const int shaderKind =
+				(isDoor || isMasked || isSprite) ? WSURF_Wall : surf.kind;
 			if(shaderKind != boundKind)
 			{
 				glUniform1i(su.uSurfKind, shaderKind);
@@ -476,6 +518,24 @@ namespace
 			{
 				glUniform1i(su.uMasked, wantMasked);
 				boundMasked = wantMasked;
+			}
+			const int wantSprite = isSprite ? 1 : 0;
+			if(wantSprite != boundSprite)
+			{
+				glUniform1i(su.uSprite, wantSprite);
+				boundSprite = wantSprite;
+			}
+			const int wantSpriteFb = (isSprite && surf.fullbright) ? 1 : 0;
+			if(wantSpriteFb != boundSpriteFb)
+			{
+				glUniform1i(su.uSpriteFullbright, wantSpriteFb);
+				boundSpriteFb = wantSpriteFb;
+			}
+			const int wantSpriteLaser = (isSprite && surf.laser) ? 1 : 0;
+			if(wantSpriteLaser != boundSpriteLaser)
+			{
+				glUniform1i(su.uSpriteLaser, wantSpriteLaser);
+				boundSpriteLaser = wantSpriteLaser;
 			}
 			glUniform1i(su.uSlide, isDoor ? 1 : 0);
 			if(isDoor && (surf.slideStyle != boundSlideStyle ||
@@ -578,14 +638,38 @@ bool R_GLWorldCapture(const char *outPath)
 	WorldBuilder::BuildDynamic(map, dynMesh, alpha);
 	WorldMesh maskedMesh;
 	WorldBuilder::BuildMasked(map, maskedMesh);
+
+	// Actor sprites and the camera are drawn at their interpolated sub-tic
+	// transform, exactly as the software frame did: apply the interpolation, refresh
+	// the view basis (viewx/viewy/viewsin/viewcos) so the billboard builder is
+	// consistent with the interpolated camera, build the sprite billboards, capture
+	// the camera transform, then restore authoritative simulation state. Apply /
+	// Restore are no-ops when interpolation is disabled, so this is unchanged there
+	// and the determinism gate (which checksums the simulation, not the render)
+	// stays green.
+	Interpolation::Apply(alpha);
+	CalcViewVariables();
+	WorldMesh spriteMesh;
+	WorldBuilder::BuildSprites(map, spriteMesh);
+	AActor *cam = players[ConsolePlayer].camera
+		? players[ConsolePlayer].camera : players[ConsolePlayer].mo;
+	const fixed camXFixed = cam->x;
+	const fixed camYFixed = cam->y;
+	const angle_t camAngle = cam->angle;
+	const int32_t camPitch = (int32_t)cam->pitch;
+	const float camFOV = players[ConsolePlayer].FOV;
+	Interpolation::Restore();
+
 	Printf("GL world: static walls=%u floors=%u ceilings=%u verts=%u; "
-		"dynamic faces=%u verts=%u (alpha=%.2f); masked faces=%u verts=%u\n",
+		"dynamic faces=%u verts=%u (alpha=%.2f); masked faces=%u verts=%u; "
+		"sprite faces=%u verts=%u\n",
 		mesh.wallFaces, mesh.floorTiles, mesh.ceilingTiles,
 		(unsigned)mesh.vertices.Size(), dynMesh.wallFaces,
 		(unsigned)dynMesh.vertices.Size(), alpha,
-		maskedMesh.wallFaces, (unsigned)maskedMesh.vertices.Size());
+		maskedMesh.wallFaces, (unsigned)maskedMesh.vertices.Size(),
+		spriteMesh.wallFaces, (unsigned)spriteMesh.vertices.Size());
 	if(mesh.vertices.Size() == 0 && dynMesh.vertices.Size() == 0 &&
-		maskedMesh.vertices.Size() == 0)
+		maskedMesh.vertices.Size() == 0 && spriteMesh.vertices.Size() == 0)
 		return false;
 
 	GLDevice dev;
@@ -605,12 +689,14 @@ bool R_GLWorldCapture(const char *outPath)
 	TMap<int, GLuint> texCache;
 	TMap<int, GLuint> opacCache;
 	unsigned int uniqueTextures = 0, maskedTextures = 0;
-	MeshGL staticGL, dynGL, maskedGL;
+	MeshGL staticGL, dynGL, maskedGL, spriteGL;
 	UploadMesh(mesh, texCache, opacCache, staticGL,
 		&uniqueTextures, &maskedTextures);
 	UploadMesh(dynMesh, texCache, opacCache, dynGL,
 		&uniqueTextures, &maskedTextures);
 	UploadMesh(maskedMesh, texCache, opacCache, maskedGL,
+		&uniqueTextures, &maskedTextures);
+	UploadMesh(spriteMesh, texCache, opacCache, spriteGL,
 		&uniqueTextures, &maskedTextures);
 	Printf("GL world: uploaded %u unique index textures (%u with opacity).\n",
 		uniqueTextures, maskedTextures);
@@ -636,14 +722,12 @@ bool R_GLWorldCapture(const char *outPath)
 		return false;
 	}
 
-	// --- camera calibrated to ECWolf ---
-	AActor *cam = players[ConsolePlayer].camera
-		? players[ConsolePlayer].camera : players[ConsolePlayer].mo;
-	const float camX = (float)cam->x / (float)TILEGLOBAL;
-	const float camY = (float)cam->y / (float)TILEGLOBAL;
+	// --- camera calibrated to ECWolf --- (interpolated transform captured above)
+	const float camX = (float)camXFixed / (float)TILEGLOBAL;
+	const float camY = (float)camYFixed / (float)TILEGLOBAL;
 	const float camZ = 0.5f;	// eye at mid-wall height
-	const float yaw = (float)((double)cam->angle / 4294967296.0 * 2.0 * kPi);
-	const float pitch = (float)((double)(int32_t)cam->pitch / 4294967296.0 * 2.0 * kPi);
+	const float yaw = (float)((double)camAngle / 4294967296.0 * 2.0 * kPi);
+	const float pitch = (float)((double)camPitch / 4294967296.0 * 2.0 * kPi);
 
 	// ECWolf view direction convention: (cos a, -sin a) in the XY plane.
 	float fwd[3] = {
@@ -654,8 +738,7 @@ bool R_GLWorldCapture(const char *outPath)
 	float up[3] = { 0.0f, 0.0f, 1.0f };
 	float eye[3] = { camX, camY, camZ };
 
-	const float hFovDeg = players[ConsolePlayer].FOV > 1.0f
-		? players[ConsolePlayer].FOV : 90.0f;
+	const float hFovDeg = camFOV > 1.0f ? camFOV : 90.0f;
 	const float aspect = (float)W / (float)H;
 	const float hFov = (float)(hFovDeg * kPi / 180.0);
 	const float vFov = 2.0f * atanf(tanf(hFov * 0.5f) / aspect);
@@ -698,6 +781,12 @@ bool R_GLWorldCapture(const char *outPath)
 	glUniform1i(glGetUniformLocation(prog, "uViewW"), W);
 	glUniform1i(glGetUniformLocation(prog, "uDither"), 1);
 	glUniform1f(glGetUniformLocation(prog, "uHorizon"), (float)H * 0.5f);
+	// Sprite colour-cycle / laser-dissolve clock and the lit-laser colour index
+	// (fullbright white, matching ScaleSprite's ColorMatcher.Pick(0xFF,0xFF,0xFF)).
+	glUniform1i(glGetUniformLocation(prog, "uPhase"),
+		(int)(gamestate.TimeCount >> 3));
+	glUniform1i(glGetUniformLocation(prog, "uLaserColor"),
+		(int)ColorMatcher.Pick(0xFF, 0xFF, 0xFF));
 
 	SurfaceUniforms su;
 	su.uIndexTex    = glGetUniformLocation(prog, "uIndexTex");
@@ -709,6 +798,9 @@ bool R_GLWorldCapture(const char *outPath)
 	su.uSlide       = glGetUniformLocation(prog, "uSlide");
 	su.uSlideStyle  = glGetUniformLocation(prog, "uSlideStyle");
 	su.uSlideAmount = glGetUniformLocation(prog, "uSlideAmount");
+	su.uSprite           = glGetUniformLocation(prog, "uSprite");
+	su.uSpriteFullbright = glGetUniformLocation(prog, "uSpriteFullbright");
+	su.uSpriteLaser      = glGetUniformLocation(prog, "uSpriteLaser");
 	su.floorPlaneH  = floorPlaneH;
 	su.ceilPlaneH   = ceilPlaneH;
 	const GLint uDebug = glGetUniformLocation(prog, "uDebug");
@@ -738,6 +830,11 @@ bool R_GLWorldCapture(const char *outPath)
 	glPolygonOffset(-1.0f, -1.0f);
 	RenderMesh(maskedMesh, maskedGL, su);
 	glDisable(GL_POLYGON_OFFSET_FILL);
+	// Sprite billboards last: they share the world depth buffer (walls and masked
+	// panes occlude them; their own opaque texels write depth so nearer sprites win
+	// regardless of draw order) and discard transparent/unlit texels so geometry
+	// behind them -- including through glass -- shows through.
+	RenderMesh(spriteMesh, spriteGL, su);
 	glFinish();
 	dev.ReadPixelsRGB(rgb, W, H);
 
@@ -764,6 +861,7 @@ bool R_GLWorldCapture(const char *outPath)
 		glPolygonOffset(-1.0f, -1.0f);
 		RenderMesh(maskedMesh, maskedGL, su);
 		glDisable(GL_POLYGON_OFFSET_FILL);
+		RenderMesh(spriteMesh, spriteGL, su);
 		glFinish();
 		dev.ReadPixelsRGB(rgb, W, H);
 		FString dbg;
@@ -792,6 +890,7 @@ bool R_GLWorldCapture(const char *outPath)
 	DestroyMesh(staticGL);
 	DestroyMesh(dynGL);
 	DestroyMesh(maskedGL);
+	DestroyMesh(spriteGL);
 	glDeleteProgram(prog);
 	dev.Destroy();
 

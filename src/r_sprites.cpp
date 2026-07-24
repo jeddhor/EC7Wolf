@@ -555,6 +555,43 @@ void ScaleSprite(AActor *actor, int xcenter, const Frame *frame, unsigned height
 	}
 }
 
+// Phase 9: select the sprite frame/rotation/mirror for the GPU renderer exactly
+// as ScaleSprite()/Scale3DSprite() do, and apply the same Corridor 7 visibility
+// gate, but produce no pixels. The world builder billboards the chosen texture.
+bool R_GetSpriteRenderInfo(AActor *actor, SpriteRenderInfo &info)
+{
+	if(actor == NULL || actor->sprite == SPR_NONE ||
+		loadedSprites[actor->sprite].numFrames == 0)
+		return false;
+	if(!C7VisorCanSeeActor(actor))
+		return false;
+
+	const Frame *frame = actor->state;
+	if(frame == NULL)
+		return false;
+
+	const Sprite &spr = spriteFrames[loadedSprites[actor->sprite].frames+frame->frame];
+	FTexture *tex;
+	bool flip = false;
+	if(spr.rotations == 0)
+		tex = TexMan[spr.texture[0]];
+	else
+	{
+		const unsigned int rot = CalcRotate(actor);
+		tex = TexMan[spr.texture[rot]];
+		flip = (spr.mirror>>rot)&1;
+	}
+	if(tex == NULL)
+		return false;
+
+	info.tex = tex;
+	info.flip = flip;
+	info.fullbright = (actor->flags & FL_BRIGHT) || frame->fullbright;
+	info.worldAligned = (actor->flags & FL_BILLBOARD) != 0;
+	info.laserBarrier = Corridor7IsLaserBarrierActor(actor);
+	return true;
+}
+
 void Scale3DSpriter(AActor *actor, int x1, int x2, FTexture *tex, bool flip, const Frame *frame, fixed ny1, fixed ny2, fixed nx1, fixed nx2)
 {
 	if(actor->sprite == SPR_NONE || loadedSprites[actor->sprite].numFrames == 0)

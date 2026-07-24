@@ -51,6 +51,7 @@ mesh_line=$(grep "GL world: static" "$log" | head -n1 || true)
 walls=$(printf '%s' "$mesh_line" | sed -n 's/.*walls=\([0-9]*\).*/\1/p')
 dynfaces=$(printf '%s' "$mesh_line" | sed -n 's/.*dynamic faces=\([0-9]*\).*/\1/p')
 maskedfaces=$(printf '%s' "$mesh_line" | sed -n 's/.*masked faces=\([0-9]*\).*/\1/p')
+spritefaces=$(printf '%s' "$mesh_line" | sed -n 's/.*sprite faces=\([0-9]*\).*/\1/p')
 opacitytex=$(grep "with opacity" "$log" | head -n1 | \
 	sed -n 's/.*(\([0-9]*\) with opacity).*/\1/p')
 covered=$(grep "GL world: rendered" "$log" | head -n1 | \
@@ -89,6 +90,17 @@ if [ "$map" = "MAP01" ]; then
 	fi
 	printf 'PASS: GL masked walls built (%s faces, %s textures with opacity masks).\n' \
 		"$maskedfaces" "$opacitytex"
+
+	# Phase 9: actor sprites are billboarded into a depth-tested mesh. Corridor 7
+	# MAP01 spawns facing the two white gate posts (C010 statics) plus flanking
+	# statics, so this view must produce sprite geometry; a regression that dropped
+	# sprite selection or the visibility test would take this to zero faces.
+	if [ -z "$spritefaces" ] || [ "$spritefaces" -le 0 ] 2>/dev/null; then
+		printf 'FAIL: no actor-sprite geometry built on MAP01 (sprite faces=%s); see %s\n' \
+			"${spritefaces:-none}" "$log" >&2
+		exit 1
+	fi
+	printf 'PASS: GL actor sprites built (%s billboard faces).\n' "$spritefaces"
 fi
 
 # Phase 7: prove dynamic door geometry renders and responds to the slide. Render

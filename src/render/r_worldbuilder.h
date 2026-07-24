@@ -36,7 +36,8 @@ enum WorldSurfaceKind
 	WSURF_Ceiling,
 	WSURF_Wall,
 	WSURF_DoorLeaf,		// sliding door leaf: wall-shaded + shader slide (Phase 7)
-	WSURF_Masked		// colour-keyed masked wall: wall-shaded + alpha test (Phase 8)
+	WSURF_Masked,		// colour-keyed masked wall: wall-shaded + alpha test (Phase 8)
+	WSURF_Sprite		// billboard actor sprite: distance-shaded, index-0 keyed (Phase 9)
 };
 
 // A run of vertices sharing a texture/kind, so the backend can bind the real
@@ -52,9 +53,13 @@ struct WorldSurface
 	// software CheckSlidePass()/SlideTextureOffset() along the quad's U axis.
 	int          slideStyle;	// SLIDE_Normal / SLIDE_Split / SLIDE_Invert
 	unsigned int slideAmount;	// 0 = closed .. 0xffff = fully open
+	// Sprite state (WSURF_Sprite only): full-bright ignores distance shade; a
+	// laser-barrier sprite is drawn as the animated infrared dissolve instead.
+	int          fullbright;	// 1 = FL_BRIGHT / frame->fullbright
+	int          laser;			// 1 = Corridor 7 laser-barrier dissolve sprite
 
 	WorldSurface() : firstVertex(0), vertexCount(0), kind(0), side(-1),
-		slideStyle(0), slideAmount(0) {}
+		slideStyle(0), slideAmount(0), fullbright(0), laser(0) {}
 };
 
 struct WorldMesh
@@ -94,6 +99,17 @@ namespace WorldBuilder
 	// the connected-glass merge, and are alpha-tested by the backend. Rebuilt each
 	// frame because force-field art animates with the game clock.
 	void BuildMasked(GameMap *gm, WorldMesh &out);
+
+	// Build billboard geometry for every visible actor sprite. Reproduces the
+	// software DrawScaleds() visibility test, TransformActor(), and the frame /
+	// rotation / mirror / visor selection, then emits one camera-facing quad per
+	// sprite (world-oriented along actor->angle for FL_BILLBOARD actors). Actor
+	// positions are read at their current (already interpolated by the caller)
+	// transform. The quads are index-0 alpha-tested and distance-shaded by the
+	// backend, sharing the world depth buffer so walls and masked panes occlude
+	// them correctly. Must run after the software view globals for this frame are
+	// current (viewx/viewy/viewsin/viewcos/scale/centerx and spot->visible).
+	void BuildSprites(GameMap *gm, WorldMesh &out);
 }
 
 #endif

@@ -35,7 +35,8 @@ enum WorldSurfaceKind
 	WSURF_Floor,
 	WSURF_Ceiling,
 	WSURF_Wall,
-	WSURF_DoorLeaf		// sliding door leaf: wall-shaded + shader slide (Phase 7)
+	WSURF_DoorLeaf,		// sliding door leaf: wall-shaded + shader slide (Phase 7)
+	WSURF_Masked		// colour-keyed masked wall: wall-shaded + alpha test (Phase 8)
 };
 
 // A run of vertices sharing a texture/kind, so the backend can bind the real
@@ -86,6 +87,13 @@ namespace WorldBuilder
 	// interpolation alpha. Door slide amounts and pushwall world positions are
 	// blended between the previous and current simulation tics via DynamicWalls.
 	void BuildDynamic(GameMap *gm, WorldMesh &out, float alpha);
+
+	// Build the masked (colour-keyed, see-through) wall geometry: glass, grates,
+	// fences, force fields, and opened animated-wall apertures. Faces are emitted
+	// at the tile boundaries (like a solid wall) but only on sides that survive
+	// the connected-glass merge, and are alpha-tested by the backend. Rebuilt each
+	// frame because force-field art animates with the game clock.
+	void BuildMasked(GameMap *gm, WorldMesh &out);
 }
 
 #endif

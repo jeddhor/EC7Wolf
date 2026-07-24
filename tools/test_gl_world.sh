@@ -47,10 +47,14 @@ set -e
 
 grep -iE "GL world: static|GL world: rendered" "$log" || true
 
-mesh_line=$(grep "GL world: static" "$log" || true)
+mesh_line=$(grep "GL world: static" "$log" | head -n1 || true)
 walls=$(printf '%s' "$mesh_line" | sed -n 's/.*walls=\([0-9]*\).*/\1/p')
 dynfaces=$(printf '%s' "$mesh_line" | sed -n 's/.*dynamic faces=\([0-9]*\).*/\1/p')
-covered=$(grep "GL world: rendered" "$log" | sed -n 's/.*, \([0-9.]*\)% covered.*/\1/p')
+maskedfaces=$(printf '%s' "$mesh_line" | sed -n 's/.*masked faces=\([0-9]*\).*/\1/p')
+opacitytex=$(grep "with opacity" "$log" | head -n1 | \
+	sed -n 's/.*(\([0-9]*\) with opacity).*/\1/p')
+covered=$(grep "GL world: rendered" "$log" | head -n1 | \
+	sed -n 's/.*, \([0-9.]*\)% covered.*/\1/p')
 
 if [ -z "$walls" ] || [ "$walls" -le 0 ] 2>/dev/null; then
 	printf 'FAIL: world mesh not built (see %s)\n' "$log" >&2
@@ -63,6 +67,29 @@ fi
 
 printf 'PASS: GL static world rendered (walls=%s, dynamic-faces=%s, coverage=%s%%).\n' \
 	"$walls" "${dynfaces:-0}" "${covered:-?}"
+
+# Phase 8: masked (colour-keyed, see-through) walls -- glass, grates, fences,
+# force fields -- are built into a separate alpha-tested mesh instead of the
+# opaque static wall mesh. Corridor 7 MAP01 spawns facing a corridor lined with
+# chain-link fences and diamond-grate panels, so this view must produce masked
+# geometry; a regression that rendered them opaque would drop the masked mesh to
+# zero faces.
+if [ "$map" = "MAP01" ]; then
+	if [ -z "$maskedfaces" ] || [ "$maskedfaces" -le 0 ] 2>/dev/null; then
+		printf 'FAIL: no masked-wall geometry built on MAP01 (masked faces=%s); see %s\n' \
+			"${maskedfaces:-none}" "$log" >&2
+		exit 1
+	fi
+	# At least one masked texture must carry an explicit opacity mask (the C7
+	# grate/fence FFlatTextures); the remainder alpha-test on the index-255 key.
+	if [ -z "$opacitytex" ] || [ "$opacitytex" -le 0 ] 2>/dev/null; then
+		printf 'FAIL: masked walls built but no opacity mask uploaded (%s); see %s\n' \
+			"${opacitytex:-none}" "$log" >&2
+		exit 1
+	fi
+	printf 'PASS: GL masked walls built (%s faces, %s textures with opacity masks).\n' \
+		"$maskedfaces" "$opacitytex"
+fi
 
 # Phase 7: prove dynamic door geometry renders and responds to the slide. Render
 # the same view with every door forced closed and forced open; the two GL images

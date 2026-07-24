@@ -134,6 +134,8 @@ namespace
 		"uniform sampler2D  uPaletteTex;\n"  // 256x1 RGB8
 		"uniform usampler2D uColormapTex;\n" // 256xNUMCOLORMAPS R8UI
 		"uniform int   uHasOpacity;\n"
+		"uniform int   uMasked;\n"        // 1 = colour-keyed masked wall / door leaf
+		"uniform int   uMaskColor;\n"     // physical index treated as transparent (Remap[255])
 		"uniform float uDepthVis;\n"
 		"uniform float uHeightNum;\n"
 		"uniform float uShade;\n"
@@ -184,11 +186,17 @@ namespace
 		"    ivec2 isz = textureSize(uIndexTex,0);\n"
 		"    ivec2 texel = ivec2(floor(uv * vec2(isz)));\n"
 		"    texel = ((texel % isz) + isz) % isz;\n"   // tile (repeat) within one cell
-		"    // Explicit per-texel opacity (C7 grate/fence walls); never write\n"
-		"    // transparent texels, matching the software postopacity test.\n"
-		"    if(uHasOpacity == 1 && texelFetch(uOpacityTex, texel, 0).r == 0u)\n"
-		"        discard;\n"
 		"    int idx = int(texelFetch(uIndexTex, texel, 0).r);\n"
+		"    // Masked-wall transparency, mirroring the software postopacity test:\n"
+		"    // an explicit per-column opacity buffer wins when present (C7 grate /\n"
+		"    // fence FFlatTextures); otherwise a masked wall (or door leaf) is keyed\n"
+		"    // on the index-255 remap colour. Never write a transparent texel, so\n"
+		"    // freshly rendered geometry behind the pane shows through.\n"
+		"    if(uHasOpacity == 1){\n"
+		"        if(texelFetch(uOpacityTex, texel, 0).r == 0u) discard;\n"
+		"    } else if(uMasked == 1 && idx == uMaskColor){\n"
+		"        discard;\n"
+		"    }\n"
 		"    // Colour-cycle + full-bright are wall-only in the software renderer\n"
 		"    // (ShadeWallColor); planes draw c7PlaneShades[c] with neither.\n"
 		"    bool isWall = uSurfKind == 2;\n"
@@ -388,6 +396,7 @@ namespace
 		GLint uIndexTex;
 		GLint uOpacityTex;
 		GLint uHasOpacity;
+		GLint uMasked;
 		GLint uSurfKind;
 		GLint uPlaneHeight;
 		GLint uSlide;
@@ -419,6 +428,7 @@ namespace
 		GLuint boundTex = 0xffffffffu;
 		GLuint boundOpac = 0xffffffffu;
 		int boundKind = -100;
+		int boundMasked = -100;
 		int boundSlideStyle = -100;
 		unsigned int boundSlideAmt = 0xffffffffu;
 		for(unsigned int i = 0; i < mesh.surfaces.Size(); ++i)
@@ -446,10 +456,12 @@ namespace
 				}
 				boundOpac = opac;
 			}
-			// A door leaf is shaded as a wall (perpendicular distance, C7 cycle /
-			// full-bright) but additionally runs the slide in the shader.
+			// Door leaves and masked walls are shaded as walls (perpendicular
+			// distance, C7 cycle / full-bright); both alpha-test the index-255
+			// colour key, and a door leaf additionally runs the slide.
 			const bool isDoor = surf.kind == WSURF_DoorLeaf;
-			const int shaderKind = isDoor ? WSURF_Wall : surf.kind;
+			const bool isMasked = surf.kind == WSURF_Masked;
+			const int shaderKind = (isDoor || isMasked) ? WSURF_Wall : surf.kind;
 			if(shaderKind != boundKind)
 			{
 				glUniform1i(su.uSurfKind, shaderKind);
@@ -458,6 +470,12 @@ namespace
 				else if(shaderKind == WSURF_Ceiling)
 					glUniform1f(su.uPlaneHeight, su.ceilPlaneH);
 				boundKind = shaderKind;
+			}
+			const int wantMasked = (isDoor || isMasked) ? 1 : 0;
+			if(wantMasked != boundMasked)
+			{
+				glUniform1i(su.uMasked, wantMasked);
+				boundMasked = wantMasked;
 			}
 			glUniform1i(su.uSlide, isDoor ? 1 : 0);
 			if(isDoor && (surf.slideStyle != boundSlideStyle ||
@@ -558,12 +576,16 @@ bool R_GLWorldCapture(const char *outPath)
 	WorldMesh dynMesh;
 	const float alpha = R_GetInterpolationAlpha();
 	WorldBuilder::BuildDynamic(map, dynMesh, alpha);
+	WorldMesh maskedMesh;
+	WorldBuilder::BuildMasked(map, maskedMesh);
 	Printf("GL world: static walls=%u floors=%u ceilings=%u verts=%u; "
-		"dynamic faces=%u verts=%u (alpha=%.2f)\n",
+		"dynamic faces=%u verts=%u (alpha=%.2f); masked faces=%u verts=%u\n",
 		mesh.wallFaces, mesh.floorTiles, mesh.ceilingTiles,
 		(unsigned)mesh.vertices.Size(), dynMesh.wallFaces,
-		(unsigned)dynMesh.vertices.Size(), alpha);
-	if(mesh.vertices.Size() == 0 && dynMesh.vertices.Size() == 0)
+		(unsigned)dynMesh.vertices.Size(), alpha,
+		maskedMesh.wallFaces, (unsigned)maskedMesh.vertices.Size());
+	if(mesh.vertices.Size() == 0 && dynMesh.vertices.Size() == 0 &&
+		maskedMesh.vertices.Size() == 0)
 		return false;
 
 	GLDevice dev;
@@ -583,10 +605,12 @@ bool R_GLWorldCapture(const char *outPath)
 	TMap<int, GLuint> texCache;
 	TMap<int, GLuint> opacCache;
 	unsigned int uniqueTextures = 0, maskedTextures = 0;
-	MeshGL staticGL, dynGL;
+	MeshGL staticGL, dynGL, maskedGL;
 	UploadMesh(mesh, texCache, opacCache, staticGL,
 		&uniqueTextures, &maskedTextures);
 	UploadMesh(dynMesh, texCache, opacCache, dynGL,
+		&uniqueTextures, &maskedTextures);
+	UploadMesh(maskedMesh, texCache, opacCache, maskedGL,
 		&uniqueTextures, &maskedTextures);
 	Printf("GL world: uploaded %u unique index textures (%u with opacity).\n",
 		uniqueTextures, maskedTextures);
@@ -669,6 +693,7 @@ bool R_GLWorldCapture(const char *outPath)
 	glUniform1i(glGetUniformLocation(prog, "uRemap208"), (int)GPalette.Remap[208]);
 	glUniform1i(glGetUniformLocation(prog, "uRemap239"), (int)GPalette.Remap[239]);
 	glUniform1i(glGetUniformLocation(prog, "uCorridor7"), corridor7 ? 1 : 0);
+	glUniform1i(glGetUniformLocation(prog, "uMaskColor"), (int)GPalette.Remap[255]);
 	glUniform1i(glGetUniformLocation(prog, "uExtraLight"), r_extralight);
 	glUniform1i(glGetUniformLocation(prog, "uViewW"), W);
 	glUniform1i(glGetUniformLocation(prog, "uDither"), 1);
@@ -678,6 +703,7 @@ bool R_GLWorldCapture(const char *outPath)
 	su.uIndexTex    = glGetUniformLocation(prog, "uIndexTex");
 	su.uOpacityTex  = glGetUniformLocation(prog, "uOpacityTex");
 	su.uHasOpacity  = glGetUniformLocation(prog, "uHasOpacity");
+	su.uMasked      = glGetUniformLocation(prog, "uMasked");
 	su.uSurfKind    = glGetUniformLocation(prog, "uSurfKind");
 	su.uPlaneHeight = glGetUniformLocation(prog, "uPlaneHeight");
 	su.uSlide       = glGetUniformLocation(prog, "uSlide");
@@ -704,6 +730,14 @@ bool R_GLWorldCapture(const char *outPath)
 	glUniform1i(uDebug, 0);
 	RenderMesh(mesh, staticGL, su);
 	RenderMesh(dynMesh, dynGL, su);
+	// Masked walls share the depth buffer and discard their transparent texels,
+	// so draw order does not affect correctness. A slight depth bias toward the
+	// viewer keeps a masked pane from z-fighting a coplanar opaque wall behind it
+	// (glass mounted on a solid wall).
+	glEnable(GL_POLYGON_OFFSET_FILL);
+	glPolygonOffset(-1.0f, -1.0f);
+	RenderMesh(maskedMesh, maskedGL, su);
+	glDisable(GL_POLYGON_OFFSET_FILL);
 	glFinish();
 	dev.ReadPixelsRGB(rgb, W, H);
 
@@ -726,6 +760,10 @@ bool R_GLWorldCapture(const char *outPath)
 		glUniform1i(uDebug, 1);
 		RenderMesh(mesh, staticGL, su);
 		RenderMesh(dynMesh, dynGL, su);
+		glEnable(GL_POLYGON_OFFSET_FILL);
+		glPolygonOffset(-1.0f, -1.0f);
+		RenderMesh(maskedMesh, maskedGL, su);
+		glDisable(GL_POLYGON_OFFSET_FILL);
 		glFinish();
 		dev.ReadPixelsRGB(rgb, W, H);
 		FString dbg;
@@ -753,6 +791,7 @@ bool R_GLWorldCapture(const char *outPath)
 	glDeleteFramebuffers(1, &fbo);
 	DestroyMesh(staticGL);
 	DestroyMesh(dynGL);
+	DestroyMesh(maskedGL);
 	glDeleteProgram(prog);
 	dev.Destroy();
 

@@ -7,8 +7,11 @@
 #include "render/r_worldbuilder.h"
 #include "render/r_dynamicwalls.h"
 #include "wl_def.h"
+#include "wl_game.h"
+#include "wl_iwad.h"
 #include "gamemap.h"
 #include "id_ca.h"
+#include "textures/textures.h"
 
 namespace
 {
@@ -88,11 +91,13 @@ namespace
 		}
 	}
 
-	// One solid wall face of a 1x1 cell whose base (min) corner is at (bx,by).
-	// The base is a float so a moving pushwall block can sit at a fractional
-	// position; static walls pass integer tile coordinates.
+	// One wall face of a 1x1 cell whose base (min) corner is at (bx,by). The base
+	// is a float so a moving pushwall block can sit at a fractional position;
+	// static walls pass integer tile coordinates. kind is WSURF_Wall for solid
+	// walls or WSURF_Masked for colour-keyed (alpha-tested) walls -- the geometry
+	// is identical; only the backend's transparency handling differs.
 	void PushWallFace(WorldMesh &out, int side, float bx, float by,
-		const FTextureID &tex)
+		const FTextureID &tex, int kind = WSURF_Wall)
 	{
 		const float sh = SideShade(side);
 		switch(side)
@@ -101,28 +106,123 @@ namespace
 				PushQuad(out,
 					bx+1, by,   0,  bx+1, by+1, 0,
 					bx+1, by+1, 1,  bx+1, by,   1,
-					tex, WSURF_Wall, side, sh);
+					tex, kind, side, sh);
 				break;
 			case MapTile::West:	// -X face at x
 				PushQuad(out,
 					bx, by+1, 0,  bx, by,   0,
 					bx, by,   1,  bx, by+1, 1,
-					tex, WSURF_Wall, side, sh);
+					tex, kind, side, sh);
 				break;
 			case MapTile::North:	// +Y face at y+1
 				PushQuad(out,
 					bx+1, by+1, 0,  bx, by+1, 0,
 					bx,   by+1, 1,  bx+1, by+1, 1,
-					tex, WSURF_Wall, side, sh);
+					tex, kind, side, sh);
 				break;
 			case MapTile::South:	// -Y face at y
 				PushQuad(out,
 					bx, by, 0,  bx+1, by, 0,
 					bx+1, by, 1,  bx, by, 1,
-					tex, WSURF_Wall, side, sh);
+					tex, kind, side, sh);
 				break;
 		}
 		++out.wallFaces;
+	}
+
+	// Resolve the texture actually drawn for a wall side this frame. Mirrors
+	// wl_draw.cpp's GetWallTexture: Corridor 7 force-field / animated walls
+	// (corridor7WallMarker 1..3) cycle through four "C7Wnnnn" frames selected by
+	// the game clock, so the barrier shimmers. Reading spot->texture[side]
+	// directly would freeze that animation, so every wall path resolves through
+	// here. Rebuilt each frame; a Phase 10 concern for static-mesh caching.
+	FTextureID ResolveWallTexture(MapSpot spot, int side)
+	{
+		FTextureID texture = spot->texture[side];
+		if(spot->corridor7WallMarker >= 1 && spot->corridor7WallMarker <= 3 &&
+			spot->corridor7WallID > 0 && spot->corridor7WallID <= 253)
+		{
+			const unsigned int base = spot->corridor7WallID-1;
+			const unsigned int frame =
+				((gamestate.TimeCount/5)+(spot->corridor7WallMarker-1))&3;
+			FString name;
+			name.Format("C7W%04u", base+frame);
+			const FTextureID animated =
+				TexMan.CheckForTexture(name, FTexture::TEX_Wall);
+			if(animated.isValid())
+				texture = animated;
+		}
+		return texture;
+	}
+
+	// --- masked (colour-keyed) wall classification, mirroring wl_draw.cpp ---
+
+	bool MaskedRaw(MapSpot s)
+	{
+		return s && s->tile && (s->maskedWallType || s->tile->renderMasked);
+	}
+
+	// A solid, opaque tile that fully occludes the neighbouring face. Doors,
+	// pushwalls, and masked walls do NOT occlude (they are see-through or move
+	// away), so a wall bordering them must still emit its face.
+	bool IsSolidOccluder(MapSpot s)
+	{
+		return s && s->tile && !DynamicWalls::IsDynamicCell(s) &&
+			!DynamicWalls::IsMaskedWallCell(s);
+	}
+
+	// Which sides of a masked tile are eligible surfaces (before connected-glass
+	// merging). Offset (door) tiles are already excluded upstream.
+	bool MaskedPassSide(MapSpot spot, int side)
+	{
+		if(!MaskedRaw(spot))
+			return false;
+		if(spot->tile->offsetVertical &&
+			side != MapTile::West && side != MapTile::East)
+			return false;
+		if(spot->tile->offsetHorizontal &&
+			side != MapTile::North && side != MapTile::South)
+			return false;
+		// In Corridor 7 a masked tile passes on every side so a fresh face is
+		// drawn even where another masked pane abuts it; the connected-glass
+		// merge below removes the internal boundaries.
+		if(IWad::CheckGameFilter("Corridor7"))
+			return true;
+		MapSpot adj = spot->GetAdjacent((MapTile::Side)side);
+		return !adj || !adj->tile;
+	}
+
+	// Two masked tiles form one continuous plane when they share the same
+	// Corridor 7 wall definition + marker (or, outside C7, are simply adjacent).
+	bool ConnectedMasked(MapSpot spot, int dir)
+	{
+		MapSpot other = spot->GetAdjacent((MapTile::Side)dir);
+		if(!MaskedRaw(other))
+			return false;
+		if(spot->corridor7WallID || other->corridor7WallID)
+			return spot->corridor7WallID == other->corridor7WallID &&
+				spot->corridor7WallMarker == other->corridor7WallMarker;
+		return true;
+	}
+
+	// The internal tile boundaries of a run of panes are not surfaces; drawing
+	// them edge-on produces the periodic floor-to-ceiling lines seen down
+	// glass-lined corridors, so they are culled here (matches the raycaster).
+	bool MaskedRenderSide(MapSpot spot, int side)
+	{
+		if(!MaskedPassSide(spot, side))
+			return false;
+		const bool horizontalRun = ConnectedMasked(spot, MapTile::East) ||
+			ConnectedMasked(spot, MapTile::West);
+		const bool verticalRun = ConnectedMasked(spot, MapTile::North) ||
+			ConnectedMasked(spot, MapTile::South);
+		if(horizontalRun && !verticalRun &&
+			(side == MapTile::East || side == MapTile::West))
+			return false;
+		if(verticalRun && !horizontalRun &&
+			(side == MapTile::North || side == MapTile::South))
+			return false;
+		return true;
 	}
 }
 
@@ -148,25 +248,29 @@ void BuildStatic(GameMap *gm, WorldMesh &out)
 
 		if(spot->tile != NULL)
 		{
-			// Doors and moving pushwalls are rebuilt every frame by
-			// BuildDynamic; keep them out of the static mesh but still emit the
-			// cell's floor/ceiling so the doorway (or vacated pushwall cell) is
-			// not a hole. Neighbours still treat these cells as solid for
-			// adjacency, so no duplicate faces appear at the opening.
-			if(DynamicWalls::IsDynamicCell(spot))
+			// Doors, moving pushwalls, and masked (see-through) walls are built
+			// by BuildDynamic / BuildMasked. Keep them out of the static mesh but
+			// still emit the cell's floor/ceiling so the doorway (or vacated
+			// pushwall cell) is not a hole. A masked full tile has no sector, so
+			// PushFloorCeiling is a no-op there.
+			if(DynamicWalls::IsDynamicCell(spot) ||
+				DynamicWalls::IsMaskedWallCell(spot))
 			{
 				PushFloorCeiling(out, spot, fx, fy);
 				continue;
 			}
 
-			// Solid wall cell: emit each face that borders open space.
+			// Solid wall cell: emit each face not fully occluded by its neighbour.
+			// Only an opaque solid neighbour hides a face; doors, pushwalls, and
+			// masked panes are see-through or move away, so the face behind them
+			// (e.g. a doorjamb, or a wall seen through glass) is still drawn.
 			for(int side = 0; side < 4; ++side)
 			{
 				MapSpot adj = spot->GetAdjacent((MapTile::Side)side);
-				if(adj != NULL && adj->tile != NULL)
-					continue;	// neighbor is solid: face hidden
+				if(IsSolidOccluder(adj))
+					continue;	// neighbor is opaque solid: face hidden
 
-				PushWallFace(out, side, fx, fy, spot->texture[side]);
+				PushWallFace(out, side, fx, fy, ResolveWallTexture(spot, side));
 			}
 		}
 		else if(spot->sector != NULL)
@@ -201,7 +305,7 @@ void BuildDynamic(GameMap *gm, WorldMesh &out, float alpha)
 		if(d.spot->tile->offsetVertical)
 		{
 			// Opens East/West: plane at x+0.5, U runs along Y.
-			const FTextureID tex = d.spot->texture[MapTile::East];
+			const FTextureID tex = ResolveWallTexture(d.spot, MapTile::East);
 			PushQuad(out,
 				fx+0.5f, fy,   0,  fx+0.5f, fy+1, 0,
 				fx+0.5f, fy+1, 1,  fx+0.5f, fy,   1,
@@ -211,7 +315,7 @@ void BuildDynamic(GameMap *gm, WorldMesh &out, float alpha)
 		else
 		{
 			// Opens North/South: plane at y+0.5, U runs along X.
-			const FTextureID tex = d.spot->texture[MapTile::North];
+			const FTextureID tex = ResolveWallTexture(d.spot, MapTile::North);
 			PushQuad(out,
 				fx,   fy+0.5f, 0,  fx+1, fy+0.5f, 0,
 				fx+1, fy+0.5f, 1,  fx,   fy+0.5f, 1,
@@ -228,6 +332,40 @@ void BuildDynamic(GameMap *gm, WorldMesh &out, float alpha)
 		const DynamicWalls::PushRender &p = pushes[i];
 		for(int side = 0; side < 4; ++side)
 			PushWallFace(out, side, p.x, p.y, p.tex[side]);
+	}
+}
+
+void BuildMasked(GameMap *gm, WorldMesh &out)
+{
+	out.Clear();
+	if(gm == NULL || gm->NumPlanes() == 0)
+		return;
+
+	const GameMap::Header &header = gm->GetHeader();
+	const unsigned int w = header.width;
+	const unsigned int h = header.height;
+
+	for(unsigned int y = 0; y < h; ++y)
+	for(unsigned int x = 0; x < w; ++x)
+	{
+		MapSpot spot = gm->GetSpot(x, y, 0);
+		if(!DynamicWalls::IsMaskedWallCell(spot))
+			continue;
+
+		const float fx = (float)x;
+		const float fy = (float)y;
+		// A masked tile is a see-through box: emit its boundary faces exactly like
+		// a solid wall (the same planes GetMaskedWallEndpoints uses for a
+		// non-offset masked wall), but only on sides that survive the
+		// connected-glass merge, and tagged WSURF_Masked so the backend alpha-
+		// tests the colour key. The texture resolves the force-field animation.
+		for(int side = 0; side < 4; ++side)
+		{
+			if(!MaskedRenderSide(spot, side))
+				continue;
+			PushWallFace(out, side, fx, fy, ResolveWallTexture(spot, side),
+				WSURF_Masked);
+		}
 	}
 }
 

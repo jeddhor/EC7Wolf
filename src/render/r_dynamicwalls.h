@@ -38,6 +38,13 @@ namespace DynamicWalls
 		return IsDoorCell(spot) || IsPushwallCell(spot);
 	}
 
+	// A non-door masked wall: a tile whose art is colour-keyed / see-through
+	// (glass, grate, fence, force field, or an opened animated-wall aperture).
+	// Rendered by the alpha-tested masked pass, not the opaque static mesh.
+	// Doors (offsetVertical/offsetHorizontal) are excluded -- they are already
+	// handled as sliding leaves by the dynamic mesh.
+	bool IsMaskedWallCell(MapSpot spot);
+
 	// One door leaf to render. amount is the interpolated slide (0 = closed ..
 	// 0xffff = fully open); style selects CheckSlidePass()/SlideTextureOffset().
 	struct DoorRender

@@ -95,6 +95,16 @@ bool IsPushwallCell(MapSpot spot)
 		spot->pushReceptor != NULL;
 }
 
+bool IsMaskedWallCell(MapSpot spot)
+{
+	// Colour-keyed / see-through tiles (maskedWallType is derived from index-255
+	// art; renderMasked is an explicit map flag). Doors slide as leaves in the
+	// dynamic mesh, so they are excluded here even though they too are masked.
+	if(!spot || !spot->tile || IsDoorCell(spot))
+		return false;
+	return spot->maskedWallType != 0 || spot->tile->renderMasked;
+}
+
 bool IsPushwallOrigin(MapSpot spot)
 {
 	// The thinker always rides the current origin cell, even across transfers.

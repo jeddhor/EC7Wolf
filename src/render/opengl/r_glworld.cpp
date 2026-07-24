@@ -1402,13 +1402,18 @@ namespace
 		int    worldW, worldH;
 		bool   haveWorld;              // a world was rendered for this frame
 		int    vx, vy, vw, vh, fw, fh; // view rect / frame size (8-bit space)
+		TArray<unsigned char> weaponCover; // per-view-rect: 1 where the weapon drew
+		int    wcx, wcy, wcw, wch;     // weapon-cover rect (frame coords)
+		bool   haveWeaponCover;        // weaponCover is valid for this frame
 		FString  capPath;              // headless: last presented frame is kept here
 		TArray<unsigned char> lastRGB; // most recent presented frame (top-down RGB)
 		int    lastW, lastH;
 		GLLive() : inited(false), prog(0), screenProg(0), paletteTex(0),
 			colormapTex(0), lastMap(NULL), worldFbo(0), worldTex(0),
 			worldDepth(0), worldW(0), worldH(0), haveWorld(false),
-			vx(0), vy(0), vw(0), vh(0), fw(0), fh(0), lastW(0), lastH(0) {}
+			vx(0), vy(0), vw(0), vh(0), fw(0), fh(0),
+			wcx(0), wcy(0), wcw(0), wch(0), haveWeaponCover(false),
+			lastW(0), lastH(0) {}
 	};
 	GLLive gLive;
 
@@ -1628,6 +1633,41 @@ void R_GLLiveRenderScene()
 
 	DrawPlayerWeapon();
 
+	// Build a robust weapon coverage mask. The compositor keys the view region
+	// on == key (Remap[0]) to decide which texels reveal the GL world, but the
+	// weapon is a masked, destination-independent blit (r_sprites.cpp:
+	// "if(src != 0) *dest = shade(src)") whose shaded texels can legitimately
+	// equal the key -- those would be misread as transparent and punch holes in
+	// the weapon. Redraw the weapon over a scratch buffer cleared to a different
+	// sentinel: because the blit ignores the destination, a covered texel writes
+	// the same value over both clears while an uncovered texel keeps its
+	// (differing) background. Equal => the weapon drew here, so it is opaque
+	// regardless of colour.
+	{
+		const byte alt = (byte)(key ^ 0xFF);
+		const int vw = viewwidth, vh = viewheight;
+		TArray<unsigned char> scratch((unsigned)(SCREENPITCH * vh));
+		scratch.Resize((unsigned)(SCREENPITCH * vh));
+		for(int y = 0; y < vh; ++y)
+			memset(&scratch[y * SCREENPITCH], alt, vw);
+
+		byte *saveVbuf = vbuf;
+		vbuf = &scratch[0];		// pitch unchanged; scratch[0] is the view origin
+		DrawPlayerWeapon();
+		vbuf = saveVbuf;
+
+		const byte *real = surf + screenofs;
+		gLive.weaponCover.Resize((unsigned)(vw * vh));
+		for(int r = 0; r < vh; ++r)
+			for(int c = 0; c < vw; ++c)
+				gLive.weaponCover[r * vw + c] =
+					(real[r * SCREENPITCH + c] == scratch[r * SCREENPITCH + c])
+						? 1 : 0;
+		gLive.wcx = viewscreenx; gLive.wcy = viewscreeny;
+		gLive.wcw = vw; gLive.wch = vh;
+		gLive.haveWeaponCover = true;
+	}
+
 	// Mark the player's own cell visible for the automap (as R_RenderView does).
 	map->GetSpot(players[ConsolePlayer].mo->tilex,
 		players[ConsolePlayer].mo->tiley, 0)->amFlags |= AM_Visible;
@@ -1685,7 +1725,17 @@ void R_GLLivePresent(const unsigned char *mem, int pitch, int fw, int fh,
 			for(int c = 0; c < gLive.vw; ++c)
 			{
 				const int fx = gLive.vx + c, fy = gLive.vy + r;
-				if(mem[fy * pitch + fx] == key)
+				// The weapon is opaque wherever its coverage mask says it drew,
+				// even if that texel's shaded index equals the key; only then
+				// fall back to the key test, so world shows through unpainted
+				// view texels while any other 2D over the view stays opaque.
+				bool weaponHere = false;
+				if(gLive.haveWeaponCover &&
+					fx >= gLive.wcx && fx < gLive.wcx + gLive.wcw &&
+					fy >= gLive.wcy && fy < gLive.wcy + gLive.wch)
+					weaponHere = gLive.weaponCover[
+						(fy - gLive.wcy) * gLive.wcw + (fx - gLive.wcx)] != 0;
+				if(!weaponHere && mem[fy * pitch + fx] == key)
 					opac[fy * W + fx] = 0;
 			}
 	}

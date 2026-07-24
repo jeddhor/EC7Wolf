@@ -13,4 +13,14 @@
 // game window: it creates its own hidden GL context for the offscreen render.
 bool R_GLWorldCapture(const char *outPath);
 
+// Full-frame composite capture (renderer redesign Phase 10). Renders the GL 3D
+// world into the view sub-rectangle and composites the engine's live 8-bit 2D
+// layer (player weapon, HUD/status bar, menus, text) over it as an indexed
+// overlay -- the view region transparent except where the weapon (or any 2D
+// drawn over the world) is opaque -- producing a complete playable frame the
+// size of the software screenshot. Writes the result as a PPM. Like
+// R_GLWorldCapture it owns its own hidden GL context and does not disturb the
+// software renderer that owns the game window.
+bool R_GLFrameCapture(const char *outPath);
+
 #endif

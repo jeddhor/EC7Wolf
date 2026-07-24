@@ -47,6 +47,7 @@ namespace
 	FString  g_captureFile;
 
 	FString  g_glWorldPath;              // Phase 5 GL world offscreen capture
+	FString  g_glFramePath;              // Phase 10 full-frame composite capture
 
 	int      g_maxFrames      = -1;      // quit after this many rendered frames
 	int      g_maxTics        = -1;      // quit after this many simulation tics
@@ -194,6 +195,11 @@ void ParseArgs(int argc, char **argv)
 		else if(strcmp(arg, "--capture-glworld") == 0 && i + 1 < argc)
 		{
 			g_glWorldPath = argv[++i];
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-glframe") == 0 && i + 1 < argc)
+		{
+			g_glFramePath = argv[++i];
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-open-doors") == 0 && i + 1 < argc)
@@ -379,6 +385,10 @@ void PostFrame()
 		// comparison against the software screenshot just taken.
 		if(!g_glWorldPath.IsEmpty())
 			R_GLWorldCapture(g_glWorldPath.GetChars());
+		// Composite the full playable frame in GL (3D world + the engine's 8-bit
+		// 2D overlay) for parity against the same software screenshot.
+		if(!g_glFramePath.IsEmpty())
+			R_GLFrameCapture(g_glFramePath.GetChars());
 #endif
 	}
 

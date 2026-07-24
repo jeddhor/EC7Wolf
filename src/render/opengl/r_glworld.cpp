@@ -1,14 +1,23 @@
 // ===========================================================================
 //
-// r_glworld.cpp - GL static-world render + offscreen capture.
+// r_glworld.cpp - GL world render + offscreen capture + 2D compositor.
 //
-// Phase 5 stood up the geometry/camera with a debug shader. Phase 6 replaces
+// Phase 5 stood up the geometry/camera with a debug shader. Phase 6 replaced
 // the debug colours with real fidelity: each surface's FTexture is uploaded as
 // an 8-bit *index* texture, and the shader resolves colour exactly the way the
 // software renderer does -- index -> colormap[shadeRow] -> palette -- with the
 // shade row derived from ECWolf's own distance/light math, plus the Corridor 7
 // colour-cycle and full-bright rules. Palette effects (visor/electric/damage)
 // live entirely in the 256-entry palette texture, never in world pixels.
+//
+// Phase 10 adds the 2D compositor: the GL 3D world is rendered into the view
+// sub-rectangle of a full frame, and the engine's 8-bit 2D layer (the player
+// weapon, HUD/status bar, menus, text -- every VWB/2D operation, drawn by the
+// existing software paths) is composited over it as an indexed overlay. The
+// view region of the overlay is transparent except where the weapon (or any 2D
+// drawn over the world) is opaque, so the GPU world shows through. This is the
+// backend-neutral core of "a playable frame without switching to the software
+// framebuffer"; the live SDL-window present swap is a following slice.
 //
 // ===========================================================================
 
@@ -36,6 +45,7 @@
 #include "wl_iwad.h"
 #include "tarray.h"
 #include "textures/textures.h"
+#include "v_video.h"
 #include "v_palette.h"
 #include "colormatcher.h"
 #include "r_data/colormaps.h"
@@ -49,6 +59,14 @@ extern int viewshift;
 // (no raycast); called after re-applying interpolation so the sprite builder's
 // view basis matches this frame's interpolated camera. Defined in wl_draw.cpp.
 void CalcViewVariables();
+
+// The engine's 2D view-model draw. It writes the player weapon into the 8-bit
+// render target pointed at by the vbuf/vbufPitch globals (index 0 = the sprite's
+// own transparent key). We repoint those globals at a scratch buffer to capture
+// the weapon silhouette without touching the live frame. Defined in wl_draw.cpp.
+extern byte     *vbuf;
+extern unsigned  vbufPitch;
+void DrawPlayerWeapon(void);
 
 namespace
 {
@@ -287,6 +305,36 @@ namespace
 		"    fragColor = vec4(rgb, 1.0);\n"
 		"}\n";
 
+	// --- Phase 10 compositor: a screen-space quad that either blits the RGB
+	// world texture (mode 0) or resolves the 8-bit 2D overlay through the palette
+	// (mode 1), discarding transparent overlay texels so the world shows through.
+	const char *kScreenVert =
+		"#version 330 core\n"
+		"layout(location=0) in vec2 aPos;\n"
+		"layout(location=1) in vec2 aUV;\n"
+		"out vec2 vUV;\n"
+		"void main(){ vUV = aUV; gl_Position = vec4(aPos, 0.0, 1.0); }\n";
+
+	const char *kScreenFrag =
+		"#version 330 core\n"
+		"in vec2 vUV; out vec4 fragColor;\n"
+		"uniform int uMode;\n"               // 0 = RGB world blit, 1 = indexed 2D overlay
+		"uniform sampler2D  uWorldTex;\n"    // RGB8 world colour (mode 0)
+		"uniform usampler2D uOverlayIdx;\n"  // R8UI final palette indices (mode 1)
+		"uniform usampler2D uOverlayOpac;\n" // R8UI 0 = transparent (mode 1)
+		"uniform sampler2D  uPaletteTex;\n"  // 256x1 RGB8
+		"void main(){\n"
+		"    if(uMode == 0){\n"
+		"        fragColor = vec4(texture(uWorldTex, vUV).rgb, 1.0); return;\n"
+		"    }\n"
+		"    ivec2 sz = textureSize(uOverlayIdx, 0);\n"
+		"    ivec2 t = ivec2(floor(vUV * vec2(sz)));\n"
+		"    t = clamp(t, ivec2(0), sz - ivec2(1));\n"
+		"    if(texelFetch(uOverlayOpac, t, 0).r == 0u) discard;\n"  // world shows through
+		"    int idx = int(texelFetch(uOverlayIdx, t, 0).r);\n"
+		"    fragColor = vec4(texelFetch(uPaletteTex, ivec2(idx,0), 0).rgb, 1.0);\n"
+		"}\n";
+
 	bool WritePPM(const char *path, const unsigned char *rgb, int w, int h)
 	{
 		FILE *f = fopen(path, "wb");
@@ -340,6 +388,23 @@ namespace
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, 256, NUMCOLORMAPS, 0,
 			GL_RED_INTEGER, GL_UNSIGNED_BYTE, NormalLight.Maps);
 		return tex;
+	}
+
+	// Upload a raw R8UI texture (nearest, clamp) -- used for the 2D overlay's
+	// index and opacity buffers, which are already full-frame row-major.
+	GLuint CreateR8UITexture(const unsigned char *data, int w, int h)
+	{
+		GLuint id = 0;
+		glGenTextures(1, &id);
+		glBindTexture(GL_TEXTURE_2D, id);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, w, h, 0,
+			GL_RED_INTEGER, GL_UNSIGNED_BYTE, data);
+		return id;
 	}
 
 	// Build an R8UI index texture from an FTexture. GetPixels() is column-major
@@ -421,9 +486,7 @@ namespace
 		return id;
 	}
 
-	// Render the world once with the given debug mode into the bound FBO and
-	// read it back to rgb. Assumes program/uniforms/textures already set up
-	// except uDebug, which is (re)set here.
+	// Uniform locations shared across every surface in one world draw.
 	struct SurfaceUniforms
 	{
 		GLint uIndexTex;
@@ -615,6 +678,329 @@ namespace
 		if(gl.vao) glDeleteVertexArrays(1, &gl.vao);
 		gl.vbo = gl.vao = 0;
 	}
+
+	// =======================================================================
+	// Shared world render: build the four meshes + program + uniforms once, then
+	// draw the colour (and, for the capture, shade-row debug) passes into the
+	// currently bound framebuffer's viewport. Both the world capture and the
+	// full-frame compositor drive this so the world pixels are identical.
+	// =======================================================================
+	struct WorldGL
+	{
+		GLuint prog;
+		GLuint paletteTex;
+		GLuint colormapTex;
+		TMap<int, GLuint> texCache;
+		TMap<int, GLuint> opacCache;
+		WorldMesh mesh, dynMesh, maskedMesh, spriteMesh;
+		MeshGL staticGL, dynGL, maskedGL, spriteGL;
+		SurfaceUniforms su;
+		GLint uDebug;
+		WorldGL() : prog(0), paletteTex(0), colormapTex(0), uDebug(-1) {}
+	};
+
+	// Build meshes/program/uniforms for a W x H world render (aspect W/H). The
+	// caller must have a current GL context. Returns false if the scene is empty
+	// or the program failed to build. Palette/colormap stay bound to units 1/2.
+	bool BuildWorldGL(WorldGL &w, int W, int H)
+	{
+		// Build the static world mesh plus the dynamic (door/pushwall) mesh. The
+		// dynamic mesh is interpolated at the current sub-tic alpha so doors and
+		// pushwalls render at their exact fractional positions.
+		WorldBuilder::BuildStatic(map, w.mesh);
+		const float alpha = R_GetInterpolationAlpha();
+		WorldBuilder::BuildDynamic(map, w.dynMesh, alpha);
+		WorldBuilder::BuildMasked(map, w.maskedMesh);
+
+		// Actor sprites and the camera are drawn at their interpolated sub-tic
+		// transform, exactly as the software frame did: apply the interpolation,
+		// refresh the view basis so the billboard builder is consistent with the
+		// interpolated camera, build the sprites, capture the camera transform,
+		// then restore authoritative simulation state.
+		Interpolation::Apply(alpha);
+		CalcViewVariables();
+		WorldBuilder::BuildSprites(map, w.spriteMesh);
+		AActor *cam = players[ConsolePlayer].camera
+			? players[ConsolePlayer].camera : players[ConsolePlayer].mo;
+		const fixed camXFixed = cam->x;
+		const fixed camYFixed = cam->y;
+		const angle_t camAngle = cam->angle;
+		const int32_t camPitch = (int32_t)cam->pitch;
+		const float camFOV = players[ConsolePlayer].FOV;
+		Interpolation::Restore();
+
+		Printf("GL world: static walls=%u floors=%u ceilings=%u verts=%u; "
+			"dynamic faces=%u verts=%u (alpha=%.2f); masked faces=%u verts=%u; "
+			"sprite faces=%u verts=%u\n",
+			w.mesh.wallFaces, w.mesh.floorTiles, w.mesh.ceilingTiles,
+			(unsigned)w.mesh.vertices.Size(), w.dynMesh.wallFaces,
+			(unsigned)w.dynMesh.vertices.Size(), alpha,
+			w.maskedMesh.wallFaces, (unsigned)w.maskedMesh.vertices.Size(),
+			w.spriteMesh.wallFaces, (unsigned)w.spriteMesh.vertices.Size());
+		if(w.mesh.vertices.Size() == 0 && w.dynMesh.vertices.Size() == 0 &&
+			w.maskedMesh.vertices.Size() == 0 && w.spriteMesh.vertices.Size() == 0)
+			return false;
+
+		w.prog = GLShader::Build(kVert, kFrag, "world-indexed");
+		if(!w.prog)
+			return false;
+
+		w.paletteTex = CreatePaletteTexture();
+		int colormapRows = 0;
+		w.colormapTex = CreateColormapTexture(colormapRows);
+
+		unsigned int uniqueTextures = 0, maskedTextures = 0;
+		UploadMesh(w.mesh, w.texCache, w.opacCache, w.staticGL,
+			&uniqueTextures, &maskedTextures);
+		UploadMesh(w.dynMesh, w.texCache, w.opacCache, w.dynGL,
+			&uniqueTextures, &maskedTextures);
+		UploadMesh(w.maskedMesh, w.texCache, w.opacCache, w.maskedGL,
+			&uniqueTextures, &maskedTextures);
+		UploadMesh(w.spriteMesh, w.texCache, w.opacCache, w.spriteGL,
+			&uniqueTextures, &maskedTextures);
+		Printf("GL world: uploaded %u unique index textures (%u with opacity).\n",
+			uniqueTextures, maskedTextures);
+
+		// --- camera calibrated to ECWolf --- (interpolated transform captured above)
+		const float camX = (float)camXFixed / (float)TILEGLOBAL;
+		const float camY = (float)camYFixed / (float)TILEGLOBAL;
+		const float camZ = 0.5f;	// eye at mid-wall height
+		const float yaw = (float)((double)camAngle / 4294967296.0 * 2.0 * kPi);
+		const float pitch = (float)((double)camPitch / 4294967296.0 * 2.0 * kPi);
+
+		// ECWolf view direction convention: (cos a, -sin a) in the XY plane.
+		float fwd[3] = {
+			cosf(yaw) * cosf(pitch),
+			-sinf(yaw) * cosf(pitch),
+			sinf(pitch)
+		};
+		float up[3] = { 0.0f, 0.0f, 1.0f };
+		float eye[3] = { camX, camY, camZ };
+
+		const float hFovDeg = camFOV > 1.0f ? camFOV : 90.0f;
+		const float aspect = (float)W / (float)H;
+		const float hFov = (float)(hFovDeg * kPi / 180.0);
+		const float vFov = 2.0f * atanf(tanf(hFov * 0.5f) / aspect);
+
+		Mat4 proj = Perspective(vFov, aspect, 0.02f, 256.0f);
+		Mat4 view = LookAt(eye, fwd, up);
+
+		// --- shading uniforms mirror the software renderer exactly ---
+		const int shade = LIGHT2SHADE(gLevelLight + r_extralight);
+		const bool corridor7 = IWad::CheckGameFilter("Corridor7");
+		const int cyclePhase = (int)((gamestate.TimeCount >> 3) & 7);
+
+		// Plane heights exactly as R_DrawPlane receives them: floor = viewz,
+		// ceiling = viewz + level depth. The shader takes their magnitude.
+		const float floorPlaneH = fabsf((float)viewz);
+		const float ceilPlaneH  = fabsf((float)(viewz +
+			(map->GetPlane(0).depth << FRACBITS)));
+
+		glUseProgram(w.prog);
+		glUniformMatrix4fv(glGetUniformLocation(w.prog, "uProj"), 1, GL_FALSE, proj.m);
+		glUniformMatrix4fv(glGetUniformLocation(w.prog, "uView"), 1, GL_FALSE, view.m);
+		glUniform1f(glGetUniformLocation(w.prog, "uDepthVis"), (float)r_depthvisibility);
+		glUniform1f(glGetUniformLocation(w.prog, "uHeightNum"), (float)heightnumerator);
+		glUniform1f(glGetUniformLocation(w.prog, "uShade"), (float)shade);
+		glUniform1f(glGetUniformLocation(w.prog, "uMaxLightVis"), (float)gLevelMaxLightVis);
+		glUniform1i(glGetUniformLocation(w.prog, "uNumColormaps"), colormapRows);
+		glUniform1i(glGetUniformLocation(w.prog, "uCyclePhase"), cyclePhase);
+		glUniform1i(glGetUniformLocation(w.prog, "uRemap15"), (int)GPalette.Remap[15]);
+		glUniform1i(glGetUniformLocation(w.prog, "uRemap254"), (int)GPalette.Remap[254]);
+		glUniform1i(glGetUniformLocation(w.prog, "uRemap208"), (int)GPalette.Remap[208]);
+		glUniform1i(glGetUniformLocation(w.prog, "uRemap239"), (int)GPalette.Remap[239]);
+		glUniform1i(glGetUniformLocation(w.prog, "uCorridor7"), corridor7 ? 1 : 0);
+		glUniform1i(glGetUniformLocation(w.prog, "uMaskColor"), (int)GPalette.Remap[255]);
+		glUniform1i(glGetUniformLocation(w.prog, "uExtraLight"), r_extralight);
+		glUniform1i(glGetUniformLocation(w.prog, "uViewW"), W);
+		glUniform1i(glGetUniformLocation(w.prog, "uDither"), 1);
+		glUniform1f(glGetUniformLocation(w.prog, "uHorizon"), (float)H * 0.5f);
+		// Sprite colour-cycle / laser-dissolve clock and the lit-laser colour
+		// index (fullbright white, matching ScaleSprite's ColorMatcher.Pick).
+		glUniform1i(glGetUniformLocation(w.prog, "uPhase"),
+			(int)(gamestate.TimeCount >> 3));
+		glUniform1i(glGetUniformLocation(w.prog, "uLaserColor"),
+			(int)ColorMatcher.Pick(0xFF, 0xFF, 0xFF));
+
+		w.su.uIndexTex    = glGetUniformLocation(w.prog, "uIndexTex");
+		w.su.uOpacityTex  = glGetUniformLocation(w.prog, "uOpacityTex");
+		w.su.uHasOpacity  = glGetUniformLocation(w.prog, "uHasOpacity");
+		w.su.uMasked      = glGetUniformLocation(w.prog, "uMasked");
+		w.su.uSurfKind    = glGetUniformLocation(w.prog, "uSurfKind");
+		w.su.uPlaneHeight = glGetUniformLocation(w.prog, "uPlaneHeight");
+		w.su.uSlide       = glGetUniformLocation(w.prog, "uSlide");
+		w.su.uSlideStyle  = glGetUniformLocation(w.prog, "uSlideStyle");
+		w.su.uSlideAmount = glGetUniformLocation(w.prog, "uSlideAmount");
+		w.su.uSprite           = glGetUniformLocation(w.prog, "uSprite");
+		w.su.uSpriteFullbright = glGetUniformLocation(w.prog, "uSpriteFullbright");
+		w.su.uSpriteLaser      = glGetUniformLocation(w.prog, "uSpriteLaser");
+		w.su.floorPlaneH  = floorPlaneH;
+		w.su.ceilPlaneH   = ceilPlaneH;
+		w.uDebug = glGetUniformLocation(w.prog, "uDebug");
+
+		// Palette (unit 1) and colormap (unit 2) are shared across every surface.
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, w.paletteTex);
+		glUniform1i(glGetUniformLocation(w.prog, "uPaletteTex"), 1);
+		glActiveTexture(GL_TEXTURE2);
+		glBindTexture(GL_TEXTURE_2D, w.colormapTex);
+		glUniform1i(glGetUniformLocation(w.prog, "uColormapTex"), 2);
+		return true;
+	}
+
+	// Render the world colour pass into the bound FBO's current viewport. Static
+	// opaque world first, then dynamic door/pushwall geometry, then masked panes
+	// (biased toward the viewer so they don't z-fight a coplanar wall behind
+	// them), then sprite billboards -- all sharing one clear and depth buffer.
+	void DrawWorldColourPass(WorldGL &w)
+	{
+		glUseProgram(w.prog);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, w.paletteTex);
+		glActiveTexture(GL_TEXTURE2);
+		glBindTexture(GL_TEXTURE_2D, w.colormapTex);
+		glUniform1i(w.uDebug, 0);
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		RenderMesh(w.mesh, w.staticGL, w.su);
+		RenderMesh(w.dynMesh, w.dynGL, w.su);
+		glEnable(GL_POLYGON_OFFSET_FILL);
+		glPolygonOffset(-1.0f, -1.0f);
+		RenderMesh(w.maskedMesh, w.maskedGL, w.su);
+		glDisable(GL_POLYGON_OFFSET_FILL);
+		RenderMesh(w.spriteMesh, w.spriteGL, w.su);
+	}
+
+	// Shade-row debug visualization of the same scene (capture exit-gate check).
+	void DrawWorldDebugPass(WorldGL &w)
+	{
+		glUseProgram(w.prog);
+		glUniform1i(w.uDebug, 1);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		RenderMesh(w.mesh, w.staticGL, w.su);
+		RenderMesh(w.dynMesh, w.dynGL, w.su);
+		glEnable(GL_POLYGON_OFFSET_FILL);
+		glPolygonOffset(-1.0f, -1.0f);
+		RenderMesh(w.maskedMesh, w.maskedGL, w.su);
+		glDisable(GL_POLYGON_OFFSET_FILL);
+		RenderMesh(w.spriteMesh, w.spriteGL, w.su);
+	}
+
+	void DestroyWorldGL(WorldGL &w)
+	{
+		TMapIterator<int, GLuint> it(w.texCache);
+		TMap<int, GLuint>::Pair *pair;
+		while(it.NextPair(pair))
+			if(pair->Value)
+				glDeleteTextures(1, &pair->Value);
+		TMapIterator<int, GLuint> ito(w.opacCache);
+		while(ito.NextPair(pair))
+			if(pair->Value)
+				glDeleteTextures(1, &pair->Value);
+		if(w.paletteTex) glDeleteTextures(1, &w.paletteTex);
+		if(w.colormapTex) glDeleteTextures(1, &w.colormapTex);
+		DestroyMesh(w.staticGL);
+		DestroyMesh(w.dynGL);
+		DestroyMesh(w.maskedGL);
+		DestroyMesh(w.spriteGL);
+		if(w.prog) glDeleteProgram(w.prog);
+	}
+
+	// Draw a screen-space quad covering the NDC rect [x0,x1]x[y0,y1] with UVs
+	// interpolated so the (x0,y0) corner is (u0,v0) and (x1,y1) is (u1,v1).
+	void DrawScreenQuad(float x0, float y0, float x1, float y1,
+		float u0, float v0, float u1, float v1)
+	{
+		const float verts[] = {
+			x0, y0, u0, v0,
+			x1, y0, u1, v0,
+			x1, y1, u1, v1,
+			x0, y0, u0, v0,
+			x1, y1, u1, v1,
+			x0, y1, u0, v1,
+		};
+		GLuint vao = 0, vbo = 0;
+		glGenVertexArrays(1, &vao);
+		glBindVertexArray(vao);
+		glGenBuffers(1, &vbo);
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4*sizeof(float), (void*)0);
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4*sizeof(float),
+			(void*)(2*sizeof(float)));
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+		glDeleteBuffers(1, &vbo);
+		glDeleteVertexArrays(1, &vao);
+	}
+
+	// Build the 2D overlay (index + opacity, full frame) from the engine's live
+	// 8-bit framebuffer. Everything outside the 3D view sub-rect is opaque 2D
+	// (HUD/status bar/menus/text). Inside the view rect, only the player weapon
+	// (or any 2D drawn over the world) is opaque; the rest is transparent so the
+	// GPU world shows through. The weapon silhouette is detected robustly by
+	// re-drawing DrawPlayerWeapon over two different backgrounds and keeping the
+	// pixels that come out identical -- the weapon overwrites deterministically,
+	// so a texel is "weapon" iff it is background-independent.
+	void BuildOverlay(int FW, int FH, int vx, int vy, int vw, int vh,
+		GLuint &idxTexOut, GLuint &opacTexOut, unsigned int &viewOpaqueOut)
+	{
+		const int pitch = screen->GetPitch();
+		const BYTE *membuf = (const BYTE *)screen->GetBuffer();
+
+		TArray<unsigned char> idx((unsigned)(FW * FH));
+		TArray<unsigned char> opac((unsigned)(FW * FH));
+		idx.Resize((unsigned)(FW * FH));
+		opac.Resize((unsigned)(FW * FH));
+		for(int y = 0; y < FH; ++y)
+			for(int x = 0; x < FW; ++x)
+			{
+				idx[y * FW + x] = membuf[y * pitch + x];
+				opac[y * FW + x] = 255;	// opaque 2D by default (HUD / menus)
+			}
+
+		// Weapon coverage over two backgrounds in scratch full-frame buffers.
+		TArray<unsigned char> sa((unsigned)(pitch * FH));
+		TArray<unsigned char> sb((unsigned)(pitch * FH));
+		sa.Resize((unsigned)(pitch * FH));
+		sb.Resize((unsigned)(pitch * FH));
+		for(int r = 0; r < vh; ++r)
+		{
+			memset(&sa[(vy + r) * pitch + vx], 0x00, vw);
+			memset(&sb[(vy + r) * pitch + vx], 0xFF, vw);
+		}
+
+		byte *saveVbuf = vbuf;
+		unsigned savePitch = vbufPitch;
+		const unsigned viewOfs = (unsigned)(vy * pitch + vx);
+		vbufPitch = (unsigned)pitch;
+		vbuf = &sa[0] + viewOfs; DrawPlayerWeapon();
+		vbuf = &sb[0] + viewOfs; DrawPlayerWeapon();
+		vbuf = saveVbuf;
+		vbufPitch = savePitch;
+
+		unsigned int viewOpaque = 0;
+		for(int r = 0; r < vh; ++r)
+			for(int c = 0; c < vw; ++c)
+			{
+				const int fx = vx + c, fy = vy + r;
+				const unsigned char a = sa[fy * pitch + fx];
+				const unsigned char b = sb[fy * pitch + fx];
+				if(a == b)	// weapon painted the same index over both -> opaque
+				{
+					idx[fy * FW + fx] = a;
+					opac[fy * FW + fx] = 255;
+					++viewOpaque;
+				}
+				else		// background survived -> transparent, world shows
+					opac[fy * FW + fx] = 0;
+			}
+		viewOpaqueOut = viewOpaque;
+
+		idxTexOut = CreateR8UITexture(&idx[0], FW, FH);
+		opacTexOut = CreateR8UITexture(&opac[0], FW, FH);
+	}
 }
 
 bool R_GLWorldCapture(const char *outPath)
@@ -628,78 +1014,17 @@ bool R_GLWorldCapture(const char *outPath)
 	int W = viewwidth  > 0 ? viewwidth  : 320;
 	int H = viewheight > 0 ? viewheight : 200;
 
-	// Build the static world mesh plus the dynamic (door/pushwall) mesh. The
-	// dynamic mesh is interpolated at the current sub-tic alpha so doors and
-	// pushwalls render at their exact fractional positions.
-	WorldMesh mesh;
-	WorldBuilder::BuildStatic(map, mesh);
-	WorldMesh dynMesh;
-	const float alpha = R_GetInterpolationAlpha();
-	WorldBuilder::BuildDynamic(map, dynMesh, alpha);
-	WorldMesh maskedMesh;
-	WorldBuilder::BuildMasked(map, maskedMesh);
-
-	// Actor sprites and the camera are drawn at their interpolated sub-tic
-	// transform, exactly as the software frame did: apply the interpolation, refresh
-	// the view basis (viewx/viewy/viewsin/viewcos) so the billboard builder is
-	// consistent with the interpolated camera, build the sprite billboards, capture
-	// the camera transform, then restore authoritative simulation state. Apply /
-	// Restore are no-ops when interpolation is disabled, so this is unchanged there
-	// and the determinism gate (which checksums the simulation, not the render)
-	// stays green.
-	Interpolation::Apply(alpha);
-	CalcViewVariables();
-	WorldMesh spriteMesh;
-	WorldBuilder::BuildSprites(map, spriteMesh);
-	AActor *cam = players[ConsolePlayer].camera
-		? players[ConsolePlayer].camera : players[ConsolePlayer].mo;
-	const fixed camXFixed = cam->x;
-	const fixed camYFixed = cam->y;
-	const angle_t camAngle = cam->angle;
-	const int32_t camPitch = (int32_t)cam->pitch;
-	const float camFOV = players[ConsolePlayer].FOV;
-	Interpolation::Restore();
-
-	Printf("GL world: static walls=%u floors=%u ceilings=%u verts=%u; "
-		"dynamic faces=%u verts=%u (alpha=%.2f); masked faces=%u verts=%u; "
-		"sprite faces=%u verts=%u\n",
-		mesh.wallFaces, mesh.floorTiles, mesh.ceilingTiles,
-		(unsigned)mesh.vertices.Size(), dynMesh.wallFaces,
-		(unsigned)dynMesh.vertices.Size(), alpha,
-		maskedMesh.wallFaces, (unsigned)maskedMesh.vertices.Size(),
-		spriteMesh.wallFaces, (unsigned)spriteMesh.vertices.Size());
-	if(mesh.vertices.Size() == 0 && dynMesh.vertices.Size() == 0 &&
-		maskedMesh.vertices.Size() == 0 && spriteMesh.vertices.Size() == 0)
-		return false;
-
 	GLDevice dev;
 	if(!dev.Create(W, H, false, /*hidden=*/true, "EC7Wolf GL world"))
 		return false;
 
-	GLuint prog = GLShader::Build(kVert, kFrag, "world-indexed");
-	if(!prog) { dev.Destroy(); return false; }
-
-	// --- palette + colormap (shared) and per-surface index textures ---
-	GLuint paletteTex = CreatePaletteTexture();
-	int colormapRows = 0;
-	GLuint colormapTex = CreateColormapTexture(colormapRows);
-
-	// Index + opacity textures cache per FTexture, shared across both meshes so
-	// shared art uploads once.
-	TMap<int, GLuint> texCache;
-	TMap<int, GLuint> opacCache;
-	unsigned int uniqueTextures = 0, maskedTextures = 0;
-	MeshGL staticGL, dynGL, maskedGL, spriteGL;
-	UploadMesh(mesh, texCache, opacCache, staticGL,
-		&uniqueTextures, &maskedTextures);
-	UploadMesh(dynMesh, texCache, opacCache, dynGL,
-		&uniqueTextures, &maskedTextures);
-	UploadMesh(maskedMesh, texCache, opacCache, maskedGL,
-		&uniqueTextures, &maskedTextures);
-	UploadMesh(spriteMesh, texCache, opacCache, spriteGL,
-		&uniqueTextures, &maskedTextures);
-	Printf("GL world: uploaded %u unique index textures (%u with opacity).\n",
-		uniqueTextures, maskedTextures);
+	WorldGL wr;
+	if(!BuildWorldGL(wr, W, H))
+	{
+		DestroyWorldGL(wr);
+		dev.Destroy();
+		return false;
+	}
 
 	// Offscreen colour + depth target.
 	GLuint fbo = 0, colorTex = 0, depthRb = 0;
@@ -718,123 +1043,20 @@ bool R_GLWorldCapture(const char *outPath)
 	if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 	{
 		Printf("GL world: framebuffer incomplete.\n");
+		DestroyWorldGL(wr);
 		dev.Destroy();
 		return false;
 	}
-
-	// --- camera calibrated to ECWolf --- (interpolated transform captured above)
-	const float camX = (float)camXFixed / (float)TILEGLOBAL;
-	const float camY = (float)camYFixed / (float)TILEGLOBAL;
-	const float camZ = 0.5f;	// eye at mid-wall height
-	const float yaw = (float)((double)camAngle / 4294967296.0 * 2.0 * kPi);
-	const float pitch = (float)((double)camPitch / 4294967296.0 * 2.0 * kPi);
-
-	// ECWolf view direction convention: (cos a, -sin a) in the XY plane.
-	float fwd[3] = {
-		cosf(yaw) * cosf(pitch),
-		-sinf(yaw) * cosf(pitch),
-		sinf(pitch)
-	};
-	float up[3] = { 0.0f, 0.0f, 1.0f };
-	float eye[3] = { camX, camY, camZ };
-
-	const float hFovDeg = camFOV > 1.0f ? camFOV : 90.0f;
-	const float aspect = (float)W / (float)H;
-	const float hFov = (float)(hFovDeg * kPi / 180.0);
-	const float vFov = 2.0f * atanf(tanf(hFov * 0.5f) / aspect);
-
-	Mat4 proj = Perspective(vFov, aspect, 0.02f, 256.0f);
-	Mat4 view = LookAt(eye, fwd, up);
-
-	// --- shading uniforms mirror the software renderer exactly ---
-	const int shade = LIGHT2SHADE(gLevelLight + r_extralight);
-	const bool corridor7 = IWad::CheckGameFilter("Corridor7");
-	const int cyclePhase = (int)((gamestate.TimeCount >> 3) & 7);
-
-	// Plane heights exactly as R_DrawPlane receives them: floor = viewz, ceiling
-	// = viewz + level depth. The shader takes their magnitude.
-	const float floorPlaneH = fabsf((float)viewz);
-	const float ceilPlaneH  = fabsf((float)(viewz +
-		(map->GetPlane(0).depth << FRACBITS)));
 
 	glViewport(0, 0, W, H);
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
 	glDisable(GL_CULL_FACE);	// keep both faces during bring-up
 
-	glUseProgram(prog);
-	glUniformMatrix4fv(glGetUniformLocation(prog, "uProj"), 1, GL_FALSE, proj.m);
-	glUniformMatrix4fv(glGetUniformLocation(prog, "uView"), 1, GL_FALSE, view.m);
-	glUniform1f(glGetUniformLocation(prog, "uDepthVis"), (float)r_depthvisibility);
-	glUniform1f(glGetUniformLocation(prog, "uHeightNum"), (float)heightnumerator);
-	glUniform1f(glGetUniformLocation(prog, "uShade"), (float)shade);
-	glUniform1f(glGetUniformLocation(prog, "uMaxLightVis"), (float)gLevelMaxLightVis);
-	glUniform1i(glGetUniformLocation(prog, "uNumColormaps"), colormapRows);
-	glUniform1i(glGetUniformLocation(prog, "uCyclePhase"), cyclePhase);
-	glUniform1i(glGetUniformLocation(prog, "uRemap15"), (int)GPalette.Remap[15]);
-	glUniform1i(glGetUniformLocation(prog, "uRemap254"), (int)GPalette.Remap[254]);
-	glUniform1i(glGetUniformLocation(prog, "uRemap208"), (int)GPalette.Remap[208]);
-	glUniform1i(glGetUniformLocation(prog, "uRemap239"), (int)GPalette.Remap[239]);
-	glUniform1i(glGetUniformLocation(prog, "uCorridor7"), corridor7 ? 1 : 0);
-	glUniform1i(glGetUniformLocation(prog, "uMaskColor"), (int)GPalette.Remap[255]);
-	glUniform1i(glGetUniformLocation(prog, "uExtraLight"), r_extralight);
-	glUniform1i(glGetUniformLocation(prog, "uViewW"), W);
-	glUniform1i(glGetUniformLocation(prog, "uDither"), 1);
-	glUniform1f(glGetUniformLocation(prog, "uHorizon"), (float)H * 0.5f);
-	// Sprite colour-cycle / laser-dissolve clock and the lit-laser colour index
-	// (fullbright white, matching ScaleSprite's ColorMatcher.Pick(0xFF,0xFF,0xFF)).
-	glUniform1i(glGetUniformLocation(prog, "uPhase"),
-		(int)(gamestate.TimeCount >> 3));
-	glUniform1i(glGetUniformLocation(prog, "uLaserColor"),
-		(int)ColorMatcher.Pick(0xFF, 0xFF, 0xFF));
-
-	SurfaceUniforms su;
-	su.uIndexTex    = glGetUniformLocation(prog, "uIndexTex");
-	su.uOpacityTex  = glGetUniformLocation(prog, "uOpacityTex");
-	su.uHasOpacity  = glGetUniformLocation(prog, "uHasOpacity");
-	su.uMasked      = glGetUniformLocation(prog, "uMasked");
-	su.uSurfKind    = glGetUniformLocation(prog, "uSurfKind");
-	su.uPlaneHeight = glGetUniformLocation(prog, "uPlaneHeight");
-	su.uSlide       = glGetUniformLocation(prog, "uSlide");
-	su.uSlideStyle  = glGetUniformLocation(prog, "uSlideStyle");
-	su.uSlideAmount = glGetUniformLocation(prog, "uSlideAmount");
-	su.uSprite           = glGetUniformLocation(prog, "uSprite");
-	su.uSpriteFullbright = glGetUniformLocation(prog, "uSpriteFullbright");
-	su.uSpriteLaser      = glGetUniformLocation(prog, "uSpriteLaser");
-	su.floorPlaneH  = floorPlaneH;
-	su.ceilPlaneH   = ceilPlaneH;
-	const GLint uDebug = glGetUniformLocation(prog, "uDebug");
-
-	// Palette (unit 1) and colormap (unit 2) are shared across every surface.
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, paletteTex);
-	glUniform1i(glGetUniformLocation(prog, "uPaletteTex"), 1);
-	glActiveTexture(GL_TEXTURE2);
-	glBindTexture(GL_TEXTURE_2D, colormapTex);
-	glUniform1i(glGetUniformLocation(prog, "uColormapTex"), 2);
-
 	unsigned char *rgb = new unsigned char[(size_t)W * H * 3];
 
-	// Pass 1: full-fidelity colour. Static opaque world first, then the dynamic
-	// door/pushwall geometry, sharing one clear and depth buffer.
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glUniform1i(uDebug, 0);
-	RenderMesh(mesh, staticGL, su);
-	RenderMesh(dynMesh, dynGL, su);
-	// Masked walls share the depth buffer and discard their transparent texels,
-	// so draw order does not affect correctness. A slight depth bias toward the
-	// viewer keeps a masked pane from z-fighting a coplanar opaque wall behind it
-	// (glass mounted on a solid wall).
-	glEnable(GL_POLYGON_OFFSET_FILL);
-	glPolygonOffset(-1.0f, -1.0f);
-	RenderMesh(maskedMesh, maskedGL, su);
-	glDisable(GL_POLYGON_OFFSET_FILL);
-	// Sprite billboards last: they share the world depth buffer (walls and masked
-	// panes occlude them; their own opaque texels write depth so nearer sprites win
-	// regardless of draw order) and discard transparent/unlit texels so geometry
-	// behind them -- including through glass -- shows through.
-	RenderMesh(spriteMesh, spriteGL, su);
+	// Pass 1: full-fidelity colour.
+	DrawWorldColourPass(wr);
 	glFinish();
 	dev.ReadPixelsRGB(rgb, W, H);
 
@@ -853,15 +1075,7 @@ bool R_GLWorldCapture(const char *outPath)
 	// Pass 2: shade-row debug visualization (exit-gate requirement).
 	if(outPath)
 	{
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		glUniform1i(uDebug, 1);
-		RenderMesh(mesh, staticGL, su);
-		RenderMesh(dynMesh, dynGL, su);
-		glEnable(GL_POLYGON_OFFSET_FILL);
-		glPolygonOffset(-1.0f, -1.0f);
-		RenderMesh(maskedMesh, maskedGL, su);
-		glDisable(GL_POLYGON_OFFSET_FILL);
-		RenderMesh(spriteMesh, spriteGL, su);
+		DrawWorldDebugPass(wr);
 		glFinish();
 		dev.ReadPixelsRGB(rgb, W, H);
 		FString dbg;
@@ -872,26 +1086,192 @@ bool R_GLWorldCapture(const char *outPath)
 
 	delete[] rgb;
 
-	// Cleanup.
-	TMapIterator<int, GLuint> it(texCache);
-	TMap<int, GLuint>::Pair *pair;
-	while(it.NextPair(pair))
-		if(pair->Value)
-			glDeleteTextures(1, &pair->Value);
-	TMapIterator<int, GLuint> ito(opacCache);
-	while(ito.NextPair(pair))
-		if(pair->Value)
-			glDeleteTextures(1, &pair->Value);
-	glDeleteTextures(1, &paletteTex);
-	glDeleteTextures(1, &colormapTex);
+	DestroyWorldGL(wr);
 	glDeleteRenderbuffers(1, &depthRb);
 	glDeleteTextures(1, &colorTex);
 	glDeleteFramebuffers(1, &fbo);
-	DestroyMesh(staticGL);
-	DestroyMesh(dynGL);
-	DestroyMesh(maskedGL);
-	DestroyMesh(spriteGL);
-	glDeleteProgram(prog);
+	dev.Destroy();
+
+	return nonBg > 0;
+}
+
+bool R_GLFrameCapture(const char *outPath)
+{
+	if(map == NULL || screen == NULL)
+	{
+		Printf("GL frame: no map/screen.\n");
+		return false;
+	}
+
+	const int FW = screen->GetWidth();
+	const int FH = screen->GetHeight();
+	int vx = viewscreenx, vy = viewscreeny, vw = viewwidth, vh = viewheight;
+	if(vw <= 0 || vh <= 0 || vx + vw > FW || vy + vh > FH)
+	{
+		// Fullscreen 3D view (viewsize 21): the view covers the whole frame.
+		vx = 0; vy = 0; vw = FW; vh = FH;
+	}
+
+	GLDevice dev;
+	if(!dev.Create(FW, FH, false, /*hidden=*/true, "EC7Wolf GL frame"))
+		return false;
+
+	// --- 1) Render the GL 3D world into its own view-sized colour texture. Kept
+	// at the exact view dimensions so the world shader's screen-space plane bands
+	// / horizon math are identical to the standalone world capture. ---
+	WorldGL wr;
+	if(!BuildWorldGL(wr, vw, vh))
+	{
+		DestroyWorldGL(wr);
+		dev.Destroy();
+		return false;
+	}
+
+	GLuint worldFbo = 0, worldTex = 0, worldDepth = 0;
+	glGenFramebuffers(1, &worldFbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, worldFbo);
+	glGenTextures(1, &worldTex);
+	glBindTexture(GL_TEXTURE_2D, worldTex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, vw, vh, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, worldTex, 0);
+	glGenRenderbuffers(1, &worldDepth);
+	glBindRenderbuffer(GL_RENDERBUFFER, worldDepth);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, vw, vh);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, worldDepth);
+	if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+	{
+		Printf("GL frame: world framebuffer incomplete.\n");
+		DestroyWorldGL(wr);
+		dev.Destroy();
+		return false;
+	}
+	glViewport(0, 0, vw, vh);
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
+	glDisable(GL_CULL_FACE);
+	DrawWorldColourPass(wr);
+	glFinish();
+
+	// --- 2) Build the 2D overlay from the engine's 8-bit frame (HUD + weapon +
+	// menus + text), view region transparent except the weapon. ---
+	GLuint overlayIdx = 0, overlayOpac = 0;
+	unsigned int viewOpaque = 0;
+	BuildOverlay(FW, FH, vx, vy, vw, vh, overlayIdx, overlayOpac, viewOpaque);
+	Printf("GL frame: 2D overlay opaque texels over the 3D view = %u "
+		"(player weapon / world-overlaid 2D).\n", viewOpaque);
+
+	// --- 3) Composite into the full-frame target: world blit into the view
+	// sub-rect, then the 2D overlay over the whole frame with transparent-key
+	// discard. ---
+	GLuint frameFbo = 0, frameTex = 0;
+	glGenFramebuffers(1, &frameFbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, frameFbo);
+	glGenTextures(1, &frameTex);
+	glBindTexture(GL_TEXTURE_2D, frameTex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, FW, FH, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, frameTex, 0);
+	if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+	{
+		Printf("GL frame: composite framebuffer incomplete.\n");
+		glDeleteTextures(1, &overlayIdx);
+		glDeleteTextures(1, &overlayOpac);
+		glDeleteTextures(1, &worldTex);
+		glDeleteRenderbuffers(1, &worldDepth);
+		glDeleteFramebuffers(1, &worldFbo);
+		DestroyWorldGL(wr);
+		dev.Destroy();
+		return false;
+	}
+
+	GLuint sprog = GLShader::Build(kScreenVert, kScreenFrag, "screen-composite");
+	if(!sprog)
+	{
+		glDeleteTextures(1, &overlayIdx);
+		glDeleteTextures(1, &overlayOpac);
+		glDeleteTextures(1, &frameTex);
+		glDeleteFramebuffers(1, &frameFbo);
+		glDeleteTextures(1, &worldTex);
+		glDeleteRenderbuffers(1, &worldDepth);
+		glDeleteFramebuffers(1, &worldFbo);
+		DestroyWorldGL(wr);
+		dev.Destroy();
+		return false;
+	}
+
+	glViewport(0, 0, FW, FH);
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_POLYGON_OFFSET_FILL);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glUseProgram(sprog);
+	const GLint uMode = glGetUniformLocation(sprog, "uMode");
+	// Texture units: 0 world RGB, 1 palette, 4 overlay index, 5 overlay opacity.
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, worldTex);
+	glUniform1i(glGetUniformLocation(sprog, "uWorldTex"), 0);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, wr.paletteTex);
+	glUniform1i(glGetUniformLocation(sprog, "uPaletteTex"), 1);
+	glActiveTexture(GL_TEXTURE4);
+	glBindTexture(GL_TEXTURE_2D, overlayIdx);
+	glUniform1i(glGetUniformLocation(sprog, "uOverlayIdx"), 4);
+	glActiveTexture(GL_TEXTURE5);
+	glBindTexture(GL_TEXTURE_2D, overlayOpac);
+	glUniform1i(glGetUniformLocation(sprog, "uOverlayOpac"), 5);
+
+	// World blit into the view sub-rect. NDC uses a top-down pixel convention
+	// (row 0 = top); the world texture is GL bottom-up, so its V is *not* flipped
+	// (v=0 at the bottom edge, v=1 at the top edge of the view rect).
+	{
+		const float nx0 = 2.0f * (float)vx / (float)FW - 1.0f;
+		const float nx1 = 2.0f * (float)(vx + vw) / (float)FW - 1.0f;
+		const float nyTop = 1.0f - 2.0f * (float)vy / (float)FH;
+		const float nyBot = 1.0f - 2.0f * (float)(vy + vh) / (float)FH;
+		glUniform1i(uMode, 0);
+		DrawScreenQuad(nx0, nyBot, nx1, nyTop, 0.0f, 0.0f, 1.0f, 1.0f);
+	}
+
+	// 2D overlay over the whole frame. The overlay buffer is top-down, so its V
+	// is flipped against NDC (v=1 at the bottom edge, v=0 at the top edge).
+	{
+		glUniform1i(uMode, 1);
+		DrawScreenQuad(-1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f);
+	}
+	glFinish();
+
+	unsigned char *rgb = new unsigned char[(size_t)FW * FH * 3];
+	dev.ReadPixelsRGB(rgb, FW, FH);
+
+	size_t nonBg = 0;
+	for(int i = 0; i < FW * FH; ++i)
+		if(rgb[i*3] || rgb[i*3+1] || rgb[i*3+2]) ++nonBg;
+	Printf("GL frame: composited %dx%d (view %dx%d at %d,%d), %.1f%% covered.\n",
+		FW, FH, vw, vh, vx, vy, 100.0 * (double)nonBg / (double)(FW * FH));
+
+	bool wrote = false;
+	if(outPath)
+		wrote = WritePPM(outPath, rgb, FW, FH);
+	if(wrote)
+		Printf("GL frame: wrote %s\n", outPath);
+
+	delete[] rgb;
+
+	glDeleteProgram(sprog);
+	glDeleteTextures(1, &overlayIdx);
+	glDeleteTextures(1, &overlayOpac);
+	glDeleteTextures(1, &frameTex);
+	glDeleteFramebuffers(1, &frameFbo);
+	glDeleteTextures(1, &worldTex);
+	glDeleteRenderbuffers(1, &worldDepth);
+	glDeleteFramebuffers(1, &worldFbo);
+	DestroyWorldGL(wr);
 	dev.Destroy();
 
 	return nonBg > 0;

@@ -1331,6 +1331,63 @@ bool R_GLFrameCapture(const char *outPath)
 
 namespace
 {
+	// --- GL debug output + resource ledger (renderer redesign Phase 11) --------
+	//
+	// Hardening instrumentation for the live GL path. Both are opt-in via
+	// vid_gldebug (config Vid_GLDebug or --gl-debug) and cost nothing when off.
+
+	// KHR_debug message callback: routes driver diagnostics into the console.
+	void GLAPIENTRY GLDebugCallback(GLenum source, GLenum type, GLuint id,
+		GLenum severity, GLsizei, const GLchar *message, const void *)
+	{
+		if(severity == GL_DEBUG_SEVERITY_NOTIFICATION)
+			return;	// skip buffer-created / verbose notes
+		const char *sev = severity == GL_DEBUG_SEVERITY_HIGH ? "HIGH" :
+			severity == GL_DEBUG_SEVERITY_MEDIUM ? "MEDIUM" : "LOW";
+		Printf("GL debug [%s]: %s\n", sev, message ? message : "");
+		(void)source; (void)type; (void)id;
+	}
+
+	bool gGLDebugInstalled = false;
+	void InstallGLDebug()
+	{
+		if(gGLDebugInstalled || !vid_gldebug)
+			return;
+		gGLDebugInstalled = true;	// attempt once per process
+		if(!epoxy_has_gl_extension("GL_KHR_debug"))
+		{
+			Printf("GL debug: GL_KHR_debug unavailable; using glGetError checks.\n");
+			return;
+		}
+		glEnable(GL_DEBUG_OUTPUT);
+		glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);	// callback on the offending call
+		glDebugMessageCallback(GLDebugCallback, NULL);
+		glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE,
+			0, NULL, GL_TRUE);
+		Printf("GL debug: KHR_debug callback installed.\n");
+	}
+
+	// Drain glGetError after a live stage; a no-op unless vid_gldebug is set.
+	void GLCheckErrors(const char *tag)
+	{
+		if(!vid_gldebug)
+			return;
+		GLenum e;
+		while((e = glGetError()) != GL_NO_ERROR)
+			Printf("GL error 0x%04x after %s\n", (unsigned)e, tag ? tag : "?");
+	}
+
+	// Live GL object ledger: counts the persistent / per-present objects the live
+	// module itself allocates so a leak surfaces as a nonzero balance at shutdown.
+	// Cache textures (created inside the shared mesh uploader) are excluded and
+	// audited separately via the cache map sizes.
+	struct GLLedger
+	{
+		long tex, fbo, rbo, prog;
+		GLLedger() : tex(0), fbo(0), rbo(0), prog(0) {}
+	};
+	GLLedger gLedger;
+
 	struct GLLive
 	{
 		bool   inited;
@@ -1378,26 +1435,34 @@ namespace
 	{
 		if(gLive.inited)
 			return;
+		InstallGLDebug();	// first live use: attach KHR_debug if requested
 		gLive.prog = GLShader::Build(kVert, kFrag, "world-indexed-live");
+		if(gLive.prog) gLedger.prog++;
 		gLive.screenProg = GLShader::Build(kScreenVert, kScreenFrag,
 			"screen-composite-live");
+		if(gLive.screenProg) gLedger.prog++;
 		gLive.paletteTex = CreatePaletteTexture();
+		if(gLive.paletteTex) gLedger.tex++;
 		int rows = 0;
 		gLive.colormapTex = CreateColormapTexture(rows);
+		if(gLive.colormapTex) gLedger.tex++;
 		gLive.inited = gLive.prog && gLive.screenProg &&
 			gLive.paletteTex && gLive.colormapTex;
+		GLCheckErrors("EnsureLiveResources");
 	}
 
 	void EnsureWorldFbo(int w, int h)
 	{
 		if(gLive.worldFbo && gLive.worldW == w && gLive.worldH == h)
 			return;
-		if(gLive.worldTex)   glDeleteTextures(1, &gLive.worldTex);
-		if(gLive.worldDepth) glDeleteRenderbuffers(1, &gLive.worldDepth);
-		if(gLive.worldFbo)   glDeleteFramebuffers(1, &gLive.worldFbo);
+		if(gLive.worldTex)   { glDeleteTextures(1, &gLive.worldTex);      gLedger.tex--; }
+		if(gLive.worldDepth) { glDeleteRenderbuffers(1, &gLive.worldDepth); gLedger.rbo--; }
+		if(gLive.worldFbo)   { glDeleteFramebuffers(1, &gLive.worldFbo);   gLedger.fbo--; }
 		glGenFramebuffers(1, &gLive.worldFbo);
+		gLedger.fbo++;
 		glBindFramebuffer(GL_FRAMEBUFFER, gLive.worldFbo);
 		glGenTextures(1, &gLive.worldTex);
+		gLedger.tex++;
 		glBindTexture(GL_TEXTURE_2D, gLive.worldTex);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA,
 			GL_UNSIGNED_BYTE, NULL);
@@ -1408,6 +1473,7 @@ namespace
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
 			GL_TEXTURE_2D, gLive.worldTex, 0);
 		glGenRenderbuffers(1, &gLive.worldDepth);
+		gLedger.rbo++;
 		glBindRenderbuffer(GL_RENDERBUFFER, gLive.worldDepth);
 		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, w, h);
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
@@ -1475,6 +1541,7 @@ namespace
 		DrawWorldColourPass(wr);
 		DestroyWorldGL(wr);	// frees per-frame VBOs; borrowed resources kept
 		gLive.haveWorld = true;
+		GLCheckErrors("RenderLiveWorld");
 	}
 }
 
@@ -1598,7 +1665,9 @@ void R_GLLivePresent(const unsigned char *mem, int pitch, int fw, int fh,
 			}
 	}
 	GLuint oIdx = CreateR8UITexture(&idx[0], W, H);
+	gLedger.tex++;
 	GLuint oOpac = CreateR8UITexture(&opac[0], W, H);
+	gLedger.tex++;
 
 	glUseProgram(gLive.screenProg);
 	const GLint uMode = glGetUniformLocation(gLive.screenProg, "uMode");
@@ -1628,7 +1697,10 @@ void R_GLLivePresent(const unsigned char *mem, int pitch, int fw, int fh,
 	DrawScreenQuad(-1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f);
 
 	glDeleteTextures(1, &oIdx);
+	gLedger.tex--;
 	glDeleteTextures(1, &oOpac);
+	gLedger.tex--;
+	GLCheckErrors("R_GLLivePresent");
 
 	// Headless verification: keep the just-composited frame (still in the default
 	// framebuffer, before the caller swaps) so the capture harness can write the
@@ -1654,13 +1726,34 @@ void R_GLLivePresent(const unsigned char *mem, int pitch, int fw, int fh,
 
 void R_GLLiveShutdown()
 {
+	// Cache textures (created by the shared mesh uploader, freed here) are audited
+	// separately from the ledger; record their count before ClearLiveCaches frees.
+	const long cacheTex = (long)gLive.texCache.CountUsed() +
+		(long)gLive.opacCache.CountUsed();
 	ClearLiveCaches();
-	if(gLive.worldTex)   glDeleteTextures(1, &gLive.worldTex);
-	if(gLive.worldDepth) glDeleteRenderbuffers(1, &gLive.worldDepth);
-	if(gLive.worldFbo)   glDeleteFramebuffers(1, &gLive.worldFbo);
-	if(gLive.screenProg) glDeleteProgram(gLive.screenProg);
-	if(gLive.prog)       glDeleteProgram(gLive.prog);
-	if(gLive.paletteTex) glDeleteTextures(1, &gLive.paletteTex);
-	if(gLive.colormapTex) glDeleteTextures(1, &gLive.colormapTex);
+	if(gLive.worldTex)    { glDeleteTextures(1, &gLive.worldTex);       gLedger.tex--; }
+	if(gLive.worldDepth)  { glDeleteRenderbuffers(1, &gLive.worldDepth); gLedger.rbo--; }
+	if(gLive.worldFbo)    { glDeleteFramebuffers(1, &gLive.worldFbo);    gLedger.fbo--; }
+	if(gLive.screenProg)  { glDeleteProgram(gLive.screenProg);          gLedger.prog--; }
+	if(gLive.prog)        { glDeleteProgram(gLive.prog);                gLedger.prog--; }
+	if(gLive.paletteTex)  { glDeleteTextures(1, &gLive.paletteTex);      gLedger.tex--; }
+	if(gLive.colormapTex) { glDeleteTextures(1, &gLive.colormapTex);     gLedger.tex--; }
+
+	// Resource-leak check: after teardown the live ledger must balance to zero and
+	// the texture caches must be empty. A nonzero balance means a live GL object
+	// was allocated without a matching free somewhere in the frame loop.
+	const long leaked = gLedger.tex + gLedger.fbo + gLedger.rbo + gLedger.prog;
+	if(leaked == 0 && gLive.texCache.CountUsed() == 0 &&
+		gLive.opacCache.CountUsed() == 0)
+		Printf("GL live: 0 leaked GL objects (balanced; %ld cache textures freed).\n",
+			cacheTex);
+	else
+		Printf("GL live: WARNING leaked GL objects "
+			"(tex=%ld fbo=%ld rbo=%ld prog=%ld, %ld cache textures at exit).\n",
+			gLedger.tex, gLedger.fbo, gLedger.rbo, gLedger.prog,
+			(long)gLive.texCache.CountUsed() + (long)gLive.opacCache.CountUsed());
+
 	gLive = GLLive();
+	gLedger = GLLedger();
+	gGLDebugInstalled = false;
 }

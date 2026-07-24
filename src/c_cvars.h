@@ -63,6 +63,7 @@ extern bool		vid_fullscreen;
 extern Aspect	vid_aspect;
 extern bool		vid_vsync;
 extern FString	vid_renderer;	// "software" | "opengl" | "vulkan"
+extern bool		vid_gldebug;	// install KHR_debug callback + GL error checks
 extern int		vid_maxfps;		// frame-rate cap; 0 = unlimited
 extern bool		r_interpolate;				// master motion interpolation switch
 extern bool		r_interpolate_camera;		// interpolate the player camera

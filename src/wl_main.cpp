@@ -1348,6 +1348,18 @@ int WL_Main (int argc, char *argv[])
 				break;
 			}
 		}
+		// GL debug output / error checking (KHR_debug). Off by default; opt in via
+		// the config's Vid_GLDebug or this flag. Must be set before the GL context
+		// is created so the debug context hint can be requested.
+		for(int i = 1; i < argc; ++i)
+		{
+			if(strcmp(argv[i], "--gl-debug") == 0)
+			{
+				vid_gldebug = true;
+				Printf("Renderer: GL debug output enabled (command line).\n");
+				break;
+			}
+		}
 
 		{
 			TArray<FString> wadfiles, files;

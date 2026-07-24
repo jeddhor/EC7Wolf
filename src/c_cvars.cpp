@@ -53,6 +53,7 @@ bool forcegrabmouse = false;
 bool vid_fullscreen = false;
 bool vid_vsync = false;
 FString vid_renderer = "software";
+bool vid_gldebug = false;
 int vid_maxfps = 0;					// 0 = unlimited
 bool r_interpolate = true;
 bool r_interpolate_camera = true;
@@ -208,6 +209,7 @@ void ReadConfig(void)
 	config.CreateSetting("Vid_Aspect", ASPECT_NONE);
 	config.CreateSetting("Vid_Vsync", false);
 	config.CreateSetting("Vid_Renderer", FString("software"));
+	config.CreateSetting("Vid_GLDebug", false);
 	config.CreateSetting("Vid_MaxFPS", 0);
 	config.CreateSetting("R_Interpolate", true);
 	config.CreateSetting("R_InterpolateCamera", true);
@@ -281,6 +283,7 @@ void ReadConfig(void)
 	vid_aspect = static_cast<Aspect>(config.GetSetting("Vid_Aspect")->GetInteger());
 	vid_vsync = config.GetSetting("Vid_Vsync")->GetInteger() != 0;
 	vid_renderer = config.GetSetting("Vid_Renderer")->GetString();
+	vid_gldebug = config.GetSetting("Vid_GLDebug")->GetInteger() != 0;
 	vid_maxfps = config.GetSetting("Vid_MaxFPS")->GetInteger();
 	r_interpolate = config.GetSetting("R_Interpolate")->GetInteger() != 0;
 	r_interpolate_camera = config.GetSetting("R_InterpolateCamera")->GetInteger() != 0;
@@ -442,6 +445,7 @@ void WriteConfig(void)
 	config.GetSetting("Vid_Aspect")->SetValue(vid_aspect);
 	config.GetSetting("Vid_Vsync")->SetValue(vid_vsync);
 	config.GetSetting("Vid_Renderer")->SetValue(vid_renderer);
+	config.GetSetting("Vid_GLDebug")->SetValue(vid_gldebug);
 	config.GetSetting("Vid_MaxFPS")->SetValue(vid_maxfps);
 	config.GetSetting("R_Interpolate")->SetValue(r_interpolate);
 	config.GetSetting("R_InterpolateCamera")->SetValue(r_interpolate_camera);

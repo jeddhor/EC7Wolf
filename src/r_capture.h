@@ -23,6 +23,9 @@
 //   --capture-frame N       Screenshot after rendered frame N (1-based).
 //   --capture-file PATH     Destination PNG for --capture-frame.
 //   --capture-maxframes N   Finalize the checksum log and quit after N frames.
+//   --capture-open-doors N  Force every door to slide amount N (0..65535) each
+//                           tic, so a mid-slide door can be compared between the
+//                           software and GL renderers without scripted input.
 //
 // ===========================================================================
 
@@ -39,6 +42,12 @@ namespace Capture
 	// If --capture-rngseed was supplied, overwrite seed with the fixed value
 	// and return true.  Called right after the engine picks its RNG seed.
 	bool OverrideRNGSeed(DWORD &seed);
+
+	// Apply capture-time world overrides (e.g. --capture-open-doors) at the top
+	// of each simulation tic, before thinkers run, so the forced state is picked
+	// up by both the software render and the GL interpolation snapshots. No-op
+	// unless an override switch was supplied.
+	void PreTic();
 
 	// Fold this simulation tic's deterministic state into the running checksum.
 	// Call exactly once per executed 70 Hz tic, after the tic is simulated.

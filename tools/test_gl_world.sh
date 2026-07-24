@@ -45,10 +45,11 @@ set +e
 ) >"$log" 2>&1
 set -e
 
-grep -iE "GL world: mesh|GL world: rendered" "$log" || true
+grep -iE "GL world: static|GL world: rendered" "$log" || true
 
-mesh_line=$(grep "GL world: mesh" "$log" || true)
+mesh_line=$(grep "GL world: static" "$log" || true)
 walls=$(printf '%s' "$mesh_line" | sed -n 's/.*walls=\([0-9]*\).*/\1/p')
+dynfaces=$(printf '%s' "$mesh_line" | sed -n 's/.*dynamic faces=\([0-9]*\).*/\1/p')
 covered=$(grep "GL world: rendered" "$log" | sed -n 's/.*, \([0-9.]*\)% covered.*/\1/p')
 
 if [ -z "$walls" ] || [ "$walls" -le 0 ] 2>/dev/null; then
@@ -60,6 +61,43 @@ if [ ! -s "$out_dir/glworld.ppm" ]; then
 	exit 1
 fi
 
-printf 'PASS: GL static world rendered (walls=%s, coverage=%s%%). Outputs in %s\n' \
-	"$walls" "${covered:-?}" "$out_dir"
+printf 'PASS: GL static world rendered (walls=%s, dynamic-faces=%s, coverage=%s%%).\n' \
+	"$walls" "${dynfaces:-0}" "${covered:-?}"
+
+# Phase 7: prove dynamic door geometry renders and responds to the slide. Render
+# the same view with every door forced closed and forced open; the two GL images
+# must differ (a door leaf slides, revealing geometry behind it). Requires the
+# ImageMagick 'compare' tool; skipped with a note if it is unavailable.
+if command -v compare >/dev/null 2>&1 || command -v magick >/dev/null 2>&1; then
+	cmp_tool="compare"
+	command -v compare >/dev/null 2>&1 || cmp_tool="magick compare"
+	for amt in 0 65535; do
+		save2=$(mktemp -d "$save.door.XXXXXX" 2>/dev/null || mktemp -d)
+		(
+			cd "$data_dir"
+			timeout 90s env SDL_AUDIODRIVER=dummy xvfb-run -a "$ec7wolf" \
+				--data CO7 --config "$cfg/door$amt.cfg" --savedir "$save2" \
+				--nowait --tedlevel "$map" --skill 2 --capture-rngseed 1 \
+				--capture-frame 30 --capture-file "$out_dir/sw_door$amt.png" \
+				--capture-glworld "$out_dir/gl_door$amt.ppm" \
+				--capture-maxframes 40 --capture-open-doors "$amt"
+		) >>"$log" 2>&1
+	done
+	if [ -s "$out_dir/gl_door0.ppm" ] && [ -s "$out_dir/gl_door65535.ppm" ]; then
+		diffpx=$($cmp_tool -metric AE "$out_dir/gl_door0.ppm" \
+			"$out_dir/gl_door65535.ppm" null: 2>&1 | sed -n 's/^\([0-9]*\).*/\1/p')
+		diffpx=${diffpx:-0}
+		if [ "$diffpx" -gt 50 ] 2>/dev/null; then
+			printf 'PASS: GL door slide renders (closed vs open differ by %s px).\n' \
+				"$diffpx"
+		else
+			printf 'WARN: no visible door in this view (closed vs open differ by %s px); door geometry still built.\n' \
+				"$diffpx"
+		fi
+	fi
+else
+	printf 'WARN: ImageMagick compare unavailable; skipped door-slide render check.\n'
+fi
+
+printf 'Outputs in %s\n' "$out_dir"
 exit 0

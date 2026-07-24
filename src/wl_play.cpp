@@ -5,6 +5,7 @@
 #include "r_capture.h"
 #include "render/r_renderer.h"
 #include "render/r_interpolation.h"
+#include "render/r_dynamicwalls.h"
 #include "wl_menu.h"
 #include "id_ca.h"
 #include "id_sd.h"
@@ -1279,6 +1280,9 @@ void PlayLoop (void)
 
 				// Snapshot render history around the tic (current -> previous).
 				Interpolation::BeginTic();
+				DynamicWalls::BeginTic();
+
+				Capture::PreTic(); // capture-time world overrides (opt-in)
 
 				CheckSpawnPlayer();
 
@@ -1294,6 +1298,7 @@ void PlayLoop (void)
 				// deterministic state into the checksum (reads real, not
 				// interpolated, state).
 				Interpolation::EndTic();
+				DynamicWalls::EndTic();
 
 				Capture::PerTic(); // fold deterministic state into the checksum
 			}

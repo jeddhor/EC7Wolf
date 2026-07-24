@@ -9,6 +9,7 @@
 #include <math.h>
 #include "wl_def.h"
 #include "wl_menu.h"
+#include "render/r_dynamicwalls.h"
 #include "id_ca.h"
 #include "id_sd.h"
 #include "id_vl.h"
@@ -334,6 +335,10 @@ void SetupGameLevel (void)
 		map->SpawnThings();
 		CheckSpawnPlayer(true);
 	}
+
+	// A new (or just-loaded) level has no motion history: forget any door /
+	// pushwall snapshots so nothing sweeps in from a previous level's state.
+	DynamicWalls::Reset();
 }
 
 

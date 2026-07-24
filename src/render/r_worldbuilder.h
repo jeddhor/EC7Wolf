@@ -34,7 +34,8 @@ enum WorldSurfaceKind
 {
 	WSURF_Floor,
 	WSURF_Ceiling,
-	WSURF_Wall
+	WSURF_Wall,
+	WSURF_DoorLeaf		// sliding door leaf: wall-shaded + shader slide (Phase 7)
 };
 
 // A run of vertices sharing a texture/kind, so the backend can bind the real
@@ -44,8 +45,15 @@ struct WorldSurface
 	unsigned int firstVertex;
 	unsigned int vertexCount;
 	FTextureID   texture;
-	int          kind;		// WorldSurfaceKind
-	int          side;		// MapTile::Side for walls, -1 otherwise
+	int          kind;			// WorldSurfaceKind
+	int          side;			// MapTile::Side for walls, -1 otherwise
+	// Door-leaf slide state (WSURF_DoorLeaf only): the shader reproduces the
+	// software CheckSlidePass()/SlideTextureOffset() along the quad's U axis.
+	int          slideStyle;	// SLIDE_Normal / SLIDE_Split / SLIDE_Invert
+	unsigned int slideAmount;	// 0 = closed .. 0xffff = fully open
+
+	WorldSurface() : firstVertex(0), vertexCount(0), kind(0), side(-1),
+		slideStyle(0), slideAmount(0) {}
 };
 
 struct WorldMesh
@@ -69,8 +77,15 @@ struct WorldMesh
 
 namespace WorldBuilder
 {
-	// Build static opaque geometry for the given map's plane 0 into out.
-	void Build(GameMap *gm, WorldMesh &out);
+	// Build static opaque geometry for the given map's plane 0 into out. Cells
+	// reported by IsDynamicCell are skipped (door/pushwall cells still emit their
+	// floor and ceiling so the doorway/vacated cell is not a hole).
+	void BuildStatic(GameMap *gm, WorldMesh &out);
+
+	// Build the dynamic geometry (door leaves + moving pushwalls) at the given
+	// interpolation alpha. Door slide amounts and pushwall world positions are
+	// blended between the previous and current simulation tics via DynamicWalls.
+	void BuildDynamic(GameMap *gm, WorldMesh &out, float alpha);
 }
 
 #endif

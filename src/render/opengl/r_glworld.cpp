@@ -21,6 +21,7 @@
 #include "render/opengl/r_gldevice.h"
 #include "render/opengl/r_glshader.h"
 #include "render/r_worldbuilder.h"
+#include "render/r_dynamicwalls.h"
 #include "wl_def.h"
 #include "zdoomsupport.h"
 #include "wl_main.h"
@@ -150,6 +151,9 @@ namespace
 		"uniform int   uExtraLight;\n"
 		"uniform int   uViewW;\n"
 		"uniform int   uDither;\n"
+		"uniform int   uSlide;\n"           // 1 = sliding door leaf
+		"uniform int   uSlideStyle;\n"      // SLIDE_Normal/Split/Invert
+		"uniform float uSlideAmount;\n"     // 0 closed .. 65535 fully open
 		"uniform int   uDebug;\n"           // 0 normal, 1 shade-row visualization
 		"const float FRACUNIT = 65536.0;\n"
 		"const float MINZ = 8192.0;\n"      // 2048*4
@@ -159,8 +163,26 @@ namespace
 		"    return (float(m[i]) + 0.5) / 16.0;\n"
 		"}\n"
 		"void main(){\n"
+		"    // Door-leaf slide: reproduce the software CheckSlidePass /\n"
+		"    // SlideTextureOffset along U before sampling. Open columns discard.\n"
+		"    vec2 uv = vUV;\n"
+		"    if(uSlide == 1){\n"
+		"        float intercept = clamp(uv.x, 0.0, 0.999985);\n"
+		"        float amt = uSlideAmount / FRACUNIT;\n"
+		"        bool open;\n"
+		"        if(amt <= 0.0) open = false;\n"
+		"        else if(uSlideStyle == 1) open = abs(1.0 - intercept*2.0) < amt;\n"
+		"        else if(uSlideStyle == 2) open = intercept > (1.0 - amt);\n"
+		"        else open = intercept < amt;\n"
+		"        if(open) discard;\n"
+		"        float off;\n"
+		"        if(uSlideStyle == 1) off = (intercept < 0.5) ? amt*0.5 : -amt*0.5;\n"
+		"        else if(uSlideStyle == 2) off = amt;\n"
+		"        else off = -amt;\n"
+		"        uv.x = fract(intercept + off);\n"
+		"    }\n"
 		"    ivec2 isz = textureSize(uIndexTex,0);\n"
-		"    ivec2 texel = ivec2(floor(vUV * vec2(isz)));\n"
+		"    ivec2 texel = ivec2(floor(uv * vec2(isz)));\n"
 		"    texel = ((texel % isz) + isz) % isz;\n"   // tile (repeat) within one cell
 		"    // Explicit per-texel opacity (C7 grate/fence walls); never write\n"
 		"    // transparent texels, matching the software postopacity test.\n"
@@ -368,25 +390,41 @@ namespace
 		GLint uHasOpacity;
 		GLint uSurfKind;
 		GLint uPlaneHeight;
+		GLint uSlide;
+		GLint uSlideStyle;
+		GLint uSlideAmount;
 		float floorPlaneH;
 		float ceilPlaneH;
 	};
 
-	void RenderPass(GLuint prog, GLint uDebug, int debugMode,
-		const WorldMesh &mesh, const TArray<GLuint> &surfaceTex,
-		const TArray<GLuint> &surfaceOpac, const SurfaceUniforms &su)
+	// One mesh's GPU resources: interleaved VBO + a per-surface index/opacity
+	// texture list (parallel to mesh.surfaces).
+	struct MeshGL
 	{
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		glUniform1i(uDebug, debugMode);
+		GLuint vao, vbo;
+		TArray<GLuint> tex;
+		TArray<GLuint> opac;
+		MeshGL() : vao(0), vbo(0) {}
+	};
+
+	// Draw one mesh with the current program/uniforms. The framebuffer clear and
+	// uDebug are set by the caller so several meshes share one pass.
+	void RenderMesh(const WorldMesh &mesh, const MeshGL &gl,
+		const SurfaceUniforms &su)
+	{
+		if(mesh.vertices.Size() == 0)
+			return;
+		glBindVertexArray(gl.vao);
 
 		GLuint boundTex = 0xffffffffu;
 		GLuint boundOpac = 0xffffffffu;
 		int boundKind = -100;
+		int boundSlideStyle = -100;
+		unsigned int boundSlideAmt = 0xffffffffu;
 		for(unsigned int i = 0; i < mesh.surfaces.Size(); ++i)
 		{
 			const WorldSurface &surf = mesh.surfaces[i];
-			const GLuint tex = surfaceTex[i];
+			const GLuint tex = gl.tex[i];
 			if(tex == 0)
 				continue;
 			if(tex != boundTex)
@@ -396,7 +434,7 @@ namespace
 				glUniform1i(su.uIndexTex, 0);
 				boundTex = tex;
 			}
-			const GLuint opac = surfaceOpac[i];
+			const GLuint opac = gl.opac[i];
 			if(opac != boundOpac)
 			{
 				glUniform1i(su.uHasOpacity, opac ? 1 : 0);
@@ -408,21 +446,96 @@ namespace
 				}
 				boundOpac = opac;
 			}
-			// surf.kind: WSURF_Floor=0, WSURF_Ceiling=1, WSURF_Wall=2 maps
-			// directly onto the shader's uSurfKind convention.
-			if(surf.kind != boundKind)
+			// A door leaf is shaded as a wall (perpendicular distance, C7 cycle /
+			// full-bright) but additionally runs the slide in the shader.
+			const bool isDoor = surf.kind == WSURF_DoorLeaf;
+			const int shaderKind = isDoor ? WSURF_Wall : surf.kind;
+			if(shaderKind != boundKind)
 			{
-				glUniform1i(su.uSurfKind, surf.kind);
-				if(surf.kind == WSURF_Floor)
+				glUniform1i(su.uSurfKind, shaderKind);
+				if(shaderKind == WSURF_Floor)
 					glUniform1f(su.uPlaneHeight, su.floorPlaneH);
-				else if(surf.kind == WSURF_Ceiling)
+				else if(shaderKind == WSURF_Ceiling)
 					glUniform1f(su.uPlaneHeight, su.ceilPlaneH);
-				boundKind = surf.kind;
+				boundKind = shaderKind;
+			}
+			glUniform1i(su.uSlide, isDoor ? 1 : 0);
+			if(isDoor && (surf.slideStyle != boundSlideStyle ||
+				surf.slideAmount != boundSlideAmt))
+			{
+				glUniform1i(su.uSlideStyle, surf.slideStyle);
+				glUniform1f(su.uSlideAmount, (float)surf.slideAmount);
+				boundSlideStyle = surf.slideStyle;
+				boundSlideAmt = surf.slideAmount;
 			}
 			glDrawArrays(GL_TRIANGLES, (GLint)surf.firstVertex,
 				(GLsizei)surf.vertexCount);
 		}
-		glFinish();
+	}
+
+	// Upload a mesh's VBO + per-surface index/opacity textures. Textures are
+	// cached per FTextureID (shared across the static and dynamic meshes) so
+	// shared art uploads a single time.
+	void UploadMesh(const WorldMesh &mesh, TMap<int, GLuint> &texCache,
+		TMap<int, GLuint> &opacCache, MeshGL &out,
+		unsigned int *uniqueOut, unsigned int *maskedOut)
+	{
+		glGenVertexArrays(1, &out.vao);
+		glBindVertexArray(out.vao);
+		glGenBuffers(1, &out.vbo);
+		glBindBuffer(GL_ARRAY_BUFFER, out.vbo);
+		if(mesh.vertices.Size() > 0)
+			glBufferData(GL_ARRAY_BUFFER,
+				(GLsizeiptr)(mesh.vertices.Size() * sizeof(WorldVertex)),
+				&mesh.vertices[0], GL_STATIC_DRAW);
+		const GLsizei stride = sizeof(WorldVertex);
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, (void*)0);
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride, (void*)(3*sizeof(float)));
+		glEnableVertexAttribArray(2);
+		glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, stride, (void*)(5*sizeof(float)));
+		glEnableVertexAttribArray(3);
+		glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, stride, (void*)(6*sizeof(float)));
+
+		out.tex.Resize(mesh.surfaces.Size());
+		out.opac.Resize(mesh.surfaces.Size());
+		for(unsigned int i = 0; i < mesh.surfaces.Size(); ++i)
+		{
+			const FTextureID id = mesh.surfaces[i].texture;
+			if(!id.isValid())
+			{
+				out.tex[i] = 0;
+				out.opac[i] = 0;
+				continue;
+			}
+			const int key = id.GetIndex();
+			GLuint *cached = texCache.CheckKey(key);
+			if(cached)
+			{
+				out.tex[i] = *cached;
+				out.opac[i] = *opacCache.CheckKey(key);
+				continue;
+			}
+			FTexture *ftex = TexMan(id);
+			GLuint idxTex = CreateIndexTextureFor(ftex);
+			GLuint opacTex = CreateOpacityTextureFor(ftex);
+			texCache[key] = idxTex;
+			opacCache[key] = opacTex;
+			out.tex[i] = idxTex;
+			out.opac[i] = opacTex;
+			if(idxTex && uniqueOut)
+				++*uniqueOut;
+			if(opacTex && maskedOut)
+				++*maskedOut;
+		}
+	}
+
+	void DestroyMesh(MeshGL &gl)
+	{
+		if(gl.vbo) glDeleteBuffers(1, &gl.vbo);
+		if(gl.vao) glDeleteVertexArrays(1, &gl.vao);
+		gl.vbo = gl.vao = 0;
 	}
 }
 
@@ -437,13 +550,20 @@ bool R_GLWorldCapture(const char *outPath)
 	int W = viewwidth  > 0 ? viewwidth  : 320;
 	int H = viewheight > 0 ? viewheight : 200;
 
-	// Build the static world mesh (backend-neutral).
+	// Build the static world mesh plus the dynamic (door/pushwall) mesh. The
+	// dynamic mesh is interpolated at the current sub-tic alpha so doors and
+	// pushwalls render at their exact fractional positions.
 	WorldMesh mesh;
-	WorldBuilder::Build(map, mesh);
-	Printf("GL world: mesh walls=%u floors=%u ceilings=%u verts=%u\n",
+	WorldBuilder::BuildStatic(map, mesh);
+	WorldMesh dynMesh;
+	const float alpha = R_GetInterpolationAlpha();
+	WorldBuilder::BuildDynamic(map, dynMesh, alpha);
+	Printf("GL world: static walls=%u floors=%u ceilings=%u verts=%u; "
+		"dynamic faces=%u verts=%u (alpha=%.2f)\n",
 		mesh.wallFaces, mesh.floorTiles, mesh.ceilingTiles,
-		(unsigned)mesh.vertices.Size());
-	if(mesh.vertices.Size() == 0)
+		(unsigned)mesh.vertices.Size(), dynMesh.wallFaces,
+		(unsigned)dynMesh.vertices.Size(), alpha);
+	if(mesh.vertices.Size() == 0 && dynMesh.vertices.Size() == 0)
 		return false;
 
 	GLDevice dev;
@@ -453,66 +573,21 @@ bool R_GLWorldCapture(const char *outPath)
 	GLuint prog = GLShader::Build(kVert, kFrag, "world-indexed");
 	if(!prog) { dev.Destroy(); return false; }
 
-	GLuint vao = 0, vbo = 0;
-	glGenVertexArrays(1, &vao);
-	glBindVertexArray(vao);
-	glGenBuffers(1, &vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER,
-		(GLsizeiptr)(mesh.vertices.Size() * sizeof(WorldVertex)),
-		&mesh.vertices[0], GL_STATIC_DRAW);
-	const GLsizei stride = sizeof(WorldVertex);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, (void*)0);
-	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride, (void*)(3*sizeof(float)));
-	glEnableVertexAttribArray(2);
-	glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, stride, (void*)(5*sizeof(float)));
-	glEnableVertexAttribArray(3);
-	glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, stride, (void*)(6*sizeof(float)));
-
 	// --- palette + colormap (shared) and per-surface index textures ---
 	GLuint paletteTex = CreatePaletteTexture();
 	int colormapRows = 0;
 	GLuint colormapTex = CreateColormapTexture(colormapRows);
 
-	// Cache index + opacity textures per FTexture so shared textures upload once.
+	// Index + opacity textures cache per FTexture, shared across both meshes so
+	// shared art uploads once.
 	TMap<int, GLuint> texCache;
 	TMap<int, GLuint> opacCache;
-	TArray<GLuint> surfaceTex(mesh.surfaces.Size());
-	TArray<GLuint> surfaceOpac(mesh.surfaces.Size());
-	surfaceTex.Resize(mesh.surfaces.Size());
-	surfaceOpac.Resize(mesh.surfaces.Size());
 	unsigned int uniqueTextures = 0, maskedTextures = 0;
-	for(unsigned int i = 0; i < mesh.surfaces.Size(); ++i)
-	{
-		const FTextureID id = mesh.surfaces[i].texture;
-		if(!id.isValid())
-		{
-			surfaceTex[i] = 0;
-			surfaceOpac[i] = 0;
-			continue;
-		}
-		const int key = id.GetIndex();
-		GLuint *cached = texCache.CheckKey(key);
-		if(cached)
-		{
-			surfaceTex[i] = *cached;
-			surfaceOpac[i] = *opacCache.CheckKey(key);
-			continue;
-		}
-		FTexture *ftex = TexMan(id);
-		GLuint idxTex = CreateIndexTextureFor(ftex);
-		GLuint opacTex = CreateOpacityTextureFor(ftex);
-		texCache[key] = idxTex;
-		opacCache[key] = opacTex;
-		surfaceTex[i] = idxTex;
-		surfaceOpac[i] = opacTex;
-		if(idxTex)
-			++uniqueTextures;
-		if(opacTex)
-			++maskedTextures;
-	}
+	MeshGL staticGL, dynGL;
+	UploadMesh(mesh, texCache, opacCache, staticGL,
+		&uniqueTextures, &maskedTextures);
+	UploadMesh(dynMesh, texCache, opacCache, dynGL,
+		&uniqueTextures, &maskedTextures);
 	Printf("GL world: uploaded %u unique index textures (%u with opacity).\n",
 		uniqueTextures, maskedTextures);
 
@@ -605,6 +680,9 @@ bool R_GLWorldCapture(const char *outPath)
 	su.uHasOpacity  = glGetUniformLocation(prog, "uHasOpacity");
 	su.uSurfKind    = glGetUniformLocation(prog, "uSurfKind");
 	su.uPlaneHeight = glGetUniformLocation(prog, "uPlaneHeight");
+	su.uSlide       = glGetUniformLocation(prog, "uSlide");
+	su.uSlideStyle  = glGetUniformLocation(prog, "uSlideStyle");
+	su.uSlideAmount = glGetUniformLocation(prog, "uSlideAmount");
 	su.floorPlaneH  = floorPlaneH;
 	su.ceilPlaneH   = ceilPlaneH;
 	const GLint uDebug = glGetUniformLocation(prog, "uDebug");
@@ -617,12 +695,16 @@ bool R_GLWorldCapture(const char *outPath)
 	glBindTexture(GL_TEXTURE_2D, colormapTex);
 	glUniform1i(glGetUniformLocation(prog, "uColormapTex"), 2);
 
-	glBindVertexArray(vao);
-
 	unsigned char *rgb = new unsigned char[(size_t)W * H * 3];
 
-	// Pass 1: full-fidelity colour.
-	RenderPass(prog, uDebug, 0, mesh, surfaceTex, surfaceOpac, su);
+	// Pass 1: full-fidelity colour. Static opaque world first, then the dynamic
+	// door/pushwall geometry, sharing one clear and depth buffer.
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glUniform1i(uDebug, 0);
+	RenderMesh(mesh, staticGL, su);
+	RenderMesh(dynMesh, dynGL, su);
+	glFinish();
 	dev.ReadPixelsRGB(rgb, W, H);
 
 	size_t nonBg = 0;
@@ -640,7 +722,11 @@ bool R_GLWorldCapture(const char *outPath)
 	// Pass 2: shade-row debug visualization (exit-gate requirement).
 	if(outPath)
 	{
-		RenderPass(prog, uDebug, 1, mesh, surfaceTex, surfaceOpac, su);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glUniform1i(uDebug, 1);
+		RenderMesh(mesh, staticGL, su);
+		RenderMesh(dynMesh, dynGL, su);
+		glFinish();
 		dev.ReadPixelsRGB(rgb, W, H);
 		FString dbg;
 		dbg.Format("%s.shaderow.ppm", outPath);
@@ -665,8 +751,8 @@ bool R_GLWorldCapture(const char *outPath)
 	glDeleteRenderbuffers(1, &depthRb);
 	glDeleteTextures(1, &colorTex);
 	glDeleteFramebuffers(1, &fbo);
-	glDeleteBuffers(1, &vbo);
-	glDeleteVertexArrays(1, &vao);
+	DestroyMesh(staticGL);
+	DestroyMesh(dynGL);
 	glDeleteProgram(prog);
 	dev.Destroy();
 

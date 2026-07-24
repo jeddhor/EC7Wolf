@@ -48,6 +48,7 @@ namespace
 
 	FString  g_glWorldPath;              // Phase 5 GL world offscreen capture
 	FString  g_glFramePath;              // Phase 10 full-frame composite capture
+	FString  g_glPresentPath;            // Phase 10 live GL-presented frame
 
 	int      g_maxFrames      = -1;      // quit after this many rendered frames
 	int      g_maxTics        = -1;      // quit after this many simulation tics
@@ -202,6 +203,11 @@ void ParseArgs(int argc, char **argv)
 			g_glFramePath = argv[++i];
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-glpresent") == 0 && i + 1 < argc)
+		{
+			g_glPresentPath = argv[++i];
+			g_armed = true;
+		}
 		else if(strcmp(arg, "--capture-open-doors") == 0 && i + 1 < argc)
 		{
 			g_openDoors = atoi(argv[++i]);
@@ -230,6 +236,13 @@ void ParseArgs(int argc, char **argv)
 			Printf("Capture: FAILED to open checksum log '%s'\n",
 				g_checksumPath.GetChars());
 	}
+
+#ifdef ECWOLF_RENDERER_OPENGL
+	// Arm the live GL present capture (it keeps the latest presented frame; we
+	// write it at the chosen gameplay frame in PostFrame).
+	if(!g_glPresentPath.IsEmpty())
+		R_GLLiveArmCapture(g_glPresentPath.GetChars(), g_captureFrame);
+#endif
 }
 
 bool Active()
@@ -389,6 +402,9 @@ void PostFrame()
 		// 2D overlay) for parity against the same software screenshot.
 		if(!g_glFramePath.IsEmpty())
 			R_GLFrameCapture(g_glFramePath.GetChars());
+		// When the GL backend is live, write the actual on-window presented frame.
+		if(!g_glPresentPath.IsEmpty())
+			R_GLLiveWriteCapture();
 #endif
 	}
 

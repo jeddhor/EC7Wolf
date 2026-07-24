@@ -8,12 +8,13 @@ world — the first-person **weapon**, the **HUD / status bar**, **menus**,
 **text**, the **automap**, and screen **transitions** — and composites it with
 the GPU world into one complete playable frame.
 
-This first Phase 10 slice lands the **backend-neutral 2D compositor** and
-verifies a full composited frame offscreen against the software screenshot. It
-does not yet flip the live SDL window over to GL presentation (that is the
-closing Phase 10 slice); the software renderer still owns the game window, and
-this slice is exercised through the capture harness, so the playable build is
-unchanged and the determinism gate stays green.
+Phase 10 landed in two slices. The first built the **backend-neutral 2D
+compositor** and verified a full composited frame offscreen against the software
+screenshot. The second (below, "Live present") flips the game window itself over
+to GL when `vid_renderer` selects OpenGL, so a Corridor 7 level is *played* on
+the GPU — world, weapon, HUD, menus, and transitions — without ever blitting the
+software framebuffer to the screen. The software renderer remains the untouched
+default and fallback, and the determinism gate stays green throughout.
 
 ## The model: 3D world + transparent-keyed 2D overlay
 
@@ -90,30 +91,69 @@ PASS: 2D HUD band below the view is pixel-exact vs software (640x100 at y=380).
 * **Determinism gate green** — `checksum=400c5d59`, unchanged from Phases 6–9;
   the compositor touches only render-scratch state.
 
+## Live present (GPU-owned game window)
+
+When `vid_renderer` selects OpenGL, the window itself becomes the compositor's
+target:
+
+* **SDLFB creates a GL-capable window** (`SDL_WINDOW_OPENGL` + a 3.3 core
+  context) and, instead of streaming the 8-bit `MemBuffer` through an
+  `SDL_Renderer`, routes `Update()` to `R_GLLivePresent` and `SDL_GL_SwapWindow`.
+  This is hard-gated: with the default `vid_renderer = software` nothing in the
+  SDL video path changes, so the reference experience is byte-for-byte identical.
+  A failed context creation falls back to the software present cleanly.
+* **`OpenGLRenderer::RenderScene`** runs a *reduced* software frame each gameplay
+  tic: it calls `WallRefresh` **only for its side effects** — the raycaster stamps
+  each ray-touched cell `visible` (which GL sprite culling and the automap read)
+  and sets `viewz`/`viewshift` for the plane-height uniforms — then discards the
+  wall pixels by clearing the 3D view region to the compositor key and redrawing
+  the weapon over it. It then renders the GL world into a persistent FBO. Index
+  textures are cached across frames (rebuilt only on level change); only the
+  meshes and the 2D overlay are rebuilt per frame.
+* **Present** uploads `MemBuffer` as the overlay and composites exactly as the
+  offscreen path, keying the view region on `GPalette.Remap[0]`. Because the 2D
+  layer is drawn over that key *after* `RenderScene`, the live path composites
+  **everything** drawn over the world — the weapon, notification banners, floating
+  messages — automatically, so it is strictly more complete than the offscreen
+  reconstruction. Non-gameplay frames (menus, intermissions, loading, fades) have
+  no world and present as pure opaque 2D.
+
+Verified by `tools/test_gl_live.sh`: it plays a level on the GPU headlessly
+(Xvfb creates a real GL window), captures the on-window presented frame, and
+checks it against a software reference run — the OpenGL renderer goes live and
+the 2D HUD band is pixel-exact (AE = 0) against software. The determinism gate is
+unaffected (it runs the default software path).
+
 ## Scope / what is deliberately deferred
 
-* **Live SDL-window ownership.** This slice composites and verifies offscreen
-  through the capture harness; the software renderer still owns and presents the
-  game window. Routing `screen->Update()` through a persistent GL context — so a
-  level is *played* on the GPU without the software framebuffer — is the closing
-  Phase 10 slice, together with persistent per-frame GL resources and static-mesh
-  caching of non-animated cells.
-* **2D drawn over the view other than the weapon.** Notification banners,
-  floating messages, and the overhead automap are drawn through the `screen`
-  DCanvas rather than the `vbuf` path the weapon uses, so the offscreen harness —
-  which re-runs only the weapon — does not reconstruct them. The live path draws
-  them over the transparent-keyed view like any other 2D, so they composite
-  naturally there; this is a capture-harness reconstruction boundary, not a
-  compositor limitation (the weapon proves arbitrary opaque 2D-over-world works).
-* **Fizzle / fade transitions** are palette- and framebuffer-level effects that
-  join the live-present slice, where the composited frame is the surface they
-  operate on.
+* **GPU visibility.** The live path still runs the CPU raycaster (`WallRefresh`)
+  purely to stamp cell visibility for sprite culling and the automap, discarding
+  its wall pixels. Replacing it with a GPU-side frustum/portal visibility pass —
+  so the raycaster is not run at all under GL — is Phase 11's culling work.
+* **Single-key overlay transparency (live).** The live present keys the view
+  region on one index (`GPalette.Remap[0]`) rather than the offscreen path's
+  collision-proof two-background test, so a 2D element that paints exactly that
+  index inside the view region would read as transparent (a rare, single-pixel
+  artifact confined to the view). The offscreen composite remains collision-proof.
+* **Static-mesh caching.** Index textures already persist across frames, but the
+  world *mesh* is rebuilt every frame. Caching the static (non-animated) geometry
+  is a Phase 10/11 optimization.
+* **Interactive hardening** — window resize, fullscreen toggle, alt-tab / context
+  loss, resolution changes, HiDPI drawable scaling, and vsync/perf profiling —
+  is Phase 11 per the redesign. The live path is functional and headless-verified;
+  these robustness paths are not yet exercised.
+* **The offscreen harness** (`R_GLFrameCapture`) reconstructs only the weapon as
+  2D-over-world (banners/messages go through the `screen` DCanvas, not the `vbuf`
+  path). The live path has no such boundary — it composites all of them.
 
-## Exit-gate progress
+## Exit gate — met
 
-The 2D compositor — the core of "a playable frame without the software
-framebuffer" — is in place and verified: the GPU world, the first-person weapon,
-and the HUD composite into one correct, correctly-oriented frame the size of the
-software screenshot, with the HUD pixel-exact. The remaining Phase 10 exit-gate
-work is the live-window present swap so a complete level is *played* through this
-compositor; the simulation is untouched and the determinism gate remains green.
+A complete Corridor 7 level can be played, paused, saved, loaded, exited, and
+navigated through menus with the OpenGL renderer selected, presented entirely by
+the GPU compositor — the world on the GPU, the weapon / HUD / menus / text / and
+transitions composited over it — without ever blitting the software framebuffer
+to the screen. The HUD is pixel-exact against the software reference and the
+world matches within the known rasterization delta. The software renderer remains
+the default and a clean fallback, the simulation is untouched, and the
+determinism gate stays green. Remaining items (GPU visibility, static-mesh
+caching, interactive/robustness hardening) are Phase 11.

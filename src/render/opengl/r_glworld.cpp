@@ -43,12 +43,20 @@
 #include "id_ca.h"
 #include "gamemap.h"
 #include "wl_iwad.h"
+#include "id_vl.h"
 #include "tarray.h"
 #include "textures/textures.h"
 #include "v_video.h"
 #include "v_palette.h"
 #include "colormatcher.h"
+#include "c_cvars.h"
 #include "r_data/colormaps.h"
+
+// Software raycaster wall pass. In the live GL path it is run only for its
+// side-effects -- it stamps each ray-touched cell `visible` (which the GL sprite
+// culling and the automap read) and sets viewz/viewshift for the plane-height
+// uniforms -- while its wall pixels are discarded. Defined in wl_draw.cpp.
+void WallRefresh(void);
 
 // Distance-shade inputs owned by the software renderer.
 extern int r_extralight;
@@ -685,18 +693,28 @@ namespace
 	// currently bound framebuffer's viewport. Both the world capture and the
 	// full-frame compositor drive this so the world pixels are identical.
 	// =======================================================================
+	// A world render's resources split into persistent (program / palette /
+	// colormap / index-texture caches) and per-frame (meshes / VBOs / uniforms).
+	// The offscreen captures own their resources (create + destroy per call); the
+	// live path (below) *borrows* a persistent set so index textures upload once
+	// and survive across frames. `prog != 0` on entry to BuildWorldGL selects the
+	// borrowed path; otherwise the resources are created and owned here.
 	struct WorldGL
 	{
 		GLuint prog;
 		GLuint paletteTex;
 		GLuint colormapTex;
-		TMap<int, GLuint> texCache;
-		TMap<int, GLuint> opacCache;
+		TMap<int, GLuint> ownTexCache;   // used only when ownResources
+		TMap<int, GLuint> ownOpacCache;
+		TMap<int, GLuint> *texCache;     // -> own caches, or a borrowed persistent set
+		TMap<int, GLuint> *opacCache;
+		bool ownResources;
 		WorldMesh mesh, dynMesh, maskedMesh, spriteMesh;
 		MeshGL staticGL, dynGL, maskedGL, spriteGL;
 		SurfaceUniforms su;
 		GLint uDebug;
-		WorldGL() : prog(0), paletteTex(0), colormapTex(0), uDebug(-1) {}
+		WorldGL() : prog(0), paletteTex(0), colormapTex(0),
+			texCache(NULL), opacCache(NULL), ownResources(true), uDebug(-1) {}
 	};
 
 	// Build meshes/program/uniforms for a W x H world render (aspect W/H). The
@@ -741,25 +759,38 @@ namespace
 			w.maskedMesh.vertices.Size() == 0 && w.spriteMesh.vertices.Size() == 0)
 			return false;
 
-		w.prog = GLShader::Build(kVert, kFrag, "world-indexed");
-		if(!w.prog)
-			return false;
-
-		w.paletteTex = CreatePaletteTexture();
-		int colormapRows = 0;
-		w.colormapTex = CreateColormapTexture(colormapRows);
+		// Resources: create + own them when none were supplied (offscreen path);
+		// otherwise the caller borrowed a persistent set (live path).
+		if(w.prog == 0)
+		{
+			w.ownResources = true;
+			w.prog = GLShader::Build(kVert, kFrag, "world-indexed");
+			if(!w.prog)
+				return false;
+			w.paletteTex = CreatePaletteTexture();
+			int colormapRows = 0;
+			w.colormapTex = CreateColormapTexture(colormapRows);
+			w.texCache = &w.ownTexCache;
+			w.opacCache = &w.ownOpacCache;
+		}
+		else
+		{
+			w.ownResources = false;	// borrowed persistent prog/palette/colormap/caches
+		}
+		const int colormapRows = NUMCOLORMAPS;
 
 		unsigned int uniqueTextures = 0, maskedTextures = 0;
-		UploadMesh(w.mesh, w.texCache, w.opacCache, w.staticGL,
+		UploadMesh(w.mesh, *w.texCache, *w.opacCache, w.staticGL,
 			&uniqueTextures, &maskedTextures);
-		UploadMesh(w.dynMesh, w.texCache, w.opacCache, w.dynGL,
+		UploadMesh(w.dynMesh, *w.texCache, *w.opacCache, w.dynGL,
 			&uniqueTextures, &maskedTextures);
-		UploadMesh(w.maskedMesh, w.texCache, w.opacCache, w.maskedGL,
+		UploadMesh(w.maskedMesh, *w.texCache, *w.opacCache, w.maskedGL,
 			&uniqueTextures, &maskedTextures);
-		UploadMesh(w.spriteMesh, w.texCache, w.opacCache, w.spriteGL,
+		UploadMesh(w.spriteMesh, *w.texCache, *w.opacCache, w.spriteGL,
 			&uniqueTextures, &maskedTextures);
-		Printf("GL world: uploaded %u unique index textures (%u with opacity).\n",
-			uniqueTextures, maskedTextures);
+		if(uniqueTextures || w.ownResources)
+			Printf("GL world: uploaded %u unique index textures (%u with opacity).\n",
+				uniqueTextures, maskedTextures);
 
 		// --- camera calibrated to ECWolf --- (interpolated transform captured above)
 		const float camX = (float)camXFixed / (float)TILEGLOBAL;
@@ -888,21 +919,32 @@ namespace
 
 	void DestroyWorldGL(WorldGL &w)
 	{
-		TMapIterator<int, GLuint> it(w.texCache);
-		TMap<int, GLuint>::Pair *pair;
-		while(it.NextPair(pair))
-			if(pair->Value)
-				glDeleteTextures(1, &pair->Value);
-		TMapIterator<int, GLuint> ito(w.opacCache);
-		while(ito.NextPair(pair))
-			if(pair->Value)
-				glDeleteTextures(1, &pair->Value);
-		if(w.paletteTex) glDeleteTextures(1, &w.paletteTex);
-		if(w.colormapTex) glDeleteTextures(1, &w.colormapTex);
+		// Per-frame VBOs are always freed; the persistent resources (program,
+		// palette, colormap, index-texture caches) are freed only when owned.
 		DestroyMesh(w.staticGL);
 		DestroyMesh(w.dynGL);
 		DestroyMesh(w.maskedGL);
 		DestroyMesh(w.spriteGL);
+		if(!w.ownResources)
+			return;
+		if(w.texCache)
+		{
+			TMapIterator<int, GLuint> it(*w.texCache);
+			TMap<int, GLuint>::Pair *pair;
+			while(it.NextPair(pair))
+				if(pair->Value)
+					glDeleteTextures(1, &pair->Value);
+		}
+		if(w.opacCache)
+		{
+			TMapIterator<int, GLuint> ito(*w.opacCache);
+			TMap<int, GLuint>::Pair *pair;
+			while(ito.NextPair(pair))
+				if(pair->Value)
+					glDeleteTextures(1, &pair->Value);
+		}
+		if(w.paletteTex) glDeleteTextures(1, &w.paletteTex);
+		if(w.colormapTex) glDeleteTextures(1, &w.colormapTex);
 		if(w.prog) glDeleteProgram(w.prog);
 	}
 
@@ -1275,4 +1317,350 @@ bool R_GLFrameCapture(const char *outPath)
 	dev.Destroy();
 
 	return nonBg > 0;
+}
+
+// ===========================================================================
+//
+// Phase 10 live present. Unlike the offscreen captures, this owns persistent GL
+// resources on the *game window's* context (created by SDLFB when vid_renderer
+// selects OpenGL) and composites every presented frame: the GL 3D world into
+// the view sub-rectangle, then the engine's live 8-bit 2D layer over it with the
+// view region's compositor-key texels made transparent.
+//
+// ===========================================================================
+
+namespace
+{
+	struct GLLive
+	{
+		bool   inited;
+		GLuint prog;         // world-indexed (kVert/kFrag)
+		GLuint screenProg;   // composite (kScreenVert/kScreenFrag)
+		GLuint paletteTex;
+		GLuint colormapTex;
+		TMap<int, GLuint> texCache;    // persistent index-texture cache
+		TMap<int, GLuint> opacCache;
+		const void *lastMap;           // invalidate caches on level change
+		GLuint worldFbo, worldTex, worldDepth;
+		int    worldW, worldH;
+		bool   haveWorld;              // a world was rendered for this frame
+		int    vx, vy, vw, vh, fw, fh; // view rect / frame size (8-bit space)
+		FString  capPath;              // headless: last presented frame is kept here
+		TArray<unsigned char> lastRGB; // most recent presented frame (top-down RGB)
+		int    lastW, lastH;
+		GLLive() : inited(false), prog(0), screenProg(0), paletteTex(0),
+			colormapTex(0), lastMap(NULL), worldFbo(0), worldTex(0),
+			worldDepth(0), worldW(0), worldH(0), haveWorld(false),
+			vx(0), vy(0), vw(0), vh(0), fw(0), fh(0), lastW(0), lastH(0) {}
+	};
+	GLLive gLive;
+
+	// Set true by SDLFB once it has created a GL context on the game window;
+	// gates whether the OpenGL backend goes live or falls back to software.
+	bool gLiveContextActive = false;
+
+	void ClearLiveCaches()
+	{
+		TMapIterator<int, GLuint> it(gLive.texCache);
+		TMap<int, GLuint>::Pair *pair;
+		while(it.NextPair(pair))
+			if(pair->Value)
+				glDeleteTextures(1, &pair->Value);
+		TMapIterator<int, GLuint> ito(gLive.opacCache);
+		while(ito.NextPair(pair))
+			if(pair->Value)
+				glDeleteTextures(1, &pair->Value);
+		gLive.texCache.Clear();
+		gLive.opacCache.Clear();
+	}
+
+	void EnsureLiveResources()
+	{
+		if(gLive.inited)
+			return;
+		gLive.prog = GLShader::Build(kVert, kFrag, "world-indexed-live");
+		gLive.screenProg = GLShader::Build(kScreenVert, kScreenFrag,
+			"screen-composite-live");
+		gLive.paletteTex = CreatePaletteTexture();
+		int rows = 0;
+		gLive.colormapTex = CreateColormapTexture(rows);
+		gLive.inited = gLive.prog && gLive.screenProg &&
+			gLive.paletteTex && gLive.colormapTex;
+	}
+
+	void EnsureWorldFbo(int w, int h)
+	{
+		if(gLive.worldFbo && gLive.worldW == w && gLive.worldH == h)
+			return;
+		if(gLive.worldTex)   glDeleteTextures(1, &gLive.worldTex);
+		if(gLive.worldDepth) glDeleteRenderbuffers(1, &gLive.worldDepth);
+		if(gLive.worldFbo)   glDeleteFramebuffers(1, &gLive.worldFbo);
+		glGenFramebuffers(1, &gLive.worldFbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, gLive.worldFbo);
+		glGenTextures(1, &gLive.worldTex);
+		glBindTexture(GL_TEXTURE_2D, gLive.worldTex);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA,
+			GL_UNSIGNED_BYTE, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+			GL_TEXTURE_2D, gLive.worldTex, 0);
+		glGenRenderbuffers(1, &gLive.worldDepth);
+		glBindRenderbuffer(GL_RENDERBUFFER, gLive.worldDepth);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, w, h);
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+			GL_RENDERBUFFER, gLive.worldDepth);
+		gLive.worldW = w;
+		gLive.worldH = h;
+	}
+
+	void UpdateLivePalette()
+	{
+		unsigned char rgb[256 * 3];
+		for(int i = 0; i < 256; ++i)
+		{
+			rgb[i*3+0] = GPalette.BaseColors[i].r;
+			rgb[i*3+1] = GPalette.BaseColors[i].g;
+			rgb[i*3+2] = GPalette.BaseColors[i].b;
+		}
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, gLive.paletteTex);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 1, GL_RGB,
+			GL_UNSIGNED_BYTE, rgb);
+	}
+
+	// Render the GL 3D world into the persistent world FBO for this frame.
+	void RenderLiveWorld()
+	{
+		EnsureLiveResources();
+		if(!gLive.inited)
+			return;
+		if(gLive.lastMap != (const void *)map)
+		{
+			ClearLiveCaches();
+			gLive.lastMap = (const void *)map;
+		}
+
+		int fw = SCREENWIDTH, fh = SCREENHEIGHT;
+		int vx = viewscreenx, vy = viewscreeny, vw = viewwidth, vh = viewheight;
+		if(vw <= 0 || vh <= 0 || vx + vw > fw || vy + vh > fh)
+		{
+			vx = 0; vy = 0; vw = fw; vh = fh;
+		}
+		gLive.vx = vx; gLive.vy = vy; gLive.vw = vw; gLive.vh = vh;
+		gLive.fw = fw; gLive.fh = fh;
+		EnsureWorldFbo(vw, vh);
+
+		WorldGL wr;
+		wr.prog = gLive.prog;
+		wr.paletteTex = gLive.paletteTex;
+		wr.colormapTex = gLive.colormapTex;
+		wr.texCache = &gLive.texCache;
+		wr.opacCache = &gLive.opacCache;
+		if(!BuildWorldGL(wr, vw, vh))
+		{
+			DestroyWorldGL(wr);
+			gLive.haveWorld = false;
+			return;
+		}
+
+		glBindFramebuffer(GL_FRAMEBUFFER, gLive.worldFbo);
+		glViewport(0, 0, vw, vh);
+		glEnable(GL_DEPTH_TEST);
+		glDepthFunc(GL_LESS);
+		glDisable(GL_CULL_FACE);
+		DrawWorldColourPass(wr);
+		DestroyWorldGL(wr);	// frees per-frame VBOs; borrowed resources kept
+		gLive.haveWorld = true;
+	}
+}
+
+bool R_GLLiveWantPresent()
+{
+	FString r = vid_renderer;
+	r.ToLower();
+	return r.Compare("opengl") == 0 || r.Compare("gl") == 0;
+}
+
+void R_GLLiveSetContextActive(bool active)
+{
+	gLiveContextActive = active;
+}
+
+bool R_GLLiveContextActive()
+{
+	return gLiveContextActive;
+}
+
+void R_GLLiveArmCapture(const char *path, int frame)
+{
+	gLive.capPath = path ? path : "";
+	(void)frame;	// the harness writes the latest present at its chosen frame
+}
+
+void R_GLLiveWriteCapture()
+{
+	if(gLive.capPath.IsEmpty() || gLive.lastRGB.Size() == 0)
+		return;
+	if(WritePPM(gLive.capPath.GetChars(), &gLive.lastRGB[0],
+		gLive.lastW, gLive.lastH))
+		Printf("GL live: wrote presented frame -> %s (%dx%d).\n",
+			gLive.capPath.GetChars(), gLive.lastW, gLive.lastH);
+}
+
+// Reduced software frame for the GL live path: run the raycaster only for its
+// visibility side-effect (and viewz/viewshift), clear the 3D view to the
+// compositor key, draw the weapon over it, then render the GL world. The
+// caller (OpenGLRenderer::RenderScene) is wrapped in interpolation Apply/Restore
+// exactly like the software path.
+void R_GLLiveRenderScene()
+{
+	if(map == NULL)
+		return;
+	if(players[ConsolePlayer].camera == NULL)
+		players[ConsolePlayer].camera = players[ConsolePlayer].mo;
+
+	map->ClearVisibility();
+
+	byte *surf = VL_LockSurface();
+	if(surf == NULL)
+		return;
+	vbuf = surf + screenofs;
+	vbufPitch = SCREENPITCH;
+
+	CalcViewVariables();
+	WallRefresh();	// stamps cell visibility + sets viewz; wall pixels discarded
+
+	// Clear the 3D view region to the compositor key so only 2D drawn over it
+	// (the weapon now; banners/messages later in PlayFrame) stays opaque.
+	const byte key = GPalette.Remap[0];
+	for(int y = 0; y < viewheight; ++y)
+		memset(vbuf + y * vbufPitch, key, viewwidth);
+
+	DrawPlayerWeapon();
+
+	// Mark the player's own cell visible for the automap (as R_RenderView does).
+	map->GetSpot(players[ConsolePlayer].mo->tilex,
+		players[ConsolePlayer].mo->tiley, 0)->amFlags |= AM_Visible;
+
+	VL_UnlockSurface();
+	vbuf = NULL;
+
+	if(player_t *player = players[ConsolePlayer].camera->player)
+		if(player->ScreenFader)
+			player->ScreenFader->Update();
+
+	RenderLiveWorld();
+}
+
+void R_GLLivePresent(const unsigned char *mem, int pitch, int fw, int fh,
+	int drawableW, int drawableH)
+{
+	if(drawableW <= 0) drawableW = fw;
+	if(drawableH <= 0) drawableH = fh;
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0, 0, drawableW, drawableH);
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_POLYGON_OFFSET_FILL);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	if(!gLive.inited || !gLive.screenProg || mem == NULL)
+		return;	// nothing composited yet; a black frame is presented
+
+	UpdateLivePalette();
+
+	// Overlay: opaque 2D everywhere, except the view region's key texels when a
+	// world was rendered this frame (those reveal the GL world behind them).
+	const int W = fw, H = fh;
+	TArray<unsigned char> idx((unsigned)(W * H)), opac((unsigned)(W * H));
+	idx.Resize((unsigned)(W * H));
+	opac.Resize((unsigned)(W * H));
+	for(int y = 0; y < H; ++y)
+		for(int x = 0; x < W; ++x)
+		{
+			idx[y * W + x] = mem[y * pitch + x];
+			opac[y * W + x] = 255;
+		}
+	if(gLive.haveWorld)
+	{
+		const unsigned char key = GPalette.Remap[0];
+		for(int r = 0; r < gLive.vh; ++r)
+			for(int c = 0; c < gLive.vw; ++c)
+			{
+				const int fx = gLive.vx + c, fy = gLive.vy + r;
+				if(mem[fy * pitch + fx] == key)
+					opac[fy * W + fx] = 0;
+			}
+	}
+	GLuint oIdx = CreateR8UITexture(&idx[0], W, H);
+	GLuint oOpac = CreateR8UITexture(&opac[0], W, H);
+
+	glUseProgram(gLive.screenProg);
+	const GLint uMode = glGetUniformLocation(gLive.screenProg, "uMode");
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, gLive.paletteTex);
+	glUniform1i(glGetUniformLocation(gLive.screenProg, "uPaletteTex"), 1);
+	glActiveTexture(GL_TEXTURE4);
+	glBindTexture(GL_TEXTURE_2D, oIdx);
+	glUniform1i(glGetUniformLocation(gLive.screenProg, "uOverlayIdx"), 4);
+	glActiveTexture(GL_TEXTURE5);
+	glBindTexture(GL_TEXTURE_2D, oOpac);
+	glUniform1i(glGetUniformLocation(gLive.screenProg, "uOverlayOpac"), 5);
+
+	if(gLive.haveWorld && gLive.worldTex)
+	{
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, gLive.worldTex);
+		glUniform1i(glGetUniformLocation(gLive.screenProg, "uWorldTex"), 0);
+		const float nx0 = 2.0f * (float)gLive.vx / (float)W - 1.0f;
+		const float nx1 = 2.0f * (float)(gLive.vx + gLive.vw) / (float)W - 1.0f;
+		const float nyTop = 1.0f - 2.0f * (float)gLive.vy / (float)H;
+		const float nyBot = 1.0f - 2.0f * (float)(gLive.vy + gLive.vh) / (float)H;
+		glUniform1i(uMode, 0);
+		DrawScreenQuad(nx0, nyBot, nx1, nyTop, 0.0f, 0.0f, 1.0f, 1.0f);
+	}
+	glUniform1i(uMode, 1);
+	DrawScreenQuad(-1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f);
+
+	glDeleteTextures(1, &oIdx);
+	glDeleteTextures(1, &oOpac);
+
+	// Headless verification: keep the just-composited frame (still in the default
+	// framebuffer, before the caller swaps) so the capture harness can write the
+	// exact gameplay frame it asks for.
+	if(!gLive.capPath.IsEmpty())
+	{
+		const size_t n = (size_t)drawableW * drawableH * 3;
+		gLive.lastRGB.Resize((unsigned)n);
+		TArray<unsigned char> tmp((unsigned)n);
+		tmp.Resize((unsigned)n);
+		glPixelStorei(GL_PACK_ALIGNMENT, 1);
+		glReadPixels(0, 0, drawableW, drawableH, GL_RGB, GL_UNSIGNED_BYTE, &tmp[0]);
+		for(int y = 0; y < drawableH; ++y)
+			memcpy(&gLive.lastRGB[(size_t)y * drawableW * 3],
+				&tmp[(size_t)(drawableH - 1 - y) * drawableW * 3],
+				(size_t)drawableW * 3);
+		gLive.lastW = drawableW;
+		gLive.lastH = drawableH;
+	}
+
+	gLive.haveWorld = false;	// consumed; a pure-2D frame follows unless re-rendered
+}
+
+void R_GLLiveShutdown()
+{
+	ClearLiveCaches();
+	if(gLive.worldTex)   glDeleteTextures(1, &gLive.worldTex);
+	if(gLive.worldDepth) glDeleteRenderbuffers(1, &gLive.worldDepth);
+	if(gLive.worldFbo)   glDeleteFramebuffers(1, &gLive.worldFbo);
+	if(gLive.screenProg) glDeleteProgram(gLive.screenProg);
+	if(gLive.prog)       glDeleteProgram(gLive.prog);
+	if(gLive.paletteTex) glDeleteTextures(1, &gLive.paletteTex);
+	if(gLive.colormapTex) glDeleteTextures(1, &gLive.colormapTex);
+	gLive = GLLive();
 }

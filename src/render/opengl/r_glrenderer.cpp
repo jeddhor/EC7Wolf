@@ -17,6 +17,7 @@
 #include "render/opengl/r_glrenderer.h"
 #include "render/opengl/r_gldevice.h"
 #include "render/opengl/r_glpalette.h"
+#include "render/opengl/r_glworld.h"
 #include "wl_def.h"
 #include "zdoomsupport.h"
 
@@ -27,16 +28,21 @@ namespace
 	public:
 		virtual bool Init()
 		{
-			// The GL device and indexed-palette pipeline are implemented and
-			// self-tested (see R_GLRunSelfTest). World geometry, masked walls,
-			// sprites and the 2D/HUD integration land in later phases, so for
-			// now gameplay defers to the software renderer via a clean fallback.
-			Printf("OpenGL backend: device + indexed-palette pipeline ready; "
-				"world rendering pending (Phase 5+). Deferring to software.\n");
+			// Go live only if SDLFB actually created a GL context on the game
+			// window (it does when vid_renderer selects OpenGL). Otherwise the
+			// game window is still a software surface, so defer to software.
+			if(R_GLLiveContextActive())
+			{
+				Printf("OpenGL backend: live compositor presenting to the game "
+					"window (GPU world + 2D overlay).\n");
+				return true;
+			}
+			Printf("OpenGL backend: no GL window context available; "
+				"deferring to software.\n");
 			return false;
 		}
-		virtual void Shutdown() {}
-		virtual void RenderScene() {}
+		virtual void Shutdown() { R_GLLiveShutdown(); }
+		virtual void RenderScene() { R_GLLiveRenderScene(); }
 		virtual RendererType Type() const { return RENDERER_OpenGL; }
 		virtual const char *Name() const { return "OpenGL renderer"; }
 	};

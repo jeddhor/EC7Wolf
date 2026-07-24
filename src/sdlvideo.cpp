@@ -19,6 +19,15 @@
 
 #include <SDL.h>
 
+#ifdef ECWOLF_RENDERER_OPENGL
+#include "render/opengl/r_glworld.h"
+#else
+// Software-only build: the GL present path compiles out entirely.
+static inline bool R_GLLiveWantPresent() { return false; }
+static inline void R_GLLivePresent(const unsigned char *, int, int, int, int, int) {}
+static inline void R_GLLiveSetContextActive(bool) {}
+#endif
+
 IVideo *Video = NULL;
 
 extern float screenGamma;
@@ -304,6 +313,8 @@ private:
 		SDL_Texture *Texture;
 		SDL_Surface *Surface;
 	};
+	SDL_GLContext GLContext;	// non-NULL when presenting through the GL backend
+	bool UsingGL;
 #else
 	SDL_Surface *Screen;
 #endif
@@ -683,6 +694,22 @@ SDLFB::SDLFB (int width, int height, bool fullscreen)
 #if SDL_VERSION_ATLEAST(2,0,0)
 	Renderer = NULL;
 	Texture = NULL;
+	GLContext = NULL;
+	// The OpenGL backend presents by compositing on the game window itself, so
+	// the window must be GL-capable and must not also drive an SDL_Renderer.
+	UsingGL = R_GLLiveWantPresent();
+
+	Uint32 winflags = (fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+	if (UsingGL)
+	{
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
+			SDL_GL_CONTEXT_PROFILE_CORE);
+		SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+		SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+		winflags |= SDL_WINDOW_OPENGL;
+	}
 
 	if (oldwin)
 	{
@@ -697,7 +724,7 @@ SDLFB::SDLFB (int width, int height, bool fullscreen)
 	{
 		Screen = SDL_CreateWindow (GetGameCaption(),
 			SDL_WINDOWPOS_UNDEFINED_DISPLAY(vid_adapter), SDL_WINDOWPOS_UNDEFINED_DISPLAY(vid_adapter),
-			width, height, (fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0));
+			width, height, winflags);
 
 		if (Screen == NULL)
 			return;
@@ -708,7 +735,26 @@ SDLFB::SDLFB (int width, int height, bool fullscreen)
 	ForceSDLFocus(Screen);
 #endif
 
-	ResetSDLRenderer ();
+	if (UsingGL)
+	{
+		GLContext = SDL_GL_CreateContext(Screen);
+		if (GLContext != NULL)
+		{
+			SDL_GL_MakeCurrent(Screen, GLContext);
+			SDL_GL_SetSwapInterval(vid_vsync ? 1 : 0);
+			R_GLLiveSetContextActive(true);
+		}
+		else
+		{
+			Printf("GL: window context creation failed (%s); "
+				"using software presentation.\n", SDL_GetError());
+			UsingGL = false;
+			R_GLLiveSetContextActive(false);
+		}
+	}
+
+	if (!UsingGL)
+		ResetSDLRenderer ();
 
 #ifdef __ANDROID__
 	extern void PostSDLCreateRenderer(SDL_Window *);
@@ -750,7 +796,12 @@ SDLFB::SDLFB (int width, int height, bool fullscreen)
 #endif
 
 	memcpy (SourcePalette, GPalette.BaseColors, sizeof(PalEntry)*256);
-	UpdateColors ();
+#if SDL_VERSION_ATLEAST(2,0,0)
+	// The GL present path uploads the palette to a texture each frame (there is
+	// no SDL_Surface/renderer palette to program), so skip UpdateColors here.
+	if (!UsingGL)
+#endif
+		UpdateColors ();
 
 #ifdef __APPLE__
 	SetVSync (vid_vsync);
@@ -760,6 +811,13 @@ SDLFB::SDLFB (int width, int height, bool fullscreen)
 SDLFB::~SDLFB ()
 {
 #if SDL_VERSION_ATLEAST(2,0,0)
+	if (GLContext)
+	{
+		R_GLLiveSetContextActive(false);
+		SDL_GL_DeleteContext (GLContext);
+		GLContext = NULL;
+	}
+
 	if (Renderer)
 	{
 		if (Texture)
@@ -820,6 +878,27 @@ void SDLFB::Update ()
 	}
 
 	DrawRateStuff ();
+
+#if SDL_VERSION_ATLEAST(2,0,0)
+	if (UsingGL)
+	{
+		// GL present: the OpenGL backend already rendered the world for this frame
+		// (OpenGLRenderer::RenderScene); composite it with the 8-bit 2D layer in
+		// MemBuffer and swap. The palette (incl. any blend baked into BaseColors)
+		// is uploaded inside Present, so the SDL palette/gamma path is bypassed.
+		Buffer = NULL;
+		LockCount = 0;
+		UpdatePending = false;
+		NeedGammaUpdate = false;
+		NeedPalUpdate = false;
+
+		int dw = Width, dh = Height;
+		SDL_GL_GetDrawableSize (Screen, &dw, &dh);
+		R_GLLivePresent (MemBuffer, Pitch, Width, Height, dw, dh);
+		SDL_GL_SwapWindow (Screen);
+		return;
+	}
+#endif
 
 	if (NeedGammaUpdate)
 	{
@@ -1063,7 +1142,8 @@ void SDLFB::SetFullscreen (bool fullscreen)
 		SDL_SetWindowSize (Screen, Width, Height);
 	}
 
-	ResetSDLRenderer ();
+	if (!UsingGL)
+		ResetSDLRenderer ();
 #endif
 }
 
@@ -1079,6 +1159,11 @@ bool SDLFB::IsFullscreen ()
 void SDLFB::ResetSDLRenderer ()
 {
 #if SDL_VERSION_ATLEAST(2,0,0)
+	// The GL present path owns the window's context and never uses an
+	// SDL_Renderer; leave it untouched.
+	if (UsingGL)
+		return;
+
 	if (Renderer)
 	{
 		if (Texture)
@@ -1147,6 +1232,12 @@ void SDLFB::ResetSDLRenderer ()
 void SDLFB::SetVSync (bool vsync)
 {
 #if SDL_VERSION_ATLEAST(2,0,0)
+	if (UsingGL)
+	{
+		SDL_GL_MakeCurrent (Screen, GLContext);
+		SDL_GL_SetSwapInterval (vsync ? 1 : 0);
+		return;
+	}
 	ResetSDLRenderer ();
 #endif
 }

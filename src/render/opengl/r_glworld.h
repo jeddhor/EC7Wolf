@@ -23,4 +23,40 @@ bool R_GLWorldCapture(const char *outPath);
 // software renderer that owns the game window.
 bool R_GLFrameCapture(const char *outPath);
 
+// --- Phase 10 live present (GPU-owned game window) ---------------------------
+//
+// These drive the live GL renderer that composites directly to the game window
+// created (GL-capable) by SDLFB when vid_renderer selects OpenGL. They run on
+// that window's context, which SDLFB makes current before calling Present.
+
+// True when the config/CLI selects the OpenGL renderer. Read by SDLFB to decide
+// whether to create a GL-capable window and present through GL.
+bool R_GLLiveWantPresent();
+
+// Reduced software frame + GL world render for one gameplay frame. Called from
+// OpenGLRenderer::RenderScene (inside the interpolation Apply/Restore that wraps
+// the software path too).
+void R_GLLiveRenderScene();
+
+// Composite the last rendered world (if any) and the engine's 8-bit 2D layer
+// into the default framebuffer. Called from SDLFB::Update with the context
+// current; the caller swaps buffers afterward. drawableW/H are the window's GL
+// drawable size (pass <= 0 to use fw/fh).
+void R_GLLivePresent(const unsigned char *mem, int pitch, int fw, int fh,
+	int drawableW, int drawableH);
+
+// Free all live GL resources (called from OpenGLRenderer::Shutdown).
+void R_GLLiveShutdown();
+
+// SDLFB reports whether it created a GL context on the game window; the OpenGL
+// backend goes live only when this is true (else it falls back to software).
+void R_GLLiveSetContextActive(bool active);
+bool R_GLLiveContextActive();
+
+// Headless verification: while armed with a path, every present keeps a copy of
+// the composited frame; R_GLLiveWriteCapture() writes the latest to that path.
+// The capture harness arms once and writes at its chosen gameplay frame.
+void R_GLLiveArmCapture(const char *path, int frame);
+void R_GLLiveWriteCapture();
+
 #endif

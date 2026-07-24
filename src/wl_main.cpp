@@ -1335,6 +1335,20 @@ int WL_Main (int argc, char *argv[])
 		config.LocateConfigFile(argc, argv);
 		ReadConfig();
 
+		// Command-line renderer override (used by the headless GL tests; the
+		// config's Vid_Renderer is the normal path). Must run before the first
+		// video mode is set so SDLFB can create a GL-capable window.
+		for(int i = 1; i < argc - 1; ++i)
+		{
+			if(strcmp(argv[i], "--vid-renderer") == 0)
+			{
+				vid_renderer = argv[i + 1];
+				Printf("Renderer: command-line override -> %s\n",
+					vid_renderer.GetChars());
+				break;
+			}
+		}
+
 		{
 			TArray<FString> wadfiles, files;
 

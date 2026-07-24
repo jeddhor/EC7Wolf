@@ -1636,8 +1636,14 @@ void R_GLLivePresent(const unsigned char *mem, int pitch, int fw, int fh,
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
 
+	// Initialize the compositor resources (shaders + palette/colormap) on the
+	// first present, independent of the world path. The 2D-only frames shown
+	// before any level renders -- splash, credits, title, and menu screens --
+	// must still composite through the palette; otherwise they present black
+	// until the first 3D frame lazily initializes these resources.
+	EnsureLiveResources();
 	if(!gLive.inited || !gLive.screenProg || mem == NULL)
-		return;	// nothing composited yet; a black frame is presented
+		return;	// resources failed to build, or nothing to composite: black frame
 
 	UpdateLivePalette();
 

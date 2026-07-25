@@ -662,6 +662,26 @@ void CheckDebugKeys()
 			StatusBar->SetTopMessage("CHEAT ACTIVATED: FULL EQUIPMENT", 4*TICRATE);
 		}
 		corridor7CheatHeld = wax;
+
+		// P+C = "print coordinates": show the player's tile, fine position and
+		// facing so a scene can be reproduced exactly (e.g. --capture-warp X Y DEG).
+		// Written to both the on-screen top message and the console log.
+		static bool coordsHeld = false;
+		const bool coords = Keyboard[sc_P] && Keyboard[sc_C];
+		if(coords && !coordsHeld)
+		{
+			if(AActor *pmo = players[ConsolePlayer].mo)
+			{
+				const int deg = (int)(pmo->angle / ANGLE_1);
+				FString msg;
+				msg.Format("POS tile (%d,%d) angle %d  [fine %d,%d]",
+					pmo->x >> TILESHIFT, pmo->y >> TILESHIFT, deg,
+					(int)pmo->x, (int)pmo->y);
+				Printf("%s\n", msg.GetChars());
+				StatusBar->SetTopMessage(msg, 6*TICRATE);
+			}
+		}
+		coordsHeld = coords;
 	}
 
 	if(IWad::CheckGameFilter(NAME_Wolf3D))

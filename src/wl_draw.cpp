@@ -690,7 +690,9 @@ enum { MASKPLANE_EDGES = 0, MASKPLANE_CENTRE_X, MASKPLANE_CENTRE_Y };
 
 static bool IsForceFieldDoor(MapSpot spot)
 {
-	return spot->corridor7WallMarker == 106;
+	// 106 = active barrier, 107 = the permanently-open aperture it becomes after
+	// Wall_AnimateRemove (lnspec.cpp). Both are the same centre pane on a track.
+	return spot->corridor7WallMarker == 106 || spot->corridor7WallMarker == 107;
 }
 
 static int MaskedPlaneAxis(MapSpot spot)

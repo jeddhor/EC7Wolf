@@ -404,7 +404,8 @@ void BuildMasked(GameMap *gm, WorldMesh &out, float camX, float camY)
 
 		// Force-field door: a single centre pane on a track (mirrors the software
 		// GetMaskedWallEndpoints centre plane), not the four edge faces of a box.
-		if(spot->corridor7WallMarker == 106)
+		// 106 = active barrier, 107 = its permanently-open aperture (post animate).
+		if(spot->corridor7WallMarker == 106 || spot->corridor7WallMarker == 107)
 		{
 			if(ForceFieldDoorHorizontal(spot))
 				PushQuad(out, fx, fy+0.5f, 0, fx+1, fy+0.5f, 0,

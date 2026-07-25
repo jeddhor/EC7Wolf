@@ -792,36 +792,73 @@ namespace
 			Printf("GL world: uploaded %u unique index textures (%u with opacity).\n",
 				uniqueTextures, maskedTextures);
 
-		// --- camera calibrated to ECWolf --- (interpolated transform captured above)
+		// --- projection matched to the software raycaster (CalcProjection) ---
+		// (interpolated transform captured above). The raycaster is a pinhole
+		// camera whose eye sits `focallength` behind the player along the view
+		// direction: horizontally it maps screen-x offset = scale*x/z, and
+		// vertically a full-height wall at distance z projects to (heightnumerator
+		// << 8)/z pixels. Replicating those exactly -- instead of a raw 90 deg
+		// symmetric frustum -- gives the GL its true ~72.4 deg field of view, the
+		// correct near-sprite scale, and wall/door depth that matches the software
+		// renderer. Without it, near geometry read as a wider fisheye: sprites
+		// looked "cut and pasted" and door jambs bulged into hollow alcoves.
 		const float camX = (float)camXFixed / (float)TILEGLOBAL;
 		const float camY = (float)camYFixed / (float)TILEGLOBAL;
-		const float camZ = 0.5f;	// eye at mid-wall height
 		const float yaw = (float)((double)camAngle / 4294967296.0 * 2.0 * kPi);
-		const float pitch = (float)((double)camPitch / 4294967296.0 * 2.0 * kPi);
+		(void)camPitch; (void)camFOV;	// pitch -> horizon shift; FOV -> `scale` below
 
-		// ECWolf view direction convention: (cos a, -sin a) in the XY plane.
-		float fwd[3] = {
-			cosf(yaw) * cosf(pitch),
-			-sinf(yaw) * cosf(pitch),
-			sinf(pitch)
+		// ECWolf view direction convention: (cos a, -sin a) in the XY plane. Pitch
+		// is NOT a camera rotation in the raycaster -- it slides the horizon
+		// (viewshift) so verticals never keystone; we reproduce that with a
+		// principal-point offset (proj.m[9]) rather than tilting `fwd`.
+		const float vc = cosf(yaw), vs = sinf(yaw);
+		float fwd[3] = { vc, -vs, 0.0f };
+		float up[3]  = { 0.0f, 0.0f, 1.0f };
+
+		// The vertical world unit differs from the horizontal one: a full-height
+		// wall spans map plane `depth` tiles (Corridor 7: depth=64) in the
+		// software's fixed Z, i.e. (depth<<FRACBITS), whereas one floor tile is
+		// TILEGLOBAL across. The GL mesh draws each wall a unit cube (z in [0,1]),
+		// so 1.0 GL == (depth<<FRACBITS) fixed vertically but == TILEGLOBAL fixed
+		// horizontally. Convert viewz / heights through the vertical unit, and
+		// focallength (a horizontal distance) through TILEGLOBAL.
+		const int   wallDepth  = map->GetPlane(0).depth;
+		const double vWallFixed = (double)wallDepth * (double)TILEGLOBAL;
+
+		// Eye pushed back by focallength -- exactly viewx/viewy -- and raised to
+		// the software eye height: the floor is GL z=0, ceiling z=1, and the eye
+		// sits -viewz (bob + view height) up, expressed in the vertical unit.
+		const float focalTiles = (float)focallength / (float)TILEGLOBAL;
+		float eye[3] = {
+			camX - focalTiles * vc,
+			camY + focalTiles * vs,
+			(float)(-(double)viewz / vWallFixed)
 		};
-		float up[3] = { 0.0f, 0.0f, 1.0f };
-		float eye[3] = { camX, camY, camZ };
 
-		const float hFovDeg = camFOV > 1.0f ? camFOV : 90.0f;
-		const float aspect = (float)W / (float)H;
-		const float hFov = (float)(hFovDeg * kPi / 180.0);
-		const float vFov = 2.0f * atanf(tanf(hFov * 0.5f) / aspect);
+		Mat4 proj;
+		for(int i = 0; i < 16; ++i) proj.m[i] = 0.0f;
+		const float znear = 0.02f, zfar = 256.0f;
+		// Horizontal focal = `scale` px. Negate clip X because Corridor 7's world
+		// is visually left-handed (X east, Y south, Z up) with the camera facing
+		// (cos a, -sin a): a standard right-handed LookAt would render the whole
+		// level left-right reversed (text backwards, layout mirrored, turning
+		// inverted). Back-face culling is disabled, so the winding flip is safe.
+		proj.m[0]  = -2.0f * (float)scale / (float)viewwidth;
+		// Vertical focal in NDC. The software's per-frame wall height for a full
+		// wall at distance z is (heightnumerator<<8)/z px; matched into this GL
+		// unit space (1.0 GL = depth tiles vertically) this is
+		// m[5] = 2*heightnumerator*depth/(TILEGLOBAL*viewheight). It already folds
+		// in the yaspect pixel-shape correction, so vertical FOV (~40 deg here) is
+		// independent of the raw aspect ratio -- exactly like the raycaster.
+		proj.m[5]  = (float)((double)heightnumerator * wallDepth /
+			(32768.0 * (double)viewheight));
+		// Look up/down: offset the horizon by viewshift px so verticals stay
+		// vertical, exactly as the software plane/wall passes do.
+		proj.m[9]  = -2.0f * (float)viewshift / (float)viewheight;
+		proj.m[10] = (zfar + znear) / (znear - zfar);
+		proj.m[11] = -1.0f;
+		proj.m[14] = (2.0f * zfar * znear) / (znear - zfar);
 
-		Mat4 proj = Perspective(vFov, aspect, 0.02f, 256.0f);
-		// Corridor 7's world is a visually left-handed space (X east, Y south,
-		// Z up) with the camera facing (cos a, -sin a): a standard right-handed
-		// LookAt then puts the camera's right hand on the wrong side, rendering
-		// the entire level left-right mirrored (wall text reads backwards, the
-		// layout is flipped, turning feels reversed). Negate clip X to reflect
-		// the world back to the correct handedness. Depth is unaffected; face
-		// winding flips but back-face culling is disabled, so this is safe.
-		proj.m[0] = -proj.m[0];
 		Mat4 view = LookAt(eye, fwd, up);
 
 		// --- shading uniforms mirror the software renderer exactly ---

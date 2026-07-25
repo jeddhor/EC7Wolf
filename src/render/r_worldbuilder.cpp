@@ -114,16 +114,16 @@ namespace
 					bx, by,   1,  bx, by+1, 1,
 					tex, kind, side, sh);
 				break;
-			case MapTile::North:	// +Y face at y+1
+			case MapTile::North:	// -Y face at y (GetAdjacent(North) == y-1)
 				PushQuad(out,
-					bx+1, by+1, 0,  bx, by+1, 0,
-					bx,   by+1, 1,  bx+1, by+1, 1,
+					bx+1, by, 0,  bx, by, 0,
+					bx,   by, 1,  bx+1, by, 1,
 					tex, kind, side, sh);
 				break;
-			case MapTile::South:	// -Y face at y
+			case MapTile::South:	// +Y face at y+1 (GetAdjacent(South) == y+1)
 				PushQuad(out,
-					bx, by, 0,  bx+1, by, 0,
-					bx+1, by, 1,  bx, by, 1,
+					bx, by+1, 0,  bx+1, by+1, 0,
+					bx+1, by+1, 1,  bx, by+1, 1,
 					tex, kind, side, sh);
 				break;
 		}

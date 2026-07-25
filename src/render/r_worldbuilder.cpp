@@ -96,22 +96,34 @@ namespace
 	// static walls pass integer tile coordinates. kind is WSURF_Wall for solid
 	// walls or WSURF_Masked for colour-keyed (alpha-tested) walls -- the geometry
 	// is identical; only the backend's transparency handling differs.
+	//
+	// The corner ORDER fixes the U direction (PushQuad puts u=0 on a/d, u=1 on b/c),
+	// so it has to match the raycaster or that face's texture reads mirrored --
+	// lettering runs backwards while the level layout still looks right. Both
+	// software paths agree on the convention: HitVertWall / HitHorizWall for solid
+	// walls (they invert the intercept on the East and North faces) and
+	// GetMaskedWallEndpoints for masked ones. Per face:
+	//     East  -> U runs -Y (north)    West  -> U runs +Y (south)
+	//     North -> U runs -X (west)     South -> U runs +X (east)
+	// Offset door leaves are the documented exception -- the raycaster skips the
+	// inversion for them (the !offsetVertical / !offsetHorizontal guards), so their
+	// quads are built separately in BuildDynamic and must not be "corrected" here.
 	void PushWallFace(WorldMesh &out, int side, float bx, float by,
 		const FTextureID &tex, int kind = WSURF_Wall)
 	{
 		const float sh = SideShade(side);
 		switch(side)
 		{
-			case MapTile::East:	// +X face at x+1
+			case MapTile::East:	// +X face at x+1, U runs -Y (north)
 				PushQuad(out,
-					bx+1, by,   0,  bx+1, by+1, 0,
-					bx+1, by+1, 1,  bx+1, by,   1,
+					bx+1, by+1, 0,  bx+1, by,   0,
+					bx+1, by,   1,  bx+1, by+1, 1,
 					tex, kind, side, sh);
 				break;
-			case MapTile::West:	// -X face at x
+			case MapTile::West:	// -X face at x, U runs +Y (south)
 				PushQuad(out,
-					bx, by+1, 0,  bx, by,   0,
-					bx, by,   1,  bx, by+1, 1,
+					bx, by,   0,  bx, by+1, 0,
+					bx, by+1, 1,  bx, by,   1,
 					tex, kind, side, sh);
 				break;
 			case MapTile::North:	// -Y face at y (GetAdjacent(North) == y-1)
@@ -438,16 +450,36 @@ void BuildMasked(GameMap *gm, WorldMesh &out, float camX, float camY)
 		// 106 = active barrier, 107 = its permanently-open aperture (post animate).
 		if(spot->corridor7WallMarker == 106 || spot->corridor7WallMarker == 107)
 		{
+			// A centre pane collapses its two opposite faces onto one plane, and
+			// those faces carry OPPOSITE U directions (GetMaskedWallEndpoints), so
+			// the raycaster mirrors the artwork depending on which side the ray
+			// arrives from -- that is how the door's handle swaps sides as you walk
+			// around it. Emitting one fixed winding pins the handle to one side and
+			// reads as flipped from the other, so orient U by the camera's side.
 			if(ForceFieldDoorHorizontal(spot))
-				PushQuad(out, fx, fy+0.5f, 0, fx+1, fy+0.5f, 0,
-					fx+1, fy+0.5f, 1, fx, fy+0.5f, 1,
+			{
+				// Plane at y+0.5: from the south the ray hits the South face (U +X),
+				// from the north the North face (U -X).
+				const bool south = camY > fy+0.5f;
+				const float x1 = south ? fx   : fx+1;
+				const float x2 = south ? fx+1 : fx;
+				PushQuad(out, x1, fy+0.5f, 0, x2, fy+0.5f, 0,
+					x2, fy+0.5f, 1, x1, fy+0.5f, 1,
 					ResolveWallTexture(spot, MapTile::North), WSURF_Masked,
 					MapTile::North, 1.0f);
+			}
 			else
-				PushQuad(out, fx+0.5f, fy, 0, fx+0.5f, fy+1, 0,
-					fx+0.5f, fy+1, 1, fx+0.5f, fy, 1,
+			{
+				// Plane at x+0.5: from the east the ray hits the East face (U -Y),
+				// from the west the West face (U +Y).
+				const bool east = camX > fx+0.5f;
+				const float y1 = east ? fy+1 : fy;
+				const float y2 = east ? fy   : fy+1;
+				PushQuad(out, fx+0.5f, y1, 0, fx+0.5f, y2, 0,
+					fx+0.5f, y2, 1, fx+0.5f, y1, 1,
 					ResolveWallTexture(spot, MapTile::East), WSURF_Masked,
 					MapTile::East, 1.0f);
+			}
 			++out.wallFaces;
 			continue;
 		}

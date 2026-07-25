@@ -123,11 +123,17 @@ void BuildSprites(GameMap *gm, WorldMesh &out)
 	if(gm == NULL || players[ConsolePlayer].camera == NULL)
 		return;
 
-	// Screen-right in world XY, from the current view basis. ECWolf's forward is
-	// (viewcos, -viewsin); right = forward x up(+Z) = (-viewsin, -viewcos). A
-	// screen-facing billboard spans this axis and stays vertical (up = +Z).
-	float screenRx = -FIXED2FLOAT(viewsin);
-	float screenRy = -FIXED2FLOAT(viewcos);
+	// Screen-right in world XY. ECWolf's forward is (viewcos, -viewsin), so the
+	// right-handed basis vector forward x up(+Z) is (-viewsin, -viewcos) -- but that
+	// axis lands on screen-LEFT once the projection's negated clip X (which matches
+	// GL's handedness to Corridor 7's X-east / Y-south world) is applied. A billboard
+	// has to span the axis that actually increases screen x, so use its negation;
+	// texture column 0 then falls on the sprite's left edge exactly as ScaleSprite
+	// draws it (actx = xcenter - leftOffset, columns increasing rightward).
+	// FL_BILLBOARD sprites below are unaffected: they span a real world direction
+	// (finesine, finecosine) that already matches Scale3DSprite.
+	float screenRx = FIXED2FLOAT(viewsin);
+	float screenRy = FIXED2FLOAT(viewcos);
 	{
 		const float l = sqrtf(screenRx*screenRx + screenRy*screenRy);
 		if(l > 0.0f) { screenRx /= l; screenRy /= l; }

@@ -445,5 +445,10 @@ actor C7Invulnerability : Inventory
 
 actor C7FloorPlan : MapRevealer
 {
+	// The floor map does not survive a floor change -- like the blue/red access
+	// cards you have to find the new one on every level. MapRevealer inherits
+	// Inventory's interhubamount of 1, which would carry it over; Key sets 0 for
+	// the same reason.
+	inventory.interhubamount 0
 	states { Spawn: C030 A -1 stop }
 }

@@ -20,14 +20,16 @@
 # missing, whose weapon overlay is empty, or whose view RMSE exceeds
 # GL_PARITY_MAX_VIEW_RMSE (default 0.55). Everything else is reported, not fatal.
 #
-# Baseline note: the view RMSE currently sits around 0.30-0.42 across the golden
-# scenes. That is NOT noise -- Corridor 7's software renderer draws a distinctive
-# "textured" ordered-dither gradient across floors and ceilings (a C7-specific
-# effect absent from stock Wolf3D) that the GL floor/ceiling shader does not yet
-# reproduce, so the world region legitimately differs there. The default ceiling
-# is set well above that baseline so the gate guards against gross regressions
-# (broken shader, wrong palette, black world) while tolerating the known,
-# documented floor/ceiling gap. Tighten it once that shading is ported.
+# Baseline note: the view RMSE now sits around 0.086-0.11 across the golden
+# scenes. It used to sit at 0.30-0.42, which was blamed on Corridor 7's
+# "textured" floor/ceiling dither being unported; the real cause was that the GL
+# plane shader advanced one colormap ROW per shade band where the software
+# advances one visually distinct palette STEP (wl_floorceiling.cpp), so distant
+# planes stayed washed out instead of falling to black. Fixed via the C7 plane
+# shade LUT in r_glworld.cpp. The residual is mostly the remaining sub-pixel
+# sampling difference along wall/plane edges. The default ceiling stays well
+# above the baseline so the gate guards against gross regressions (broken shader,
+# wrong palette, black world) rather than tracking small drift.
 #
 # Runs headlessly (Xvfb + Mesa). Requires ImageMagick for the metrics/report.
 #

@@ -13,23 +13,29 @@
 #   * View-region fidelity -- normalized RMSE of the 3D view rectangle
 #     (GL world vs software raycaster). A small delta is expected (dither /
 #     sub-pixel); a large one means a shading/geometry regression.
-#   * Weapon overlay -- opaque weapon texels composited over the view (> 0).
+#   * View overlay -- opaque 2D texels composited over the view (> 0): the
+#     player weapon plus anything drawn over it (C7's top message).
 # A per-scene diff image and a Markdown report are written to OUT_DIR.
 #
 # Hard failures: any scene whose HUD band is not pixel-exact, whose composite is
-# missing, whose weapon overlay is empty, or whose view RMSE exceeds
+# missing, whose view overlay is empty, or whose view RMSE exceeds
 # GL_PARITY_MAX_VIEW_RMSE (default 0.55). Everything else is reported, not fatal.
 #
-# Baseline note: the view RMSE now sits around 0.086-0.11 across the golden
-# scenes. It used to sit at 0.30-0.42, which was blamed on Corridor 7's
-# "textured" floor/ceiling dither being unported; the real cause was that the GL
-# plane shader advanced one colormap ROW per shade band where the software
-# advances one visually distinct palette STEP (wl_floorceiling.cpp), so distant
-# planes stayed washed out instead of falling to black. Fixed via the C7 plane
-# shade LUT in r_glworld.cpp. The residual is mostly the remaining sub-pixel
-# sampling difference along wall/plane edges. The default ceiling stays well
-# above the baseline so the gate guards against gross regressions (broken shader,
-# wrong palette, black world) rather than tracking small drift.
+# Baseline note: the view RMSE now sits around 0.043-0.078 across the golden
+# scenes. Two fixes got it there from 0.30-0.42. (1) The old number was blamed on
+# Corridor 7's "textured" floor/ceiling dither being unported; the real cause was
+# that the GL plane shader advanced one colormap ROW per shade band where the
+# software advances one visually distinct palette STEP (wl_floorceiling.cpp), so
+# distant planes stayed washed out instead of falling to black -- fixed via the
+# C7 plane shade LUT in r_glworld.cpp (0.30-0.42 -> 0.086-0.11). (2) BuildOverlay
+# marked everything in the view transparent except the weapon, so C7's top
+# message went missing from every GL composite -- fixed by measuring the
+# view-overlay coverage too (0.086-0.11 -> 0.043-0.078). The residual is mostly
+# the remaining sub-pixel sampling difference along wall/plane edges. Note this
+# metric does see dropped 2D: a view overlay GL fails to composite shows up here.
+# The default ceiling stays well above the baseline so the gate guards against
+# gross regressions (broken shader, wrong palette, black world) rather than
+# tracking small drift.
 #
 # Runs headlessly (Xvfb + Mesa). Requires ImageMagick for the metrics/report.
 #
@@ -86,11 +92,11 @@ report="$out_dir/parity-report.md"
 	printf -- '- Build: `%s`\n' "$ec7wolf"
 	printf -- '- Data: `%s`\n' "$data_dir"
 	printf -- '- Frame: %s   Max view RMSE: %s\n\n' "$frame" "$max_view_rmse"
-	printf 'View RMSE baseline is ~0.30-0.42: Corridor 7 draws a textured '
-	printf 'ordered-dither gradient on floors/ceilings that the GL shader does '
-	printf 'not yet reproduce. HUD band AE and weapon texels are exact invariants.\n\n'
-	printf '| Scene | Frame | View RMSE | Full RMSE | HUD band AE | Weapon texels | Verdict |\n'
-	printf '|-------|-------|-----------|-----------|-------------|---------------|---------|\n'
+	printf 'View RMSE baseline is ~0.043-0.078 (sub-pixel sampling along '
+	printf 'wall/plane edges); see the header comment for how it got there. '
+	printf 'HUD band AE and view-overlay texels are exact invariants.\n\n'
+	printf '| Scene | Frame | View RMSE | Full RMSE | HUD band AE | Overlay texels | Verdict |\n'
+	printf '|-------|-------|-----------|-----------|-------------|----------------|---------|\n'
 } >"$report"
 
 overall_rc=0
@@ -165,7 +171,7 @@ for map in $maps; do
 		if [ "$hud_ae" != "0" ]; then
 			verdict="FAIL"; reason="HUD band AE=$hud_ae"
 		elif [ -z "$weapon" ] || [ "$weapon" -le 0 ] 2>/dev/null; then
-			verdict="FAIL"; reason="no weapon overlay"
+			verdict="FAIL"; reason="no view overlay"
 		elif [ "$view_rmse" != "n/a" ] &&
 			awk "BEGIN{exit !($view_rmse > $max_view_rmse)}"; then
 			verdict="FAIL"; reason="view RMSE $view_rmse > $max_view_rmse"
@@ -181,7 +187,7 @@ for map in $maps; do
 	printf '| %s | %s | %s | %s | %s | %s | %s%s |\n' \
 		"$map" "$frame" "$view_rmse" "$full_rmse" "$hud_ae" "${weapon:-0}" \
 		"$verdict" "${reason:+ ($reason)}" >>"$report"
-	printf '%-8s %-5s view_rmse=%-9s hud_ae=%-8s weapon=%-7s %s%s\n' \
+	printf '%-8s %-5s view_rmse=%-9s hud_ae=%-8s overlay=%-7s %s%s\n' \
 		"$map" "$verdict" "$view_rmse" "$hud_ae" "${weapon:-0}" \
 		"$verdict" "${reason:+ ($reason)}"
 done

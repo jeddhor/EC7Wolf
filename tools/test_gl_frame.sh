@@ -14,7 +14,8 @@
 #   * the 2D HUD/status-bar band below the 3D view is a PIXEL-EXACT match to the
 #     software frame (both come from the same 8-bit overlay resolved through the
 #     palette) -- this proves the compositor and its orientation are correct,
-#   * the player weapon composited opaque texels over the GL 3D view (> 0).
+#   * 2D composited opaque texels over the GL 3D view (> 0) -- the player
+#     weapon plus anything drawn over the view (C7's top message).
 #
 # Runs headlessly (Xvfb + Mesa is fine). Requires ImageMagick for the HUD check.
 #
@@ -81,15 +82,15 @@ fi
 printf 'PASS: GL composite frame rendered (%sx%s, view %sx%s at %s,%s).\n' \
 	"$fw" "$fh" "$vw" "$vh" "$vx" "$vy"
 
-# The player weapon (or any 2D drawn over the world) must composite opaque texels
-# over the 3D view. A regression that dropped the weapon overlay -- or the
+# The weapon and any 2D drawn over the world must composite opaque texels over
+# the 3D view. A regression that dropped either overlay -- or the
 # transparent-key discard -- would take this to zero.
 if [ -z "$weapon" ] || [ "$weapon" -le 0 ] 2>/dev/null; then
 	printf 'FAIL: no 2D overlay composited over the GL view (weapon texels=%s); see %s\n' \
 		"${weapon:-none}" "$log" >&2
 	exit 1
 fi
-printf 'PASS: player weapon composited over the GL 3D view (%s opaque texels).\n' \
+printf 'PASS: 2D composited over the GL 3D view (%s opaque texels: weapon + overlay).\n' \
 	"$weapon"
 
 # Pixel-exact HUD/orientation check: the 2D status-bar band strictly below the 3D

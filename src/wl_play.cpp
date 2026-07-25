@@ -1147,12 +1147,43 @@ void FinishPaletteShifts (void)
 ===================
 */
 
-// Thunk so the top overlay can be handed to the renderer seam as a plain
-// function pointer (see IRenderer::DrawViewOverlay). Pure drawing: a backend
-// may run it more than once per frame.
+// The 2D PlayFrame draws over the 3D view, split into pure function-pointer
+// thunks for the renderer seam (see IRenderer::DrawViewOverlay). A compositing
+// backend may run each of these more than once per frame, so they must draw and
+// nothing else. They stay separate rather than merged into one call because the
+// automap draws between them and must keep its place in the paint order.
 static void DrawTopOverlayThunk()
 {
 	StatusBar->DrawTopOverlay();
+}
+
+static void DrawPausedOverlay()
+{
+	if(!(Paused & 1))
+		return;
+
+	if(IWad::CheckGameFilter("Corridor7"))
+	{
+		// Corridor 7 has no Wolf3D PAUSED art chunk. Drawing that absent
+		// texture produced the checkerboard placeholder and an Unknown Texture
+		// warning. Render the pause label with the game's remapped font instead.
+		const char *pauseText = "PAUSED";
+		const int pauseX = 160-SmallFont->StringWidth(pauseText)/2;
+		screen->DrawText(SmallFont, CR_BLACK, pauseX+1, 73, pauseText,
+			DTA_FillColor, GPalette.BaseColors[GPalette.BlackIndex].d,
+			DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
+		screen->DrawText(SmallFont, CR_YELLOW, pauseX, 72, pauseText,
+			DTA_FillColor, GPalette.BaseColors[3].d,
+			DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
+	}
+	else
+		VWB_DrawGraphic(TexMan("PAUSED"), (20 - 4)*8, 80 - 2*8);
+}
+
+void R_DrawPlayViewOverlays()
+{
+	DrawTopOverlayThunk();
+	DrawPausedOverlay();
 }
 
 void PlayFrame()
@@ -1179,25 +1210,10 @@ void PlayFrame()
 
 	if(automap && !gamestate.victoryflag)
 		BasicOverhead();
-	if(Paused & 1)
-	{
-		if(IWad::CheckGameFilter("Corridor7"))
-		{
-			// Corridor 7 has no Wolf3D PAUSED art chunk. Drawing that absent
-			// texture produced the checkerboard placeholder and an Unknown Texture
-			// warning. Render the pause label with the game's remapped font instead.
-			const char *pauseText = "PAUSED";
-			const int pauseX = 160-SmallFont->StringWidth(pauseText)/2;
-			screen->DrawText(SmallFont, CR_BLACK, pauseX+1, 73, pauseText,
-				DTA_FillColor, GPalette.BaseColors[GPalette.BlackIndex].d,
-				DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
-			screen->DrawText(SmallFont, CR_YELLOW, pauseX, 72, pauseText,
-				DTA_FillColor, GPalette.BaseColors[3].d,
-				DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
-		}
-		else
-			VWB_DrawGraphic(TexMan("PAUSED"), (20 - 4)*8, 80 - 2*8);
-	}
+	// PAUSED also lands over the 3D view -- and in Corridor 7 it carries the same
+	// black drop shadow the top message does, which a key-based compositor cannot
+	// see. Same seam, drawn after the automap so the paint order is unchanged.
+	Renderer->DrawViewOverlay(DrawPausedOverlay);
 
 	if(Net::IsBlocked())
 	{

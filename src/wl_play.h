@@ -52,6 +52,12 @@ extern  memptr      demobuffer;
 void    PlayFrame();
 void    PlayLoop (void);
 
+// Every 2D element PlayFrame draws over the 3D view, as one pure call. PlayFrame
+// itself draws these in place (interleaved with the automap, which is excluded
+// here because it is not re-entrant); the GL offscreen frame capture replays this
+// to measure which view texels they paint. See IRenderer::DrawViewOverlay.
+void    R_DrawPlayViewOverlays();
+
 void    InitRedShifts (void);
 void    FinishPaletteShifts (void);
 

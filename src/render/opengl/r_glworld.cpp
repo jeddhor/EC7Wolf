@@ -1117,20 +1117,69 @@ namespace
 		glDeleteVertexArrays(1, &vao);
 	}
 
+	// Measure which view texels PlayFrame's 2D-over-the-view overlays paint, by
+	// replaying them over two different backgrounds directly on the canvas and
+	// keeping the texels that come out identical (the live path's
+	// R_GLLiveDrawViewOverlay does the same as they are drawn). The weapon can be
+	// measured in scratch buffers because it blits through `vbuf`, but these draw
+	// through `screen`, so the canvas itself is the only place to measure them --
+	// hence save, measure, restore. The restore is byte-exact: the replayed values
+	// are what a single draw already put there.
+	// Fills `cover` (vw*vh, 1 = painted); leaves the canvas as it found it.
+	void MeasureViewOverlayCover(byte *wbuf, int pitch, int vx, int vy,
+		int vw, int vh, TArray<unsigned char> &cover)
+	{
+		const unsigned n = (unsigned)(vw * vh);
+		cover.Resize(n);
+		memset(&cover[0], 0, n);
+
+		const byte bgA = GPalette.Remap[0];
+		const byte bgB = (byte)(bgA ^ 0xFF);
+		TArray<unsigned char> saved(n), passA(n), passB(n);
+		saved.Resize(n); passA.Resize(n); passB.Resize(n);
+
+		for(int r = 0; r < vh; ++r)
+			memcpy(&saved[r * vw], wbuf + (vy + r) * pitch + vx, (size_t)vw);
+
+		for(int r = 0; r < vh; ++r)
+			memset(wbuf + (vy + r) * pitch + vx, bgA, (size_t)vw);
+		R_DrawPlayViewOverlays();
+		for(int r = 0; r < vh; ++r)
+			memcpy(&passA[r * vw], wbuf + (vy + r) * pitch + vx, (size_t)vw);
+
+		for(int r = 0; r < vh; ++r)
+			memset(wbuf + (vy + r) * pitch + vx, bgB, (size_t)vw);
+		R_DrawPlayViewOverlays();
+		for(int r = 0; r < vh; ++r)
+			memcpy(&passB[r * vw], wbuf + (vy + r) * pitch + vx, (size_t)vw);
+
+		for(int r = 0; r < vh; ++r)
+			memcpy(wbuf + (vy + r) * pitch + vx, &saved[r * vw], (size_t)vw);
+
+		for(unsigned i = 0; i < n; ++i)
+			cover[i] = (passA[i] == passB[i]) ? 1 : 0;
+	}
+
 	// Build the 2D overlay (index + opacity, full frame) from the engine's live
 	// 8-bit framebuffer. Everything outside the 3D view sub-rect is opaque 2D
 	// (HUD/status bar/menus/text). Inside the view rect, only the player weapon
-	// (or any 2D drawn over the world) is opaque; the rest is transparent so the
-	// GPU world shows through. The weapon silhouette is detected robustly by
-	// re-drawing DrawPlayerWeapon over two different backgrounds and keeping the
-	// pixels that come out identical -- the weapon overwrites deterministically,
-	// so a texel is "weapon" iff it is background-independent.
+	// and the 2D drawn over the world are opaque; the rest is transparent so the
+	// GPU world shows through. Both are detected the same robust way -- redraw
+	// over two different backgrounds and keep the pixels that come out identical
+	// -- because a masked blit overwrites deterministically, so a texel is
+	// "painted" iff it is background-independent, whatever colour it landed in.
 	void BuildOverlay(int FW, int FH, int vx, int vy, int vw, int vh,
 		GLuint &idxTexOut, GLuint &opacTexOut, unsigned int &viewOpaqueOut)
 	{
 		const int pitch = screen->GetPitch();
-		const BYTE *membuf = (const BYTE *)screen->GetBuffer();
+		byte *const wbuf = (byte *)screen->GetBuffer();
 
+		// Overlay coverage first: it writes to (and restores) the canvas, so it
+		// must run before the frame is snapshotted into idx below.
+		TArray<unsigned char> ovCover;
+		MeasureViewOverlayCover(wbuf, pitch, vx, vy, vw, vh, ovCover);
+
+		const BYTE *membuf = wbuf;
 		TArray<unsigned char> idx((unsigned)(FW * FH));
 		TArray<unsigned char> opac((unsigned)(FW * FH));
 		idx.Resize((unsigned)(FW * FH));
@@ -1169,7 +1218,12 @@ namespace
 				const int fx = vx + c, fy = vy + r;
 				const unsigned char a = sa[fy * pitch + fx];
 				const unsigned char b = sb[fy * pitch + fx];
-				if(a == b)	// weapon painted the same index over both -> opaque
+				if(ovCover[r * vw + c])	// 2D over the view -- keep what it left
+				{
+					opac[fy * FW + fx] = 255;
+					++viewOpaque;
+				}
+				else if(a == b)	// weapon painted the same index over both -> opaque
 				{
 					idx[fy * FW + fx] = a;
 					opac[fy * FW + fx] = 255;
@@ -1892,9 +1946,18 @@ void R_GLLiveDrawViewOverlay(void (*draw)())
 	for(int r = 0; r < vh; ++r)
 		memcpy(&passB[r * vw], surf + (vy + r) * pitch + vx, (size_t)vw);
 
+	// Accumulate: PlayFrame registers more than one overlay per frame (the top
+	// message, then PAUSED after the automap), so coverage ORs together and is
+	// reset only when the next scene render starts.
+	const bool accumulate = gLive.haveOverlayCover && gLive.overlayCover.Size() == n;
+	if(!accumulate)
+	{
+		gLive.overlayCover.Resize(n);
+		memset(&gLive.overlayCover[0], 0, n);
+	}
+
 	// Restore the real frame and replay only the painted texels over it, so the
 	// canvas ends up exactly as a single draw would have left it.
-	gLive.overlayCover.Resize(n);
 	for(int r = 0; r < vh; ++r)
 	{
 		byte *dst = surf + (vy + r) * pitch + vx;
@@ -1902,7 +1965,8 @@ void R_GLLiveDrawViewOverlay(void (*draw)())
 		{
 			const unsigned i = (unsigned)(r * vw + c);
 			const bool painted = passA[i] == passB[i];
-			gLive.overlayCover[i] = painted ? 1 : 0;
+			if(painted)
+				gLive.overlayCover[i] = 1;
 			dst[c] = painted ? passA[i] : saved[i];
 		}
 	}

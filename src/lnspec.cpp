@@ -136,6 +136,29 @@ static void OpenWallCell(MapSpot spot, bool removeTile)
 	}
 }
 
+// Exact reverse of OpenWallCell(spot, false), for a force-field door switched
+// back on. GameMap::LinkZones is REFERENCE COUNTED, so the pairs joined when the
+// cell opened have to be released one-for-one here; otherwise toggling a door
+// repeatedly leaks a link and sound keeps bleeding through the live barrier.
+static void CloseWallCell(MapSpot spot)
+{
+	const MapZone *zone = NULL;
+	for(unsigned int side = 0;side < 4;++side)
+	{
+		MapSpot adjacent = spot->GetAdjacent(static_cast<MapTile::Side>(side));
+		if(!adjacent || !adjacent->zone)
+			continue;
+		if(zone == NULL)
+			zone = adjacent->zone;
+		else if(adjacent->zone != zone)
+			map->LinkZones(zone, adjacent->zone, false);
+	}
+	for(unsigned int side = 0;side < 4;++side)
+		spot->sideSolid[side] = true;
+	spot->corridor7SightTransparent = false;
+	spot->zone = NULL;
+}
+
 // Corridor 7's object-plane values 98, 101, and 102 mark walls that
 // disintegrate when used. Preserve the neighboring area connectivity when the
 // wall cell becomes floor so actors, sound, and saves all see the opened route.
@@ -153,7 +176,13 @@ class C7AnimatedWall : public Thinker
 	DECLARE_CLASS(C7AnimatedWall, Thinker)
 
 public:
-	C7AnimatedWall(MapSpot spot) : Thinker(ThinkerList::WORLD), spot(spot), frame(0), tics(0)
+	// activating == 0: the barrier dissolves, frames 0 -> 3, and the cell opens.
+	// activating == 1: the same four pages run backwards, 3 -> 0, and the cell
+	// seals again -- Corridor 7's force-field doors are switches, not one-shot
+	// removals, so using one again turns the field back on.
+	C7AnimatedWall(MapSpot spot, bool activating = false)
+		: Thinker(ThinkerList::WORLD), spot(spot),
+		  frame(activating ? 3 : 0), tics(0), activating(activating ? 1 : 0)
 	{
 		spot->thinker = this;
 	}
@@ -175,7 +204,17 @@ public:
 		if(++tics < 8)
 			return;
 		tics = 0;
-		if(++frame > 3)
+
+		if(activating)
+		{
+			if(frame == 0)		// safety net; the frame==0 branch below finishes
+			{
+				Destroy();
+				return;
+			}
+			--frame;
+		}
+		else if(++frame > 3)
 		{
 			Destroy();
 			return;
@@ -191,7 +230,7 @@ public:
 				spot->texture[side] = texture;
 		}
 
-		if(frame == 3)
+		if(!activating && frame == 3)
 		{
 			// The last frame is an empty aperture with its metal surround still
 			// visible. Keep the tile for masked rendering, but open collision,
@@ -201,11 +240,20 @@ public:
 			OpenWallCell(spot, false);
 			Destroy();
 		}
+		else if(activating && frame == 0)
+		{
+			// Back to page 0, the live barrier: restore the marker the renderers
+			// and the use trigger test, and seal the cell again.
+			spot->corridor7WallMarker = 106;
+			spot->maskedWallType = 1;
+			CloseWallCell(spot);
+			Destroy();
+		}
 	}
 
 	void Serialize(FArchive &arc)
 	{
-		arc << spot << frame << tics;
+		arc << spot << frame << tics << activating;
 		Super::Serialize(arc);
 	}
 
@@ -213,18 +261,23 @@ private:
 	MapSpot spot;
 	BYTE frame;
 	BYTE tics;
+	BYTE activating;
 };
 IMPLEMENT_INTERNAL_CLASS(C7AnimatedWall)
 
 FUNC(Wall_AnimateRemove)
 {
-	if(!spot || !spot->tile || spot->corridor7WallMarker != 106 ||
-		spot->corridor7WallID == 0 || spot->thinker)
-	{
+	if(!spot || !spot->tile || spot->corridor7WallID == 0 || spot->thinker)
 		return 0;
-	}
 
-	new C7AnimatedWall(spot);
+	// 106 = live barrier -> switch it off; 107 = open aperture -> switch it back
+	// on. Only a cell that started as marker 106 carries this trigger, so a
+	// map-authored 107 aperture (gamemap_planes.cpp) is never reachable here.
+	const bool activating = spot->corridor7WallMarker == 107;
+	if(!activating && spot->corridor7WallMarker != 106)
+		return 0;
+
+	new C7AnimatedWall(spot, activating);
 	const char *sound = "c7/forcefield/deactivate/53";
 	switch(spot->corridor7WallID)
 	{

@@ -1478,12 +1478,16 @@ void GameMap::ReadPlanesData()
 
 							// Marker 106 selects one of four native texture-frame door
 							// sequences (53, 73, 81, or 229). It never slides laterally.
+							// The trigger is repeatable because these are switches, not
+							// one-shot removals: using an open force-field door again
+							// runs the sequence backwards and turns the barrier back on
+							// (Wall_AnimateRemove / C7AnimatedWall in lnspec.cpp).
 							if(IWad::CheckGameFilter("Corridor7") && oldplane[i] == 106 &&
 								trigger.action == Specials::Wall_AnimateRemove)
 							{
 								mapPlane.map[i].maskedWallType = 1;
 								mapPlane.map[i].corridor7WallMarker = 106;
-								trigger.repeatable = false;
+								trigger.repeatable = true;
 							}
 
 							triggers.Push(trigger);

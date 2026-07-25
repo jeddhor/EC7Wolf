@@ -24,7 +24,10 @@
 #include "v_video.h"
 #include "v_palette.h"
 #include "files.h"
+#include "c_cvars.h"
 #include "id_ca.h"
+#include "id_vl.h"
+#include "id_vh.h"
 #include "gamemap.h"
 #ifdef ECWOLF_RENDERER_OPENGL
 #include "render/opengl/r_glworld.h"
@@ -66,6 +69,12 @@ namespace
 	bool     g_haveWarp       = false;   // --capture-warp: pin player to a tile+angle
 	fixed    g_warpX = 0, g_warpY = 0;
 	angle_t  g_warpAngle = 0;
+
+	// --capture-vidmode: queued mid-run video mode changes. Repeatable, so a run
+	// can switch more than once (tearing down a context that was itself built
+	// after an earlier teardown).
+	struct VidModeChange { int w, h, frame; };
+	TArray<VidModeChange> g_vidModes;
 
 	// Running state.
 	uint64_t g_ticCount       = 0;
@@ -241,6 +250,16 @@ void ParseArgs(int argc, char **argv)
 			double a = deg / 360.0; a -= (double)(long)a; if(a < 0) a += 1.0;
 			g_warpAngle = (angle_t)(a * 4294967296.0);
 			g_haveWarp = true;
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-vidmode") == 0 && i + 3 < argc)
+		{
+			VidModeChange vm;
+			vm.w = atoi(argv[++i]);
+			vm.h = atoi(argv[++i]);
+			vm.frame = atoi(argv[++i]);
+			if(vm.w > 0 && vm.h > 0 && vm.frame > 0)
+				g_vidModes.Push(vm);
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-blend") == 0 && i + 4 < argc)
@@ -465,6 +484,26 @@ void PostFrame()
 		if(!g_glPresentPath.IsEmpty())
 			R_GLLiveWriteCapture();
 #endif
+	}
+
+	// Change the video mode mid-run, the way the Display menu's resolution picker
+	// does (MENU_LISTENER(SetResolution) in wl_menu.cpp). Toggling fullscreen
+	// takes the same path -- VL_SetFullscreen just swaps in the fullscreen or
+	// windowed size before calling VL_SetVGAPlaneMode -- so this exercises both
+	// reported cases, and in particular the framebuffer/GL-context recreation
+	// that follows. Applied after frame N is captured, so a capture at a later
+	// frame shows what the renderer produces once the mode has changed.
+	for(unsigned int i = 0; i < g_vidModes.Size(); ++i)
+	{
+		if((uint64_t)g_vidModes[i].frame != g_frameCount)
+			continue;
+		Printf("Capture: switching video mode to %dx%d at frame %d.\n",
+			g_vidModes[i].w, g_vidModes[i].h, g_vidModes[i].frame);
+		screenWidth = windowedScreenWidth = g_vidModes[i].w;
+		screenHeight = windowedScreenHeight = g_vidModes[i].h;
+		r_ratio = static_cast<Aspect>(CheckRatio(screenWidth, screenHeight));
+		VH_Startup();	// recalculate fizzlefade tables for the new size
+		VL_SetVGAPlaneMode();
 	}
 
 	const bool hitFrameLimit =

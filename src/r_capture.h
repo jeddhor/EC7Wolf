@@ -32,6 +32,12 @@
 //   --capture-warp X Y DEG  Pin the player to tile (X,Y) facing DEG degrees every
 //                           tic, so a specific viewpoint can be reproduced for a
 //                           software-vs-GL comparison independent of the bot.
+//   --capture-vidmode W H N Switch the video mode to WxH after frame N, exactly
+//                           as the Display menu does. Toggling fullscreen takes
+//                           the same path, so this covers both. Lets the frames
+//                           produced after a framebuffer (and, under OpenGL, a GL
+//                           context) recreation be captured headlessly. Repeatable:
+//                           pass it more than once to switch more than once.
 //
 // ===========================================================================
 

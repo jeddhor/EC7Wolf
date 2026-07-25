@@ -1776,8 +1776,27 @@ bool R_GLLiveWantPresent()
 	return r.Compare("opengl") == 0 || r.Compare("gl") == 0;
 }
 
+static void FreeLiveResources(bool audit);
+
 void R_GLLiveSetContextActive(bool active)
 {
+	// SDLFB reports the window's GL context going away. Every live resource --
+	// shaders, palette/colormap/LUT textures, the world FBO, the per-map index
+	// texture caches -- belongs to that context, and the object names are
+	// meaningless in its replacement, so they must not survive it.
+	//
+	// This is not a rare path: it fires on any video mode change, and toggling
+	// fullscreen is one, because VL_SetFullscreen swaps screenWidth/Height to the
+	// fullscreen or windowed pair. That almost always changes the resolution, so
+	// V_SetResolution takes the recreate branch (delete the SDLFB, which deletes
+	// the context, then build a new one) rather than reusing the window. Without
+	// this teardown the compositor kept drawing with dead handles and presented a
+	// black window until the game was restarted.
+	//
+	// The dying context is still current here -- SDLFB calls this before
+	// SDL_GL_DeleteContext -- so this is a real free, not just a handle drop.
+	if(!active && gLiveContextActive)
+		FreeLiveResources(/*audit=*/false);
 	gLiveContextActive = active;
 }
 
@@ -2097,7 +2116,10 @@ void R_GLLivePresent(const unsigned char *mem, int pitch, int fw, int fh,
 	gLive.haveWorld = false;	// consumed; a pure-2D frame follows unless re-rendered
 }
 
-void R_GLLiveShutdown()
+// Release every live GL object. The owning context must be current. `audit`
+// reports the leak ledger; that is the final-shutdown check, so a video mode
+// change (which tears down and rebuilds) passes false and stays quiet.
+static void FreeLiveResources(bool audit)
 {
 	// Cache textures (created by the shared mesh uploader, freed here) are audited
 	// separately from the ledger; record their count before ClearLiveCaches frees.
@@ -2116,18 +2138,31 @@ void R_GLLiveShutdown()
 	// Resource-leak check: after teardown the live ledger must balance to zero and
 	// the texture caches must be empty. A nonzero balance means a live GL object
 	// was allocated without a matching free somewhere in the frame loop.
-	const long leaked = gLedger.tex + gLedger.fbo + gLedger.rbo + gLedger.prog;
-	if(leaked == 0 && gLive.texCache.CountUsed() == 0 &&
-		gLive.opacCache.CountUsed() == 0)
-		Printf("GL live: 0 leaked GL objects (balanced; %ld cache textures freed).\n",
-			cacheTex);
-	else
-		Printf("GL live: WARNING leaked GL objects "
-			"(tex=%ld fbo=%ld rbo=%ld prog=%ld, %ld cache textures at exit).\n",
-			gLedger.tex, gLedger.fbo, gLedger.rbo, gLedger.prog,
-			(long)gLive.texCache.CountUsed() + (long)gLive.opacCache.CountUsed());
+	if(audit)
+	{
+		const long leaked = gLedger.tex + gLedger.fbo + gLedger.rbo + gLedger.prog;
+		if(leaked == 0 && gLive.texCache.CountUsed() == 0 &&
+			gLive.opacCache.CountUsed() == 0)
+			Printf("GL live: 0 leaked GL objects (balanced; %ld cache textures freed).\n",
+				cacheTex);
+		else
+			Printf("GL live: WARNING leaked GL objects "
+				"(tex=%ld fbo=%ld rbo=%ld prog=%ld, %ld cache textures at exit).\n",
+				gLedger.tex, gLedger.fbo, gLedger.rbo, gLedger.prog,
+				(long)gLive.texCache.CountUsed() + (long)gLive.opacCache.CountUsed());
+	}
 
+	// Everything is rebuilt lazily (EnsureLiveResources / EnsureWorldFbo / the
+	// mesh caches, which key off lastMap). Carry the capture arming across: it is
+	// set once at startup and a mode change must not disarm the harness.
+	const FString capPath = gLive.capPath;
 	gLive = GLLive();
+	gLive.capPath = capPath;
 	gLedger = GLLedger();
 	gGLDebugInstalled = false;
+}
+
+void R_GLLiveShutdown()
+{
+	FreeLiveResources(/*audit=*/true);
 }

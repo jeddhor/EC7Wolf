@@ -1147,6 +1147,14 @@ void FinishPaletteShifts (void)
 ===================
 */
 
+// Thunk so the top overlay can be handed to the renderer seam as a plain
+// function pointer (see IRenderer::DrawViewOverlay). Pure drawing: a backend
+// may run it more than once per frame.
+static void DrawTopOverlayThunk()
+{
+	StatusBar->DrawTopOverlay();
+}
+
 void PlayFrame()
 {
 	// Palette-flash decay is simulation-rate state: advance it only on frames
@@ -1164,7 +1172,10 @@ void PlayFrame()
 	Interpolation::Apply(R_GetInterpolationAlpha());
 	Renderer->RenderScene(); // routed through the backend-neutral renderer seam
 	Interpolation::Restore();
-	StatusBar->DrawTopOverlay();
+	// Routed through the renderer seam: this 2D lands over the 3D view, and a
+	// compositing backend has to be told which texels it painted (see
+	// IRenderer::DrawViewOverlay). The software backend just draws it.
+	Renderer->DrawViewOverlay(DrawTopOverlayThunk);
 
 	if(automap && !gamestate.victoryflag)
 		BasicOverhead();

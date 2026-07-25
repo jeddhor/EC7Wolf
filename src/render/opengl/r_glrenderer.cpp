@@ -43,6 +43,7 @@ namespace
 		}
 		virtual void Shutdown() { R_GLLiveShutdown(); }
 		virtual void RenderScene() { R_GLLiveRenderScene(); }
+		virtual void DrawViewOverlay(void (*draw)()) { R_GLLiveDrawViewOverlay(draw); }
 		virtual RendererType Type() const { return RENDERER_OpenGL; }
 		virtual const char *Name() const { return "OpenGL renderer"; }
 	};

@@ -38,6 +38,14 @@ bool R_GLLiveWantPresent();
 // the software path too).
 void R_GLLiveRenderScene();
 
+// Draw 2D that lands over the 3D view after the world pass (Corridor 7's
+// top-message / power-chamber overlay) and record which texels it painted, so
+// the compositor keeps them opaque even when they are drawn in the key colour
+// (e.g. the top message's black drop shadow). `draw` is invoked more than once
+// and must be a pure drawing function. Reached from game code through
+// IRenderer::DrawViewOverlay; the software backend just calls `draw`.
+void R_GLLiveDrawViewOverlay(void (*draw)());
+
 // Composite the last rendered world (if any) and the engine's 8-bit 2D layer
 // into the default framebuffer. Called from SDLFB::Update with the context
 // current; the caller swaps buffers afterward. drawableW/H are the window's GL

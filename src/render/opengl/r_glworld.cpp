@@ -1546,6 +1546,8 @@ namespace
 		TArray<unsigned char> weaponCover; // per-view-rect: 1 where the weapon drew
 		int    wcx, wcy, wcw, wch;     // weapon-cover rect (frame coords)
 		bool   haveWeaponCover;        // weaponCover is valid for this frame
+		TArray<unsigned char> overlayCover; // per-view-rect: 1 where post-world 2D drew
+		bool   haveOverlayCover;       // overlayCover is valid for this frame
 		FString  capPath;              // headless: last presented frame is kept here
 		TArray<unsigned char> lastRGB; // most recent presented frame (top-down RGB)
 		int    lastW, lastH;
@@ -1554,7 +1556,7 @@ namespace
 			worldDepth(0), worldW(0), worldH(0), haveWorld(false),
 			vx(0), vy(0), vw(0), vh(0), fw(0), fh(0),
 			wcx(0), wcy(0), wcw(0), wch(0), haveWeaponCover(false),
-			lastW(0), lastH(0) {}
+			haveOverlayCover(false), lastW(0), lastH(0) {}
 	};
 	GLLive gLive;
 
@@ -1760,6 +1762,10 @@ void R_GLLiveRenderScene()
 
 	map->ClearVisibility();
 
+	// Any post-world 2D coverage belongs to the frame that recorded it; the new
+	// frame re-records it (R_GLLiveDrawViewOverlay) after this render completes.
+	gLive.haveOverlayCover = false;
+
 	byte *surf = VL_LockSurface();
 	if(surf == NULL)
 		return;
@@ -1826,6 +1832,85 @@ void R_GLLiveRenderScene()
 	RenderLiveWorld();
 }
 
+// Draw 2D that lands over the 3D view (Corridor 7's top-message / power-chamber
+// overlay), recording which texels it painted.
+//
+// The compositor decides what shows through the view region by keying on the
+// palette's black index (the value R_GLLiveRenderScene clears the view to), and
+// that test cannot see 2D drawn *in* that colour. C7's top message paints a
+// one-pixel black drop shadow under its yellow letters exactly like the DOS
+// notification renderer, so those texels read as "nothing drawn here" and the
+// world showed through them -- the shadow vanished in GL while surviving in
+// software.
+//
+// The fix is the same destination-independence test the weapon coverage mask
+// uses: run the draw twice over two different backgrounds and keep the texels
+// that come out identical. A masked/stencil blit ignores what it covers, so a
+// texel is "painted" iff it is background-independent, whatever colour it is.
+// `draw` is therefore called more than once and must be pure (a translucent
+// draw would fail the test and stay transparent, as it does today).
+void R_GLLiveDrawViewOverlay(void (*draw)())
+{
+	if(draw == NULL)
+		return;
+
+	const int vx = gLive.wcx, vy = gLive.wcy, vw = gLive.wcw, vh = gLive.wch;
+	if(!gLive.haveWeaponCover || !gLive.haveWorld || vw <= 0 || vh <= 0)
+	{
+		draw();	// no world behind the 2D this frame: nothing to key against
+		return;
+	}
+
+	// Hold the canvas lock across the whole sequence: the inner draws nest their
+	// own Lock/Unlock, and keeping LockCount above one stops the final Unlock
+	// from triggering a present mid-measurement.
+	byte *surf = VL_LockSurface();
+	if(surf == NULL)
+	{
+		draw();
+		return;
+	}
+	const int pitch = screen->GetPitch();
+	const byte bgA = GPalette.Remap[0];
+	const byte bgB = (byte)(bgA ^ 0xFF);
+	const unsigned n = (unsigned)(vw * vh);
+
+	TArray<unsigned char> saved(n), passA(n), passB(n);
+	saved.Resize(n); passA.Resize(n); passB.Resize(n);
+	for(int r = 0; r < vh; ++r)
+		memcpy(&saved[r * vw], surf + (vy + r) * pitch + vx, (size_t)vw);
+
+	for(int r = 0; r < vh; ++r)
+		memset(surf + (vy + r) * pitch + vx, bgA, (size_t)vw);
+	draw();
+	for(int r = 0; r < vh; ++r)
+		memcpy(&passA[r * vw], surf + (vy + r) * pitch + vx, (size_t)vw);
+
+	for(int r = 0; r < vh; ++r)
+		memset(surf + (vy + r) * pitch + vx, bgB, (size_t)vw);
+	draw();
+	for(int r = 0; r < vh; ++r)
+		memcpy(&passB[r * vw], surf + (vy + r) * pitch + vx, (size_t)vw);
+
+	// Restore the real frame and replay only the painted texels over it, so the
+	// canvas ends up exactly as a single draw would have left it.
+	gLive.overlayCover.Resize(n);
+	for(int r = 0; r < vh; ++r)
+	{
+		byte *dst = surf + (vy + r) * pitch + vx;
+		for(int c = 0; c < vw; ++c)
+		{
+			const unsigned i = (unsigned)(r * vw + c);
+			const bool painted = passA[i] == passB[i];
+			gLive.overlayCover[i] = painted ? 1 : 0;
+			dst[c] = painted ? passA[i] : saved[i];
+		}
+	}
+	gLive.haveOverlayCover = true;
+
+	VL_UnlockSurface();
+}
+
 void R_GLLivePresent(const unsigned char *mem, int pitch, int fw, int fh,
 	int drawableW, int drawableH)
 {
@@ -1869,17 +1954,22 @@ void R_GLLivePresent(const unsigned char *mem, int pitch, int fw, int fh,
 			for(int c = 0; c < gLive.vw; ++c)
 			{
 				const int fx = gLive.vx + c, fy = gLive.vy + r;
-				// The weapon is opaque wherever its coverage mask says it drew,
-				// even if that texel's shaded index equals the key; only then
-				// fall back to the key test, so world shows through unpainted
-				// view texels while any other 2D over the view stays opaque.
-				bool weaponHere = false;
-				if(gLive.haveWeaponCover &&
-					fx >= gLive.wcx && fx < gLive.wcx + gLive.wcw &&
-					fy >= gLive.wcy && fy < gLive.wcy + gLive.wch)
-					weaponHere = gLive.weaponCover[
-						(fy - gLive.wcy) * gLive.wcw + (fx - gLive.wcx)] != 0;
-				if(!weaponHere && mem[fy * pitch + fx] == key)
+				// The weapon and the post-world 2D overlay are opaque wherever
+				// their coverage masks say they drew, even if that texel's index
+				// equals the key (a shaded weapon column, C7's black text drop
+				// shadow); only then fall back to the key test, so world shows
+				// through unpainted view texels while any other 2D over the view
+				// stays opaque.
+				const bool inCover = fx >= gLive.wcx && fx < gLive.wcx + gLive.wcw &&
+					fy >= gLive.wcy && fy < gLive.wcy + gLive.wch;
+				const unsigned ci = inCover
+					? (unsigned)((fy - gLive.wcy) * gLive.wcw + (fx - gLive.wcx)) : 0;
+				bool painted = false;
+				if(inCover && gLive.haveWeaponCover)
+					painted = gLive.weaponCover[ci] != 0;
+				if(inCover && !painted && gLive.haveOverlayCover)
+					painted = gLive.overlayCover[ci] != 0;
+				if(!painted && mem[fy * pitch + fx] == key)
 					opac[fy * W + fx] = 0;
 			}
 	}

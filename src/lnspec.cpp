@@ -159,6 +159,30 @@ static void CloseWallCell(MapSpot spot)
 	spot->zone = NULL;
 }
 
+// True if a monster or player is standing in this cell, or has committed to a
+// step into it, so re-arming a force-field barrier here would seal them inside.
+// The pushwall thinker's CheckSpotFree cannot be reused: it rejects any cell that
+// still has a tile, and a force-field door keeps its tile for masked rendering.
+static bool WallCellOccupied(MapSpot spot)
+{
+	const int cx = spot->GetX();
+	const int cy = spot->GetY();
+	for(AActor::Iterator iter = AActor::GetIterator();iter.Next();)
+	{
+		AActor *actor = iter;
+		if(!(actor->flags & FL_ISMONSTER) && !actor->player)
+			continue;
+		if(actor->tilex == cx && actor->tiley == cy)
+			return true;
+		// Mid-step: dirdeltax/y[nodir] is 0, so a stationary actor just retests
+		// its own tile here.
+		if(actor->tilex + dirdeltax[actor->dir] == cx &&
+			actor->tiley + dirdeltay[actor->dir] == cy)
+			return true;
+	}
+	return false;
+}
+
 // Corridor 7's object-plane values 98, 101, and 102 mark walls that
 // disintegrate when used. Preserve the neighboring area connectivity when the
 // wall cell becomes floor so actors, sound, and saves all see the opened route.
@@ -220,15 +244,7 @@ public:
 			return;
 		}
 
-		FString textureName;
-		textureName.Format("C7W%04u", spot->corridor7WallID-1+frame);
-		const FTextureID texture = TexMan.CheckForTexture(textureName,
-			FTexture::TEX_Wall);
-		if(texture.isValid())
-		{
-			for(unsigned int side = 0;side < 4;++side)
-				spot->texture[side] = texture;
-		}
+		SetFrameTexture();
 
 		if(!activating && frame == 3)
 		{
@@ -242,6 +258,20 @@ public:
 		}
 		else if(activating && frame == 0)
 		{
+			// Never seal an actor inside the doorway. Wall_AnimateRemove already
+			// refuses to start while the cell is occupied; this covers the race
+			// where something steps in during the ~24-tic animation. Fall back to
+			// the open aperture (the cell was never re-solidified) so the state
+			// stays consistent and the switch can simply be used again.
+			if(WallCellOccupied(spot))
+			{
+				frame = 3;
+				SetFrameTexture();
+				spot->corridor7WallMarker = 107;
+				Destroy();
+				return;
+			}
+
 			// Back to page 0, the live barrier: restore the marker the renderers
 			// and the use trigger test, and seal the cell again.
 			spot->corridor7WallMarker = 106;
@@ -249,6 +279,18 @@ public:
 			CloseWallCell(spot);
 			Destroy();
 		}
+	}
+
+	void SetFrameTexture()
+	{
+		FString textureName;
+		textureName.Format("C7W%04u", spot->corridor7WallID-1+frame);
+		const FTextureID texture = TexMan.CheckForTexture(textureName,
+			FTexture::TEX_Wall);
+		if(!texture.isValid())
+			return;
+		for(unsigned int side = 0;side < 4;++side)
+			spot->texture[side] = texture;
 	}
 
 	void Serialize(FArchive &arc)
@@ -275,6 +317,12 @@ FUNC(Wall_AnimateRemove)
 	// map-authored 107 aperture (gamemap_planes.cpp) is never reachable here.
 	const bool activating = spot->corridor7WallMarker == 107;
 	if(!activating && spot->corridor7WallMarker != 106)
+		return 0;
+
+	// Switching the barrier back on would make this cell solid again, so refuse
+	// while anyone is standing in the doorway rather than sealing them inside.
+	// Switching it OFF is always safe.
+	if(activating && WallCellOccupied(spot))
 		return 0;
 
 	new C7AnimatedWall(spot, activating);

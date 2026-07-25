@@ -224,6 +224,38 @@ namespace
 			return false;
 		return true;
 	}
+
+	// --- Corridor 7 force-field door helpers (kept in sync with wl_draw.cpp) ---
+
+	// 106 = active barrier, 107 = its permanently-open aperture. Both render as a
+	// single centre pane on a track and carry no offset flag.
+	bool IsForceFieldDoor(MapSpot spot)
+	{
+		return spot && spot->tile &&
+			(spot->corridor7WallMarker == 106 || spot->corridor7WallMarker == 107);
+	}
+
+	// The axis is not stored, so derive it from open-neighbour topology (the pane
+	// blocks the passage, so it sits perpendicular to whichever way the floor runs).
+	bool ForceFieldDoorHorizontal(MapSpot spot)
+	{
+		const MapSpot n = spot->GetAdjacent(MapTile::North);
+		const MapSpot s = spot->GetAdjacent(MapTile::South);
+		const MapSpot ww = spot->GetAdjacent(MapTile::West);
+		const MapSpot e = spot->GetAdjacent(MapTile::East);
+		const int openNS = (!n || !n->tile) + (!s || !s->tile);
+		const int openWE = (!ww || !ww->tile) + (!e || !e->tile);
+		return openNS > openWE;	// passage N/S -> pane spans X, centred in Y
+	}
+
+	// C7's door track/jamb graphic (C7W0254), used on the jamb sides of every normal
+	// door tile. Force-field door tiles carry the force-field art on all four sides,
+	// so their jamb faces must substitute this fixed track instead.
+	FTextureID C7DoorTrackTexture()
+	{
+		static FTextureID id = TexMan.CheckForTexture("C7W0254", FTexture::TEX_Wall);
+		return id;
+	}
 }
 
 namespace WorldBuilder
@@ -272,20 +304,33 @@ void BuildStatic(GameMap *gm, WorldMesh &out)
 
 				// Doorjamb texture, mirroring wl_draw.cpp HitVertWall /
 				// HitHorizWall: when the neighbour across this face is a door of
-				// the perpendicular orientation, the jamb shows the DOOR's side
-				// (track) texture, not the frame tile's own wall texture.
+				// the perpendicular orientation, the jamb shows the door track
+				// texture, not the frame tile's own wall texture. A normal door
+				// carries the track (C7W0254) on its own jamb sides; a force-field
+				// door carries force-field art on all sides, so it substitutes the
+				// fixed track texture instead.
 				MapSpot texSpot = spot;
+				bool forceFieldJamb = false;
 				if(adj && adj->tile)
 				{
 					const bool ns = (side == MapTile::North ||
 						side == MapTile::South);
-					if((ns && adj->tile->offsetVertical &&
+					const bool doorV = (adj->tile->offsetVertical &&
 							!adj->tile->offsetHorizontal) ||
-						(!ns && adj->tile->offsetHorizontal &&
-							!adj->tile->offsetVertical))
-						texSpot = adj;
+						(IsForceFieldDoor(adj) && !ForceFieldDoorHorizontal(adj));
+					const bool doorH = (adj->tile->offsetHorizontal &&
+							!adj->tile->offsetVertical) ||
+						(IsForceFieldDoor(adj) && ForceFieldDoorHorizontal(adj));
+					if((ns && doorV) || (!ns && doorH))
+					{
+						if(IsForceFieldDoor(adj))
+							forceFieldJamb = true;
+						else
+							texSpot = adj;
+					}
 				}
-				PushWallFace(out, side, fx, fy, ResolveWallTexture(texSpot, side));
+				PushWallFace(out, side, fx, fy, forceFieldJamb ?
+					C7DoorTrackTexture() : ResolveWallTexture(texSpot, side));
 			}
 		}
 		else if(spot->sector != NULL)
@@ -363,23 +408,6 @@ bool MaskedFaceTowardCamera(int side, int bx, int by, float camX, float camY)
 		case MapTile::North: return camY < (float)by;		// -Y edge
 		default:             return camY > (float)(by + 1);	// South, +Y edge
 	}
-}
-
-// C7 force-field door (map marker 106): the barrier is a single see-through pane on
-// the cell-centre plane and just switches off in place -- it never slides. The axis
-// is not stored, so derive it from open-neighbour topology (the pane blocks the
-// passage, so it sits perpendicular to whichever way the open floor runs). Mirrors
-// wl_draw.cpp MaskedPlaneAxis for marker 106; real offset masked cells never reach
-// BuildMasked (they are doors, built by BuildDynamic).
-bool ForceFieldDoorHorizontal(MapSpot spot)
-{
-	const MapSpot n = spot->GetAdjacent(MapTile::North);
-	const MapSpot s = spot->GetAdjacent(MapTile::South);
-	const MapSpot ww = spot->GetAdjacent(MapTile::West);
-	const MapSpot e = spot->GetAdjacent(MapTile::East);
-	const int openNS = (!n || !n->tile) + (!s || !s->tile);
-	const int openWE = (!ww || !ww->tile) + (!e || !e->tile);
-	return openNS > openWE;	// passage N/S -> pane spans X, centred in Y
 }
 
 void BuildMasked(GameMap *gm, WorldMesh &out, float camX, float camY)

@@ -438,6 +438,38 @@ static FTexture *GetWallTexture(MapSpot spot, MapTile::Side side)
 	return TexMan(texture);
 }
 
+// --- Corridor 7 force-field door helpers (kept in sync with r_worldbuilder.cpp) ---
+
+// 106 = active barrier, 107 = its permanently-open aperture. Both render as a single
+// centre pane on a track and, unlike normal doors, carry no offset flag.
+static bool IsForceFieldDoor(MapSpot spot)
+{
+	return spot && spot->tile &&
+		(spot->corridor7WallMarker == 106 || spot->corridor7WallMarker == 107);
+}
+
+// A force-field door's axis is not stored, so derive it from open-neighbour
+// topology (the pane blocks the passage, so it sits perpendicular to the open run).
+static bool ForceFieldDoorHorizontal(MapSpot spot)
+{
+	const MapSpot n = spot->GetAdjacent(MapTile::North);
+	const MapSpot s = spot->GetAdjacent(MapTile::South);
+	const MapSpot w = spot->GetAdjacent(MapTile::West);
+	const MapSpot e = spot->GetAdjacent(MapTile::East);
+	const int openNS = (!n || !n->tile) + (!s || !s->tile);
+	const int openWE = (!w || !w->tile) + (!e || !e->tile);
+	return openNS > openWE;
+}
+
+// The Corridor 7 door track/jamb graphic (C7W0254), used on the jamb sides of every
+// normal door tile in xlat/corridor7.txt. Force-field door tiles carry the force-
+// field art on all four sides, so their jamb faces must substitute this fixed track.
+static FTexture *C7DoorTrackTexture()
+{
+	static FTextureID id = TexMan.CheckForTexture("C7W0254", FTexture::TEX_Wall);
+	return id.isValid() ? TexMan(id) : NULL;
+}
+
 /*
 ====================
 =
@@ -491,8 +523,11 @@ void HitVertWall (void)
 	FTexture *source = NULL;
 
 	MapSpot adj = tilehit->GetAdjacent(hitdir);
+	const bool adjForceField = IsForceFieldDoor(adj) && ForceFieldDoorHorizontal(adj);
 	if (adj && adj->tile && adj->tile->offsetHorizontal && !adj->tile->offsetVertical) // check for adjacent doors
 		source = GetWallTexture(adj, hitdir);
+	else if (adjForceField) // force-field door jamb: fixed track texture, not its art
+		source = C7DoorTrackTexture();
 	else
 		source = GetWallTexture(tilehit, hitdir);
 
@@ -572,8 +607,11 @@ void HitHorizWall (void)
 	FTexture *source = NULL;
 
 	MapSpot adj = tilehit->GetAdjacent(hitdir);
+	const bool adjForceField = IsForceFieldDoor(adj) && !ForceFieldDoorHorizontal(adj);
 	if (adj && adj->tile && adj->tile->offsetVertical && !adj->tile->offsetHorizontal) // check for adjacent doors
 		source = GetWallTexture(adj, hitdir);
+	else if (adjForceField) // force-field door jamb: fixed track texture, not its art
+		source = C7DoorTrackTexture();
 	else
 		source = GetWallTexture(tilehit, hitdir);
 
@@ -688,13 +726,6 @@ static TArray<MaskedWallHit> maskedWallHits;
 // offset flag (which would reclassify it as a door and change collision).
 enum { MASKPLANE_EDGES = 0, MASKPLANE_CENTRE_X, MASKPLANE_CENTRE_Y };
 
-static bool IsForceFieldDoor(MapSpot spot)
-{
-	// 106 = active barrier, 107 = the permanently-open aperture it becomes after
-	// Wall_AnimateRemove (lnspec.cpp). Both are the same centre pane on a track.
-	return spot->corridor7WallMarker == 106 || spot->corridor7WallMarker == 107;
-}
-
 static int MaskedPlaneAxis(MapSpot spot)
 {
 	if(spot->tile->offsetVertical)
@@ -702,16 +733,8 @@ static int MaskedPlaneAxis(MapSpot spot)
 	if(spot->tile->offsetHorizontal)
 		return MASKPLANE_CENTRE_Y;
 	if(IsForceFieldDoor(spot))
-	{
-		const MapSpot n = spot->GetAdjacent(MapTile::North);
-		const MapSpot s = spot->GetAdjacent(MapTile::South);
-		const MapSpot w = spot->GetAdjacent(MapTile::West);
-		const MapSpot e = spot->GetAdjacent(MapTile::East);
-		const int openNS = (!n || !n->tile) + (!s || !s->tile);
-		const int openWE = (!w || !w->tile) + (!e || !e->tile);
 		// Passage along N/S -> pane spans X, centred in Y (MASKPLANE_CENTRE_Y).
-		return openNS > openWE ? MASKPLANE_CENTRE_Y : MASKPLANE_CENTRE_X;
-	}
+		return ForceFieldDoorHorizontal(spot) ? MASKPLANE_CENTRE_Y : MASKPLANE_CENTRE_X;
 	return MASKPLANE_EDGES;
 }
 

@@ -17,16 +17,20 @@
 
 namespace
 {
-	// MapTile::Side -> unit step in the world builder's tile space
-	// (East=+X, North=+Y, West=-X, South=-Y).
+	// MapTile::Side -> unit step in the world builder's tile space. This MUST match
+	// GameMap::GetAdjacent (gamemap.cpp), which is the engine's definition of where
+	// a side points: South is +Y and North is -Y. Getting the Y pair backwards makes
+	// a pushwall on the N/S axis animate toward the player instead of away, then snap
+	// to the right cell when the thinker finishes and the map data takes over (the
+	// E/W axis is unaffected, which is why only some secret walls looked wrong).
 	void SideDelta(int side, int &dx, int &dy)
 	{
 		switch(side)
 		{
 			case MapTile::East:  dx =  1; dy =  0; break;
-			case MapTile::North: dx =  0; dy =  1; break;
+			case MapTile::North: dx =  0; dy = -1; break;
 			case MapTile::West:  dx = -1; dy =  0; break;
-			default:             dx =  0; dy = -1; break;	// South
+			default:             dx =  0; dy =  1; break;	// South
 		}
 	}
 

@@ -8,6 +8,7 @@
 #include "wl_shade.h"
 #include "wl_iwad.h"
 #include "r_data/colormaps.h"
+#include "v_palette.h"
 
 #include <climits>
 
@@ -101,39 +102,34 @@ static void R_DrawPlane(byte *vbuf, unsigned vbufPitch, int min_wallheight, int 
 			const unsigned int band = virtualEdgeRow/3;
 			const unsigned int extraLight = MAX(0, r_extralight);
 			const unsigned int litBand = band > extraLight/8 ? band-extraLight/8 : 0;
-			const unsigned int firstShade = MIN<unsigned int>(NUMCOLORMAPS-1,
-				MAX(0, 5-static_cast<int>(extraLight/16)));
 
+			// Corridor 7 does not shade its planes through a colormap at all: it
+			// walks the PALETTE, one index darker per band, and stops at the bottom
+			// of the colour's own ramp. Read straight off the released game,
+			// MAP23's green ceiling from the screen edge inward:
+			//
+			//   122 121 122 120 121 120 119 120 118 119 118 117 ...
+			//
+			// which is band N alternating with band N+1 while N counts down by one
+			// index per band. The ramps are neither uniformly sized nor aligned
+			// (grey 16-39, red 64-79, green 112-127, purple 184-207), so each
+			// colour's floor comes from V_GetC7RampFloors, which derives them from
+			// the palette by descending while luminance does not rise.
+			//
+			// This replaces a walk of NormalLight.Maps looking for the next
+			// visually distinct row. That walk could not match the original on any
+			// saturated colour: Corridor 7's palette holds three overlapping red
+			// ramps, so the colour matcher legitimately hops between them
+			// (71 -> 241, 73 -> 242) and the step sequence came out erratic.
+			const BYTE *const rampFloor = V_GetC7RampFloors();
 			for(unsigned int color = 0;color < 256;++color)
 			{
-				unsigned int shadeIndex = firstShade;
-				byte shadeColor = NormalLight.Maps[(shadeIndex<<8)+color];
-				for(unsigned int step = 0;step < litBand;++step)
-				{
-					for(unsigned int darker = shadeIndex+1;
-						darker < NUMCOLORMAPS;++darker)
-					{
-						const byte candidate = NormalLight.Maps[(darker<<8)+color];
-						if(candidate != shadeColor)
-						{
-							shadeIndex = darker;
-							shadeColor = candidate;
-							break;
-						}
-					}
-				}
-				c7PlaneShades[color] = shadeColor;
-				c7NextPlaneShades[color] = shadeColor;
-				for(unsigned int darker = shadeIndex+1;
-					darker < NUMCOLORMAPS;++darker)
-				{
-					const byte candidate = NormalLight.Maps[(darker<<8)+color];
-					if(candidate != shadeColor)
-					{
-						c7NextPlaneShades[color] = candidate;
-						break;
-					}
-				}
+				const unsigned int base = rampFloor[color];
+				const unsigned int lit = color >= base + litBand
+					? color - litBand : base;
+				c7PlaneShades[color] = static_cast<byte>(lit);
+				c7NextPlaneShades[color] =
+					static_cast<byte>(lit > base ? lit-1 : base);
 			}
 			curshades = c7PlaneShades;
 		}

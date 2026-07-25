@@ -125,7 +125,15 @@ void V_ForceBlend (int blendr, int blendg, int blendb, int blenda);
 // Corridor 7 changes the actual DAC palette for its visor and electrical
 // shock effects. Mode 0 restores the palette captured when the effect began;
 // 1/2 are monochrome green/red and 3 is the animated shock palette.
-void V_SetCorridor7PaletteMode (int mode, unsigned int phase=0);
+void V_SetCorridor7PaletteMode (int mode, unsigned int phase=0);
+
+// Corridor 7 plane shading walks the palette one index darker per band and
+// stops at the bottom of the colour's own ramp. The palette has no ramp table,
+// so the floors are derived from it: from each index, descend while luminance
+// does not increase. That finds grey 16-39, red 64-79, green 112-127 and purple
+// 184-207 without hardcoding any of them. Returns a cached 256-entry table,
+// rebuilt when the game palette changes.
+const BYTE *V_GetC7RampFloors ();
 
 
 // Colorspace conversion RGB <-> HSV

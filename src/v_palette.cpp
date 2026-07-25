@@ -496,6 +496,44 @@ void V_ForceBlend (int blendr, int blendg, int blendb, int blenda)
 	screen->SetFlash (PalEntry (BlendR, BlendG, BlendB), BlendA);
 }
 
+const BYTE *V_GetC7RampFloors ()
+{
+	static BYTE floors[256];
+	static bool built = false;
+	static PalEntry signature[8];
+
+	// Cheap staleness check: a different game palette (or a reload) changes
+	// these entries. The visor modes rewrite screen->GetPalette(), not
+	// GPalette.BaseColors, so they correctly leave the ramps alone.
+	bool stale = !built;
+	for(int i = 0; i < 8 && !stale; ++i)
+		if(signature[i] != GPalette.BaseColors[i*32])
+			stale = true;
+	if(!stale)
+		return floors;
+
+	for(int i = 0; i < 8; ++i)
+		signature[i] = GPalette.BaseColors[i*32];
+
+	for(int c = 0; c < 256; ++c)
+	{
+		int i = c;
+		while(i > 0)
+		{
+			const PalEntry &here = GPalette.BaseColors[i];
+			const PalEntry &down = GPalette.BaseColors[i-1];
+			const int lh = (77*here.r + 150*here.g + 29*here.b) >> 8;
+			const int ld = (77*down.r + 150*down.g + 29*down.b) >> 8;
+			if(ld > lh)
+				break;	// next entry down is brighter: a different ramp starts
+			--i;
+		}
+		floors[c] = (BYTE)i;
+	}
+	built = true;
+	return floors;
+}
+
 void V_SetCorridor7PaletteMode (int mode, unsigned int phase)
 {
 	if(screen == NULL)

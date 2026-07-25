@@ -207,9 +207,15 @@ defaultmap
 	// data -- every shipped map's flats plane is uniformly zero, there are no
 	// floor/ceiling tags, and the level header is fully accounted for by
 	// offsets/lengths/dimensions/name with no spare bytes. Values are palette
-	// indices 15 (white) and 199, mid the purple ramp 192-207.
-	defaultfloor = "#71518A"
-	defaultceiling = "#FFFFFF"
+	// indices 39 (white, the top of the grey ramp 16-39) and 199 (mid the
+	// purple ramp 184-207). Index 15 is also pure white but is a standalone
+	// entry, not the head of a ramp -- shading down from it walks into the
+	// skin tones at 14 and below. Written as "@NNN"
+	// (exact palette entry) rather than "#RRGGBB": the plane shading walks the
+	// palette by index, and Corridor 7 repeats colours across ramps, so a
+	// colour-matched flat can land in the wrong ramp and fade out the wrong way.
+	defaultfloor = "@199"
+	defaultceiling = "@39"
 	// Corridor 7 uses a full-range depth ramp:
 	// MAP01's nearby surfaces stay bright while its distant fence line and
 	// floor/ceiling fade toward the dark palette ramps.
@@ -367,11 +373,12 @@ map "MAP19" "Corridor 7 Level 19"
 
 map "MAP20" "Corridor 7 Level 20"
 {
-	// Red sector. Ceiling read from the original at MAP20: the screen-edge
-	// dither pair is palette 76/75 in the pure-red ramp 64-79. See the
-	// comment on defaultmap: the floor value here is provisional.
-	defaultceiling = "#B60000"
-	defaultfloor = "#AA0000"
+	// Red sector. Read off the original at MAP20: the screen edge (band 0)
+	// shows the dither pair 76/75 in the pure-red ramp 64-79, so the
+	// ceiling base is 76. The floor base is provisional -- MAP20's bottom
+	// rows are mottled (75 mixed with 70 and 73) and never settle.
+	defaultceiling = "@76"
+	defaultfloor = "@75"
 	next = "MAP21"
 	secretnext = "MAP45"
 	floornumber = 20
@@ -380,11 +387,12 @@ map "MAP20" "Corridor 7 Level 20"
 
 map "MAP21" "Corridor 7 Level 21"
 {
-	// Red sector. Ceiling read from the original at MAP20: the screen-edge
-	// dither pair is palette 76/75 in the pure-red ramp 64-79. See the
-	// comment on defaultmap: the floor value here is provisional.
-	defaultceiling = "#B60000"
-	defaultfloor = "#AA0000"
+	// Red sector. Read off the original at MAP20: the screen edge (band 0)
+	// shows the dither pair 76/75 in the pure-red ramp 64-79, so the
+	// ceiling base is 76. The floor base is provisional -- MAP20's bottom
+	// rows are mottled (75 mixed with 70 and 73) and never settle.
+	defaultceiling = "@76"
+	defaultfloor = "@75"
 	next = "MAP22"
 	floornumber = 21
 	cluster = 1
@@ -394,10 +402,10 @@ map "MAP22" "Corridor 7 Level 22"
 {
 	// Green sector. Both planes fitted exactly from the original at MAP23:
 	// screen-edge dither pairs 122/121 (ceiling) and 123/122 (floor) in the
-	// green ramp 112-127, reproduced here by bases 124/125 (which base
-	// renders a given pair is fitted per ramp, not a fixed offset).
-	defaultceiling = "#1C510C"
-	defaultfloor = "#20590C"
+	// green ramp 112-127. With the plane shading walking the palette
+	// directly these ARE the bases: band 0 paints the base itself.
+	defaultceiling = "@122"
+	defaultfloor = "@123"
 	next = "MAP23"
 	floornumber = 22
 	cluster = 1
@@ -407,10 +415,10 @@ map "MAP23" "Corridor 7 Level 23"
 {
 	// Green sector. Both planes fitted exactly from the original at MAP23:
 	// screen-edge dither pairs 122/121 (ceiling) and 123/122 (floor) in the
-	// green ramp 112-127, reproduced here by bases 124/125 (which base
-	// renders a given pair is fitted per ramp, not a fixed offset).
-	defaultceiling = "#1C510C"
-	defaultfloor = "#20590C"
+	// green ramp 112-127. With the plane shading walking the palette
+	// directly these ARE the bases: band 0 paints the base itself.
+	defaultceiling = "@122"
+	defaultfloor = "@123"
 	next = "MAP24"
 	floornumber = 23
 	cluster = 1
@@ -418,11 +426,12 @@ map "MAP23" "Corridor 7 Level 23"
 
 map "MAP24" "Corridor 7 Level 24"
 {
-	// Red sector. Ceiling read from the original at MAP20: the screen-edge
-	// dither pair is palette 76/75 in the pure-red ramp 64-79. See the
-	// comment on defaultmap: the floor value here is provisional.
-	defaultceiling = "#B60000"
-	defaultfloor = "#AA0000"
+	// Red sector. Read off the original at MAP20: the screen edge (band 0)
+	// shows the dither pair 76/75 in the pure-red ramp 64-79, so the
+	// ceiling base is 76. The floor base is provisional -- MAP20's bottom
+	// rows are mottled (75 mixed with 70 and 73) and never settle.
+	defaultceiling = "@76"
+	defaultfloor = "@75"
 	next = "MAP25"
 	floornumber = 24
 	cluster = 1
@@ -432,10 +441,10 @@ map "MAP25" "Corridor 7 Level 25"
 {
 	// Green sector. Both planes fitted exactly from the original at MAP23:
 	// screen-edge dither pairs 122/121 (ceiling) and 123/122 (floor) in the
-	// green ramp 112-127, reproduced here by bases 124/125 (which base
-	// renders a given pair is fitted per ramp, not a fixed offset).
-	defaultceiling = "#1C510C"
-	defaultfloor = "#20590C"
+	// green ramp 112-127. With the plane shading walking the palette
+	// directly these ARE the bases: band 0 paints the base itself.
+	defaultceiling = "@122"
+	defaultfloor = "@123"
 	next = "MAP26"
 	secretnext = "MAP46"
 	floornumber = 25
@@ -444,11 +453,12 @@ map "MAP25" "Corridor 7 Level 25"
 
 map "MAP26" "Corridor 7 Level 26"
 {
-	// Red sector. Ceiling read from the original at MAP20: the screen-edge
-	// dither pair is palette 76/75 in the pure-red ramp 64-79. See the
-	// comment on defaultmap: the floor value here is provisional.
-	defaultceiling = "#B60000"
-	defaultfloor = "#AA0000"
+	// Red sector. Read off the original at MAP20: the screen edge (band 0)
+	// shows the dither pair 76/75 in the pure-red ramp 64-79, so the
+	// ceiling base is 76. The floor base is provisional -- MAP20's bottom
+	// rows are mottled (75 mixed with 70 and 73) and never settle.
+	defaultceiling = "@76"
+	defaultfloor = "@75"
 	next = "MAP27"
 	floornumber = 26
 	cluster = 1
@@ -470,11 +480,12 @@ map "MAP28" "Corridor 7 Level 28"
 
 map "MAP29" "Corridor 7 Level 29"
 {
-	// Red sector. Ceiling read from the original at MAP20: the screen-edge
-	// dither pair is palette 76/75 in the pure-red ramp 64-79. See the
-	// comment on defaultmap: the floor value here is provisional.
-	defaultceiling = "#B60000"
-	defaultfloor = "#AA0000"
+	// Red sector. Read off the original at MAP20: the screen edge (band 0)
+	// shows the dither pair 76/75 in the pure-red ramp 64-79, so the
+	// ceiling base is 76. The floor base is provisional -- MAP20's bottom
+	// rows are mottled (75 mixed with 70 and 73) and never settle.
+	defaultceiling = "@76"
+	defaultfloor = "@75"
 	next = "MAP30"
 	floornumber = 29
 	cluster = 1

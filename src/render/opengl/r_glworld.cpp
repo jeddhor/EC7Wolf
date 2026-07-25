@@ -163,11 +163,10 @@ namespace
 		"in vec2 vUV; in vec3 vViewPos;\n"
 		"out vec4 fragColor;\n"
 		"uniform usampler2D uIndexTex;\n"    // per-surface WxH, R8UI physical indices
+		"uniform usampler2D uC7RampFloor;\n" // 256x1 R8UI: colour -> its ramp floor
 		"uniform usampler2D uOpacityTex;\n"  // per-surface WxH, R8UI (0 = transparent)
 		"uniform sampler2D  uPaletteTex;\n"  // 256x1 RGB8
 		"uniform usampler2D uColormapTex;\n" // 256xNUMCOLORMAPS R8UI
-		"uniform usampler2D uC7PlaneLUT;\n"  // 256xkC7LUTBands R8UI: colour,band -> row
-		"uniform int   uC7LUTBands;\n"
 		"uniform int   uHasOpacity;\n"
 		"uniform int   uMasked;\n"        // 1 = colour-keyed masked wall / door leaf
 		"uniform int   uMaskColor;\n"     // physical index treated as transparent (Remap[255])
@@ -286,13 +285,22 @@ namespace
 		"        int b = (ver % 3 == 1) ? 1 : 0;\n"
 		"        int c = band & 1;\n"
 		// Four-pixel alternation: the software picks c7NextPlaneShades, i.e. the
-		// NEXT visible step -- one more band, not one more colormap row.
+		// NEXT band -- one more palette step.
 		"        if((a ^ b ^ c) == 0) litBand += 1;\n"
-		// Each band is one visually distinct palette step, and how many colormap
-		// rows that spans depends on the colour index, so read it from the table
-		// built by UploadC7PlaneLUT rather than adding band to firstShade.
-		"        shadeRow = int(texelFetch(uC7PlaneLUT,\n"
-		"            ivec2(idx, clamp(litBand, 0, uC7LUTBands - 1)), 0).r);\n"
+		// The plane never goes through the colormap: Corridor 7 walks the palette
+		// one index darker per band and clamps at the bottom of the colour's own
+		// 16-aligned ramp (see wl_floorceiling.cpp for the measurement). Resolve
+		// and return here -- the wall-only full-bright and colour-cycle rules
+		// below do not apply to planes, and uSurfKind is 0/1 only for planes
+		// (doors, masked walls and sprites are all bound as WSURF_Wall).
+		"        int rampBase = int(texelFetch(uC7RampFloor, ivec2(idx, 0), 0).r);\n"
+		"        int planeIdx = max(rampBase, idx - litBand);\n"
+		"        if(uDebug == 1){\n"
+		"            float g = float(idx - planeIdx) / 15.0;\n"
+		"            fragColor = vec4(g, g, g, 1.0); return;\n"
+		"        }\n"
+		"        vec3 prgb = texelFetch(uPaletteTex, ivec2(planeIdx, 0), 0).rgb;\n"
+		"        fragColor = vec4(prgb, 1.0); return;\n"
 		"    } else {\n"
 		"        // Generic (non-C7) plane distance formula.\n"
 		"        float rowFromHorizon = abs(gl_FragCoord.y - uHorizon);\n"
@@ -405,54 +413,13 @@ namespace
 		return tex;
 	}
 
-	// Corridor 7's untextured planes do NOT darken one colormap row per band. Per
-	// wl_floorceiling.cpp they advance one *visually distinct* palette step per
-	// three-row band: the search skips every colormap row that maps the colour to
-	// the same output index. Because the distance colormap repeats a colour for
-	// several consecutive rows -- and by a different amount for every colour index
-	// -- a raw `firstShade + band` row (what the shader used to do) darkens far too
-	// slowly, leaving the far floor and ceiling washed out instead of falling to
-	// black. The step sequence depends only on the colour index and firstShade, so
-	// precompute colour -> band -> colormap row and let the shader index it.
-	const int kC7LUTBands = 32;
-
-	void UploadC7PlaneLUT(int firstShade)
+	// 256x1 R8UI: for each palette index, the bottom of its ramp. The C7 plane
+	// shader steps one index darker per band and stops there; the ramps are not
+	// uniform, so this is derived from the palette (V_GetC7RampFloors) and shared
+	// with the software renderer rather than assumed.
+	GLuint CreateC7RampFloorTexture()
 	{
-		unsigned char lut[256*kC7LUTBands];
-		for(unsigned int color = 0; color < 256; ++color)
-		{
-			unsigned int shadeIndex = (unsigned int)firstShade;
-			BYTE shadeColor = NormalLight.Maps[(shadeIndex<<8)+color];
-			for(int band = 0; band < kC7LUTBands; ++band)
-			{
-				if(band > 0)
-				{
-					// Next row that actually changes this colour, exactly as the
-					// software renderer's inner search does.
-					for(unsigned int darker = shadeIndex+1;
-						darker < NUMCOLORMAPS; ++darker)
-					{
-						const BYTE candidate = NormalLight.Maps[(darker<<8)+color];
-						if(candidate != shadeColor)
-						{
-							shadeIndex = darker;
-							shadeColor = candidate;
-							break;
-						}
-					}
-				}
-				lut[band*256 + color] = (unsigned char)shadeIndex;
-			}
-		}
-		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, 256, kC7LUTBands, 0,
-			GL_RED_INTEGER, GL_UNSIGNED_BYTE, lut);
-	}
-
-	// firstShade moves only with extralight, so the table is rebuilt in place (same
-	// texture object, no create/destroy) on the rare frames it changes.
-	GLuint CreateC7PlaneLUTTexture()
-	{
+		const BYTE *floors = V_GetC7RampFloors();
 		GLuint tex = 0;
 		glGenTextures(1, &tex);
 		glBindTexture(GL_TEXTURE_2D, tex);
@@ -460,7 +427,9 @@ namespace
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		UploadC7PlaneLUT(5);	// firstShade with no extralight
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, 256, 1, 0,
+			GL_RED_INTEGER, GL_UNSIGNED_BYTE, floors);
 		return tex;
 	}
 
@@ -770,24 +739,18 @@ namespace
 		GLuint prog;
 		GLuint paletteTex;
 		GLuint colormapTex;
-		GLuint c7PlaneLUTTex;
+		GLuint c7RampFloorTex;
 		TMap<int, GLuint> ownTexCache;   // used only when ownResources
 		TMap<int, GLuint> ownOpacCache;
 		TMap<int, GLuint> *texCache;     // -> own caches, or a borrowed persistent set
 		TMap<int, GLuint> *opacCache;
-		// Which firstShade the plane LUT currently holds. Borrowed alongside the
-		// texture (same idiom as texCache) so the live path's value lives with the
-		// texture in GLLive and dies with it when the GL context is replaced.
-		int  ownPlaneLUTShade;
-		int *c7PlaneLUTShade;
 		bool ownResources;
 		WorldMesh mesh, dynMesh, maskedMesh, spriteMesh;
 		MeshGL staticGL, dynGL, maskedGL, spriteGL;
 		SurfaceUniforms su;
 		GLint uDebug;
-		WorldGL() : prog(0), paletteTex(0), colormapTex(0), c7PlaneLUTTex(0),
-			texCache(NULL), opacCache(NULL), ownPlaneLUTShade(5),
-			c7PlaneLUTShade(NULL), ownResources(true), uDebug(-1) {}
+		WorldGL() : prog(0), paletteTex(0), colormapTex(0), c7RampFloorTex(0),
+			texCache(NULL), opacCache(NULL), ownResources(true), uDebug(-1) {}
 	};
 
 	// Build meshes/program/uniforms for a W x H world render (aspect W/H). The
@@ -849,9 +812,7 @@ namespace
 			w.paletteTex = CreatePaletteTexture();
 			int colormapRows = 0;
 			w.colormapTex = CreateColormapTexture(colormapRows);
-			w.c7PlaneLUTTex = CreateC7PlaneLUTTexture();
-			w.ownPlaneLUTShade = 5;	// what CreateC7PlaneLUTTexture uploaded
-			w.c7PlaneLUTShade = &w.ownPlaneLUTShade;
+			w.c7RampFloorTex = CreateC7RampFloorTexture();
 			w.texCache = &w.ownTexCache;
 			w.opacCache = &w.ownOpacCache;
 		}
@@ -973,30 +934,6 @@ namespace
 		glUniform1i(glGetUniformLocation(w.prog, "uViewW"), W);
 		glUniform1i(glGetUniformLocation(w.prog, "uDither"), 1);
 		glUniform1f(glGetUniformLocation(w.prog, "uHorizon"), (float)H * 0.5f);
-		// C7 plane shade table on unit 6. firstShade tracks extralight exactly as
-		// wl_floorceiling.cpp computes it; the table is refilled in place when it
-		// moves, so the texture object (and the leak ledger) is untouched.
-		if(w.c7PlaneLUTTex && w.c7PlaneLUTShade)
-		{
-			// Which firstShade the table currently holds is a property of the
-			// TEXTURE, so it is tracked on the owning struct. As a function-local
-			// static it outlived the texture: a video mode change destroys the GL
-			// context, and the rebuilt table always starts at firstShade 5
-			// (CreateC7PlaneLUTTexture), so a cache that still remembered the
-			// pre-change value suppressed the refill and left the planes shaded
-			// for the wrong extralight until the visor next changed state.
-			const int firstShade = MIN<int>(NUMCOLORMAPS-1,
-				MAX(0, 5 - (r_extralight/16)));
-			glActiveTexture(GL_TEXTURE6);
-			glBindTexture(GL_TEXTURE_2D, w.c7PlaneLUTTex);
-			if(firstShade != *w.c7PlaneLUTShade)
-			{
-				UploadC7PlaneLUT(firstShade);
-				*w.c7PlaneLUTShade = firstShade;
-			}
-			glUniform1i(glGetUniformLocation(w.prog, "uC7PlaneLUT"), 6);
-			glUniform1i(glGetUniformLocation(w.prog, "uC7LUTBands"), kC7LUTBands);
-		}
 		// Sprite colour-cycle / laser-dissolve clock and the lit-laser colour
 		// index (fullbright white, matching ScaleSprite's ColorMatcher.Pick).
 		glUniform1i(glGetUniformLocation(w.prog, "uPhase"),
@@ -1027,6 +964,7 @@ namespace
 		glActiveTexture(GL_TEXTURE2);
 		glBindTexture(GL_TEXTURE_2D, w.colormapTex);
 		glUniform1i(glGetUniformLocation(w.prog, "uColormapTex"), 2);
+		glUniform1i(glGetUniformLocation(w.prog, "uC7RampFloor"), 6);
 		return true;
 	}
 
@@ -1042,7 +980,7 @@ namespace
 		glActiveTexture(GL_TEXTURE2);
 		glBindTexture(GL_TEXTURE_2D, w.colormapTex);
 		glActiveTexture(GL_TEXTURE6);
-		glBindTexture(GL_TEXTURE_2D, w.c7PlaneLUTTex);
+		glBindTexture(GL_TEXTURE_2D, w.c7RampFloorTex);
 		glUniform1i(w.uDebug, 0);
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1098,7 +1036,7 @@ namespace
 		}
 		if(w.paletteTex) glDeleteTextures(1, &w.paletteTex);
 		if(w.colormapTex) glDeleteTextures(1, &w.colormapTex);
-		if(w.c7PlaneLUTTex) glDeleteTextures(1, &w.c7PlaneLUTTex);
+		if(w.c7RampFloorTex) glDeleteTextures(1, &w.c7RampFloorTex);
 		if(w.prog) glDeleteProgram(w.prog);
 	}
 
@@ -1603,8 +1541,7 @@ namespace
 		GLuint screenProg;   // composite (kScreenVert/kScreenFrag)
 		GLuint paletteTex;
 		GLuint colormapTex;
-		GLuint c7PlaneLUTTex;
-		int    c7PlaneLUTShade;        // firstShade the LUT currently holds
+		GLuint c7RampFloorTex;
 		TMap<int, GLuint> texCache;    // persistent index-texture cache
 		TMap<int, GLuint> opacCache;
 		const void *lastMap;           // invalidate caches on level change
@@ -1621,8 +1558,7 @@ namespace
 		TArray<unsigned char> lastRGB; // most recent presented frame (top-down RGB)
 		int    lastW, lastH;
 		GLLive() : inited(false), prog(0), screenProg(0), paletteTex(0),
-			colormapTex(0), c7PlaneLUTTex(0), c7PlaneLUTShade(5),
-			lastMap(NULL), worldFbo(0), worldTex(0),
+			colormapTex(0), c7RampFloorTex(0), lastMap(NULL), worldFbo(0), worldTex(0),
 			worldDepth(0), worldW(0), worldH(0), haveWorld(false),
 			vx(0), vy(0), vw(0), vh(0), fw(0), fh(0),
 			wcx(0), wcy(0), wcw(0), wch(0), haveWeaponCover(false),
@@ -1664,9 +1600,8 @@ namespace
 		int rows = 0;
 		gLive.colormapTex = CreateColormapTexture(rows);
 		if(gLive.colormapTex) gLedger.tex++;
-		gLive.c7PlaneLUTTex = CreateC7PlaneLUTTexture();
-		gLive.c7PlaneLUTShade = 5;	// what CreateC7PlaneLUTTexture uploaded
-		if(gLive.c7PlaneLUTTex) gLedger.tex++;
+		gLive.c7RampFloorTex = CreateC7RampFloorTexture();
+		if(gLive.c7RampFloorTex) gLedger.tex++;
 		gLive.inited = gLive.prog && gLive.screenProg &&
 			gLive.paletteTex && gLive.colormapTex;
 		GLCheckErrors("EnsureLiveResources");
@@ -1758,8 +1693,7 @@ namespace
 		wr.prog = gLive.prog;
 		wr.paletteTex = gLive.paletteTex;
 		wr.colormapTex = gLive.colormapTex;
-		wr.c7PlaneLUTTex = gLive.c7PlaneLUTTex;
-		wr.c7PlaneLUTShade = &gLive.c7PlaneLUTShade;
+		wr.c7RampFloorTex = gLive.c7RampFloorTex;
 		wr.texCache = &gLive.texCache;
 		wr.opacCache = &gLive.opacCache;
 		if(!BuildWorldGL(wr, vw, vh))
@@ -2151,7 +2085,7 @@ static void FreeLiveResources(bool audit)
 	if(gLive.prog)        { glDeleteProgram(gLive.prog);                gLedger.prog--; }
 	if(gLive.paletteTex)  { glDeleteTextures(1, &gLive.paletteTex);      gLedger.tex--; }
 	if(gLive.colormapTex) { glDeleteTextures(1, &gLive.colormapTex);     gLedger.tex--; }
-	if(gLive.c7PlaneLUTTex) { glDeleteTextures(1, &gLive.c7PlaneLUTTex); gLedger.tex--; }
+	if(gLive.c7RampFloorTex) { glDeleteTextures(1, &gLive.c7RampFloorTex); gLedger.tex--; }
 
 	// Resource-leak check: after teardown the live ledger must balance to zero and
 	// the texture caches must be empty. A nonzero balance means a live GL object

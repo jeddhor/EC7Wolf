@@ -148,6 +148,7 @@ void FTextureManager::DeleteAll()
 //==========================================================================
 
 FTexture *SolidTexture_TryCreate(const char *color);
+FTexture *SolidTexture_CreateIndexed(int paletteIndex);
 FTextureID FTextureManager::CheckForTexture (const char *name, int usetype, BITFIELD flags)
 {
 	int i;
@@ -220,6 +221,26 @@ FTextureID FTextureManager::CheckForTexture (const char *name, int usetype, BITF
 		FTexture *solidTex = SolidTexture_TryCreate(name+1);
 		solidTex->UseType = FTexture::TEX_Flat;
 		return AddTexture(solidTex);
+	}
+
+	// "@NNN": a solid flat pinned to palette entry NNN. Use this instead of
+	// "#RRGGBB" when the exact index matters and the palette is ambiguous --
+	// see SolidTexture_CreateIndexed.
+	if(name[0] == '@' && namelen >= 2 && namelen <= 4)
+	{
+		bool digits = true;
+		int index = 0;
+		for(size_t d = 1; d < namelen; ++d)
+		{
+			if(name[d] < '0' || name[d] > '9') { digits = false; break; }
+			index = index*10 + (name[d] - '0');
+		}
+		if(digits && index <= 255)
+		{
+			FTexture *solidTex = SolidTexture_CreateIndexed(index);
+			solidTex->UseType = FTexture::TEX_Flat;
+			return AddTexture(solidTex);
+		}
 	}
 
 	// Handle font look ups (FONTNAME:XX)

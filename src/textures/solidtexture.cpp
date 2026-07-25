@@ -47,7 +47,7 @@
 class FSolidTexture : public FTexture
 {
 public:
-	FSolidTexture(DWORD color);
+	FSolidTexture(DWORD color, int paletteIndex = -1);
 	~FSolidTexture();
 
 	const BYTE *GetColumn(unsigned int column, const Span **spans_out);
@@ -58,6 +58,8 @@ protected:
 	BYTE* Pixels;
 	Span **Spans;
 	const DWORD color;
+	// >= 0 pins the texel to an exact palette entry instead of colour matching.
+	const int paletteIndex;
 
 	virtual void MakeTexture();
 };
@@ -98,12 +100,33 @@ FTexture *SolidTexture_TryCreate(const char* color)
 
 //==========================================================================
 //
+// SolidTexture_CreateIndexed
+//
+// Solid texture pinned to an exact palette entry. Colour matching cannot
+// express this: a palette may hold the same RGB at several indices, and which
+// one you get matters when something walks the palette by index rather than
+// reading the colour. Corridor 7's plane shading does exactly that -- it steps
+// one index darker per band and stops at the bottom of the colour's own
+// 16-aligned ramp -- and its palette repeats (170,0,0) at 4, 76 and 244, so an
+// "#AA0000" flat resolved to 4 and faded out through the greys instead of the
+// reds.
+//
+//==========================================================================
+
+FTexture *SolidTexture_CreateIndexed(int paletteIndex)
+{
+	const PalEntry &pe = GPalette.BaseColors[paletteIndex & 0xFF];
+	return new FSolidTexture(MAKERGB(pe.r, pe.g, pe.b), paletteIndex & 0xFF);
+}
+
+//==========================================================================
+//
 //
 //
 //==========================================================================
 
-FSolidTexture::FSolidTexture(DWORD color) : FTexture(NULL, -1), Pixels(NULL),
-	Spans(NULL), color(color)
+FSolidTexture::FSolidTexture(DWORD color, int paletteIndex) : FTexture(NULL, -1),
+	Pixels(NULL), Spans(NULL), color(color), paletteIndex(paletteIndex)
 {
 	Width = 64;
 	Height = 64;
@@ -199,5 +222,7 @@ void FSolidTexture::MakeTexture()
 {
 	Pixels = new BYTE[Width*Height];
 
-	memset(Pixels, RGB32k[RPART(color)>>3][GPART(color)>>3][BPART(color)>>3], Width*Height);
+	memset(Pixels, paletteIndex >= 0
+		? (BYTE)paletteIndex
+		: RGB32k[RPART(color)>>3][GPART(color)>>3][BPART(color)>>3], Width*Height);
 }

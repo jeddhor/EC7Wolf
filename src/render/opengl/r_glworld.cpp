@@ -728,7 +728,13 @@ namespace
 		WorldBuilder::BuildStatic(map, w.mesh);
 		const float alpha = R_GetInterpolationAlpha();
 		WorldBuilder::BuildDynamic(map, w.dynMesh, alpha);
-		WorldBuilder::BuildMasked(map, w.maskedMesh);
+		// Masked geometry needs the camera position for its back-face cull (draw
+		// only the pane nearest the viewer, like the raycaster's entry-face DDA).
+		AActor *maskCam = players[ConsolePlayer].camera
+			? players[ConsolePlayer].camera : players[ConsolePlayer].mo;
+		WorldBuilder::BuildMasked(map, w.maskedMesh,
+			(float)maskCam->x / (float)TILEGLOBAL,
+			(float)maskCam->y / (float)TILEGLOBAL);
 
 		// Actor sprites and the camera are drawn at their interpolated sub-tic
 		// transform, exactly as the software frame did: apply the interpolation,

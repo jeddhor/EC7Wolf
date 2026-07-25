@@ -98,7 +98,14 @@ namespace WorldBuilder
 	// at the tile boundaries (like a solid wall) but only on sides that survive
 	// the connected-glass merge, and are alpha-tested by the backend. Rebuilt each
 	// frame because force-field art animates with the game clock.
-	void BuildMasked(GameMap *gm, WorldMesh &out);
+	//
+	// camX/camY are the camera position in tile units. The raycaster's DDA records
+	// a masked-wall hit only for the cell a ray ENTERS, so it draws just the face
+	// nearest the viewer; emitting a cell's far face too makes a see-through pane
+	// read as a doubled box. camX/camY drive a CPU back-face cull that reproduces
+	// the entry-face behaviour (done on the CPU so it is independent of the world-
+	// mirror in the projection, which flips GL winding).
+	void BuildMasked(GameMap *gm, WorldMesh &out, float camX, float camY);
 
 	// Build billboard geometry for every visible actor sprite. Reproduces the
 	// software DrawScaleds() visibility test, TransformActor(), and the frame /

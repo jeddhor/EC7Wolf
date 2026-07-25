@@ -270,7 +270,22 @@ void BuildStatic(GameMap *gm, WorldMesh &out)
 				if(IsSolidOccluder(adj))
 					continue;	// neighbor is opaque solid: face hidden
 
-				PushWallFace(out, side, fx, fy, ResolveWallTexture(spot, side));
+				// Doorjamb texture, mirroring wl_draw.cpp HitVertWall /
+				// HitHorizWall: when the neighbour across this face is a door of
+				// the perpendicular orientation, the jamb shows the DOOR's side
+				// (track) texture, not the frame tile's own wall texture.
+				MapSpot texSpot = spot;
+				if(adj && adj->tile)
+				{
+					const bool ns = (side == MapTile::North ||
+						side == MapTile::South);
+					if((ns && adj->tile->offsetVertical &&
+							!adj->tile->offsetHorizontal) ||
+						(!ns && adj->tile->offsetHorizontal &&
+							!adj->tile->offsetVertical))
+						texSpot = adj;
+				}
+				PushWallFace(out, side, fx, fy, ResolveWallTexture(texSpot, side));
 			}
 		}
 		else if(spot->sector != NULL)
@@ -335,7 +350,22 @@ void BuildDynamic(GameMap *gm, WorldMesh &out, float alpha)
 	}
 }
 
-void BuildMasked(GameMap *gm, WorldMesh &out)
+// True when the camera lies on the outward side of this cell's `side` face, i.e.
+// the face is nearest the viewer. Matches the raycaster, whose DDA only records a
+// masked hit for the cell it enters (never the far side), so only the near face is
+// ever drawn. bx/by are the cell's min corner in tile units.
+bool MaskedFaceTowardCamera(int side, int bx, int by, float camX, float camY)
+{
+	switch(side)
+	{
+		case MapTile::East:  return camX > (float)(bx + 1);	// +X edge
+		case MapTile::West:  return camX < (float)bx;		// -X edge
+		case MapTile::North: return camY < (float)by;		// -Y edge
+		default:             return camY > (float)(by + 1);	// South, +Y edge
+	}
+}
+
+void BuildMasked(GameMap *gm, WorldMesh &out, float camX, float camY)
 {
 	out.Clear();
 	if(gm == NULL || gm->NumPlanes() == 0)
@@ -362,6 +392,16 @@ void BuildMasked(GameMap *gm, WorldMesh &out)
 		for(int side = 0; side < 4; ++side)
 		{
 			if(!MaskedRenderSide(spot, side))
+				continue;
+			// The raycaster draws only the masked face a ray reaches: never one
+			// backed by a solid wall (no hit is ever recorded there), and only the
+			// near side of a see-through cell (the DDA records the entered cell,
+			// not the far boundary). Emitting the others wraps the texture onto the
+			// sides of a solid opening or shows the far pane through the near one,
+			// so a force-field/grate reads as a doubled box. Cull both here.
+			if(IsSolidOccluder(spot->GetAdjacent((MapTile::Side)side)))
+				continue;
+			if(!MaskedFaceTowardCamera(side, (int)x, (int)y, camX, camY))
 				continue;
 			PushWallFace(out, side, fx, fy, ResolveWallTexture(spot, side),
 				WSURF_Masked);

@@ -23,8 +23,14 @@
 #   * the GL object ledger still balances at exit, so the mid-run teardown and
 #     rebuild neither leaked nor double-freed.
 #
-# Cases: shrink, grow, and two switches in one run (the second exercises
-# tearing down a context that was itself built after a previous teardown).
+# Cases: shrink, grow, two switches in one run (the second exercises tearing
+# down a context that was itself built after a previous teardown), and a switch
+# with the Corridor 7 visor on. The visor case matters because it is the one
+# reported from play: Alt+Enter also delivered Enter, so the mode change happened
+# with extralight pinned high, and the GL plane shade table's "which firstShade
+# is loaded" cache used to be a function-local static. It outlived the texture,
+# so the rebuilt table (always firstShade 5) was never refilled and the planes
+# were shaded for the wrong extralight.
 #
 # Runs headlessly (Xvfb + Mesa creates a real GL window and reads it back).
 # Requires ImageMagick for the HUD band comparison.
@@ -166,6 +172,7 @@ run_case() {
 run_case shrink  "--capture-vidmode 320 200 10"                           320 200
 run_case grow    "--capture-vidmode 800 600 10"                           800 600
 run_case twice   "--capture-vidmode 320 200 10 --capture-vidmode 640 480 25" 640 480
+run_case visor   "--capture-extralight 20 --capture-vidmode 320 200 10"    320 200
 
 printf '\nOutputs in %s\n' "$out_dir"
 if [ "$n_fail" -eq 0 ]; then

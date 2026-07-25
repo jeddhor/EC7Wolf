@@ -775,13 +775,19 @@ namespace
 		TMap<int, GLuint> ownOpacCache;
 		TMap<int, GLuint> *texCache;     // -> own caches, or a borrowed persistent set
 		TMap<int, GLuint> *opacCache;
+		// Which firstShade the plane LUT currently holds. Borrowed alongside the
+		// texture (same idiom as texCache) so the live path's value lives with the
+		// texture in GLLive and dies with it when the GL context is replaced.
+		int  ownPlaneLUTShade;
+		int *c7PlaneLUTShade;
 		bool ownResources;
 		WorldMesh mesh, dynMesh, maskedMesh, spriteMesh;
 		MeshGL staticGL, dynGL, maskedGL, spriteGL;
 		SurfaceUniforms su;
 		GLint uDebug;
 		WorldGL() : prog(0), paletteTex(0), colormapTex(0), c7PlaneLUTTex(0),
-			texCache(NULL), opacCache(NULL), ownResources(true), uDebug(-1) {}
+			texCache(NULL), opacCache(NULL), ownPlaneLUTShade(5),
+			c7PlaneLUTShade(NULL), ownResources(true), uDebug(-1) {}
 	};
 
 	// Build meshes/program/uniforms for a W x H world render (aspect W/H). The
@@ -844,6 +850,8 @@ namespace
 			int colormapRows = 0;
 			w.colormapTex = CreateColormapTexture(colormapRows);
 			w.c7PlaneLUTTex = CreateC7PlaneLUTTexture();
+			w.ownPlaneLUTShade = 5;	// what CreateC7PlaneLUTTexture uploaded
+			w.c7PlaneLUTShade = &w.ownPlaneLUTShade;
 			w.texCache = &w.ownTexCache;
 			w.opacCache = &w.ownOpacCache;
 		}
@@ -968,17 +976,23 @@ namespace
 		// C7 plane shade table on unit 6. firstShade tracks extralight exactly as
 		// wl_floorceiling.cpp computes it; the table is refilled in place when it
 		// moves, so the texture object (and the leak ledger) is untouched.
-		if(w.c7PlaneLUTTex)
+		if(w.c7PlaneLUTTex && w.c7PlaneLUTShade)
 		{
-			static int lastFirstShade = 5;
+			// Which firstShade the table currently holds is a property of the
+			// TEXTURE, so it is tracked on the owning struct. As a function-local
+			// static it outlived the texture: a video mode change destroys the GL
+			// context, and the rebuilt table always starts at firstShade 5
+			// (CreateC7PlaneLUTTexture), so a cache that still remembered the
+			// pre-change value suppressed the refill and left the planes shaded
+			// for the wrong extralight until the visor next changed state.
 			const int firstShade = MIN<int>(NUMCOLORMAPS-1,
 				MAX(0, 5 - (r_extralight/16)));
 			glActiveTexture(GL_TEXTURE6);
 			glBindTexture(GL_TEXTURE_2D, w.c7PlaneLUTTex);
-			if(firstShade != lastFirstShade)
+			if(firstShade != *w.c7PlaneLUTShade)
 			{
 				UploadC7PlaneLUT(firstShade);
-				lastFirstShade = firstShade;
+				*w.c7PlaneLUTShade = firstShade;
 			}
 			glUniform1i(glGetUniformLocation(w.prog, "uC7PlaneLUT"), 6);
 			glUniform1i(glGetUniformLocation(w.prog, "uC7LUTBands"), kC7LUTBands);
@@ -1590,6 +1604,7 @@ namespace
 		GLuint paletteTex;
 		GLuint colormapTex;
 		GLuint c7PlaneLUTTex;
+		int    c7PlaneLUTShade;        // firstShade the LUT currently holds
 		TMap<int, GLuint> texCache;    // persistent index-texture cache
 		TMap<int, GLuint> opacCache;
 		const void *lastMap;           // invalidate caches on level change
@@ -1606,7 +1621,8 @@ namespace
 		TArray<unsigned char> lastRGB; // most recent presented frame (top-down RGB)
 		int    lastW, lastH;
 		GLLive() : inited(false), prog(0), screenProg(0), paletteTex(0),
-			colormapTex(0), c7PlaneLUTTex(0), lastMap(NULL), worldFbo(0), worldTex(0),
+			colormapTex(0), c7PlaneLUTTex(0), c7PlaneLUTShade(5),
+			lastMap(NULL), worldFbo(0), worldTex(0),
 			worldDepth(0), worldW(0), worldH(0), haveWorld(false),
 			vx(0), vy(0), vw(0), vh(0), fw(0), fh(0),
 			wcx(0), wcy(0), wcw(0), wch(0), haveWeaponCover(false),
@@ -1649,6 +1665,7 @@ namespace
 		gLive.colormapTex = CreateColormapTexture(rows);
 		if(gLive.colormapTex) gLedger.tex++;
 		gLive.c7PlaneLUTTex = CreateC7PlaneLUTTexture();
+		gLive.c7PlaneLUTShade = 5;	// what CreateC7PlaneLUTTexture uploaded
 		if(gLive.c7PlaneLUTTex) gLedger.tex++;
 		gLive.inited = gLive.prog && gLive.screenProg &&
 			gLive.paletteTex && gLive.colormapTex;
@@ -1742,6 +1759,7 @@ namespace
 		wr.paletteTex = gLive.paletteTex;
 		wr.colormapTex = gLive.colormapTex;
 		wr.c7PlaneLUTTex = gLive.c7PlaneLUTTex;
+		wr.c7PlaneLUTShade = &gLive.c7PlaneLUTShade;
 		wr.texCache = &gLive.texCache;
 		wr.opacCache = &gLive.opacCache;
 		if(!BuildWorldGL(wr, vw, vh))

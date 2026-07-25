@@ -355,6 +355,18 @@ void Delay(int wolfticks)
 ===================
 */
 
+// Alt+Enter is the fullscreen chord (see CheckKeys). Enter is also Corridor 7's
+// visor button, and PollControls runs before CheckKeys in the frame, so without
+// this the same press toggles the visor as a side effect of going fullscreen.
+// That is not cosmetic: visor mode 2 sets extralight to 20, which zeroes the
+// first 20 plane shade bands, so the floor and ceiling go flat and it reads as
+// the renderer losing its lighting. The cost is that the visor cannot be toggled
+// while strafe (Alt) is held.
+static inline bool KeyboardChordJammed(int key)
+{
+	return key == sc_Enter && Keyboard[sc_Alt];
+}
+
 void PollKeyboardButtons (void)
 {
 	if(automap == AMA_Normal)
@@ -373,7 +385,9 @@ void PollKeyboardButtons (void)
 		}
 		for(int i = 0;controlScheme[i].button != bt_nobutton;i++)
 		{
-			if(controlScheme[i].keyboard != -1 && Keyboard[controlScheme[i].keyboard] && !jam[controlScheme[i].keyboard])
+			if(controlScheme[i].keyboard != -1 && Keyboard[controlScheme[i].keyboard] &&
+				!jam[controlScheme[i].keyboard] &&
+				!KeyboardChordJammed(controlScheme[i].keyboard))
 				control[ConsolePlayer].buttonstate[controlScheme[i].button] = true;
 		}
 	}
@@ -381,7 +395,8 @@ void PollKeyboardButtons (void)
 	{
 		for(int i = 0;controlScheme[i].button != bt_nobutton;i++)
 		{
-			if(controlScheme[i].keyboard != -1 && Keyboard[controlScheme[i].keyboard])
+			if(controlScheme[i].keyboard != -1 && Keyboard[controlScheme[i].keyboard] &&
+				!KeyboardChordJammed(controlScheme[i].keyboard))
 				control[ConsolePlayer].buttonstate[controlScheme[i].button] = true;
 		}
 	}
@@ -819,8 +834,22 @@ void CheckKeys (void)
 	else if(!Keyboard[sc_Equals] && !Keyboard[sc_Minus])
 		changeSize = true;
 
-	if(Keyboard[sc_Alt] && Keyboard[sc_Enter])
-		VL_ToggleFullscreen();
+	// Edge-triggered: CheckKeys runs every frame, so a level test re-entered the
+	// video mode change on every frame the chord was held -- which under OpenGL
+	// means tearing down and rebuilding the window's GL context each time.
+	{
+		static bool altEnterHeld = false;
+		if(Keyboard[sc_Alt] && Keyboard[sc_Enter])
+		{
+			if(!altEnterHeld)
+			{
+				altEnterHeld = true;
+				VL_ToggleFullscreen();
+			}
+		}
+		else
+			altEnterHeld = false;
+	}
 
 //
 // F1-F7/ESC to enter control panel

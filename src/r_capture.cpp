@@ -70,6 +70,14 @@ namespace
 	fixed    g_warpX = 0, g_warpY = 0;
 	angle_t  g_warpAngle = 0;
 
+	// --capture-extralight VALUE [FROMFRAME]: pin the player's extralight from a
+	// given rendered frame onward. Repeatable, so the visor can be switched on or
+	// off part way through a run (20 = C7 visor mode 2, 12 = muzzle flash, 0 = off).
+	struct ExtraLightStep { int value, frame; };
+	TArray<ExtraLightStep> g_extraLights;
+	bool     g_haveExtraLight = false;
+	int      g_extraLight     = 0;
+
 	// --capture-vidmode: queued mid-run video mode changes. Repeatable, so a run
 	// can switch more than once (tearing down a context that was itself built
 	// after an earlier teardown).
@@ -252,6 +260,17 @@ void ParseArgs(int argc, char **argv)
 			g_haveWarp = true;
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-extralight") == 0 && i + 1 < argc)
+		{
+			ExtraLightStep el;
+			el.value = atoi(argv[++i]);
+			el.frame = (i + 1 < argc && argv[i+1][0] != '-') ? atoi(argv[++i]) : 0;
+			g_extraLights.Push(el);
+			if(el.frame <= 0)
+				g_extraLight = el.value;	// active from the first frame
+			g_haveExtraLight = true;
+			g_armed = true;
+		}
 		else if(strcmp(arg, "--capture-vidmode") == 0 && i + 3 < argc)
 		{
 			VidModeChange vm;
@@ -428,6 +447,24 @@ void PreTic()
 
 void ApplyPaletteOverride()
 {
+	// Pin the player's extralight, which is what the Corridor 7 visor drives
+	// (a_playerpawn.cpp sets 20 in visor mode 2, 12 during a muzzle flash). It
+	// brightens the plane shading: wl_floorceiling.cpp subtracts extraLight/8 from
+	// the band and lowers firstShade by extraLight/16, and the GL shader mirrors
+	// that. Forcing it lets visor-lit planes be compared between renderers without
+	// scripted input -- notably across a video mode change, where the GL side has
+	// to rebuild its plane shade table for the new context.
+	//
+	// Applied here rather than in PreTic because the player pawn's Tick assigns
+	// extralight from the visor inventory every tic, which would overwrite it.
+	// This runs after the tics and before the scene is rendered, so it is the
+	// value both renderers actually see.
+	if(g_haveExtraLight)
+	{
+		if(players[ConsolePlayer].mo && players[ConsolePlayer].mo->player)
+			players[ConsolePlayer].mo->player->extralight = (short)g_extraLight;
+	}
+
 	if(!g_haveBlend)
 		return;
 
@@ -493,6 +530,18 @@ void PostFrame()
 	// reported cases, and in particular the framebuffer/GL-context recreation
 	// that follows. Applied after frame N is captured, so a capture at a later
 	// frame shows what the renderer produces once the mode has changed.
+	// Scheduled extralight (visor) changes take effect from their frame onward.
+	for(unsigned int i = 0; i < g_extraLights.Size(); ++i)
+	{
+		if(g_extraLights[i].frame > 0 &&
+			(uint64_t)g_extraLights[i].frame == g_frameCount)
+		{
+			g_extraLight = g_extraLights[i].value;
+			Printf("Capture: extralight -> %d at frame %d.\n",
+				g_extraLight, g_extraLights[i].frame);
+		}
+	}
+
 	for(unsigned int i = 0; i < g_vidModes.Size(); ++i)
 	{
 		if((uint64_t)g_vidModes[i].frame != g_frameCount)

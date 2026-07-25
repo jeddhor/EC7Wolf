@@ -202,6 +202,12 @@ defaultmap
 	music = "C7MUS00"
 	victorynext = "EndTitle"
 	bordertexture = "#000000"
+	// The white/purple sector, which is every level except the eight overridden
+	// below. Corridor 7 keeps these per level in its executable, not in the map
+	// data -- every shipped map's flats plane is uniformly zero, there are no
+	// floor/ceiling tags, and the level header is fully accounted for by
+	// offsets/lengths/dimensions/name with no spare bytes. Values are palette
+	// indices 15 (white) and 199, mid the purple ramp 192-207.
 	defaultfloor = "#71518A"
 	defaultceiling = "#FFFFFF"
 	// Corridor 7 uses a full-range depth ramp:
@@ -361,6 +367,11 @@ map "MAP19" "Corridor 7 Level 19"
 
 map "MAP20" "Corridor 7 Level 20"
 {
+	// Red sector. Ceiling read from the original at MAP20: the screen-edge
+	// dither pair is palette 76/75 in the pure-red ramp 64-79. See the
+	// comment on defaultmap: the floor value here is provisional.
+	defaultceiling = "#B60000"
+	defaultfloor = "#AA0000"
 	next = "MAP21"
 	secretnext = "MAP45"
 	floornumber = 20
@@ -369,6 +380,11 @@ map "MAP20" "Corridor 7 Level 20"
 
 map "MAP21" "Corridor 7 Level 21"
 {
+	// Red sector. Ceiling read from the original at MAP20: the screen-edge
+	// dither pair is palette 76/75 in the pure-red ramp 64-79. See the
+	// comment on defaultmap: the floor value here is provisional.
+	defaultceiling = "#B60000"
+	defaultfloor = "#AA0000"
 	next = "MAP22"
 	floornumber = 21
 	cluster = 1
@@ -376,6 +392,12 @@ map "MAP21" "Corridor 7 Level 21"
 
 map "MAP22" "Corridor 7 Level 22"
 {
+	// Green sector. Both planes fitted exactly from the original at MAP23:
+	// screen-edge dither pairs 122/121 (ceiling) and 123/122 (floor) in the
+	// green ramp 112-127, reproduced here by bases 124/125 (which base
+	// renders a given pair is fitted per ramp, not a fixed offset).
+	defaultceiling = "#1C510C"
+	defaultfloor = "#20590C"
 	next = "MAP23"
 	floornumber = 22
 	cluster = 1
@@ -383,6 +405,12 @@ map "MAP22" "Corridor 7 Level 22"
 
 map "MAP23" "Corridor 7 Level 23"
 {
+	// Green sector. Both planes fitted exactly from the original at MAP23:
+	// screen-edge dither pairs 122/121 (ceiling) and 123/122 (floor) in the
+	// green ramp 112-127, reproduced here by bases 124/125 (which base
+	// renders a given pair is fitted per ramp, not a fixed offset).
+	defaultceiling = "#1C510C"
+	defaultfloor = "#20590C"
 	next = "MAP24"
 	floornumber = 23
 	cluster = 1
@@ -390,6 +418,11 @@ map "MAP23" "Corridor 7 Level 23"
 
 map "MAP24" "Corridor 7 Level 24"
 {
+	// Red sector. Ceiling read from the original at MAP20: the screen-edge
+	// dither pair is palette 76/75 in the pure-red ramp 64-79. See the
+	// comment on defaultmap: the floor value here is provisional.
+	defaultceiling = "#B60000"
+	defaultfloor = "#AA0000"
 	next = "MAP25"
 	floornumber = 24
 	cluster = 1
@@ -397,6 +430,12 @@ map "MAP24" "Corridor 7 Level 24"
 
 map "MAP25" "Corridor 7 Level 25"
 {
+	// Green sector. Both planes fitted exactly from the original at MAP23:
+	// screen-edge dither pairs 122/121 (ceiling) and 123/122 (floor) in the
+	// green ramp 112-127, reproduced here by bases 124/125 (which base
+	// renders a given pair is fitted per ramp, not a fixed offset).
+	defaultceiling = "#1C510C"
+	defaultfloor = "#20590C"
 	next = "MAP26"
 	secretnext = "MAP46"
 	floornumber = 25
@@ -405,6 +444,11 @@ map "MAP25" "Corridor 7 Level 25"
 
 map "MAP26" "Corridor 7 Level 26"
 {
+	// Red sector. Ceiling read from the original at MAP20: the screen-edge
+	// dither pair is palette 76/75 in the pure-red ramp 64-79. See the
+	// comment on defaultmap: the floor value here is provisional.
+	defaultceiling = "#B60000"
+	defaultfloor = "#AA0000"
 	next = "MAP27"
 	floornumber = 26
 	cluster = 1
@@ -426,6 +470,11 @@ map "MAP28" "Corridor 7 Level 28"
 
 map "MAP29" "Corridor 7 Level 29"
 {
+	// Red sector. Ceiling read from the original at MAP20: the screen-edge
+	// dither pair is palette 76/75 in the pure-red ramp 64-79. See the
+	// comment on defaultmap: the floor value here is provisional.
+	defaultceiling = "#B60000"
+	defaultfloor = "#AA0000"
 	next = "MAP30"
 	floornumber = 29
 	cluster = 1

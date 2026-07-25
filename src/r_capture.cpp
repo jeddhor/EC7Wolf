@@ -78,6 +78,9 @@ namespace
 	bool     g_haveExtraLight = false;
 	int      g_extraLight     = 0;
 
+	bool     g_haveVisorMode  = false;   // --capture-visormode: force the C7 visor
+	int      g_visorMode      = 0;       // 0 off, 1 night vision, 2 infrared, 3 shock
+
 	// --capture-vidmode: queued mid-run video mode changes. Repeatable, so a run
 	// can switch more than once (tearing down a context that was itself built
 	// after an earlier teardown).
@@ -138,10 +141,19 @@ namespace
 			return;
 		}
 
+		// Resolve through the framebuffer's CURRENT palette, not GPalette's base
+		// colours. They are the same in ordinary play, but Corridor 7 rewrites the
+		// DAC for the visor modes (V_SetCorridor7PaletteMode) and V_ForceBlend
+		// adds a full-screen flash on top -- and a screenshot that ignores both
+		// shows a grey scene where the game is displaying green or red, which
+		// makes the visor impossible to compare against the original.
+		PalEntry shotPal[256];
+		screen->GetFlashedPalette(shotPal);
+
 		FILE *file = fopen(path, "wb");
 		if(file != NULL)
 		{
-			M_CreatePNG(file, buffer, GPalette.BaseColors, color_type,
+			M_CreatePNG(file, buffer, shotPal, color_type,
 				SCREENWIDTH, SCREENHEIGHT, pitch);
 			M_FinishPNG(file);
 			fclose(file);
@@ -269,6 +281,12 @@ void ParseArgs(int argc, char **argv)
 			if(el.frame <= 0)
 				g_extraLight = el.value;	// active from the first frame
 			g_haveExtraLight = true;
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-visormode") == 0 && i + 1 < argc)
+		{
+			g_visorMode = atoi(argv[++i]);
+			g_haveVisorMode = true;
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-vidmode") == 0 && i + 3 < argc)
@@ -464,6 +482,14 @@ void ApplyPaletteOverride()
 		if(players[ConsolePlayer].mo && players[ConsolePlayer].mo->player)
 			players[ConsolePlayer].mo->player->extralight = (short)g_extraLight;
 	}
+
+	// Force a Corridor 7 visor palette. Applied here, after UpdatePaletteShifts
+	// has set the mode from the player's C7VisorMode inventory, so it wins for
+	// the frame about to be rendered. Both renderers read the result through the
+	// framebuffer palette, so this compares the visor between them -- and against
+	// the original -- without scripted input.
+	if(g_haveVisorMode)
+		V_SetCorridor7PaletteMode(g_visorMode, 0);
 
 	if(!g_haveBlend)
 		return;

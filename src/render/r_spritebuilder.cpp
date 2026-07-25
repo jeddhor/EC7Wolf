@@ -158,14 +158,26 @@ void BuildSprites(GameMap *gm, WorldMesh &out)
 		if(worldW <= 0.0f || worldH <= 0.0f)
 			continue;
 
-		// Horizontal anchor at the texture's left offset; vertical anchor with the
-		// sprite standing on the floor (z=0). Hanging / floating z offsets are a
-		// Phase 11 refinement (see the phase doc).
+		// Anchor the billboard by the texture's offsets, exactly as the software
+		// scaler does (ScaleSprite in r_sprites.cpp): the actor origin sits leftOff
+		// texels from the sprite's left edge and topOff texels below its top edge.
+		// Horizontally that spans [-leftOff, worldW-leftOff] about the origin;
+		// vertically the top edge is topOff above the origin and the bottom is worldH
+		// below the top. The top-offset is what places ceiling / hanging props high:
+		// their topOff is a full tile while the graphic itself is short, so anchoring
+		// the base at z=0 (the old model) dropped every such prop onto the floor.
+		//
+		// The origin's own height above the floor comes from obj->z: the software
+		// scaler adds (obj->z<<6) to viewz, and a full wall (floor..ceiling) spans
+		// map-plane depth tiles = (depth<<FRACBITS) fixed Z mapped to GL z in [0,1].
 		const float leftOff = (float)tex->GetScaledLeftOffsetDouble()*scaleXf/kTexelsPerTile;
+		const float topOff = (float)tex->GetScaledTopOffsetDouble()*scaleYf/kTexelsPerTile;
 		const float aL = -leftOff;
 		const float aR = worldW - leftOff;
-		const float zB = 0.0f;
-		const float zT = worldH;
+		const float invWallZ = 1.0f / (float)(gm->GetPlane(0).depth << FRACBITS);
+		const float zOrigin = (float)obj->z * 64.0f * invWallZ;
+		const float zT = zOrigin + topOff;
+		const float zB = zT - worldH;
 
 		const float cx = (float)obj->x / (float)TILEGLOBAL;
 		const float cy = (float)obj->y / (float)TILEGLOBAL;

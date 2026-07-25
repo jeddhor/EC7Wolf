@@ -259,7 +259,7 @@ namespace
 		"    bool isWall = uSurfKind == 2;\n"
 		"    if(uCorridor7 == 1 && isWall && idx >= 208 && idx <= 239){\n"
 		"        int base = idx & ~7;\n"
-		"        idx = base + ((idx - base - uCyclePhase) & 7);\n"
+		"        idx = base + ((idx - base + uCyclePhase) & 7);\n"
 		"    }\n"
 		"    // Shade row selection mirrors the software renderer per surface type.\n"
 		"    int shadeRow;\n"
@@ -373,12 +373,22 @@ namespace
 	// texture. Palette effects only ever re-run this; world pixels never change.
 	GLuint CreatePaletteTexture()
 	{
+		// The palette actually on screen, not GPalette's base colours: Corridor 7
+		// rewrites the DAC for the visor modes and V_ForceBlend adds a flash on
+		// top. The live path already uploads this; the offscreen capture path did
+		// not, so a --capture-glframe of a visor scene came back untinted and could
+		// not be compared with the software screenshot beside it.
+		PalEntry pal[256];
+		if(screen != NULL)
+			screen->GetFlashedPalette(pal);
+		else
+			memcpy(pal, GPalette.BaseColors, sizeof(pal));
 		unsigned char rgb[256 * 3];
 		for(int i = 0; i < 256; ++i)
 		{
-			rgb[i*3+0] = GPalette.BaseColors[i].r;
-			rgb[i*3+1] = GPalette.BaseColors[i].g;
-			rgb[i*3+2] = GPalette.BaseColors[i].b;
+			rgb[i*3+0] = pal[i].r;
+			rgb[i*3+1] = pal[i].g;
+			rgb[i*3+2] = pal[i].b;
 		}
 		GLuint tex = 0;
 		glGenTextures(1, &tex);

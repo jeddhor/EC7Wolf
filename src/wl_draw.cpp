@@ -269,7 +269,10 @@ static inline BYTE Corridor7CycleColor(BYTE color)
 	{
 		const int base = color & ~7;
 		const int phase = (gamestate.TimeCount >> 3) & 7;
-		return base + ((color-base-phase) & 7);
+		// The ramps rotate DOWNWARD -- a texel walks toward the dark end of its
+		// eight-colour band as the phase advances, so a force field's energy
+		// reads as travelling down. Subtracting the phase ran it the other way.
+		return base + ((color-base+phase) & 7);
 	}
 	return color;
 }

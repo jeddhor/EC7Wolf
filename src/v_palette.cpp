@@ -577,14 +577,19 @@ void V_SetCorridor7PaletteMode (int mode, unsigned int phase)
 				continue;
 			}
 			// The DOS visor palettes are monochrome DAC rewrites, not translucent
-			// overlays. Luminance preserves scene detail while zeroing the two
-			// unused channels exactly as the original captures show.
-			const BYTE luminance = static_cast<BYTE>(
-				(77*source.r + 150*source.g + 29*source.b) >> 8);
+			// overlays. Take the peak channel, not a luminance: luminance weights
+			// blue at 29/256, which collapsed Corridor 7's blue force-field band
+			// (216-223) to green values of 3..28 out of 255 -- the force fields
+			// went black in both visor modes while the red band beside them
+			// (208-215, peaking at 76) stayed visible. The original shows both
+			// bands animating at the same strength, merely tinted, and only a
+			// per-channel-symmetric transform can do that. Neutral content, which
+			// is most of the scene, is unaffected: max == luminance for any grey.
+			const BYTE level = MAX(source.r, MAX(source.g, source.b));
 			if(mode == 1)
-				palette[i] = PalEntry(0, luminance, 0);
+				palette[i] = PalEntry(0, level, 0);
 			else if(mode == 2)
-				palette[i] = PalEntry(luminance, 0, 0);
+				palette[i] = PalEntry(level, 0, 0);
 			else
 			{
 				// Electric fields rapidly rotate, invert, and quantize the DAC.

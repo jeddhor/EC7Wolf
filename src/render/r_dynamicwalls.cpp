@@ -87,7 +87,11 @@ bool IsDoorCell(MapSpot spot)
 
 bool IsPushwallCell(MapSpot spot)
 {
-	if(!spot || !spot->tile || IsDoorCell(spot))
+	// A see-through masked wall is never a moving block. C7 force-field doors carry
+	// a C7AnimatedWall thinker while deactivating; without this guard the thinker
+	// test below would also class them as a pushwall, so BuildDynamic would draw the
+	// full 4-face block on top of the masked centre pane for the ~0.5s transition.
+	if(!spot || !spot->tile || IsDoorCell(spot) || IsMaskedWallCell(spot))
 		return false;
 	// A wall in motion: the origin carries a thinker and/or a nonzero push
 	// amount; the destination carries a pushReceptor back to the origin.
@@ -111,7 +115,7 @@ bool IsPushwallOrigin(MapSpot spot)
 	// A nonzero pushAmount also marks the origin (used by the capture-time
 	// synthetic pushwall, which has no thinker); the destination cell is
 	// identified by pushReceptor instead and is never treated as an origin.
-	return spot && spot->tile && !IsDoorCell(spot) &&
+	return spot && spot->tile && !IsDoorCell(spot) && !IsMaskedWallCell(spot) &&
 		spot->pushReceptor == NULL &&
 		(spot->thinker != NULL || spot->pushAmount != 0);
 }

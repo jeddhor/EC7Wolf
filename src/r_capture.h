@@ -29,6 +29,9 @@
 //   --capture-blend R G B A Force a full-screen palette flash (0..255 each, alpha
 //                           0..256) so a flashed frame can be captured to verify
 //                           the GL renderer applies full-screen palette effects.
+//   --capture-warp X Y DEG  Pin the player to tile (X,Y) facing DEG degrees every
+//                           tic, so a specific viewpoint can be reproduced for a
+//                           software-vs-GL comparison independent of the bot.
 //
 // ===========================================================================
 

@@ -63,6 +63,10 @@ namespace
 	bool     g_haveBlend      = false;   // --capture-blend full-screen flash override
 	int      g_blendR = 0, g_blendG = 0, g_blendB = 0, g_blendA = 0;
 
+	bool     g_haveWarp       = false;   // --capture-warp: pin player to a tile+angle
+	fixed    g_warpX = 0, g_warpY = 0;
+	angle_t  g_warpAngle = 0;
+
 	// Running state.
 	uint64_t g_ticCount       = 0;
 	uint64_t g_frameCount     = 0;
@@ -227,6 +231,18 @@ void ParseArgs(int argc, char **argv)
 			g_havePush = true;
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-warp") == 0 && i + 3 < argc)
+		{
+			const double tx = atof(argv[++i]);
+			const double ty = atof(argv[++i]);
+			const double deg = atof(argv[++i]);
+			g_warpX = (fixed)((tx + 0.5) * (double)TILEGLOBAL);
+			g_warpY = (fixed)((ty + 0.5) * (double)TILEGLOBAL);
+			double a = deg / 360.0; a -= (double)(long)a; if(a < 0) a += 1.0;
+			g_warpAngle = (angle_t)(a * 4294967296.0);
+			g_haveWarp = true;
+			g_armed = true;
+		}
 		else if(strcmp(arg, "--capture-blend") == 0 && i + 4 < argc)
 		{
 			g_blendR = atoi(argv[++i]) & 0xFF;
@@ -372,6 +388,22 @@ void PreTic()
 			SetupSyntheticPushwall();
 		if(g_pushOrigin != NULL)
 			g_pushOrigin->pushAmount = (unsigned int)g_pushAmount;
+	}
+
+	// Pin the player to a fixed tile + facing so a specific viewpoint can be
+	// reproduced for renderer comparison, independent of the deterministic bot.
+	// Applied every tic; both renderers are pinned identically, so software vs
+	// GL comparisons at any frame stay valid.
+	if(g_haveWarp)
+	{
+		AActor *pmo = players[ConsolePlayer].mo;
+		if(pmo)
+		{
+			pmo->x = g_warpX;
+			pmo->y = g_warpY;
+			pmo->angle = g_warpAngle;
+			pmo->pitch = 0;
+		}
 	}
 }
 

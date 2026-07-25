@@ -679,13 +679,48 @@ struct MaskedWallHit
 
 static TArray<MaskedWallHit> maskedWallHits;
 
+// Corridor 7 force-field doors (map marker 106) are a single see-through pane on
+// the cell-centre plane -- the barrier just switches off in place, it never slides.
+// The map format encodes only the tile, not the axis, so (like autoOrient doors)
+// pick it from open-neighbour topology: the pane blocks the passage, so it is
+// perpendicular to whichever axis the open floor runs along. Returned as an axis
+// selector so the masked-plane code can centre it without the tile carrying an
+// offset flag (which would reclassify it as a door and change collision).
+enum { MASKPLANE_EDGES = 0, MASKPLANE_CENTRE_X, MASKPLANE_CENTRE_Y };
+
+static bool IsForceFieldDoor(MapSpot spot)
+{
+	return spot->corridor7WallMarker == 106;
+}
+
+static int MaskedPlaneAxis(MapSpot spot)
+{
+	if(spot->tile->offsetVertical)
+		return MASKPLANE_CENTRE_X;
+	if(spot->tile->offsetHorizontal)
+		return MASKPLANE_CENTRE_Y;
+	if(IsForceFieldDoor(spot))
+	{
+		const MapSpot n = spot->GetAdjacent(MapTile::North);
+		const MapSpot s = spot->GetAdjacent(MapTile::South);
+		const MapSpot w = spot->GetAdjacent(MapTile::West);
+		const MapSpot e = spot->GetAdjacent(MapTile::East);
+		const int openNS = (!n || !n->tile) + (!s || !s->tile);
+		const int openWE = (!w || !w->tile) + (!e || !e->tile);
+		// Passage along N/S -> pane spans X, centred in Y (MASKPLANE_CENTRE_Y).
+		return openNS > openWE ? MASKPLANE_CENTRE_Y : MASKPLANE_CENTRE_X;
+	}
+	return MASKPLANE_EDGES;
+}
+
 static bool IsMaskedWallPassSide(MapSpot spot, MapTile::Side side)
 {
 	if(!(spot->maskedWallType || spot->tile->renderMasked))
 		return false;
-	if(spot->tile->offsetVertical && side != MapTile::West && side != MapTile::East)
+	const int axis = MaskedPlaneAxis(spot);
+	if(axis == MASKPLANE_CENTRE_X && side != MapTile::West && side != MapTile::East)
 		return false;
-	if(spot->tile->offsetHorizontal && side != MapTile::North && side != MapTile::South)
+	if(axis == MASKPLANE_CENTRE_Y && side != MapTile::North && side != MapTile::South)
 		return false;
 
 	// Rendering must continue through a masked tile even when another wall tile
@@ -772,10 +807,13 @@ static void GetMaskedWallEndpoints(MapSpot spot, MapTile::Side side,
 	const fixed top = spot->GetY() << TILESHIFT;
 	const fixed right = left + TILEGLOBAL;
 	const fixed bottom = top + TILEGLOBAL;
-	const fixed verticalPlane = spot->tile->offsetVertical ? left+TILEGLOBAL/2 : left;
-	const fixed verticalBackPlane = spot->tile->offsetVertical ? left+TILEGLOBAL/2 : right;
-	const fixed horizontalPlane = spot->tile->offsetHorizontal ? top+TILEGLOBAL/2 : top;
-	const fixed horizontalBackPlane = spot->tile->offsetHorizontal ? top+TILEGLOBAL/2 : bottom;
+	// A centred pane (offset door or C7 force-field door) collapses front and back
+	// to the cell-centre plane; a plain masked wall keeps them at the tile edges.
+	const int axis = MaskedPlaneAxis(spot);
+	const fixed verticalPlane = axis == MASKPLANE_CENTRE_X ? left+TILEGLOBAL/2 : left;
+	const fixed verticalBackPlane = axis == MASKPLANE_CENTRE_X ? left+TILEGLOBAL/2 : right;
+	const fixed horizontalPlane = axis == MASKPLANE_CENTRE_Y ? top+TILEGLOBAL/2 : top;
+	const fixed horizontalBackPlane = axis == MASKPLANE_CENTRE_Y ? top+TILEGLOBAL/2 : bottom;
 
 	switch(side)
 	{

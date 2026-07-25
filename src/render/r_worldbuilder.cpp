@@ -365,6 +365,23 @@ bool MaskedFaceTowardCamera(int side, int bx, int by, float camX, float camY)
 	}
 }
 
+// C7 force-field door (map marker 106): the barrier is a single see-through pane on
+// the cell-centre plane and just switches off in place -- it never slides. The axis
+// is not stored, so derive it from open-neighbour topology (the pane blocks the
+// passage, so it sits perpendicular to whichever way the open floor runs). Mirrors
+// wl_draw.cpp MaskedPlaneAxis for marker 106; real offset masked cells never reach
+// BuildMasked (they are doors, built by BuildDynamic).
+bool ForceFieldDoorHorizontal(MapSpot spot)
+{
+	const MapSpot n = spot->GetAdjacent(MapTile::North);
+	const MapSpot s = spot->GetAdjacent(MapTile::South);
+	const MapSpot ww = spot->GetAdjacent(MapTile::West);
+	const MapSpot e = spot->GetAdjacent(MapTile::East);
+	const int openNS = (!n || !n->tile) + (!s || !s->tile);
+	const int openWE = (!ww || !ww->tile) + (!e || !e->tile);
+	return openNS > openWE;	// passage N/S -> pane spans X, centred in Y
+}
+
 void BuildMasked(GameMap *gm, WorldMesh &out, float camX, float camY)
 {
 	out.Clear();
@@ -384,6 +401,25 @@ void BuildMasked(GameMap *gm, WorldMesh &out, float camX, float camY)
 
 		const float fx = (float)x;
 		const float fy = (float)y;
+
+		// Force-field door: a single centre pane on a track (mirrors the software
+		// GetMaskedWallEndpoints centre plane), not the four edge faces of a box.
+		if(spot->corridor7WallMarker == 106)
+		{
+			if(ForceFieldDoorHorizontal(spot))
+				PushQuad(out, fx, fy+0.5f, 0, fx+1, fy+0.5f, 0,
+					fx+1, fy+0.5f, 1, fx, fy+0.5f, 1,
+					ResolveWallTexture(spot, MapTile::North), WSURF_Masked,
+					MapTile::North, 1.0f);
+			else
+				PushQuad(out, fx+0.5f, fy, 0, fx+0.5f, fy+1, 0,
+					fx+0.5f, fy+1, 1, fx+0.5f, fy, 1,
+					ResolveWallTexture(spot, MapTile::East), WSURF_Masked,
+					MapTile::East, 1.0f);
+			++out.wallFaces;
+			continue;
+		}
+
 		// A masked tile is a see-through box: emit its boundary faces exactly like
 		// a solid wall (the same planes GetMaskedWallEndpoints uses for a
 		// non-offset masked wall), but only on sides that survive the

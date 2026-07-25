@@ -48,6 +48,8 @@ STR_JOYSENS = "Joystick Sensitivity";
 STR_DISABLEYAXIS = "Disable Y Axis";
 STR_CUSTOM = "Customize controls";
 STR_HOWTOUGH = "How tough are you?";
+// Corridor 7 words its difficulty prompt differently.
+STR_C7RANK = "Choose Your Rank";
 STR_DADDY = "Can I play, Daddy?";
 STR_HURTME = "Don't hurt me.";
 STR_BRINGEM = "Bring 'em on!";

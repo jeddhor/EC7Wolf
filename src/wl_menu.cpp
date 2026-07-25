@@ -510,7 +510,8 @@ void CreateMenus()
 		episodes.addItem(tmp);
 	}
 
-	skills.setHeadText(language["STR_HOWTOUGH"]);
+	skills.setHeadText(language[IWad::CheckGameFilter("Corridor7")
+		? "STR_C7RANK" : "STR_HOWTOUGH"]);
 	skills.setHeadPicture("M_HOWTGH", true);
 	for(unsigned int i = 0;i < SkillInfo::GetNumSkills();++i)
 	{

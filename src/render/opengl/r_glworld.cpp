@@ -814,6 +814,14 @@ namespace
 		const float vFov = 2.0f * atanf(tanf(hFov * 0.5f) / aspect);
 
 		Mat4 proj = Perspective(vFov, aspect, 0.02f, 256.0f);
+		// Corridor 7's world is a visually left-handed space (X east, Y south,
+		// Z up) with the camera facing (cos a, -sin a): a standard right-handed
+		// LookAt then puts the camera's right hand on the wrong side, rendering
+		// the entire level left-right mirrored (wall text reads backwards, the
+		// layout is flipped, turning feels reversed). Negate clip X to reflect
+		// the world back to the correct handedness. Depth is unaffected; face
+		// winding flips but back-face culling is disabled, so this is safe.
+		proj.m[0] = -proj.m[0];
 		Mat4 view = LookAt(eye, fwd, up);
 
 		// --- shading uniforms mirror the software renderer exactly ---

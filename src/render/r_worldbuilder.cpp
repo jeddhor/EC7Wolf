@@ -192,17 +192,20 @@ namespace
 		return !adj || !adj->tile;
 	}
 
-	// Two masked tiles form one continuous plane when they share the same
-	// Corridor 7 wall definition + marker (or, outside C7, are simply adjacent).
+	// Two masked tiles form one continuous plane when they share the same map
+	// marker (the same wall KIND). Their individual artwork page (corridor7WallID)
+	// may differ: an observation-glass wall is built from varied panels (earth,
+	// globe, monitors...) that must still merge into one plane, otherwise each
+	// differing panel is an isolated cell that draws its perpendicular faces too
+	// -- an extra pane of glass seen edge-on through the wall. Different markers
+	// (e.g. a force-field door) stay separate. Outside C7 (no marker) adjacency is
+	// enough.
 	bool ConnectedMasked(MapSpot spot, int dir)
 	{
 		MapSpot other = spot->GetAdjacent((MapTile::Side)dir);
 		if(!MaskedRaw(other))
 			return false;
-		if(spot->corridor7WallID || other->corridor7WallID)
-			return spot->corridor7WallID == other->corridor7WallID &&
-				spot->corridor7WallMarker == other->corridor7WallMarker;
-		return true;
+		return spot->corridor7WallMarker == other->corridor7WallMarker;
 	}
 
 	// The internal tile boundaries of a run of panes are not surfaces; drawing

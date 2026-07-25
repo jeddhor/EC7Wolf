@@ -768,15 +768,14 @@ static bool IsConnectedMaskedWall(MapSpot spot, MapTile::Side direction)
 		return false;
 	}
 
-	// Corridor 7 puts unrelated masked artwork next to one another in a few
-	// places. Only merge faces that came from the same wall definition and map
-	// marker, otherwise a real exposed edge could disappear.
-	if(spot->corridor7WallID || other->corridor7WallID)
-	{
-		return spot->corridor7WallID == other->corridor7WallID &&
-			spot->corridor7WallMarker == other->corridor7WallMarker;
-	}
-	return true;
+	// Merge faces of adjacent masked panes that share a map marker (the same wall
+	// KIND) even when their artwork page (corridor7WallID) differs -- an
+	// observation-glass wall is built from varied panels (earth, globe, monitors)
+	// that must still read as one continuous plane. Without this a differing panel
+	// is an isolated cell whose perpendicular faces draw as an extra pane seen
+	// edge-on through the wall. Different markers (e.g. a force-field door) stay
+	// separate; outside C7 (no marker) adjacency is enough.
+	return spot->corridor7WallMarker == other->corridor7WallMarker;
 }
 
 static bool IsMaskedWallRenderSide(MapSpot spot, MapTile::Side side)

@@ -66,6 +66,7 @@ Menu episodes(NE_X+4, NE_Y-1, NE_W+7, 83);
 Menu skills(NM_X, NM_Y, NM_W, 24);
 Menu controls(15, 70, 310, 24);
 Menu resolutionMenu(90, 25, 150, 24);
+Menu advancedGraphics(20, 60, 285, 56);
 
 MENU_LISTENER(PlayDemosOrReturnToGame)
 {
@@ -325,6 +326,58 @@ MENU_LISTENER(ToggleVsync)
 	screen->SetVSync(vid_vsync);
 	return true;
 }
+static const int kMaxFPSValues[] = { 0, 60, 75, 120, 144, 165, 240 };
+static const float kFOVValues[] = { 60.0f, 72.0f, 90.0f, 100.0f, 110.0f, 120.0f };
+static const float kGammaValues[] = { 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f };
+
+// Returns the index of the option matching the live value, so a menu opens
+// showing what is actually set rather than always showing the first choice.
+template<typename T, int N>
+static int NearestOption(const T (&values)[N], T current)
+{
+	int best = 0;
+	double bestDist = -1;
+	for(int i = 0;i < N;++i)
+	{
+		const double dist = fabs((double)values[i] - (double)current);
+		if(bestDist < 0 || dist < bestDist)
+		{
+			bestDist = dist;
+			best = i;
+		}
+	}
+	return best;
+}
+
+MENU_LISTENER(SetRenderer)
+{
+	// Read once before the first video mode is set, so this cannot take effect
+	// until the game is next started. Saying so beats silently doing nothing.
+	vid_renderer = which == 0 ? "opengl" : "software";
+	return true;
+}
+
+MENU_LISTENER(SetMaxFPS)
+{
+	vid_maxfps = kMaxFPSValues[which];
+	return true;
+}
+
+MENU_LISTENER(SetFOV)
+{
+	localDesiredFOV = kFOVValues[which];
+	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+		players[i].SetFOV(localDesiredFOV);
+	return true;
+}
+
+MENU_LISTENER(SetGamma)
+{
+	screenGamma = kGammaValues[which];
+	screen->SetGamma(screenGamma);
+	return true;
+}
+
 MENU_LISTENER(SetAspectRatio)
 {
 	vid_aspect = static_cast<Aspect>(which);
@@ -649,6 +702,49 @@ void CreateMenus()
 
 	const char* aspectOptions[] = {"Aspect: Auto", "Aspect: 16:9", "Aspect: 16:10", "Aspect: 17:10", "Aspect: 4:3", "Aspect: 5:4", "Aspect: 21:9", "Aspect: 32:9"};
 	displayMenu.setHeadText(language["STR_DISPLAY"]);
+	if(MenuStyle == MENUSTYLE_Corridor7)
+	{
+		// Built in its own order rather than appended to the generic list: the
+		// settings below were never exposed by a menu before, and tacking them
+		// on the end put them under the Screen Size heading, which has nothing
+		// to do with them. Only Corridor 7 is reordered, so no other game's
+		// menu shifts underneath it.
+		static const char *rendererOptions[] = { "OpenGL", "Software" };
+		static const char *maxFPSOptions[] = { "Unlimited", "60", "75", "120", "144", "165", "240" };
+		static const char *fovOptions[] = { "60", "72", "90", "100", "110", "120" };
+		static const char *gammaOptions[] = { "0.75", "1.00", "1.25", "1.50", "1.75", "2.00" };
+
+		AddLabeled(displayMenu, new MultipleChoiceMenuItem(SetRenderer, rendererOptions, 2,
+			vid_renderer.CompareNoCase("opengl") == 0 ? 0 : 1), "Renderer");
+#ifndef __ANDROID__
+		AddLabeled(displayMenu, new BooleanMenuItem(language["STR_FULLSCREEN"], vid_fullscreen, ToggleFullscreen), "Fullscreen");
+#endif
+		displayMenu.addItem(new MenuSwitcherMenuItem("Screen Resolution", resolutionMenu, EnterResolutionSelection));
+		AddLabeled(displayMenu, new MultipleChoiceMenuItem(SetAspectRatio, aspectOptions, 8, vid_aspect), "Aspect Ratio");
+#if SDL_VERSION_ATLEAST(2,0,0)
+		AddLabeled(displayMenu, new BooleanMenuItem(language["STR_VSYNC"], vid_vsync, ToggleVsync), "Vertical Sync");
+#endif
+		AddLabeled(displayMenu, new MultipleChoiceMenuItem(SetMaxFPS, maxFPSOptions, 7,
+			NearestOption(kMaxFPSValues, vid_maxfps)), "Frame Rate Limit");
+		AddLabeled(displayMenu, new MultipleChoiceMenuItem(SetFOV, fovOptions, 6,
+			NearestOption(kFOVValues, localDesiredFOV)), "Field of View");
+		AddLabeled(displayMenu, new MultipleChoiceMenuItem(SetGamma, gammaOptions, 6,
+			NearestOption(kGammaValues, screenGamma)), "Brightness");
+		AddLabeled(displayMenu, new SliderMenuItem(viewsize, 110, 21, language["STR_SMALL"], language["STR_LARGE"], AdjustViewSize), "View Size");
+		displayMenu.addItem(new MenuSwitcherMenuItem("Advanced Graphics", advancedGraphics));
+
+		advancedGraphics.setHeadText("Advanced Graphics");
+		advancedGraphics.addItem(new LabelMenuItem("Motion"));
+		AddLabeled(advancedGraphics, new BooleanMenuItem("Motion Interpolation", r_interpolate), "Motion Interpolation");
+		AddLabeled(advancedGraphics, new BooleanMenuItem("Camera", r_interpolate_camera), "Camera");
+		AddLabeled(advancedGraphics, new BooleanMenuItem("Actors", r_interpolate_actors), "Actors");
+		AddLabeled(advancedGraphics, new BooleanMenuItem("Doors & Pushwalls", r_interpolate_dynamicwalls), "Doors & Pushwalls");
+		AddLabeled(advancedGraphics, new BooleanMenuItem("Late Mouse Latch", r_latelatch_mouse), "Late Mouse Latch");
+		advancedGraphics.addItem(new LabelMenuItem("Diagnostics"));
+		AddLabeled(advancedGraphics, new BooleanMenuItem("GL Debug Output", vid_gldebug), "GL Debug Output");
+	}
+	else
+	{
 #ifndef __ANDROID__
 	displayMenu.addItem(new BooleanMenuItem(language["STR_FULLSCREEN"], vid_fullscreen, ToggleFullscreen));
 #endif
@@ -659,6 +755,8 @@ void CreateMenus()
 	displayMenu.addItem(new MenuSwitcherMenuItem(language["STR_SELECTRES"], resolutionMenu, EnterResolutionSelection));
 	displayMenu.addItem(new LabelMenuItem(language["STR_SCREENSIZE"]));
 	AddLabeled(displayMenu, new SliderMenuItem(viewsize, 110, 21, language["STR_SMALL"], language["STR_LARGE"], AdjustViewSize), "View Size");
+	}
+
 
 	resolutionMenu.setHeadText(language["STR_SELECTRES"]);
 

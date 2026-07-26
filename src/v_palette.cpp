@@ -560,7 +560,20 @@ void V_SetCorridor7PaletteMode (int mode, unsigned int phase)
 		for(unsigned int i = 0;i < 256;++i)
 		{
 			const PalEntry source = Corridor7BasePalette[i];
-			// Corridor 7 leaves its dedicated lamp whites outside the monochrome
+			// Index 254 is the lamp HALO, not a lamp. The wall art paints a white
+			// core of index 15 ringed by 254 -- of index 15's 2045 texels across
+			// the shipped wall pages, 9864 neighbour samples are 254 -- and both
+			// visor palettes in the released game drive that ring to their darkest
+			// level while leaving the core bright: infrared maps 254 to pure black
+			// and night vision to (0,40,0), the same level it gives index 0. That
+			// is what draws the thick black border around every light in infrared.
+			// Exempting 254 alongside 15, as this did, removed the border entirely.
+			if(i == 254)
+			{
+				palette[i] = PalEntry(0, 0, 0);
+				continue;
+			}
+			// Corridor 7 leaves its dedicated lamp white outside the monochrome
 			// conversion in INFRARED ONLY (mode 2). That is why the door jamb
 			// lights stay white there while the surrounding wall turns red.
 			//
@@ -571,7 +584,7 @@ void V_SetCorridor7PaletteMode (int mode, unsigned int phase)
 			// ceiling itself -- blaze full bright through the green, which is what
 			// the released game never shows. The electric-shock palette (mode 3)
 			// transforms every entry too.
-			if(mode == 2 && (i == 15 || i == 254))
+			if(mode == 2 && i == 15)
 			{
 				palette[i] = source;
 				continue;

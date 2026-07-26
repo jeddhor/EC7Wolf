@@ -169,6 +169,80 @@ void R_XBRZScaleARGB(const uint32_t *src, int srcW, int srcH, int factor,
 		hasAlpha ? xbrz::ColorFormat::ARGB : xbrz::ColorFormat::RGB);
 }
 
+// Sum of absolute channel differences: cheap, and adequate here because the
+// decision below only needs "these two are obviously different" rather than any
+// perceptual ordering.
+static inline int ColorDist(uint32_t a, uint32_t b)
+{
+	return abs((int)((a >> 16) & 0xFF) - (int)((b >> 16) & 0xFF)) +
+		abs((int)((a >> 8) & 0xFF) - (int)((b >> 8) & 0xFF)) +
+		abs((int)(a & 0xFF) - (int)(b & 0xFF));
+}
+
+int R_XBRZDeDither(uint32_t *px, int w, int h)
+{
+	// Why this exists: xBRZ assumes clean pixel art, where a step between two
+	// colours means an edge. Hand-dithered art breaks that assumption on purpose
+	// -- a checkerboard of two colours is not an edge, it is a third colour that
+	// the palette could not hold. Fed to the upscaler as-is, every dither cell
+	// is read as a tiny feature worth preserving, and the filter enlarges the
+	// noise into visible blobs. Corridor 7's splash screen is dithered heavily
+	// through its shadows, which is exactly where the artifacts showed.
+	//
+	// So the dither is resolved first, into the colour it was always meant to
+	// look like from a distance.
+	if(px == NULL || w < 3 || h < 3)
+		return 0;
+
+	// A pixel is dither if it differs from all four of its neighbours while they
+	// agree with each other: that is a lone cell in a flat field, which is what
+	// an ordered dither is made of. Real detail -- a highlight, a thin line --
+	// either matches a neighbour along its run or sits on a background that is
+	// not flat, and fails one test or the other.
+	static const int kDiffers = 24;	// centre vs neighbour, summed over channels
+	static const int kAgrees  = 40;	// neighbour vs neighbour
+
+	TArray<uint32_t> src((unsigned)(w*h));
+	src.Resize((unsigned)(w*h));
+	memcpy(&src[0], px, (size_t)w*h*sizeof(uint32_t));
+
+	int changed = 0;
+	for(int y = 0; y < h; ++y)
+	{
+		for(int x = 0; x < w; ++x)
+		{
+			const uint32_t c = src[y*w + x];
+			const uint32_t n = src[(y > 0 ? y-1 : 0)*w + x];
+			const uint32_t s = src[(y < h-1 ? y+1 : h-1)*w + x];
+			const uint32_t e = src[y*w + (x < w-1 ? x+1 : w-1)];
+			const uint32_t o = src[y*w + (x > 0 ? x-1 : 0)];
+
+			if(ColorDist(c, n) <= kDiffers || ColorDist(c, s) <= kDiffers ||
+				ColorDist(c, e) <= kDiffers || ColorDist(c, o) <= kDiffers)
+				continue;
+			if(ColorDist(n, s) >= kAgrees || ColorDist(e, o) >= kAgrees ||
+				ColorDist(n, e) >= kAgrees)
+				continue;
+
+			// Half way to the surrounding mean rather than all the way to it.
+			// On a checkerboard of A and B, the A cells see a mean of B and the
+			// B cells see a mean of A, so both land on the same midpoint and the
+			// pattern flattens. Snapping fully to the mean would instead swap
+			// the two and leave the checkerboard exactly as it was.
+			uint32_t out = 0xFF000000u;
+			for(int shift = 0; shift <= 16; shift += 8)
+			{
+				const int mean = (((n >> shift) & 0xFF) + ((s >> shift) & 0xFF) +
+					((e >> shift) & 0xFF) + ((o >> shift) & 0xFF)) / 4;
+				out |= (uint32_t)((((int)((c >> shift) & 0xFF) + mean) / 2) & 0xFF) << shift;
+			}
+			px[y*w + x] = out;
+			++changed;
+		}
+	}
+	return changed;
+}
+
 void R_XBRZFreeScratch()
 {
 	ScratchSrc.Clear();

@@ -820,10 +820,12 @@ void SelectGame(TArray<FString> &wadfiles, const char* iwad, const char* datawad
 
 	NumIWads = base.Path.Size();
 
-	// Optional high-resolution menu art. It derives from the commercial splash
-	// screen, so it must never live in the source tree or the pk3; it sits next
-	// to the game data instead, and is simply absent for anyone who has not
-	// installed it. The menu falls back to a plain black backdrop without it.
+	// Optional replacement menu art, for anyone who would rather supply their own
+	// upscale than use the one the menu builds. It derives from the commercial
+	// splash screen either way, so it must never live in the source tree or the
+	// pk3; it sits next to the game data instead. Without it the menu upscales
+	// VGA chunk 6 out of the player's own data files (see c7_menu.cpp), so this
+	// is an override rather than the only source of a backdrop.
 	if(base.Path.Size() > 0)
 	{
 		FString dir = base.Path[0];

@@ -38,6 +38,12 @@ const uint32_t *R_XBRZScaleIndexed(const BYTE *src, int srcPitch, int srcW, int 
 void R_XBRZScaleARGB(const uint32_t *src, int srcW, int srcH, int factor,
 	uint32_t *dst, bool hasAlpha);
 
+// Collapses ordered dither back into the flat colour it was standing in for,
+// in place, over a 0xAARRGGBB image. Run this before scaling art that was
+// dithered by hand -- see the note on the implementation for why the upscaler
+// cannot be left to cope with it alone. Returns the number of pixels changed.
+int R_XBRZDeDither(uint32_t *px, int w, int h);
+
 // Drop the scratch buffers. Called at shutdown and on a video mode change, so a
 // full-screen frame's worth of scratch is not held for a mode that no longer
 // exists.

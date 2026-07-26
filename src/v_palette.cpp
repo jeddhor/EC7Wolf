@@ -576,6 +576,15 @@ void V_SetCorridor7PaletteMode (int mode, unsigned int phase)
 				palette[i] = source;
 				continue;
 			}
+			// The HUD text yellow is never tinted by the visor. Index 3 is a
+			// standalone entry in the low block, like the lamp white at 15 -- the
+			// yellows scene artwork actually uses are the ramps at 96-111 and the
+			// animated 224-231, so leaving 3 alone does not touch the world.
+			if(mode != 3 && i == 3)
+			{
+				palette[i] = source;
+				continue;
+			}
 			// The DOS visor palettes are monochrome DAC rewrites, not translucent
 			// overlays. Take the peak channel, not a luminance: luminance weights
 			// blue at 29/256, which collapsed Corridor 7's blue force-field band

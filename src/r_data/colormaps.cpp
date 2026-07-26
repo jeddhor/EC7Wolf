@@ -297,7 +297,20 @@ void FDynamicColormap::BuildLights ()
 		{ // White light, so we can just pick the colors directly
 			for (c = 0; c < 256; c++)
 			{
-				*shade++ = ColorMatcher.Pick (colors[c].r, colors[c].g, colors[c].b);
+				// At zero darkening a colour must map to ITSELF. ColorMatcher
+				// returns the lowest index holding that RGB, so in a palette with
+				// duplicates an entry can alias onto a different index that merely
+				// looks the same. Corridor 7 has two pure whites -- 39, used all
+				// over structural artwork, and 15, reserved for lamps -- so row 0
+				// mapped 39 onto 15. Harmless while 15 is just another white, but
+				// the infrared visor deliberately exempts the lamp indices from its
+				// monochrome rewrite, so every close-up white wall texel (shade row
+				// 0) came out glaring white instead of red, while the same texel
+				// further away (row 3+, index 38) tinted correctly.
+				if (colors[c] == GPalette.BaseColors[c])
+					*shade++ = (BYTE)c;
+				else
+					*shade++ = ColorMatcher.Pick (colors[c].r, colors[c].g, colors[c].b);
 			}
 		}
 		else

@@ -192,12 +192,34 @@ bool C7Menu_Draw(const Menu *menu)
 	const int count = menu->getNumItems();
 	const int cur = menu->getCurrentPosition();
 
-	for(int i = 0;i < count;++i)
+	// Scrolling. The engine keeps its own itemOffset, but it is computed from
+	// 320x200 item heights that mean nothing here, and it is only ever advanced
+	// by drawMenu(), which the skin replaces -- so a long list (the resolution
+	// picker) never scrolled and the selection walked off the bottom.
+	//
+	// Both of handle()'s navigation branches move curPos identically whether or
+	// not they touch itemOffset, so the skin can derive its own window and leave
+	// the engine's alone. Deriving it from curPos each frame rather than storing
+	// it means the selection is always on screen by construction.
+	const int listBottom = SCREENHEIGHT - Scaled(96);
+	int rowsVisible = (listBottom - y) / rowStep;
+	if(rowsVisible < 1)
+		rowsVisible = 1;
+	int first = 0;
+	if(cur >= rowsVisible)
+		first = cur - rowsVisible + 1;
+	if(first > count - rowsVisible)
+		first = count - rowsVisible;
+	if(first < 0)
+		first = 0;
+	const int listTop = y;
+
+	for(int i = first;i < count;++i)
 	{
 		MenuItem *item = menu->getIndex(i);
 		if(item == NULL || !item->isVisible())
 			continue;
-		if(y + rowStep > SCREENHEIGHT - Scaled(80))
+		if(y + rowStep > listBottom)
 			break;
 
 		const bool active = (i == cur);
@@ -230,6 +252,32 @@ bool C7Menu_Draw(const Menu *menu)
 		}
 
 		y += rowStep;
+	}
+
+	// Tell the player the list continues. Without this a scrolled list is
+	// indistinguishable from a complete one.
+	if(count > rowsVisible)
+	{
+		const BYTE tip = ColorMatcher.Pick(kAmberDimR, kAmberDimG, kAmberDimB);
+		const int tw = Scaled(10), th = Scaled(6);
+		const int tx = valueX - tw;
+		if(first > 0)
+		{
+			for(int r = 0;r < th;++r)
+				screen->Clear(tx + (tw * r) / (2 * th), listTop - Scaled(18) + (th - 1 - r),
+					tx + tw - (tw * r) / (2 * th), listTop - Scaled(18) + (th - r), tip, 0);
+		}
+		if(first + rowsVisible < count)
+		{
+			for(int r = 0;r < th;++r)
+				screen->Clear(tx + (tw * r) / (2 * th), listBottom + Scaled(6) + r,
+					tx + tw - (tw * r) / (2 * th), listBottom + Scaled(6) + r + 1, tip, 0);
+		}
+
+		FString pos;
+		pos.Format("%d / %d", cur + 1, count);
+		V_TTDrawText(g_regular, Scaled(13), labelX, listBottom + Scaled(6),
+			pos, kDimR, kDimG, kDimB);
 	}
 
 	// Footer key hints. Arrows are drawn as triangles: the bundled face is an

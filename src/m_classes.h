@@ -228,6 +228,7 @@ class Menu
 		static FTexture			*cursor;
 
 		void	drawGunHalfStep(int x, int y);
+		void	redrawSelection();
 		void	eraseGun(int x, int y);
 		virtual void handleDelete() {}
 

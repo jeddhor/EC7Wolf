@@ -619,6 +619,9 @@ void ControlMenuItem::right()
 
 void Menu::drawGunHalfStep(int x, int y)
 {
+	// The skin draws its own cursor; this one would land in the wrong place.
+	if(C7Menu_Active())
+		return;
 	// Corridor 7's arrow jumps directly between items with a single sound.
 	if(MenuStyle == MENUSTYLE_Wolf)
 	{
@@ -631,6 +634,9 @@ void Menu::drawGunHalfStep(int x, int y)
 
 void Menu::eraseGun(int x, int y)
 {
+	// The skin draws its own cursor; this one would land in the wrong place.
+	if(C7Menu_Active())
+		return;
 	if(MenuStyle == MENUSTYLE_Wolf)
 	{
 		int gx = x, gy = y, gw = cursor->GetScaledWidth(), gh = cursor->GetScaledHeight();
@@ -867,6 +873,23 @@ void Menu::draw() const
 	VW_UpdateScreen ();
 }
 
+// Repaint just the selected row. The stock presentation can do that in place
+// with the bitmap font, which is why handle() does it on every keypress. The
+// Corridor 7 skin cannot: it owns the whole screen, so an in-place item draw
+// lands on top of it in the old font at the old coordinates. That is what
+// produced flashes of stale text when changing a value or moving the cursor.
+void Menu::redrawSelection()
+{
+	if(C7Menu_Active())
+	{
+		draw();
+		return;
+	}
+	PrintX = getX() + getIndent();
+	PrintY = getY() + getHeight(curPos);
+	getIndex(curPos)->draw();
+}
+
 int Menu::handle()
 {
 	char key;
@@ -884,9 +907,7 @@ int Menu::handle()
 
 	if (redrawitem)
 	{
-		PrintX = getX() + getIndent();
-		PrintY = getY() + getHeight(curPos);
-		getIndex(curPos)->draw();
+		redrawSelection();
 	}
 	VW_UpdateScreen ();
 
@@ -1065,17 +1086,13 @@ int Menu::handle()
 			}
 			case dir_West:
 				getIndex(curPos)->left();
-				PrintX = getX() + getIndent();
-				PrintY = getY() + getHeight(curPos);
-				getIndex(curPos)->draw();
+				redrawSelection();
 				VW_UpdateScreen();
 				TicDelay(20);
 				break;
 			case dir_East:
 				getIndex(curPos)->right();
-				PrintX = getX() + getIndent();
-				PrintY = getY() + getHeight(curPos);
-				getIndex(curPos)->draw();
+				redrawSelection();
 				VW_UpdateScreen();
 				TicDelay(20);
 				break;
@@ -1098,9 +1115,7 @@ int Menu::handle()
 	//
 	if (lastitem != curPos)
 	{
-		PrintX = getX() + getIndent();
-		PrintY = getY() + getHeight(curPos);
-		getIndex(curPos)->draw();
+		redrawSelection();
 		redrawitem = 1;
 	}
 	else
@@ -1115,11 +1130,9 @@ int Menu::handle()
 			if(getIndex(curPos)->playActivateSound())
 				SD_PlaySound (getIndex(curPos)->getActivateSound());
 			getIndex(curPos)->activate();
-			PrintX = getX() + getIndent();
-			PrintY = getY() + getHeight(curPos);
 			if(!Menu::areMenusClosed())
 			{
-				getIndex(curPos)->draw();
+				redrawSelection();
 				VW_UpdateScreen();
 			}
 

@@ -451,7 +451,11 @@ static BYTE C7CycleSpriteColor(BYTE color)
 	{
 		const int base = color & ~7;
 		const int phase = (gamestate.TimeCount >> 3) & 7;
-		return base + ((color-base-phase) & 7);
+		// Rotates DOWNWARD, the same direction as Corridor7CycleColor in
+		// wl_draw.cpp and the GL shader. This read -phase, so a lit texel on a
+		// sprite crawled the opposite way to the identical texel on a wall --
+		// impossible in the original, where one DAC rotation drives both.
+		return base + ((color-base+phase) & 7);
 	}
 	return color;
 }
@@ -463,6 +467,23 @@ static BYTE C7ShadePlayerSpriteColor(BYTE color, const BYTE *colormap)
 {
 	const bool luminous = IWad::CheckGameFilter("Corridor7") &&
 		color >= 208 && color <= 239;
+	color = C7CycleSpriteColor(color);
+	return luminous ? NormalLight.Maps[color] : colormap[color];
+}
+
+// Corridor 7's reserved lamp indices are luminous wherever they appear, not
+// only in wall artwork. The light fittings on world props -- the ceiling lamps
+// (C013), the wall units (C001, C041) and the blinking panels (C002..C004) --
+// keep their palette brightness while the housing around them still shades with
+// distance. This is ShadeWallColor's rule applied per texel to sprites: without
+// it a ceiling lamp went dark down a long corridor while the identical lamp
+// painted into a wall texture stayed lit.
+static BYTE C7ShadeWorldSpriteColor(BYTE color, const BYTE *colormap)
+{
+	if(!IWad::CheckGameFilter("Corridor7"))
+		return colormap[color];
+	const bool luminous = color == GPalette.Remap[15] || color == GPalette.Remap[254] ||
+		(color >= GPalette.Remap[208] && color <= GPalette.Remap[239]);
 	color = C7CycleSpriteColor(color);
 	return luminous ? NormalLight.Maps[color] : colormap[color];
 }
@@ -548,7 +569,7 @@ void ScaleSprite(AActor *actor, int xcenter, const Frame *frame, unsigned height
 						*dest = laserColor;
 				}
 				else
-					*dest = colormap[C7CycleSpriteColor(src[y>>FRACBITS])];
+					*dest = C7ShadeWorldSpriteColor(src[y>>FRACBITS], colormap);
 			}
 			dest += vbufPitch;
 		}
@@ -676,7 +697,7 @@ void Scale3DSpriter(AActor *actor, int x1, int x2, FTexture *tex, bool flip, con
 						*dest = laserColor;
 				}
 				else
-					*dest = colormap[C7CycleSpriteColor(src[y>>FRACBITS])];
+					*dest = C7ShadeWorldSpriteColor(src[y>>FRACBITS], colormap);
 			}
 			dest += vbufPitch;
 		}

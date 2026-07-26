@@ -105,13 +105,15 @@ ControlScheme controlScheme[] =
 	{ bt_nextweapon,		"Next Weapon",	4,			-1,				-1, CS_AxisDigital, 0 },
 	{ bt_prevweapon,		"Prev Weapon",	5, 			-1,				-1, CS_AxisDigital, 0 },
 	{ bt_altattack,			"Alt Attack",	-1,			-1,				-1, CS_AxisDigital, 0 },
-	{ bt_reload,			"Drop Mine", -1,				sc_B,			-1, CS_AxisDigital, 0 },
+	{ bt_reload,			"Drop Mine", -1,				sc_M,			-1, CS_AxisDigital, 0 },
 	{ bt_zoom,				"Visor Mode", -1,				sc_Enter,		-1, CS_AxisDigital, 0 },
 	// Corridor 7 has two maps and both are kept. Tab raises the game's own
-	// inset panel, which is what the original put there; ECWolf's
-	// full-viewport automap moves to M. wl_debug.cpp jams its debug-key
-	// sequence for whichever of these holds sc_Tab -- see schemeAutomapKey.
-	{ bt_automap,			"Automap",		-1,			sc_M,			-1, CS_AxisDigital, 0 },
+	// inset panel, which is what the original put there. ECWolf's
+	// full-viewport automap goes on F1, which the original leaves unused
+	// (F2 saves, F3 loads, and so on), so no original binding moves.
+	// wl_debug.cpp jams its debug-key sequence for whichever of these holds
+	// sc_Tab -- see schemeAutomapKey.
+	{ bt_automap,			"Automap",		-1,			sc_F1,			-1, CS_AxisDigital, 0 },
 	{ bt_showstatusbar,		"Show Status",	-1,			-1,				-1,	CS_AxisDigital, 0 },
 	{ bt_c7map,				"Floor Map",	-1,			sc_Tab,			-1, CS_AxisDigital, 0 },
 	{ bt_pause,				"Pause",		-1,			sc_Pause,		-1, CS_AxisDigital, 0 },
@@ -125,6 +127,18 @@ ControlScheme controlScheme[] =
 // now, not bt_automap. When the input system is redone, hopefully we don't
 // need this kind of thing.
 ControlScheme &schemeAutomapKey = controlScheme[27];
+
+// Whether a raw scancode is the one bt_automap is bound to, so CheckKeys can
+// keep it out of the control-panel F-key range.
+static bool IsAutomapKeyboardScan(int scan)
+{
+	for(int i = 0;controlScheme[i].button != bt_nobutton;++i)
+	{
+		if(controlScheme[i].button == bt_automap)
+			return controlScheme[i].keyboard != -1 && scan == controlScheme[i].keyboard;
+	}
+	return false;
+}
 
 ControlScheme amControlScheme[] =
 {
@@ -879,7 +893,11 @@ void CheckKeys (void)
 		return;
 	}
 
-	if ((scan >= sc_F1 && scan <= sc_F9) || scan == sc_Escape || control[ConsolePlayer].buttonstate[bt_esc])
+	// The key the automap is bound to must not also open the control panel.
+	// Wolf3D put help on F1; Corridor 7 leaves F1 unused (F2 saves, F3 loads),
+	// which is why the full-viewport automap sits there.
+	if ((scan >= sc_F1 && scan <= sc_F9 && !IsAutomapKeyboardScan(scan)) ||
+		scan == sc_Escape || control[ConsolePlayer].buttonstate[bt_esc])
 	{
 		int lastoffs = StopMusic ();
 		SD_StopDigitized();

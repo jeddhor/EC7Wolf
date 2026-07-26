@@ -269,6 +269,32 @@ void ReadConfig(void)
 			controlScheme[i].keyboard = SDL2Convert(config.GetSetting(keySettingName)->GetInteger());
 		controlScheme[i].mouse = config.GetSetting(mseSettingName)->GetInteger();
 	}
+
+	// Tab used to raise ECWolf's full-viewport automap. Corridor 7's own inset
+	// panel took that key over and the full map moved to F1 -- but a saved
+	// setting always beats a changed default, so a config written before the
+	// split keeps Keyboard_Automap on Tab while Floor_Map defaults onto it too.
+	// Both maps then open together and the full-viewport one covers the panel.
+	//
+	// The collision is the evidence, and it has to be: the config gains a
+	// Floor_Map entry the first time a post-split build exits, so its absence
+	// only identifies the upgrade for one run. Two maps on one key is never
+	// something anyone chose, and rebinding either one clears the condition, so
+	// a deliberate binding is left alone.
+	ControlScheme *automapScheme = NULL, *c7mapScheme = NULL;
+	for(unsigned int i = 0;controlScheme[i].button != bt_nobutton;i++)
+	{
+		if(controlScheme[i].button == bt_automap)
+			automapScheme = &controlScheme[i];
+		else if(controlScheme[i].button == bt_c7map)
+			c7mapScheme = &controlScheme[i];
+	}
+	if(automapScheme && c7mapScheme &&
+		automapScheme->keyboard == sc_Tab && c7mapScheme->keyboard == sc_Tab)
+	{
+		automapScheme->keyboard = sc_F1;
+		config.GetSetting("Keyboard_Automap")->SetValue(SDL2Backconvert(sc_F1));
+	}
 	viewsize = config.GetSetting("ViewSize")->GetInteger();
 	mousexadjustment = config.GetSetting("MouseXAdjustment")->GetInteger();
 	mouseyadjustment = config.GetSetting("MouseYAdjustment")->GetInteger();

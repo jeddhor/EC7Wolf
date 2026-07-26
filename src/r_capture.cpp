@@ -81,6 +81,7 @@ namespace
 	int      g_extraLight     = 0;
 
 	bool     g_c7Map          = false;   // --capture-c7map: raise the C7 inset panel
+	bool     g_c7FloorPlan    = false;   // --capture-floorplan: as if the plan were picked up
 	// --capture-exitlevel: complete the level at this tic, taking the same path
 	// the elevator does (lnspec.cpp sets ex_completed), so a level transition can
 	// be exercised headlessly. The debug "quit level" key cannot be driven under
@@ -323,6 +324,11 @@ void ParseArgs(int argc, char **argv)
 			g_c7Map = true;
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-floorplan") == 0)
+		{
+			g_c7FloorPlan = true;
+			g_armed = true;
+		}
 		else if(strcmp(arg, "--capture-exitlevel") == 0 && i + 1 < argc)
 		{
 			g_exitLevelTic = atol(argv[++i]);
@@ -550,6 +556,14 @@ void ApplyPaletteOverride()
 	// makes it reachable without scripted input.
 	if(g_c7Map && !C7Map_Active())
 		C7Map_Toggle();
+
+	// Stand in for having picked up the floor plan. Only the revealed state is
+	// forced, not the inventory token, so this stays a render-side override
+	// like the rest of this function -- the panel reads either one. The pickup
+	// itself needs the equipment cheat held down for two seconds, which is
+	// input-timing dependent and cannot be part of a deterministic capture.
+	if(g_c7FloorPlan)
+		gamestate.fullmap = true;
 
 	if(!g_haveBlend)
 		return;

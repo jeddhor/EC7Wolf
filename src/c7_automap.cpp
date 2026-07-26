@@ -154,7 +154,11 @@ void C7Map_Draw()
 	const int playerTY = player->tiley;
 
 	// The floor plan reveals the whole level at once, so it simply drops the
-	// window rather than widening it.
+	// window rather than widening it -- and it drops the reachability gate
+	// below with it. A blueprint shows the floor's geometry, not where you can
+	// currently walk; leaving the gate on made the plan look like it kept
+	// expiring, because the gate is live (see below) and re-greyed everything
+	// past a door the moment that door swung shut.
 	const bool fullmap = gamestate.fullmap ||
 		player->FindInventory(ClassDef::FindClass("C7FloorPlan")) != NULL;
 
@@ -173,8 +177,13 @@ void C7Map_Draw()
 	// is Wolf3D's zone graph, which Corridor 7 inherited and which ECWolf still
 	// maintains for sound propagation. Without this, level 1's sealed side rooms
 	// showed as open floor where the original showed wall.
+	//
+	// Note this is a live query, not a record of what has been seen: CheckLink
+	// reads zoneLinks, which counts doors that are open right now. Reachability
+	// therefore shrinks again whenever a door closes, which is why the floor
+	// plan has to bypass it rather than merely widen the window.
 	const GameMap::Zone *playerZone = map->GetSpot(playerTX, playerTY, 0)->zone;
-	if(playerZone == NULL)
+	if(!fullmap && playerZone == NULL)
 	{
 		// Standing in a doorway puts the player on a door tile, and a door
 		// belongs to no zone -- it is the link between two of them. CheckLink
@@ -213,7 +222,7 @@ void C7Map_Draw()
 				// are tiles. Same test the ECWolf automap uses.
 				if(solid && (spot->tile->offsetHorizontal || spot->tile->offsetVertical))
 					solid = false;
-				else if(!solid)
+				else if(!solid && !fullmap)
 				{
 					const GameMap::Zone *const zone = spot->zone;
 					if(zone == NULL)

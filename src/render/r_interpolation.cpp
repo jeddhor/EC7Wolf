@@ -133,4 +133,13 @@ void Restore()
 	}
 }
 
+// Marks every actor's render snapshot stale. EndTic re-seeds a stale actor from
+// its authoritative position and Apply()/Restore() skip it until then, so this
+// is self-healing: the next tic renders it statically at its true position.
+void Reset()
+{
+	for(AActor::Iterator iter = AActor::GetIterator(); iter.Next();)
+		iter->renderInterpValid = false;
+}
+
 } // namespace Interpolation

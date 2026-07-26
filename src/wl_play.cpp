@@ -1327,6 +1327,16 @@ void PlayLoop (void)
 
 	playstate = ex_stillplaying;
 	ResetTimeCount();
+	// A level entered from another one keeps its player pawn: FinishTravel moves
+	// the surviving actor to the new map's start. Its render snapshot still holds
+	// the OLD map's position, and Restore() writes that snapshot back into the
+	// actor after the first frame is drawn -- teleporting the player to wherever
+	// they stood on the previous level, which on most maps is inside a wall.
+	//
+	// DynamicWalls::Reset() already does this for doors and pushwalls in
+	// SetupGameLevel; actors were missed. It has to happen here rather than
+	// there, because SetupGameLevel runs BEFORE FinishTravel moves the pawn.
+	Interpolation::Reset();
 	// Decouple frame pacing from the 70 Hz simulation for smooth high-refresh
 	// motion. Disabled cleanly on exit so intermission/animation loops keep the
 	// legacy blocking timing.

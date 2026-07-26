@@ -42,6 +42,11 @@ namespace Interpolation
 	// Apply()/Restore() are a no-op when interpolation is disabled.
 	void Apply(float alpha);
 	void Restore();
+
+	// Forgets every actor's motion history. A level change gives actors new
+	// authoritative positions from outside the tic loop, and Restore() would
+	// otherwise write the previous level's snapshot back over them.
+	void Reset();
 }
 
 #endif

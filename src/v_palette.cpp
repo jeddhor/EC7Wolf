@@ -534,6 +534,166 @@ const BYTE *V_GetC7RampFloors ()
 	return floors;
 }
 
+// Corridor 7's visor palettes, read from the released game's own DAC.
+//
+// A raw DOSBox-X screenshot stores the framebuffer together with the palette
+// that was live when it was taken, so an indexed capture made while a visor is
+// active carries the original's DAC as its embedded palette. These are those two
+// tables; regenerate with tools/python/make_corridor7_visor_tables.py.
+//
+// They cannot be replaced by a formula. The mapping is keyed on the palette
+// INDEX, not the colour: indices 15 and 39 both hold (255,255,255) but infrared
+// keeps 15 white and turns 39 red, and indices 37 and 254 both hold
+// (223,223,223) but infrared keeps 37 as red 223 and forces 254 to black. Nor is
+// the level a simple function of brightness -- greys map to themselves in
+// infrared while (154,0,0) becomes 60 and (113,81,138) becomes 125, matching
+// neither luminance, average nor peak channel. Night vision is a different
+// transform again: a gamma-like boost with no crush to black, where the grey
+// ramp runs 8->40, 32->77, 125->178, 207->227, 255->255.
+//
+// What the tables encode, for reference: infrared leaves the low block 0-15,
+// 248-253 and 255 untouched (which is why the HUD text and the lamp whites keep
+// their colour), crushes positions 0-7 of every 24-entry ramp to black, and
+// forces the lamp halo at 254 to black. Night vision converts everything except
+// 255 and gives 254 its dimmest level.
+// Night vision (mode 1) DAC, read from the released game.
+static const BYTE Corridor7NightVisionPal[256][3] =
+{
+	{  0, 40,  0}, {  0, 93,  0}, {  0,170,  0}, {  0,215,  0},
+	{  0, 89,  0}, {  0,109,  0}, {  0,190, 16}, {  0,247,  0},
+	{  0,178,  0}, {  0,235,  0}, {  0,255,  0}, {  0,227,  0},
+	{  0,199,  0}, {  0,146,  0}, {  0,134,  0}, {  0,255,  0},
+	{  0, 40,  0}, {  0, 48,  0}, {  0, 56,  0}, {  0, 69,  0},
+	{  0, 77,  0}, {  0, 85,  0}, {  0, 93,  0}, {  0,105,  0},
+	{  0,113,  0}, {  0,121,  0}, {  0,134,  0}, {  0,142,  0},
+	{  0,150,  0}, {  0,162,  0}, {  0,170,  0}, {  0,178,  0},
+	{  0,186,  0}, {  0,199,  0}, {  0,207,  0}, {  0,215,  0},
+	{  0,227,  0}, {  0,235,  0}, {  0,243,  0}, {  0,255,  0},
+	{  0, 40,  0}, {  0, 48,  0}, {  0, 56,  0}, {  0, 69,  0},
+	{  0, 77,  0}, {  0, 85,  0}, {  0, 93,  0}, {  0,105,  0},
+	{  0,113,  0}, {  0,121,  0}, {  0,134,  0}, {  0,142,  0},
+	{  0,150,  0}, {  0,162,  0}, {  0,170,  0}, {  0,178,  0},
+	{  0,186,  0}, {  0,199,  0}, {  0,207,  0}, {  0,215,  0},
+	{  0,227,  0}, {  0,235,  0}, {  0,243,  0}, {  0,255,  0},
+	{  0, 40,  0}, {  0, 48,  0}, {  0, 56,  0}, {  0, 69,  0},
+	{  0, 77,  0}, {  0, 85,  0}, {  0, 93,  0}, {  0,105,  0},
+	{  0,113,  0}, {  0,121,  0}, {  0,134,  0}, {  0,142,  0},
+	{  0,150,  0}, {  0,162,  0}, {  0,170,  0}, {  0,178,  0},
+	{  0,186,  0}, {  0,199,  0}, {  0,207,  0}, {  0,215,  0},
+	{  0,227,  0}, {  0,235,  0}, {  0,243,  0}, {  0,255,  0},
+	{  0, 40,  0}, {  0, 48,  0}, {  0, 56,  0}, {  0, 69,  0},
+	{  0, 77,  0}, {  0, 85,  0}, {  0, 93,  0}, {  0,105,  0},
+	{  0,113,  0}, {  0,121,  0}, {  0,134,  0}, {  0,142,  0},
+	{  0,150,  0}, {  0,162,  0}, {  0,170,  0}, {  0,178,  0},
+	{  0,186,  0}, {  0,199,  0}, {  0,207,  0}, {  0,215,  0},
+	{  0,227,  0}, {  0,235,  0}, {  0,243,  0}, {  0,255,  0},
+	{  0, 40,  0}, {  0, 48,  0}, {  0, 56,  0}, {  0, 69,  0},
+	{  0, 77,  0}, {  0, 85,  0}, {  0, 93,  0}, {  0,105,  0},
+	{  0,113,  0}, {  0,121,  0}, {  0,134,  0}, {  0,142,  0},
+	{  0,150,  0}, {  0,162,  0}, {  0,170,  0}, {  0,178,  0},
+	{  0,186,  0}, {  0,199,  0}, {  0,207,  0}, {  0,215,  0},
+	{  0,227,  0}, {  0,235,  0}, {  0,243,  0}, {  0,255,  0},
+	{  0, 40,  0}, {  0, 48,  0}, {  0, 56,  0}, {  0, 69,  0},
+	{  0, 77,  0}, {  0, 85,  0}, {  0, 93,  0}, {  0,105,  0},
+	{  0,113,  0}, {  0,121,  0}, {  0,134,  0}, {  0,142,  0},
+	{  0,150,  0}, {  0,162,  0}, {  0,170,  0}, {  0,178,  0},
+	{  0,186,  0}, {  0,199,  0}, {  0,207,  0}, {  0,215,  0},
+	{  0,227,  0}, {  0,235,  0}, {  0,243,  0}, {  0,255,  0},
+	{  0, 40,  0}, {  0, 48,  0}, {  0, 56,  0}, {  0, 69,  0},
+	{  0, 77,  0}, {  0, 85,  0}, {  0, 93,  0}, {  0,105,  0},
+	{  0,113,  0}, {  0,121,  0}, {  0,134,  0}, {  0,142,  0},
+	{  0,150,  0}, {  0,162,  0}, {  0,170,  0}, {  0,178,  0},
+	{  0,186,  0}, {  0,199,  0}, {  0,207,  0}, {  0,215,  0},
+	{  0,227,  0}, {  0,235,  0}, {  0,243,  0}, {  0,255,  0},
+	{  0, 40,  0}, {  0, 48,  0}, {  0, 56,  0}, {  0, 69,  0},
+	{  0, 77,  0}, {  0, 85,  0}, {  0, 93,  0}, {  0,105,  0},
+	{  0,113,  0}, {  0,121,  0}, {  0,134,  0}, {  0,142,  0},
+	{  0,150,  0}, {  0,162,  0}, {  0,170,  0}, {  0,178,  0},
+	{  0,186,  0}, {  0,199,  0}, {  0,207,  0}, {  0,215,  0},
+	{  0,227,  0}, {  0,235,  0}, {  0,243,  0}, {  0,255,  0},
+	{  0,223,  0}, {  0,255,  0}, {  0, 40,  0}, {  0, 69,  0},
+	{  0,101,  0}, {  0,130,  0}, {  0,162,  0}, {  0,190,  0},
+	{  0,223,  0}, {  0,255,  0}, {  0, 40,  0}, {  0, 69,  0},
+	{  0,101,  0}, {  0,130,  0}, {  0,162,  0}, {  0,190,  0},
+	{  0,223,  0}, {  0,255,  0}, {  0, 40,  0}, {  0, 69,  0},
+	{  0,101,  0}, {  0,130,  0}, {  0,162,  0}, {  0,190,  0},
+	{  0, 40,  0}, {  0, 40,  0}, {  0, 40,  0}, {  0, 40,  0},
+	{  0, 40,  0}, {  0, 40,  0}, {  0, 40,  0}, {  0, 40,  0},
+	{  0, 40,  0}, {  0, 89,  0}, {  0,113,  0}, {  0,142,  0},
+	{  0,170,  0}, {  0,199,  0}, {  0,227,  0}, {  0,255,  0},
+	{  0, 56,  0}, {  0,105,  0}, {  0,146,  0}, {  0,162,  0},
+	{  0,190,  0}, {  0,255,  0}, {  0, 40,  0}, {154,  0,138},
+};
+
+// Infrared (mode 2) DAC, read from the released game.
+static const BYTE Corridor7InfraredPal[256][3] =
+{
+	{  0,  0,  0}, {  0,  0,170}, {  0,170,  0}, {215,215,  0},
+	{170,  0,  0}, {223, 56,  0}, {251, 52, 16}, {170,170,170},
+	{ 85, 85, 85}, { 85, 85,255}, {255,235,223}, {255,215,190},
+	{255,199,166}, {255,186,146}, {255,166,113}, {255,255,255},
+	{  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0},
+	{  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0},
+	{ 12,  0,  0}, { 28,  0,  0}, { 44,  0,  0}, { 60,  0,  0},
+	{ 77,  0,  0}, { 93,  0,  0}, {109,  0,  0}, {125,  0,  0},
+	{142,  0,  0}, {158,  0,  0}, {174,  0,  0}, {190,  0,  0},
+	{207,  0,  0}, {223,  0,  0}, {239,  0,  0}, {255,  0,  0},
+	{  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0},
+	{  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0},
+	{ 12,  0,  0}, { 28,  0,  0}, { 44,  0,  0}, { 60,  0,  0},
+	{ 77,  0,  0}, { 93,  0,  0}, {109,  0,  0}, {125,  0,  0},
+	{142,  0,  0}, {158,  0,  0}, {174,  0,  0}, {190,  0,  0},
+	{207,  0,  0}, {223,  0,  0}, {239,  0,  0}, {255,  0,  0},
+	{  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0},
+	{  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0},
+	{ 12,  0,  0}, { 28,  0,  0}, { 44,  0,  0}, { 60,  0,  0},
+	{ 77,  0,  0}, { 93,  0,  0}, {109,  0,  0}, {125,  0,  0},
+	{142,  0,  0}, {158,  0,  0}, {174,  0,  0}, {190,  0,  0},
+	{207,  0,  0}, {223,  0,  0}, {239,  0,  0}, {255,  0,  0},
+	{  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0},
+	{  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0},
+	{ 12,  0,  0}, { 28,  0,  0}, { 44,  0,  0}, { 60,  0,  0},
+	{ 77,  0,  0}, { 93,  0,  0}, {109,  0,  0}, {125,  0,  0},
+	{142,  0,  0}, {158,  0,  0}, {174,  0,  0}, {190,  0,  0},
+	{207,  0,  0}, {223,  0,  0}, {239,  0,  0}, {255,  0,  0},
+	{  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0},
+	{  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0},
+	{ 12,  0,  0}, { 28,  0,  0}, { 44,  0,  0}, { 60,  0,  0},
+	{ 77,  0,  0}, { 93,  0,  0}, {109,  0,  0}, {125,  0,  0},
+	{142,  0,  0}, {158,  0,  0}, {174,  0,  0}, {190,  0,  0},
+	{207,  0,  0}, {223,  0,  0}, {239,  0,  0}, {255,  0,  0},
+	{  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0},
+	{  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0},
+	{ 12,  0,  0}, { 28,  0,  0}, { 44,  0,  0}, { 60,  0,  0},
+	{ 77,  0,  0}, { 93,  0,  0}, {109,  0,  0}, {125,  0,  0},
+	{142,  0,  0}, {158,  0,  0}, {174,  0,  0}, {190,  0,  0},
+	{207,  0,  0}, {223,  0,  0}, {239,  0,  0}, {255,  0,  0},
+	{  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0},
+	{  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0},
+	{ 12,  0,  0}, { 28,  0,  0}, { 44,  0,  0}, { 60,  0,  0},
+	{ 77,  0,  0}, { 93,  0,  0}, {109,  0,  0}, {125,  0,  0},
+	{142,  0,  0}, {158,  0,  0}, {174,  0,  0}, {190,  0,  0},
+	{207,  0,  0}, {223,  0,  0}, {239,  0,  0}, {255,  0,  0},
+	{  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0},
+	{  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0}, {  0,  0,  0},
+	{ 12,  0,  0}, { 28,  0,  0}, { 44,  0,  0}, { 60,  0,  0},
+	{ 77,  0,  0}, { 93,  0,  0}, {109,  0,  0}, {125,  0,  0},
+	{142,  0,  0}, {158,  0,  0}, {174,  0,  0}, {190,  0,  0},
+	{207,  0,  0}, {223,  0,  0}, {239,  0,  0}, {255,  0,  0},
+	{ 32,  0,  0}, { 69,  0,  0}, {105,  0,  0}, {142,  0,  0},
+	{178,  0,  0}, {219,  0,  0}, {255,  0,  0}, {  0,  0,  0},
+	{ 32,  0,  0}, { 69,  0,  0}, {105,  0,  0}, {142,  0,  0},
+	{178,  0,  0}, {219,  0,  0}, {255,  0,  0}, {  0,  0,  0},
+	{ 32,  0,  0}, { 69,  0,  0}, {105,  0,  0}, {142,  0,  0},
+	{178,  0,  0}, {219,  0,  0}, {255,  0,  0}, {  0,  0,  0},
+	{ 32,  0,  0}, { 69,  0,  0}, {105,  0,  0}, {142,  0,  0},
+	{178,  0,  0}, {219,  0,  0}, {255,  0,  0}, {  0,  0,  0},
+	{  0,  0,  0}, { 89,  0,  0}, {113,  0,  0}, {142,  0,  0},
+	{170,  0,  0}, {199,  0,  0}, {227,  0,  0}, {255,  0,  0},
+	{130, 16,  0}, {154, 44,  0}, {178, 85,  0}, {203,134,  0},
+	{227,190,  0}, {255,255,  0}, {  0,  0,  0}, {154,  0,138},
+};
+
 void V_SetCorridor7PaletteMode (int mode, unsigned int phase)
 {
 	if(screen == NULL)
@@ -560,58 +720,16 @@ void V_SetCorridor7PaletteMode (int mode, unsigned int phase)
 		for(unsigned int i = 0;i < 256;++i)
 		{
 			const PalEntry source = Corridor7BasePalette[i];
-			// Index 254 is the lamp HALO, not a lamp. The wall art paints a white
-			// core of index 15 ringed by 254 -- of index 15's 2045 texels across
-			// the shipped wall pages, 9864 neighbour samples are 254 -- and both
-			// visor palettes in the released game drive that ring to their darkest
-			// level while leaving the core bright: infrared maps 254 to pure black
-			// and night vision to (0,40,0), the same level it gives index 0. That
-			// is what draws the thick black border around every light in infrared.
-			// Exempting 254 alongside 15, as this did, removed the border entirely.
-			if(i == 254)
-			{
-				palette[i] = PalEntry(0, 0, 0);
-				continue;
-			}
-			// Corridor 7 leaves its dedicated lamp white outside the monochrome
-			// conversion in INFRARED ONLY (mode 2). That is why the door jamb
-			// lights stay white there while the surrounding wall turns red.
-			//
-			// Night vision (mode 1) is a full monochrome DAC rewrite with no
-			// exemption: in the original nothing on screen is white. Applying the
-			// infrared exemption to it as well made every white texel in the scene
-			// -- the medipack wall's highlights, the panel outlines, and the white
-			// ceiling itself -- blaze full bright through the green, which is what
-			// the released game never shows. The electric-shock palette (mode 3)
-			// transforms every entry too.
-			if(mode == 2 && i == 15)
-			{
-				palette[i] = source;
-				continue;
-			}
-			// The HUD text yellow is never tinted by the visor. Index 3 is a
-			// standalone entry in the low block, like the lamp white at 15 -- the
-			// yellows scene artwork actually uses are the ramps at 96-111 and the
-			// animated 224-231, so leaving 3 alone does not touch the world.
-			if(mode != 3 && i == 3)
-			{
-				palette[i] = source;
-				continue;
-			}
-			// The DOS visor palettes are monochrome DAC rewrites, not translucent
-			// overlays. Take the peak channel, not a luminance: luminance weights
-			// blue at 29/256, which collapsed Corridor 7's blue force-field band
-			// (216-223) to green values of 3..28 out of 255 -- the force fields
-			// went black in both visor modes while the red band beside them
-			// (208-215, peaking at 76) stayed visible. The original shows both
-			// bands animating at the same strength, merely tinted, and only a
-			// per-channel-symmetric transform can do that. Neutral content, which
-			// is most of the scene, is unaffected: max == luminance for any grey.
-			const BYTE level = MAX(source.r, MAX(source.g, source.b));
 			if(mode == 1)
-				palette[i] = PalEntry(0, level, 0);
+			{
+				const BYTE *e = Corridor7NightVisionPal[i];
+				palette[i] = PalEntry(e[0], e[1], e[2]);
+			}
 			else if(mode == 2)
-				palette[i] = PalEntry(level, 0, 0);
+			{
+				const BYTE *e = Corridor7InfraredPal[i];
+				palette[i] = PalEntry(e[0], e[1], e[2]);
+			}
 			else
 			{
 				// Electric fields rapidly rotate, invert, and quantize the DAC.

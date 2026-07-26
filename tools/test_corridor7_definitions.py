@@ -156,7 +156,12 @@ require(r'trigger\s+102\s*\{.*?action\s*=\s*"Pushwall_Move".*?arg1\s*=\s*8.*?arg
 require(r'trigger\s+106\s*\{.*?action\s*=\s*"Wall_AnimateRemove".*?repeatable\s*=\s*false', XLAT, "marker-106 walls use their native four-frame opening")
 require(r'oldplane\[i\]\s*==\s*106.*?Wall_AnimateRemove.*?maskedWallType\s*=\s*1.*?corridor7WallMarker\s*=\s*106', GAMEMAP_PLANES, "marker-106 animated walls use masked in-place geometry")
 require(r'oldplane\[i\]\s*==\s*107.*?sideSolid\[0\].*?false.*?maskedWallType\s*=\s*1', GAMEMAP_PLANES, "marker-107 walls start permanently open and masked")
-require(r'class\s+C7AnimatedWall.*?\+\+frame\s*>\s*3.*?corridor7WallID-1\+frame.*?frame\s*==\s*3.*?OpenWallCell\(spot,\s*false\)', LNSPEC, "Corridor 7 animated walls retain their final aperture")
+# Split across three checks rather than one ordered match: the frame texture
+# moved into SetFrameTexture(), which is defined below the frame logic, so a
+# single regex spanning both can no longer match in source order.
+require(r'class\s+C7AnimatedWall.*?\+\+frame\s*>\s*3.*?Destroy\(\)', LNSPEC, "Corridor 7 animated walls stop after their fourth page")
+require(r'!activating\s*&&\s*frame\s*==\s*3.*?maskedWallType\s*=\s*1.*?OpenWallCell\(spot,\s*false\)', LNSPEC, "Corridor 7 animated walls retain their final aperture")
+require(r'SetFrameTexture.*?C7W%04u.*?corridor7WallID-1\+frame', LNSPEC, "Corridor 7 animated walls page through wall-ID-minus-one")
 require(r'class\s+C7AnimatedWall.*?\+\+tics\s*<\s*8.*?\+\+frame', LNSPEC, "Corridor 7 chamber doors visibly advance their opening frames")
 require(r'ActivateTrigger.*?trig\.active\s*&&\s*trig\.isSecret.*?\+\+gamestate\.secretcount.*?trig\.active\s*=\s*false',
         GAMEMAP, "successful secret walls count exactly once")
@@ -165,8 +170,31 @@ require(r'ShadeWallColor.*?GPalette\.Remap\[15\].*?GPalette\.Remap\[254\].*?GPal
         "Corridor 7 dedicated lamp whites and animated light ramps remain full-bright")
 if re.search(r'ShadeWallColor.*?GPalette\.Remap\[39\]', WL_DRAW, re.DOTALL):
     raise SystemExit("Corridor 7 definition check failed: ordinary structural white 39 must remain shaded")
-require(r'mode\s*!=\s*3.*?i\s*==\s*15.*?i\s*==\s*254.*?palette\[i\]\s*=\s*source',
-        V_PALETTE, "night and infrared visor palettes preserve lamp-white source colors")
+# The visor palettes are now the released game's own DAC, read per index
+# (see V_SetCorridor7PaletteMode), so check the tables themselves rather than
+# the hand-written exemptions they replaced. Doing it as data also catches the
+# thing the old regex asserted wrongly: only infrared keeps the lamp white.
+# Night vision tints index 15 like everything else.
+def c7_visor_table(name):
+    body = re.search(name + r'\[256\]\[3\]\s*=\s*\{(.*?)\n\};', V_PALETTE, re.DOTALL)
+    if body is None:
+        raise SystemExit("Corridor 7 definition check failed: %s table missing" % name)
+    entries = re.findall(r'\{\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\}', body.group(1))
+    if len(entries) != 256:
+        raise SystemExit("Corridor 7 definition check failed: %s has %d entries, expected 256"
+                         % (name, len(entries)))
+    return [tuple(int(c) for c in e) for e in entries]
+
+_c7_nv = c7_visor_table('Corridor7NightVisionPal')
+_c7_ir = c7_visor_table('Corridor7InfraredPal')
+for _idx, _want, _table, _why in (
+        (15, (255, 255, 255), _c7_ir, "infrared keeps the lamp core white"),
+        (254, (0, 0, 0), _c7_ir, "infrared blacks out the lamp halo ring"),
+        (39, (255, 0, 0), _c7_ir, "infrared tints ordinary structural white, unlike the lamp"),
+        (15, (0, 255, 0), _c7_nv, "night vision tints the lamp core like everything else")):
+    if _table[_idx] != _want:
+        raise SystemExit("Corridor 7 definition check failed: %s (index %d is %s, expected %s)"
+                         % (_why, _idx, _table[_idx], _want))
 if re.search(r'mode\s*!=\s*3.*?i\s*==\s*39', V_PALETTE, re.DOTALL):
     raise SystemExit("Corridor 7 definition check failed: visor palettes must tint ordinary white 39")
 if len(re.findall(r'ShadeWallColor\((?:postsource|source)\[yw\],\s*curshades\)', WL_DRAW)) != 3:
@@ -241,7 +269,11 @@ require(r'Keyboard\[sc_W\].*?Keyboard\[sc_A\].*?Keyboard\[sc_X\].*?GiveCorridor7
         WL_DEBUG, "holding W+A+X activates the Corridor 7 equipment cheat")
 require(r'GiveCorridor7Cheat.*?GiveAllWeaponsAndAmmo.*?P_GiveKeys.*?gamestate\.fullmap\s*=\s*true.*?C7VisorCharge',
         WL_DEBUG, "the WAX cheat grants weapons, access, map, health, armor, and visor charge")
-require(r'ThreeDRefresh\s*\(\s*\).*?DrawTopOverlay\s*\(\s*\)', WL_PLAY, "top overlay redraws every rendered frame")
+# The overlay is no longer drawn inline after ThreeDRefresh: it goes through
+# IRenderer::DrawViewOverlay so a compositing backend can measure which view
+# texels it paints. The property is the same -- rendered scene, then overlay.
+require(r'Renderer->RenderScene\s*\(\s*\).*?Renderer->DrawViewOverlay\(DrawTopOverlayThunk\)',
+        WL_PLAY, "top overlay redraws every rendered frame, through the renderer seam")
 require(r'if\(Paused\s*&\s*1\).*?CheckGameFilter\("Corridor7"\).*?'
         r'pauseText\s*=\s*"PAUSED".*?DrawText\(SmallFont.*?else\s*'
         r'VWB_DrawGraphic\(TexMan\("PAUSED"\)', WL_PLAY,
@@ -276,7 +308,7 @@ require(r'c7/forcefield/deactivate/53\s+\{\s+C7DS0015.*?'
         r'c7/forcefield/deactivate/73\s+\{\s+C7DS0014.*?'
         r'c7/forcefield/deactivate/81\s+\{\s+C7DS0013', SNDINFO,
         "force-field wall families use their executable- and DMA-confirmed sounds")
-require(r'Wall_AnimateRemove.*?new\s+C7AnimatedWall\(spot\).*?'
+require(r'Wall_AnimateRemove.*?new\s+C7AnimatedWall\(spot(?:,\s*activating)?\).*?'
         r'case\s+73:.*?case\s+229:.*?deactivate/73.*?case\s+81:.*?deactivate/81.*?'
         r'PlaySoundLocMapSpot\(sound,\s*spot\)', LNSPEC,
         "force-field shutdown dispatch follows its native wall family")
@@ -478,7 +510,7 @@ require(r'C7CycleSpriteColor.*?color\s*>=\s*208\s*&&\s*color\s*<=\s*239.*?'
         r'R_DrawPlayerSprite.*?C7ShadePlayerSpriteColor\(src\[y>>FRACBITS\],\s*colormap\)',
         R_SPRITES, "weapon instrumentation cycles at full brightness while the gun remains shaded")
 require(r'CheckGameFilter\("Corridor7"\).*?virtualEdgeRow.*?80.*?band\s*=\s*virtualEdgeRow/3.*?'
-        r'extraLight\s*=\s*MAX\(0,\s*r_extralight\).*?litBand.*?extraLight/8.*?firstShade.*?extraLight/16.*?'
+        r'extraLight\s*=\s*MAX\(0,\s*r_extralight\).*?litBand.*?extraLight/8.*?'
         r'virtualX.*?320.*?virtualX>>2.*?virtualEdgeRow%3\s*==\s*1.*?band&1.*?==\s*0',
         FLOOR_CEILING, "Corridor 7 planes reproduce the native three-row/four-column VGA shade pattern")
 if "bayer4" in FLOOR_CEILING:

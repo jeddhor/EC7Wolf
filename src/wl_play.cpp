@@ -849,7 +849,9 @@ void CheckKeys (void)
 			NewViewSize(viewsize-1);
 		if(Keyboard[sc_Equals] || Keyboard[sc_Minus])
 		{
-			SD_PlaySound("world/hitwall");
+			// Upstream plays world/hitwall here. Corridor 7's wall thud is a
+			// harsh, low sample that sounds like a glitch on a menu action, so
+			// resizing the view is silent.
 			if (viewsize < 21)
 				DrawPlayScreen();
 			changeSize = false;

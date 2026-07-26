@@ -40,6 +40,7 @@
 #include "wl_def.h"
 //#include "i_system.h"
 #include "w_wad.h"
+#include "wl_iwad.h"
 //#include "doomdef.h"
 //#include "r_local.h"
 //#include "r_sky.h"
@@ -244,6 +245,44 @@ static void FreeSpecialLights()
 //
 //==========================================================================
 
+// Corridor 7 reserves palette entries 15 and 254 for the lamps embedded in wall
+// graphics, and the infrared visor deliberately exempts them from its monochrome
+// rewrite so those lamps stay white while everything else turns red. Nothing
+// else may shade ONTO them, or ordinary artwork inherits that exemption and
+// glares white at whatever distance the colour matcher happens to choose them:
+// index 39 (the structural white) picked 15 at shade rows 0 through 2, which
+// read in play as "white up close, correct further away", and after row 0 was
+// made identity, as a narrow band that still glares from just the right spot.
+//
+// Returns the nearest entry that is not a reserved lamp, unless the source
+// texel IS one of them, in which case it keeps its own index.
+static BYTE PickAvoidingReserved (int r, int g, int b, int src)
+{
+	const BYTE picked = ColorMatcher.Pick (r, g, b);
+	if ((picked != 15 && picked != 254) || src == 15 || src == 254 ||
+		!IWad::CheckGameFilter("Corridor7"))
+	{
+		return picked;
+	}
+
+	int best = picked, bestdist = INT_MAX;
+	for (int i = 0; i < 256; ++i)
+	{
+		if (i == 15 || i == 254)
+			continue;
+		const int dr = r - GPalette.BaseColors[i].r;
+		const int dg = g - GPalette.BaseColors[i].g;
+		const int db = b - GPalette.BaseColors[i].b;
+		const int dist = dr*dr + dg*dg + db*db;
+		if (dist < bestdist)
+		{
+			bestdist = dist;
+			best = i;
+		}
+	}
+	return (BYTE)best;
+}
+
 void FDynamicColormap::BuildLights ()
 {
 	int l, c;
@@ -310,17 +349,18 @@ void FDynamicColormap::BuildLights ()
 				if (colors[c] == GPalette.BaseColors[c])
 					*shade++ = (BYTE)c;
 				else
-					*shade++ = ColorMatcher.Pick (colors[c].r, colors[c].g, colors[c].b);
+					*shade++ = PickAvoidingReserved (colors[c].r, colors[c].g,
+						colors[c].b, c);
 			}
 		}
 		else
 		{ // Colored light, so do the (slightly) slower thing
 			for (c = 0; c < 256; c++)
 			{
-				*shade++ = ColorMatcher.Pick (
+				*shade++ = PickAvoidingReserved (
 					(colors[c].r*lr)>>8,
 					(colors[c].g*lg)>>8,
-					(colors[c].b*lb)>>8);
+					(colors[c].b*lb)>>8, c);
 			}
 		}
 	}

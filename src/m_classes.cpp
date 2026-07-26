@@ -1,5 +1,6 @@
 #include "c_cvars.h"
 #include "m_classes.h"
+#include "c7_menu.h"
 #include "id_ca.h"
 #include "wl_def.h"
 #include "wl_menu.h"
@@ -53,6 +54,40 @@ void MenuItem::draw()
 
 	US_Print(BigFont, getString(), getTextColor());
 	PrintX = menu->getX() + menu->getIndent();
+}
+
+// --- value text for label/value skins ------------------------------------
+// These return what the row currently reads as, so a skin can lay a menu out as
+// two columns instead of letting each item paint itself. They deliberately
+// duplicate no drawing logic: each one reports the same state its draw() shows.
+
+FString BooleanMenuItem::getValueText() const
+{
+	return value ? "On" : "Off";
+}
+
+FString MenuSwitcherMenuItem::getValueText() const
+{
+	// A row that opens another screen shows an affordance, not a value.
+	return ">";
+}
+
+FString MultipleChoiceMenuItem::getValueText() const
+{
+	if(curOption < 0 || (unsigned)curOption >= numOptions || options[curOption] == NULL)
+		return FString();
+	return options[curOption];
+}
+
+FString SliderMenuItem::getValueText() const
+{
+	// Percent of full travel: the numeric scale differs per slider (volume runs
+	// to MAX_VOLUME, view size to 21), and a percentage is comparable across them.
+	if(max <= 0)
+		return FString();
+	FString out;
+	out.Format("%d%%", (value * 100 + max / 2) / max);
+	return out;
 }
 
 bool MenuItem::isSelected() const
@@ -497,6 +532,38 @@ void ControlMenuItem::activate()
 	}
 }
 
+FString ControlMenuItem::getValueText() const
+{
+	extern int SDL2Backconvert(int sc);
+
+	FString out;
+	const int key = SDL2Backconvert(button.keyboard);
+	if(button.keyboard >= 0 && button.keyboard < 512 && KeyNames[key])
+		out = KeyNames[key];
+	if(button.mouse != -1)
+	{
+		FString btn;
+		if(button.mouse >= ControlScheme::MWheel_Left && button.mouse <= ControlScheme::MWheel_Up)
+			btn = MWheelNames[button.mouse - ControlScheme::MWheel_Left];
+		else
+			btn.Format("MS%d", button.mouse);
+		if(out.IsNotEmpty())
+			out += " / ";
+		out += btn;
+	}
+	if(button.joystick != -1)
+	{
+		FString btn;
+		btn.Format("JS%d", button.joystick);
+		if(out.IsNotEmpty())
+			out += " / ";
+		out += btn;
+	}
+	if(out.IsEmpty())
+		out = "---";
+	return out;
+}
+
 void ControlMenuItem::draw()
 {
 	extern int SDL2Backconvert(int sc);
@@ -727,6 +794,15 @@ void Menu::drawMenu() const
 
 void Menu::draw() const
 {
+	// Corridor 7 replaces the whole presentation: splash art on the left, the
+	// menu in the cleared space on the right. The skin can decline (missing
+	// font or art), in which case the stock presentation below still runs.
+	if(C7Menu_Active() && C7Menu_Draw(this))
+	{
+		VW_UpdateScreen();
+		return;
+	}
+
 	if(backgroundPicture)
 	{
 		// The picture holds the window and every label; only the cursor moves.

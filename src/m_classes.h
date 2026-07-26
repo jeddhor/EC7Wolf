@@ -77,6 +77,12 @@ class MenuItem
 		virtual void	left() {}
 		virtual void	right() {}
 		virtual bool	playActivateSound() { return activateSoundEnabled; }
+		/**
+		 * The item's current value as text, for skins that lay a menu out as a
+		 * label column and a value column instead of letting each item paint
+		 * itself. Empty means the row has no value to show.
+		 */
+		virtual FString	getValueText() const { return FString(); }
 };
 
 class LabelMenuItem : public MenuItem
@@ -97,6 +103,7 @@ class BooleanMenuItem : public MenuItem
 
 		void	activate();
 		void	draw();
+		FString	getValueText() const;
 };
 
 class MenuSwitcherMenuItem : public MenuItem
@@ -111,6 +118,7 @@ class MenuSwitcherMenuItem : public MenuItem
 		MenuSwitcherMenuItem(const char string[36], Menu &menu, MENU_LISTENER_PROTOTYPE(activateListener)=NULL);
 
 		void	activate();
+		FString	getValueText() const;
 };
 
 class SliderMenuItem : public MenuItem
@@ -128,6 +136,7 @@ class SliderMenuItem : public MenuItem
 		void	left();
 		void	right();
 		bool	playActivateSound() { return false; }
+		FString	getValueText() const;
 };
 
 class MultipleChoiceMenuItem : public MenuItem
@@ -148,6 +157,7 @@ class MultipleChoiceMenuItem : public MenuItem
 		void	draw();
 		void	left();
 		void	right();
+		FString	getValueText() const;
 };
 
 class TextInputMenuItem : public MenuItem
@@ -184,6 +194,7 @@ class ControlMenuItem : public MenuItem
 		void	draw();
 		void	left();
 		void	right();
+		FString	getValueText() const;
 };
 
 class Menu
@@ -249,6 +260,7 @@ class Menu
 		void			setEscapeSound(FString sound) { escapeSound = sound; }
 		void			setHeadPicture(const char* picture, bool isAlt=false);
 		void			setHeadText(const char text[36], bool drawInStripes=false);
+		const char		*getHeadText() const { return headText; }
 		void			show();
 		/**
 		 * Should this menu show the Key, Mse. and Joy headers?

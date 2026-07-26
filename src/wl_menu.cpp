@@ -453,42 +453,36 @@ void CreateMenus()
 	const bool useEpisodeMenu = EpisodeInfo::GetNumEpisodes() > 1;
 	if(MenuStyle == MENUSTYLE_Corridor7)
 	{
-		// The whole main menu screen ships as one picture (chunk 12) with the
-		// labels painted in; only the arrow cursor is drawn by the engine at
-		// x=56, one column of item text tops measured from that picture:
-		// 58, 74, 83, 101, 110, 128, 137, 155, 172.
-		static const int itemHeights[9] = { 16, 9, 18, 9, 18, 9, 18, 17, 14 };
-		mainMenu.setBackground("C7G0012", 56, 58);
-		// Escape from the main menu triggers the quit prompt, which carries
-		// its own sound in Confirm(); the original plays nothing here.
+		// The released game shipped this screen as one picture with its labels
+		// painted in. The new shell draws the labels itself, so the picture is
+		// gone and the items carry real text again.
+		//
+		// Nomenclature is the original's: it says Mission and Building, never
+		// Game and Quit, and the difficulty ladder is a rank.
 		mainMenu.setEscapeSound("");
 
-		MenuItem *items[9];
 		if(gameinfo.PlayerClasses.Size() > 1)
-			items[0] = new MenuSwitcherMenuItem("New Mission", playerClasses);
+			mainMenu.addItem(new MenuSwitcherMenuItem("New Mission", playerClasses));
 		else if(!Net::IsArbiter())
-			items[0] = new MenuItem("New Mission", JoinNetGame);
+			mainMenu.addItem(new MenuItem("New Mission", JoinNetGame));
 		else if(useEpisodeMenu)
-			items[0] = new MenuSwitcherMenuItem("New Mission", episodes);
+			mainMenu.addItem(new MenuSwitcherMenuItem("New Mission", episodes));
 		else
-			items[0] = new MenuSwitcherMenuItem("New Mission", skills);
-		items[1] = new MenuSwitcherMenuItem("Adjust Audio", soundBase);
-		items[2] = new MenuSwitcherMenuItem("Adjust Visual", displayMenu);
-		items[3] = GameSave::GetLoadMenuItem();   // Retrieve Mission
-		items[4] = GameSave::GetSaveMenuItem();   // Store Mission
-		items[5] = new MenuItem("Resume Current Mission", PlayDemosOrReturnToGame);
-		items[6] = new MenuItem("Abort Current Mission", C7AbortMission);
-		items[7] = new MenuItem("High Scores", C7ViewHighScores);
-		items[8] = new MenuItem("Exit Building", QuitGame);
-		// Activating an entry is silent in the original; the quit prompt's
-		// sound is played by Confirm() when the dialog appears.
-		for(int i = 0;i < 9;++i)
-		{
-			items[i]->setTextVisible(false);
-			items[i]->setActivateSoundEnabled(false);
-			items[i]->setHeight(itemHeights[i]);
-			mainMenu.addItem(items[i]);
-		}
+			mainMenu.addItem(new MenuSwitcherMenuItem("New Mission", skills));
+
+		// The released game stores and retrieves missions; it never says save
+		// or load. The items themselves are the engine's own.
+		MenuItem *store = GameSave::GetSaveMenuItem();
+		MenuItem *retrieve = GameSave::GetLoadMenuItem();
+		store->setText("Store Mission");
+		retrieve->setText("Retrieve Mission");
+		mainMenu.addItem(store);
+		mainMenu.addItem(retrieve);
+		mainMenu.addItem(new MenuSwitcherMenuItem("Options", optionsMenu));
+		mainMenu.addItem(new MenuItem("Resume Current Mission", PlayDemosOrReturnToGame));
+		mainMenu.addItem(new MenuItem("Abort Current Mission", C7AbortMission));
+		mainMenu.addItem(new MenuItem("High Scores", C7ViewHighScores));
+		mainMenu.addItem(new MenuItem("Exit Building", QuitGame));
 	}
 	else
 	{
@@ -553,10 +547,24 @@ void CreateMenus()
 
 	optionsMenu.setHeadText(language["STR_OPTIONS"], true);
 	optionsMenu.setHeadPicture("M_OPTION");
+	if(MenuStyle == MENUSTYLE_Corridor7)
+	{
+		// Four categories under one Options screen, so the main menu stays
+		// short. The submenus themselves are the engine's existing ones -- only
+		// the grouping and the titles change.
+		optionsMenu.addItem(new MenuSwitcherMenuItem("Gameplay", automapMenu));
+		optionsMenu.addItem(new MenuSwitcherMenuItem("Graphics", displayMenu));
+		optionsMenu.addItem(new MenuSwitcherMenuItem("Audio", soundBase));
+		optionsMenu.addItem(new MenuSwitcherMenuItem("Controls", controlBase));
+
+	}
+	else
+	{
 	optionsMenu.addItem(new MenuSwitcherMenuItem(language["STR_CL"], controlBase));
 	optionsMenu.addItem(new MenuSwitcherMenuItem(language["STR_SD"], soundBase));
 	optionsMenu.addItem(new MenuSwitcherMenuItem(language["STR_DISPLAY"], displayMenu));
 	optionsMenu.addItem(new MenuSwitcherMenuItem(language["STR_AMOPTIONS"], automapMenu));
+	}
 
 	// Collect options and defaults
 	const char* soundEffectsOptions[] = {language["STR_NONE"], language["STR_PC"], language["STR_ALSB"] };
@@ -667,6 +675,23 @@ void CreateMenus()
 	const char* rotateOptions[] = { language["STR_AMROTATEOFF"], language["STR_AMROTATEON"], language["STR_AMROTATEOVERLAY"] };
 	const char* overlayOptions[] = { language["STR_AMOVERLAYOFF"], language["STR_AMOVERLAYON"], language["STR_AMOVERLAYBOTH"] };
 	automapMenu.setHeadText(language["STR_AMOPTIONS"]);
+
+	if(MenuStyle == MENUSTYLE_Corridor7)
+	{
+		// Applied last on purpose: every menu above sets its own generic title,
+		// so anything assigned earlier is overwritten before it is ever drawn.
+		optionsMenu.setHeadText("Options");
+		automapMenu.setHeadText("Gameplay");
+		displayMenu.setHeadText("Graphics");
+		soundBase.setHeadText("Audio");
+		controlBase.setHeadText("Controls");
+		controls.setHeadText("Controls");
+		resolutionMenu.setHeadText("Resolution");
+		mouseSensitivity.setHeadText("Mouse Sensitivity");
+		joySensitivity.setHeadText("Joystick Sensitivity");
+		skills.setHeadText("Choose Your Rank");
+		episodes.setHeadText("Choose Your Mission");
+	}
 	automapMenu.addItem(new MultipleChoiceMenuItem(ChangeAMOverlay, overlayOptions, 3, am_overlay));
 	automapMenu.addItem(new MultipleChoiceMenuItem(ChangeAMRotate, rotateOptions, 3, am_rotate));
 	automapMenu.addItem(new BooleanMenuItem(language["STR_AMTEXTURES"], am_drawtexturedwalls, ChangeAutomapFlag));
@@ -771,25 +796,32 @@ void US_ControlPanel (ScanCode scancode)
 
 	if(MenuStyle == MENUSTYLE_Corridor7)
 	{
-		// Fixed layout painted into the background picture:
-		// 0=New Mission 1=Adjust Audio 2=Adjust Visual 3=Retrieve Mission
-		// 4=Store Mission 5=Resume Current Mission 6=Abort Current Mission
-		// 7=High Scores 8=Exit Building
+		// Named rather than numbered: this block used to index the old
+		// picture-painted layout by hand, and silently enabled the wrong rows
+		// the moment the menu was reordered.
+		enum
+		{
+			C7MENU_NEW = 0, C7MENU_STORE, C7MENU_RETRIEVE, C7MENU_OPTIONS,
+			C7MENU_RESUME, C7MENU_ABORT, C7MENU_HIGHSCORES, C7MENU_EXIT
+		};
+
 		if(ingame)
 		{
-			mainMenu[0]->setEnabled(Net::InitVars.mode == Net::MODE_SinglePlayer); // Require explicit end game for net games
-			mainMenu[4]->setEnabled(Net::InitVars.mode == Net::MODE_SinglePlayer && players[ConsolePlayer].state != player_t::PST_DEAD);
-			mainMenu[5]->setEnabled(true);
-			mainMenu[6]->setEnabled(Net::IsArbiter());
+			mainMenu[C7MENU_NEW]->setEnabled(Net::InitVars.mode == Net::MODE_SinglePlayer); // Require explicit end game for net games
+			mainMenu[C7MENU_STORE]->setEnabled(Net::InitVars.mode == Net::MODE_SinglePlayer && players[ConsolePlayer].state != player_t::PST_DEAD);
+			mainMenu[C7MENU_RESUME]->setEnabled(true);
+			mainMenu[C7MENU_ABORT]->setEnabled(Net::IsArbiter());
 		}
 		else
 		{
-			mainMenu[0]->setEnabled(true);
-			mainMenu[4]->setEnabled(false);
-			mainMenu[5]->setEnabled(Net::InitVars.mode == Net::MODE_SinglePlayer);
-			mainMenu[6]->setEnabled(false);
+			mainMenu[C7MENU_NEW]->setEnabled(true);
+			mainMenu[C7MENU_STORE]->setEnabled(false);
+			mainMenu[C7MENU_RESUME]->setEnabled(false);
+			mainMenu[C7MENU_ABORT]->setEnabled(false);
 		}
-		mainMenu[7]->setEnabled(gameinfo.TrackHighScores == true && Net::InitVars.mode == Net::MODE_SinglePlayer);
+		mainMenu[C7MENU_OPTIONS]->setEnabled(true);
+		mainMenu[C7MENU_HIGHSCORES]->setEnabled(gameinfo.TrackHighScores == true && Net::InitVars.mode == Net::MODE_SinglePlayer);
+		mainMenu[C7MENU_EXIT]->setEnabled(true);
 	}
 	else if(ingame)
 	{

@@ -820,6 +820,20 @@ void SelectGame(TArray<FString> &wadfiles, const char* iwad, const char* datawad
 
 	NumIWads = base.Path.Size();
 
+	// Optional high-resolution menu art. It derives from the commercial splash
+	// screen, so it must never live in the source tree or the pk3; it sits next
+	// to the game data instead, and is simply absent for anyone who has not
+	// installed it. The menu falls back to a plain black backdrop without it.
+	if(base.Path.Size() > 0)
+	{
+		FString dir = base.Path[0];
+		long slash = dir.LastIndexOfAny("/\\");
+		dir = slash >= 0 ? dir.Left(slash + 1) : FString("");
+		FString extra = dir + "c7menu.pk3";
+		if(File(extra).exists())
+			wadfiles.Push(extra);
+	}
+
 	// Load in config autoloads
 	FString autoloadkey = FString("Autoload") + selectedGame->Autoname;
 	for(long dot = 0, dotterm;dot < (long)autoloadkey.Len();dot = dotterm+1)

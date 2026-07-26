@@ -80,6 +80,12 @@ namespace
 	int      g_extraLight     = 0;
 
 	bool     g_c7Map          = false;   // --capture-c7map: raise the C7 inset panel
+	// --capture-exitlevel: complete the level at this tic, taking the same path
+	// the elevator does (lnspec.cpp sets ex_completed), so a level transition can
+	// be exercised headlessly. The debug "quit level" key cannot be driven under
+	// Corridor 7 because its Tab modifier is the floor map.
+	long     g_exitLevelTic   = -1;
+	bool     g_exitLevelDone  = false;
 	bool     g_haveVisorMode  = false;   // --capture-visormode: force the C7 visor
 	int      g_visorMode      = 0;       // 0 off, 1 night vision, 2 infrared, 3 shock
 
@@ -163,9 +169,19 @@ namespace
 			// frame pacing is decoupled from the 70Hz simulation, so the tic a
 			// given frame lands on varies between runs. Anything measuring an
 			// animation rate has to bin by tic, not by frame.
-			Printf("Capture: wrote screenshot '%s' at frame %lu tic %lu\n",
+			// Player tile is logged too: "spawned in a wall" bugs are about
+			// where the pawn ended up, and a screenshot alone cannot say which
+			// tile that is.
+			int ptx = -1, pty = -1;
+			if(players[ConsolePlayer].mo)
+			{
+				ptx = players[ConsolePlayer].mo->tilex;
+				pty = players[ConsolePlayer].mo->tiley;
+			}
+			Printf("Capture: wrote screenshot '%s' at frame %lu tic %lu map %s player (%d,%d)\n",
 				path, (unsigned long)g_frameCount,
-				(unsigned long)gamestate.TimeCount);
+				(unsigned long)gamestate.TimeCount,
+				gamestate.mapname, ptx, pty);
 		}
 		else
 			Printf("Capture: FAILED to open screenshot '%s'\n", path);
@@ -293,6 +309,11 @@ void ParseArgs(int argc, char **argv)
 		else if(strcmp(arg, "--capture-c7map") == 0)
 		{
 			g_c7Map = true;
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-exitlevel") == 0 && i + 1 < argc)
+		{
+			g_exitLevelTic = atol(argv[++i]);
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-visormode") == 0 && i + 1 < argc)
@@ -429,6 +450,15 @@ void PreTic()
 {
 	if(!g_armed || map == NULL)
 		return;
+
+	if(g_exitLevelTic >= 0 && !g_exitLevelDone &&
+		(long)gamestate.TimeCount >= g_exitLevelTic)
+	{
+		g_exitLevelDone = true;
+		Printf("Capture: completing level at tic %lu\n",
+			(unsigned long)gamestate.TimeCount);
+		playstate = ex_completed;
+	}
 
 	// Force every door cell to a fixed slide amount each tic. Applied before the
 	// thinkers run so DynamicWalls::EndTic snapshots it and both renderers agree;

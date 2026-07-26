@@ -39,6 +39,7 @@
 
 #include "wl_def.h"
 #include "v_video.h"
+#include "wl_iwad.h"
 #include "m_swap.h"
 //#include "r_defs.h"
 //#include "r_utility.h"
@@ -759,7 +760,17 @@ bool DCanvas::ParseDrawTextureTags (FTexture *img, double x, double y, DWORD tag
 void DCanvas::VirtualToRealCoords(double &x, double &y, double &w, double &h,
 	double vwidth, double vheight, bool vbottom, bool handleaspect) const
 {
-	int myratio = handleaspect ? CheckRatio (Width, Height) : 0;
+	// Corridor 7 fills the whole screen, the way the DOS game filled a 4:3
+	// display and the way its own 3D view already does here. Leaving the 2D on
+	// the aspect-preserving mapping pillarboxed it inside a wide window while
+	// the view behind it stretched: the status bar grew black bars at both
+	// ends, the top message drifted toward the middle instead of tracking the
+	// left edge, and the tiled loading backdrop stopped reaching the sides.
+	// This is the single place the 320x200 HUD/page mapping is decided, so
+	// every one of those follows from it. Menus are not affected -- they scale
+	// through MenuToRealCoords, which does its own arithmetic.
+	const bool stretchToScreen = IWad::CheckGameFilter("Corridor7");
+	int myratio = (handleaspect && !stretchToScreen) ? CheckRatio (Width, Height) : 0;
 	double right = x + w;
 	double bottom = y + h;
 

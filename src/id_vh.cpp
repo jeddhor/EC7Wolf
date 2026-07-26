@@ -5,6 +5,7 @@
 #include "id_in.h"
 #include "id_vl.h"
 #include "id_vh.h"
+#include "r_artscale.h"
 #include "w_wad.h"
 #include "v_font.h"
 #include "v_palette.h"
@@ -393,6 +394,14 @@ void VWB_DrawGraphic(FTexture *tex, int ix, int iy, MenuOffset menu, FRemapTable
 
 void CA_CacheScreen(FTexture* tex, bool noaspect)
 {
+	// Every full-screen page in the game arrives here -- title, credits, high
+	// scores, the status report, the sign-on plate -- and every one of them is
+	// 320x200 art blown up to fill a modern window, which makes this the one
+	// place worth upscaling. Both draws below size themselves from the texture
+	// or from the screen rather than from a fixed 320x200, so a larger texture
+	// lands on exactly the same pixels; only the detail within them changes.
+	tex = R_UpscaledArt(tex);
+
 	screen->Lock(false);
 	screen->Clear(0, 0, SCREENWIDTH, SCREENHEIGHT, GPalette.BlackIndex, 0);
 	if(noaspect)

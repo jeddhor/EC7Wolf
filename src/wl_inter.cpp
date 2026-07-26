@@ -13,6 +13,7 @@
 #include "wl_agent.h"
 #include "wl_game.h"
 #include "wl_inter.h"
+#include "r_artscale.h"
 #include "wl_net.h"
 #include "wl_text.h"
 #include "g_mapinfo.h"
@@ -629,6 +630,32 @@ static void C7StencilPrintAt(FFont *font, int x, int y, const char *text,
 // texture at native texel size in REAL pixels: the 32x40 tile covered a tenth
 // of the width at 320x200 but only a twentieth at 640x480, so every tile came
 // out half the size the original shows (and smaller still above that).
+// Draws one of the Corridor 7 plates -- the loading bar's surround, the death
+// report's panel -- upscaled, but into exactly the rectangle it has always
+// occupied.
+//
+// The size has to be passed explicitly. The short form of VWB_DrawGraphic takes
+// the destination rectangle from the texture's own dimensions, which is right
+// only while the texture is still the size it was authored at; handed an
+// upscaled one it would place the plate several times too large. Reading the
+// authored size first and passing it through keeps the layout fixed, which
+// matters here beyond neatness: the loading meter is drawn at hard-coded
+// coordinates inside the plate and would otherwise no longer sit in it.
+static void C7DrawPlate(FTexture *tex, int x, int y)
+{
+	if(tex == NULL)
+		return;
+	const double w = tex->GetScaledWidthDouble();
+	const double h = tex->GetScaledHeightDouble();
+	VWB_DrawGraphic(R_UpscaledArt(tex), x, y, w, h);
+}
+
+// The skull pattern behind those plates is deliberately NOT upscaled. xBRZ reads
+// the edges of what it is given as edges of the image, but these are seams in
+// the middle of a repeating pattern, so every tile boundary would be filtered as
+// though the pattern stopped there -- a grid of seams across the backdrop.
+// Upscaling a tile correctly means telling the filter how it wraps, which it has
+// no way to express.
 static void C7DrawTiledBackdrop(FTexture *tex)
 {
 	if(tex == NULL)
@@ -663,7 +690,7 @@ void Corridor7Death(void)
 	// The DOS death report uses the small repeating skull tile and the
 	// centered 128x120 death plate, not the per-floor status-report artwork.
 	C7DrawTiledBackdrop(TexMan("C7G0004"));
-	VWB_DrawGraphic(TexMan("C7G0003"), 96, 40);
+	C7DrawPlate(TexMan("C7G0003"), 96, 40);
 
 	const unsigned int thisAliens = gamestate.killtotal ?
 		(static_cast<unsigned int>(gamestate.killcount)*100)/gamestate.killtotal : 100;
@@ -993,7 +1020,7 @@ void PreloadGraphics (bool showPsych)
 			// loading plate at (48,56). Its red 200x7 meter is drawn by
 			// PreloadUpdate inside that plate.
 			C7DrawTiledBackdrop(TexMan("C7G0004"));
-			VWB_DrawGraphic(TexMan("C7G0073"), 48, 56);
+			C7DrawPlate(TexMan("C7G0073"), 48, 56);
 		}
 		else
 		{

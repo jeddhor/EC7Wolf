@@ -85,6 +85,7 @@ initial_sources(
 	actor.cpp
 	am_map.cpp
 	c7_automap.cpp
+	v_ttf.cpp
 	colormatcher.cpp
 	config.cpp
 	c_cvars.cpp
@@ -345,6 +346,7 @@ target_include_directories(engine PRIVATE
 	${CMAKE_CURRENT_BINARY_DIR}
 	${CMAKE_CURRENT_SOURCE_DIR}
 	${CMAKE_CURRENT_SOURCE_DIR}/g_shared
+	${CMAKE_CURRENT_SOURCE_DIR}/../deps/stb
 )
 
 set_target_properties(engine PROPERTIES

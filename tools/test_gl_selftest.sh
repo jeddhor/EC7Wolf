@@ -27,14 +27,22 @@ if [ ! -x "$ec7wolf" ]; then
 fi
 
 log=$(mktemp /tmp/ec7wolf-gltest.XXXXXX)
-cleanup() { rm -f "$log"; }
+# The run has to happen inside the data directory, which for a working install is
+# also where the player's own ec7wolf.cfg lives. Without an explicit --config the
+# game would load it and write it back on exit, so running this test would
+# silently rewrite their settings -- renderer choice included. Every other script
+# in this suite already uses a scratch config; this one was the exception.
+cfg=$(mktemp -d /tmp/ec7wolf-gltest-cfg.XXXXXX)
+save=$(mktemp -d /tmp/ec7wolf-gltest-save.XXXXXX)
+cleanup() { rm -f "$log"; rm -rf "$cfg" "$save"; }
 trap cleanup EXIT HUP INT TERM
 
 set +e
 (
 	cd "$data_dir"
 	timeout 60s env SDL_AUDIODRIVER=dummy xvfb-run -a "$ec7wolf" \
-		--data CO7 --gltest "${ppm_out:-/dev/null}"
+		--data CO7 --config "$cfg/ec7wolf.cfg" --savedir "$save" \
+		--gltest "${ppm_out:-/dev/null}"
 ) >"$log" 2>&1
 status=$?
 set -e

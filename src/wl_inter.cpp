@@ -623,6 +623,31 @@ static void C7StencilPrintAt(FFont *font, int x, int y, const char *text,
 	VWB_DrawPropString(font, text, CR_UNTRANSLATED, true, paletteIndex);
 }
 
+// Corridor 7 tiles its skull backdrop across the original 320x200 screen, so
+// the pattern has to scale with the virtual screen rather than the output
+// resolution. VWB_DrawFill goes through DCanvas::FlatFill, which repeats the
+// texture at native texel size in REAL pixels: the 32x40 tile covered a tenth
+// of the width at 320x200 but only a twentieth at 640x480, so every tile came
+// out half the size the original shows (and smaller still above that).
+static void C7DrawTiledBackdrop(FTexture *tex)
+{
+	if(tex == NULL)
+		return;
+	const int tileW = tex->GetScaledWidth();
+	const int tileH = tex->GetScaledHeight();
+	if(tileW <= 0 || tileH <= 0)
+		return;
+	for(int y = 0;y < 200;y += tileH)
+	{
+		for(int x = 0;x < 320;x += tileW)
+		{
+			screen->DrawTexture(tex, x, y,
+				DTA_VirtualWidth, 320, DTA_VirtualHeight, 200,
+				DTA_TopOffset, 0, DTA_LeftOffset, 0, TAG_DONE);
+		}
+	}
+}
+
 void Corridor7Death(void)
 {
 	ClearSplitVWB();
@@ -637,7 +662,7 @@ void Corridor7Death(void)
 
 	// The DOS death report uses the small repeating skull tile and the
 	// centered 128x120 death plate, not the per-floor status-report artwork.
-	VWB_DrawFill(TexMan("C7G0004"), 0, 0, screenWidth, screenHeight);
+	C7DrawTiledBackdrop(TexMan("C7G0004"));
 	VWB_DrawGraphic(TexMan("C7G0003"), 96, 40);
 
 	const unsigned int thisAliens = gamestate.killtotal ?
@@ -967,7 +992,7 @@ void PreloadGraphics (bool showPsych)
 			// The CD release tiles its skull pattern and places the 224x56
 			// loading plate at (48,56). Its red 200x7 meter is drawn by
 			// PreloadUpdate inside that plate.
-			VWB_DrawFill(TexMan("C7G0004"), 0, 0, screenWidth, screenHeight);
+			C7DrawTiledBackdrop(TexMan("C7G0004"));
 			VWB_DrawGraphic(TexMan("C7G0073"), 48, 56);
 		}
 		else

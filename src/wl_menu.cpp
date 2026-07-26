@@ -135,6 +135,32 @@ MENU_LISTENER(C7AbortMission)
 	}
 	return true;
 }
+// Corridor 7 does not just cut to DOS: it holds a full-screen sign-off page
+// (C7G0013) for a moment, then fades that out and exits. Drawn as a stretched
+// 320x200 picture page like the game's other full-screen art, so it fills the
+// window at any resolution instead of sitting native-size in a corner.
+static void Corridor7ExitScreen()
+{
+	FTexture *const page = TexMan(TexMan.CheckForTexture("C7G0013", FTexture::TEX_Any));
+	if(page == NULL)
+		return;
+
+	VW_FadeOut();
+	screen->Lock(true);
+	screen->DrawTexture(page, 0, 0,
+		DTA_VirtualWidth, 320, DTA_VirtualHeight, 200,
+		DTA_TopOffset, 0, DTA_LeftOffset, 0, TAG_DONE);
+	screen->Unlock();
+	VW_UpdateScreen();
+	VW_FadeIn();
+
+	// Long enough to read, and interruptible so a keypress does not feel stuck.
+	IN_ClearKeysDown();
+	IN_UserInput(TICRATE*2, ACK_Local);
+
+	VW_FadeOut();
+}
+
 MENU_LISTENER(QuitGame)
 {
 	FString endString = gameinfo.QuitMessages[M_Random()%gameinfo.QuitMessages.Size()];
@@ -150,6 +176,8 @@ MENU_LISTENER(QuitGame)
 			MenuFadeOut();
 		else
 			VW_FadeOut();
+		if(IWad::CheckGameFilter("Corridor7"))
+			Corridor7ExitScreen();
 		Quit();
 	}
 

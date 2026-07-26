@@ -802,14 +802,21 @@ namespace
 		const float camFOV = players[ConsolePlayer].FOV;
 		Interpolation::Restore();
 
-		Printf("GL world: static walls=%u floors=%u ceilings=%u verts=%u; "
-			"dynamic faces=%u verts=%u (alpha=%.2f); masked faces=%u verts=%u; "
-			"sprite faces=%u verts=%u\n",
-			w.mesh.wallFaces, w.mesh.floorTiles, w.mesh.ceilingTiles,
-			(unsigned)w.mesh.vertices.Size(), w.dynMesh.wallFaces,
-			(unsigned)w.dynMesh.vertices.Size(), alpha,
-			w.maskedMesh.wallFaces, (unsigned)w.maskedMesh.vertices.Size(),
-			w.spriteMesh.wallFaces, (unsigned)w.spriteMesh.vertices.Size());
+		// Mesh census. Useful once per offscreen capture, which is what the
+		// world/parity tests read -- but BuildWorldGL runs every frame on the
+		// live path, so printing it there buries the console under thousands of
+		// lines whenever a door is moving. `prog == 0` on entry is the offscreen
+		// path (see above); the live path has to ask for it with vid_gldebug.
+		const bool logMesh = w.prog == 0 || vid_gldebug;
+		if(logMesh)
+			Printf("GL world: static walls=%u floors=%u ceilings=%u verts=%u; "
+				"dynamic faces=%u verts=%u (alpha=%.2f); masked faces=%u verts=%u; "
+				"sprite faces=%u verts=%u\n",
+				w.mesh.wallFaces, w.mesh.floorTiles, w.mesh.ceilingTiles,
+				(unsigned)w.mesh.vertices.Size(), w.dynMesh.wallFaces,
+				(unsigned)w.dynMesh.vertices.Size(), alpha,
+				w.maskedMesh.wallFaces, (unsigned)w.maskedMesh.vertices.Size(),
+				w.spriteMesh.wallFaces, (unsigned)w.spriteMesh.vertices.Size());
 		if(w.mesh.vertices.Size() == 0 && w.dynMesh.vertices.Size() == 0 &&
 			w.maskedMesh.vertices.Size() == 0 && w.spriteMesh.vertices.Size() == 0)
 			return false;
@@ -844,7 +851,10 @@ namespace
 			&uniqueTextures, &maskedTextures);
 		UploadMesh(w.spriteMesh, *w.texCache, *w.opacCache, w.spriteGL,
 			&uniqueTextures, &maskedTextures);
-		if(uniqueTextures || w.ownResources)
+		// Same rule: once per offscreen capture, or on demand. The live path
+		// uploads new textures whenever an unseen wall comes into view, so this
+		// is intermittent rather than per-frame, but it is still noise.
+		if(w.ownResources || (uniqueTextures && vid_gldebug))
 			Printf("GL world: uploaded %u unique index textures (%u with opacity).\n",
 				uniqueTextures, maskedTextures);
 

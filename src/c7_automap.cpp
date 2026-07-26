@@ -173,7 +173,27 @@ void C7Map_Draw()
 	// is Wolf3D's zone graph, which Corridor 7 inherited and which ECWolf still
 	// maintains for sound propagation. Without this, level 1's sealed side rooms
 	// showed as open floor where the original showed wall.
-	const GameMap::Zone *const playerZone = map->GetSpot(playerTX, playerTY, 0)->zone;
+	const GameMap::Zone *playerZone = map->GetSpot(playerTX, playerTY, 0)->zone;
+	if(playerZone == NULL)
+	{
+		// Standing in a doorway puts the player on a door tile, and a door
+		// belongs to no zone -- it is the link between two of them. CheckLink
+		// answers false for a NULL zone, so every tile on the map read as
+		// unreachable and the panel filled solid. Borrow a zone from a
+		// neighbouring tile: the player can only be inside a door that is open,
+		// and an open door links the zones on either side, so whichever of the
+		// two is found first gives the same reachability set.
+		static const int kAdjX[4] = { -1, 1, 0, 0 };
+		static const int kAdjY[4] = { 0, 0, -1, 1 };
+		for(int i = 0;i < 4 && playerZone == NULL;++i)
+		{
+			const int ax = playerTX + kAdjX[i];
+			const int ay = playerTY + kAdjY[i];
+			if(ax < 0 || ay < 0 || ax >= int(mapwidth) || ay >= int(mapheight))
+				continue;
+			playerZone = map->GetSpot(ax, ay, 0)->zone;
+		}
+	}
 	TMap<const GameMap::Zone *, bool> zoneReachable;
 
 	// Solid tiles as one run per stretch, so a row costs a handful of fills

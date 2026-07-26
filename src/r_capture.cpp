@@ -30,6 +30,7 @@
 #include "id_vl.h"
 #include "id_vh.h"
 #include "gamemap.h"
+#include "thingdef/thingdef.h"
 #ifdef ECWOLF_RENDERER_OPENGL
 #include "render/opengl/r_glworld.h"
 #endif
@@ -173,15 +174,26 @@ namespace
 			// where the pawn ended up, and a screenshot alone cannot say which
 			// tile that is.
 			int ptx = -1, pty = -1;
+			// Access cards too. They are per-floor, so whether they survive a
+			// level transition is a gameplay rule worth asserting, and the
+			// status bar cannot answer it from pixels alone -- the cheat that
+			// grants them also changes health, ammo and armour, so a screenshot
+			// diff of the bar cannot isolate the cards.
+			char cards[3] = { '-', '-', '\0' };
 			if(players[ConsolePlayer].mo)
 			{
-				ptx = players[ConsolePlayer].mo->tilex;
-				pty = players[ConsolePlayer].mo->tiley;
+				AActor *const pmo = players[ConsolePlayer].mo;
+				ptx = pmo->tilex;
+				pty = pmo->tiley;
+				if(pmo->FindInventory(ClassDef::FindClass("C7Static001")))
+					cards[0] = 'R';
+				if(pmo->FindInventory(ClassDef::FindClass("C7Static002")))
+					cards[1] = 'B';
 			}
-			Printf("Capture: wrote screenshot '%s' at frame %lu tic %lu map %s player (%d,%d)\n",
+			Printf("Capture: wrote screenshot '%s' at frame %lu tic %lu map %s player (%d,%d) cards %s\n",
 				path, (unsigned long)g_frameCount,
 				(unsigned long)gamestate.TimeCount,
-				gamestate.mapname, ptx, pty);
+				gamestate.mapname, ptx, pty, cards);
 		}
 		else
 			Printf("Capture: FAILED to open screenshot '%s'\n", path);

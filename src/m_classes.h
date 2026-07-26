@@ -45,6 +45,11 @@ class MenuItem
 		bool		activateSoundEnabled;
 		const Menu	*menu;
 		FString		activateSound;
+		// Row label for label/value skins. Several item types keep their
+		// current VALUE in `string` -- a multiple choice stores the selected
+		// option there, a slider its end caption -- so `string` cannot serve as
+		// a label for them and they carry one here instead.
+		FString		label;
 
 		EColorRange	getTextColor() const;
 
@@ -83,6 +88,13 @@ class MenuItem
 		 * itself. Empty means the row has no value to show.
 		 */
 		virtual FString	getValueText() const { return FString(); }
+		const char		*getLabel() const { return label.IsNotEmpty() ? label.GetChars() : string; }
+		void			setLabel(const char *text) { label = text; }
+		/**
+		 * True for rows that title a group rather than being selectable, so a
+		 * skin can set them apart instead of drawing them as ordinary rows.
+		 */
+		virtual bool	isSectionLabel() const { return false; }
 };
 
 class LabelMenuItem : public MenuItem
@@ -91,6 +103,7 @@ class LabelMenuItem : public MenuItem
 		LabelMenuItem(const char string[36]);
 
 		void draw();
+		bool isSectionLabel() const { return true; }
 };
 
 class BooleanMenuItem : public MenuItem

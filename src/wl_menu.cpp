@@ -420,6 +420,16 @@ MENU_LISTENER(AdjustViewSize)
 	return true;
 }
 
+// Adds an item with an explicit row label. Multiple-choice and slider items
+// keep their current value in the text a label/value skin would otherwise use,
+// so they have to be told what to call themselves.
+static MenuItem *AddLabeled(Menu &menu, MenuItem *item, const char *label)
+{
+	item->setLabel(label);
+	menu.addItem(item);
+	return item;
+}
+
 void CreateMenus()
 {
 	// HACK: Determine menu style by IWAD
@@ -598,15 +608,15 @@ void CreateMenus()
 		case smm_Midi: musicMode = 2; break;
 	}
 	soundBase.setHeadText(language["STR_SOUNDCONFIG"]);
-	soundBase.addItem(new LabelMenuItem(language["STR_DIGITALDEVICE"]));
-	soundBase.addItem(new MultipleChoiceMenuItem(SetDigitalSound, digitizedOptions, 2, digitizedMode));
-	soundBase.addItem(new SliderMenuItem(SoundVolume, 150, MAX_VOLUME, language["STR_SOFT"], language["STR_LOUD"]));
-	soundBase.addItem(new LabelMenuItem(language["STR_ADLIBDEVICE"]));
-	soundBase.addItem(new MultipleChoiceMenuItem(SetSoundEffects, soundEffectsOptions, 3, soundEffectsMode));
-	soundBase.addItem(new SliderMenuItem(AdlibVolume, 150, MAX_VOLUME, language["STR_SOFT"], language["STR_LOUD"], SD_UpdatePCSpeakerVolume));
-	soundBase.addItem(new LabelMenuItem(language["STR_MUSICDEVICE"]));
-	soundBase.addItem(new MultipleChoiceMenuItem(SetMusic, musicOptions, 3, musicMode));
-	soundBase.addItem(new SliderMenuItem(MusicVolume, 150, MAX_VOLUME, language["STR_SOFT"], language["STR_LOUD"], SD_UpdateMusicVolume));
+	AddLabeled(soundBase, new LabelMenuItem(language["STR_DIGITALDEVICE"]), "Digital Sound");
+	AddLabeled(soundBase, new MultipleChoiceMenuItem(SetDigitalSound, digitizedOptions, 2, digitizedMode), "Device");
+	AddLabeled(soundBase, new SliderMenuItem(SoundVolume, 150, MAX_VOLUME, language["STR_SOFT"], language["STR_LOUD"]), "Volume");
+	AddLabeled(soundBase, new LabelMenuItem(language["STR_ADLIBDEVICE"]), "Sound Effects");
+	AddLabeled(soundBase, new MultipleChoiceMenuItem(SetSoundEffects, soundEffectsOptions, 3, soundEffectsMode), "Device");
+	AddLabeled(soundBase, new SliderMenuItem(AdlibVolume, 150, MAX_VOLUME, language["STR_SOFT"], language["STR_LOUD"], SD_UpdatePCSpeakerVolume), "Volume");
+	AddLabeled(soundBase, new LabelMenuItem(language["STR_MUSICDEVICE"]), "Music");
+	AddLabeled(soundBase, new MultipleChoiceMenuItem(SetMusic, musicOptions, 3, musicMode), "Device");
+	AddLabeled(soundBase, new SliderMenuItem(MusicVolume, 150, MAX_VOLUME, language["STR_SOFT"], language["STR_LOUD"], SD_UpdateMusicVolume), "Volume");
 
 	controlBase.setHeadText(language["STR_CL"], true);
 	controlBase.setHeadPicture("M_CONTRL");
@@ -645,10 +655,10 @@ void CreateMenus()
 #if SDL_VERSION_ATLEAST(2,0,0)
 	displayMenu.addItem(new BooleanMenuItem(language["STR_VSYNC"], vid_vsync, ToggleVsync));
 #endif
-	displayMenu.addItem(new MultipleChoiceMenuItem(SetAspectRatio, aspectOptions, 8, vid_aspect));
+	AddLabeled(displayMenu, new MultipleChoiceMenuItem(SetAspectRatio, aspectOptions, 8, vid_aspect), "Aspect Ratio");
 	displayMenu.addItem(new MenuSwitcherMenuItem(language["STR_SELECTRES"], resolutionMenu, EnterResolutionSelection));
 	displayMenu.addItem(new LabelMenuItem(language["STR_SCREENSIZE"]));
-	displayMenu.addItem(new SliderMenuItem(viewsize, 110, 21, language["STR_SMALL"], language["STR_LARGE"], AdjustViewSize));
+	AddLabeled(displayMenu, new SliderMenuItem(viewsize, 110, 21, language["STR_SMALL"], language["STR_LARGE"], AdjustViewSize), "View Size");
 
 	resolutionMenu.setHeadText(language["STR_SELECTRES"]);
 
@@ -692,8 +702,8 @@ void CreateMenus()
 		skills.setHeadText("Choose Your Rank");
 		episodes.setHeadText("Choose Your Mission");
 	}
-	automapMenu.addItem(new MultipleChoiceMenuItem(ChangeAMOverlay, overlayOptions, 3, am_overlay));
-	automapMenu.addItem(new MultipleChoiceMenuItem(ChangeAMRotate, rotateOptions, 3, am_rotate));
+	AddLabeled(automapMenu, new MultipleChoiceMenuItem(ChangeAMOverlay, overlayOptions, 3, am_overlay), "Map Overlay");
+	AddLabeled(automapMenu, new MultipleChoiceMenuItem(ChangeAMRotate, rotateOptions, 3, am_rotate), "Rotate Map");
 	automapMenu.addItem(new BooleanMenuItem(language["STR_AMTEXTURES"], am_drawtexturedwalls, ChangeAutomapFlag));
 	automapMenu.addItem(new BooleanMenuItem(language["STR_AMFLOORS"], am_drawfloors, ChangeAutomapFlag));
 	automapMenu.addItem(new BooleanMenuItem(language["STR_AMTEXTUREDOVERLAY"], am_overlaytextured, ChangeAutomapFlag));

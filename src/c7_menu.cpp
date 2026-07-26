@@ -222,6 +222,24 @@ bool C7Menu_Draw(const Menu *menu)
 		if(y + rowStep > listBottom)
 			break;
 
+		// A section label titles the rows under it rather than being one of
+		// them, so it is set in small dim capitals over a hairline instead of
+		// being drawn as an ordinary row.
+		if(item->isSectionLabel())
+		{
+			FString head = item->getLabel();
+			head.ToUpper();
+			const int sy = y + Scaled(12);
+			V_TTDrawText(g_bold, Scaled(13), labelX, sy, head,
+				kAmberDimR, kAmberDimG, kAmberDimB);
+			const int hw = V_TTTextWidth(g_bold, Scaled(13), head);
+			screen->Clear(labelX + hw + Scaled(10), sy + Scaled(7),
+				labelX + ruleW, sy + Scaled(7) + 1,
+				ColorMatcher.Pick(52, 44, 30), 0);
+			y += rowStep;
+			continue;
+		}
+
 		const bool active = (i == cur);
 		const bool usable = item->isEnabled();
 		int r = kWhiteR, g = kWhiteG, b = kWhiteB;
@@ -238,7 +256,7 @@ bool C7Menu_Draw(const Menu *menu)
 		}
 
 		V_TTDrawText(active ? g_bold : g_regular, textSize, labelX, y,
-			item->getString(), r, g, b);
+			item->getLabel(), r, g, b);
 
 		const FString value = isMain ? FString() : item->getValueText();
 		if(value.IsNotEmpty())

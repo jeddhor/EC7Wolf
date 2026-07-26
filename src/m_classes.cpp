@@ -76,7 +76,19 @@ FString MultipleChoiceMenuItem::getValueText() const
 {
 	if(curOption < 0 || (unsigned)curOption >= numOptions || options[curOption] == NULL)
 		return FString();
-	return options[curOption];
+
+	FString value = options[curOption];
+	// Some option lists name themselves, because without a label column the
+	// option text was the only thing on the row -- "Aspect: Auto". Once the row
+	// has a real label that prefix is said twice, so drop it. Only when the item
+	// carries an explicit label, so untouched menus keep reading as before.
+	if(label.IsNotEmpty())
+	{
+		const long sep = value.IndexOf(": ");
+		if(sep > 0)
+			value = value.Mid(sep + 2);
+	}
+	return value;
 }
 
 FString SliderMenuItem::getValueText() const

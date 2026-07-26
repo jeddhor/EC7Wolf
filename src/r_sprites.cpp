@@ -450,7 +450,7 @@ static BYTE C7CycleSpriteColor(BYTE color)
 	if(IWad::CheckGameFilter("Corridor7") && color >= 208 && color <= 239)
 	{
 		const int base = color & ~7;
-		const int phase = (gamestate.TimeCount >> 3) & 7;
+		const int phase = (gamestate.TimeCount >> C7_RAMP_CYCLE_SHIFT) & 7;
 		// Rotates DOWNWARD, the same direction as Corridor7CycleColor in
 		// wl_draw.cpp and the GL shader. This read -phase, so a lit texel on a
 		// sprite crawled the opposite way to the identical texel on a wall --

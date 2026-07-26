@@ -92,6 +92,16 @@ actor C7Player : PlayerPawn
 	}
 }
 
+// Frame durations below are DECORATE tics, which ECWolf authors in Doom's 35Hz
+// and doubles at parse time to reach its 70Hz TICRATE. The released game's
+// attack table is in 70Hz tics, so a value copied from it verbatim runs at half
+// speed -- which is what these tables used to do.
+//
+// Measured from a 70fps capture of the DOS game holding fire (see
+// tools/dosbox/capture_corridor7_timing.sh): every weapon frame dwells exactly
+// 6 tics, flat across 82 consecutive cycles with no variance. That is DECORATE
+// 3, and it matches Wolf3D's own attackinfo table, which also uses 6 tics and
+// which ECWolf's wolfweapons.txt likewise writes as 3.
 actor C7Weapon : Weapon
 {
 	weapon.yadjust 32
@@ -119,10 +129,10 @@ actor C7Bayonet : C7Weapon
 			loop
 		Fire:
 		Hold:
-			C746 A 6
-			C747 A 6
-			C748 A 6 bright A_CustomPunch(random(0, 255), true, CPF_ALWAYSPLAYSOUND)
-			C749 A 6
+			C746 A 3
+			C747 A 3
+			C748 A 3 bright A_CustomPunch(random(0, 255), true, CPF_ALWAYSPLAYSOUND)
+			C749 A 3
 			TNT1 A 0 A_ReFire
 			goto Ready
 		Spawn:
@@ -143,13 +153,13 @@ actor C7M16 : C7Weapon
 			C761 A 1 A_WeaponReady
 			loop
 		Fire:
-			C754 A 6
-			C755 A 6
+			C754 A 3
+			C755 A 3
 		Hold:
-			C756 A 6 bright A_C7GunAttack(2)
+			C756 A 3 bright A_C7GunAttack(2)
 			// A_ReFire changes the psprite immediately when its state is entered.
 			// Branch after C757 so both native firing frames remain visible.
-			C757 A 6
+			C757 A 3
 			TNT1 A 0 A_ReFire
 			goto Ready
 		Spawn:
@@ -173,10 +183,10 @@ actor C7M343 : C7Weapon
 		Hold:
 			// Restart held bursts at the muzzle flash, then advance through the
 			// complete rotating-barrel sequence.
-			C762 A 6
-			C763 A 6
-			C764 A 6 bright A_C7GunAttack(3)
-			C765 A 6
+			C762 A 3
+			C763 A 3
+			C764 A 3 bright A_C7GunAttack(3)
+			C765 A 3
 			TNT1 A 0 A_ReFire
 			goto Ready
 		Spawn:
@@ -197,11 +207,11 @@ actor C7DualBlaster : C7Weapon
 			C777 A 1 A_WeaponReady
 			loop
 		Fire:
-			C770 A 6
-			C771 A 6
+			C770 A 3
+			C771 A 3
 		Hold:
-			C772 A 6 bright A_C7GunAttack(4)
-			C773 A 6 bright
+			C772 A 3 bright A_C7GunAttack(4)
+			C773 A 3 bright
 			TNT1 A 0 A_ReFire
 			goto Ready
 		Spawn:
@@ -222,12 +232,14 @@ actor C7Disintegrator : C7Weapon
 			C809 A 1 A_WeaponReady
 			loop
 		Fire:
-			C802 A 6
-			C803 A 6
+			C802 A 3
+			C803 A 3
 		Hold:
-			// The released attack table holds the peak discharge for 20 tics.
-			C804 A 20 bright A_C7GunAttack(7)
-			C805 A 6
+			// The released attack table holds the peak discharge for 20 tics,
+			// which is DECORATE 10 -- durations here are in Doom's 35Hz and are
+			// doubled at parse time to reach ECWolf's 70Hz TICRATE.
+			C804 A 10 bright A_C7GunAttack(7)
+			C805 A 3
 			TNT1 A 0 A_ReFire
 			goto Ready
 		Spawn:
@@ -249,14 +261,14 @@ actor C7Shotgun : C7Weapon
 			loop
 		Fire:
 		Hold:
-			C786 A 6
-			C787 A 6
-			C788 A 6 bright A_C7GunAttack(1)
-			C789 A 6
-			C810 A 12
-			C811 A 12
-			C812 A 12
-			C813 A 12
+			C786 A 3
+			C787 A 3
+			C788 A 3 bright A_C7GunAttack(1)
+			C789 A 3
+			C810 A 6
+			C811 A 6
+			C812 A 6
+			C813 A 6
 			TNT1 A 0 A_ReFire
 			goto Ready
 		Spawn:
@@ -277,11 +289,11 @@ actor C7PlasmaRifle : C7Weapon
 			C785 A 1 A_WeaponReady
 			loop
 		Fire:
-			C778 A 6
-			C779 A 6
+			C778 A 3
+			C779 A 3
 		Hold:
-			C780 A 20 bright A_FireCustomMissile("C7PlasmaBolt")
-			C781 A 6
+			C780 A 10 bright A_FireCustomMissile("C7PlasmaBolt")
+			C781 A 3
 			TNT1 A 0 A_ReFire
 			goto Ready
 		Spawn:
@@ -302,11 +314,11 @@ actor C7AssaultCannon : C7Weapon
 			C801 A 1 A_WeaponReady
 			loop
 		Fire:
-			C794 A 6
-			C795 A 6
+			C794 A 3
+			C795 A 3
 		Hold:
-			C796 A 6 bright A_C7GunAttack(6)
-			C797 A 6
+			C796 A 3 bright A_C7GunAttack(6)
+			C797 A 3
 			TNT1 A 0 A_ReFire
 			goto Ready
 		Spawn:

@@ -159,8 +159,13 @@ namespace
 				SCREENWIDTH, SCREENHEIGHT, pitch);
 			M_FinishPNG(file);
 			fclose(file);
-			Printf("Capture: wrote screenshot '%s' at frame %lu\n",
-				path, (unsigned long)g_frameCount);
+			// The tic is reported alongside the frame because they are not 1:1:
+			// frame pacing is decoupled from the 70Hz simulation, so the tic a
+			// given frame lands on varies between runs. Anything measuring an
+			// animation rate has to bin by tic, not by frame.
+			Printf("Capture: wrote screenshot '%s' at frame %lu tic %lu\n",
+				path, (unsigned long)g_frameCount,
+				(unsigned long)gamestate.TimeCount);
 		}
 		else
 			Printf("Capture: FAILED to open screenshot '%s'\n", path);

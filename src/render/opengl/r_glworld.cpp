@@ -920,7 +920,7 @@ namespace
 		// --- shading uniforms mirror the software renderer exactly ---
 		const int shade = LIGHT2SHADE(gLevelLight + r_extralight);
 		const bool corridor7 = IWad::CheckGameFilter("Corridor7");
-		const int cyclePhase = (int)((gamestate.TimeCount >> 3) & 7);
+		const int cyclePhase = (int)((gamestate.TimeCount >> C7_RAMP_CYCLE_SHIFT) & 7);
 
 		// Plane heights exactly as R_DrawPlane receives them: floor = viewz,
 		// ceiling = viewz + level depth. The shader takes their magnitude.

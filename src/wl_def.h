@@ -100,6 +100,24 @@ typedef SDWORD int32;
 static inline uint32_t MS2TICS(uint32_t ms) { return ms * 7 / 100; }
 static inline uint32_t TICS2MS(uint32_t tics) { return tics * 100 / 7; }
 
+// Corridor 7 rotates its four eight-colour VGA ramps (208..239) to animate the
+// blinking and travelling lights baked into wall, sprite and weapon artwork.
+// The released game advances the rotation once per game-loop pass, so its speed
+// is bound to the emulated CPU rather than to the tic clock, and the VGA retrace
+// quantises it: measured from 70fps captures of the DOS game facing a force-field
+// wall, a phase lasts exactly 1 tic at 60000 DOSBox cycles (70Hz, the retrace
+// ceiling) and exactly 2 tics at 20000 (35Hz, one step every second retrace).
+//
+// Two tics is what a period-correct 486DX2-66 produced, and it is half the
+// absolute ceiling, so it is the value used here. Driving the rotation off the
+// tic clock rather than off our own frame rate keeps it stable under an uncapped
+// GL renderer, where a per-frame step would strobe.
+//
+// Measure this scene with a lab map, not a shipped level: level 1's start has no
+// ramp-coloured wall in view, and a capture there reads a wandering actor
+// instead -- which is tic-driven and gives a completely wrong answer.
+#define C7_RAMP_CYCLE_SHIFT 1
+
 //
 // tile constants
 //

@@ -43,6 +43,8 @@ R_SPRITES = (ROOT / "src/r_sprites.cpp").read_text()
 NATIVE_ACTORS = (ROOT / "wadsrc/static/actors/native.txt").read_text()
 LOCKDEFS = (ROOT / "wadsrc/static/lockdefs.txt").read_text()
 THINGDEF_CODEPTR = (ROOT / "src/thingdef/thingdef_codeptr.cpp").read_text()
+WL_DEF = (ROOT / "src/wl_def.h").read_text()
+GLWORLD = (ROOT / "src/render/opengl/r_glworld.cpp").read_text()
 
 
 def require(pattern: str, text: str, description: str) -> None:
@@ -165,7 +167,15 @@ require(r'SetFrameTexture.*?C7W%04u.*?corridor7WallID-1\+frame', LNSPEC, "Corrid
 require(r'class\s+C7AnimatedWall.*?\+\+tics\s*<\s*8.*?\+\+frame', LNSPEC, "Corridor 7 chamber doors visibly advance their opening frames")
 require(r'ActivateTrigger.*?trig\.active\s*&&\s*trig\.isSecret.*?\+\+gamestate\.secretcount.*?trig\.active\s*=\s*false',
         GAMEMAP, "successful secret walls count exactly once")
-require(r'color\s*>=\s*208\s*&&\s*color\s*<=\s*239.*?color\s*&\s*~7.*?TimeCount\s*>>\s*3', WL_DRAW, "all four Corridor 7 VGA palette ramps cycle every eight tics")
+# The rotation rate is measured, not chosen: facing a force-field wall in the
+# released game, a phase lasts exactly 2 tics at 20000 DOSBox cycles and 1 tic at
+# 60000 (the 70Hz retrace ceiling). Shift 1 is the 2-tic value. All three render
+# paths must read the same constant or a wall and the sprite in front of it will
+# rotate at different speeds.
+require(r'#define\s+C7_RAMP_CYCLE_SHIFT\s+1\b', WL_DEF, "Corridor 7 VGA ramps rotate one phase every two tics")
+require(r'color\s*>=\s*208\s*&&\s*color\s*<=\s*239.*?color\s*&\s*~7.*?TimeCount\s*>>\s*C7_RAMP_CYCLE_SHIFT', WL_DRAW, "Corridor 7 wall ramps rotate on the shared cycle constant")
+require(r'color\s*>=\s*208\s*&&\s*color\s*<=\s*239.*?color\s*&\s*~7.*?TimeCount\s*>>\s*C7_RAMP_CYCLE_SHIFT', R_SPRITES, "Corridor 7 sprite ramps rotate on the shared cycle constant")
+require(r'cyclePhase\s*=.*?TimeCount\s*>>\s*C7_RAMP_CYCLE_SHIFT', GLWORLD, "the GL renderer rotates ramps on the shared cycle constant")
 require(r'ShadeWallColor.*?GPalette\.Remap\[15\].*?GPalette\.Remap\[254\].*?GPalette\.Remap\[208\].*?GPalette\.Remap\[239\].*?NormalLight\.Maps\[color\]', WL_DRAW,
         "Corridor 7 dedicated lamp whites and animated light ramps remain full-bright")
 if re.search(r'ShadeWallColor.*?GPalette\.Remap\[39\]', WL_DRAW, re.DOTALL):
@@ -358,7 +368,10 @@ require(r'CheckGameFilter\("Corridor7"\)\)\s*\n\s*PlaySoundLocActor\(pickupsound
         INVENTORY, "native Corridor 7 pickups do not play inherited Wolf sounds")
 if re.search(r'c7/mine/arm|C063\s+A\s+12\s+A_PlaySound', PLAYER):
     raise SystemExit("Corridor 7 definition check failed: native mine arming must remain silent")
-require(r'actor\s+C7Shotgun.*?C810\s+A\s+12.*?C813\s+A\s+12.*?goto\s+Ready',
+# Durations are deliberately not pinned here: they are measured (see the
+# C7Weapon comment in player.txt) and belong to the timing check below. What
+# this guards is that the reload runs C810..C813 and stops before C814.
+require(r'actor\s+C7Shotgun.*?C810\s+A\s+\d+.*?C813\s+A\s+\d+.*?goto\s+Ready',
         PLAYER, "Ithaca reload ends before the C814 Tebazile sprite")
 shotgun = re.search(r'actor\s+C7Shotgun(.*?)actor\s+C7PlasmaRifle', PLAYER, re.DOTALL)
 if shotgun is None or "C814" in shotgun.group(1):
@@ -456,14 +469,16 @@ for weapon in (
         raise SystemExit(
             f"Corridor 7 definition check failed: weapon {weapon} has no held-fire branch"
         )
-require(r'actor\s+C7Bayonet.*?Fire:\s*Hold:.*?C746\s+A\s+6.*?'
-        r'C748\s+A\s+6\s+bright\s+A_CustomPunch.*?C749\s+A\s+6\s*'
+require(r'actor\s+C7Bayonet.*?Fire:\s*Hold:.*?C746\s+A\s+\d+.*?'
+        r'C748\s+A\s+\d+\s+bright\s+A_CustomPunch.*?C749\s+A\s+\d+\s*'
         r'TNT1\s+A\s+0\s+A_ReFire', PLAYER,
         "Taser held fire repeats its complete native attack sequence")
-require(r'actor\s+C7M16.*?C756\s+A\s+6\s+bright\s+A_C7GunAttack\(2\).*?'
-        r'C757\s+A\s+6\s+TNT1\s+A\s+0\s+A_ReFire', PLAYER,
+# These check firing SEQUENCE, not duration. Durations are measured and are
+# asserted once, below, so a re-measurement does not have to touch every one.
+require(r'actor\s+C7M16.*?C756\s+A\s+\d+\s+bright\s+A_C7GunAttack\(2\).*?'
+        r'C757\s+A\s+\d+\s+TNT1\s+A\s+0\s+A_ReFire', PLAYER,
         "M-24 held fire draws both released jiggle frames before refiring")
-require(r'actor\s+C7M343.*?Fire:\s*Hold:.*?C762\s+A\s+6.*?C765\s+A\s+6\s*'
+require(r'actor\s+C7M343.*?Fire:\s*Hold:.*?C762\s+A\s+\d+.*?C765\s+A\s+\d+\s*'
         r'TNT1\s+A\s+0\s+A_ReFire', PLAYER,
         "M-343 held bursts replay the muzzle flash and complete barrel cycle")
 for weapon, action_frame in {
@@ -471,16 +486,47 @@ for weapon, action_frame in {
     "C7PlasmaRifle": "C781",
     "C7AssaultCannon": "C797",
 }.items():
-    require(rf'actor\s+{weapon}.*?{action_frame}\s+A\s+6(?:\s+bright)?\s*'
+    require(rf'actor\s+{weapon}.*?{action_frame}\s+A\s+\d+(?:\s+bright)?\s*'
             r'TNT1\s+A\s+0\s+A_ReFire', PLAYER,
             f"{weapon} displays its final firing frame before held refire")
-require(r'actor\s+C7Disintegrator.*?Fire:.*?C802\s+A\s+6.*?C803\s+A\s+6.*?'
-        r'Hold:.*?C804\s+A\s+20\s+bright\s+A_C7GunAttack\(7\).*?'
-        r'C805\s+A\s+6\s+TNT1\s+A\s+0\s+A_ReFire', PLAYER,
+require(r'actor\s+C7Disintegrator.*?Fire:.*?C802\s+A\s+\d+.*?C803\s+A\s+\d+.*?'
+        r'Hold:.*?C804\s+A\s+\d+\s+bright\s+A_C7GunAttack\(7\).*?'
+        r'C805\s+A\s+\d+\s+TNT1\s+A\s+0\s+A_ReFire', PLAYER,
         "Disintegrator holds on its final two firing frames without showing its movement pose")
-require(r'actor\s+C7Shotgun.*?Fire:\s*Hold:.*?C810\s+A\s+12.*?'
-        r'C813\s+A\s+12\s+TNT1\s+A\s+0\s+A_ReFire', PLAYER,
+require(r'actor\s+C7Shotgun.*?Fire:\s*Hold:.*?C810\s+A\s+\d+.*?'
+        r'C813\s+A\s+\d+\s+TNT1\s+A\s+0\s+A_ReFire', PLAYER,
         "Ithaca held fire completes every pump frame before repeating")
+
+# Measured from a 70fps capture of the released game holding fire: every weapon
+# animation frame dwells exactly 6 tics. DECORATE is authored in Doom's 35Hz and
+# doubled at parse time, so that is 3 here. Copying the released 70Hz table
+# verbatim -- which these states used to do -- runs the guns at half speed.
+# Duration 1 is A_WeaponReady's poll loop, not an animation frame.
+# Every duration maps to a released 70Hz tic count: 1 is the A_WeaponReady poll
+# loop, 3 is the measured 6-tic firing frame, 6 is the shotgun's 12-tic pump, and
+# 10 is the disintegrator/plasma 20-tic peak discharge.
+_ALLOWED_WEAPON_DURATIONS = {1: "poll", 3: "6-tic firing frame", 6: "12-tic pump",
+                             10: "20-tic peak discharge"}
+_weapon_block = re.search(r'actor\s+C7Weapon\s*:(.*)\Z', PLAYER, re.DOTALL).group(1)
+_base_frames = 0
+for _actor in re.finditer(r'actor\s+(C7\w+)\s*:\s*C7Weapon(.*?)(?=\nactor\s|\Z)',
+                          _weapon_block, re.DOTALL):
+    _name, _body = _actor.group(1), _actor.group(2)
+    for _frame, _dur in re.findall(r'\n\s+(C\d{3}) [A-Z] (\d+)', _body):
+        if int(_dur) not in _ALLOWED_WEAPON_DURATIONS:
+            raise SystemExit(
+                "Corridor 7 definition check failed: %s frame %s has duration %s; "
+                "weapon frames are measured, and %s is not one of %s"
+                % (_name, _frame, _dur, _dur, sorted(_ALLOWED_WEAPON_DURATIONS)))
+        if int(_dur) == 3:
+            _base_frames += 1
+# A regression that copies the released 70Hz table verbatim shows up as 6 across
+# the board, which leaves no frames at the measured base at all.
+if _base_frames < 24:
+    raise SystemExit(
+        "Corridor 7 definition check failed: only %d weapon frames use the measured "
+        "3-tic base; the released tables are 6 tics per frame, halved to 3 here"
+        % _base_frames)
 for weapon, movement_frame in {
     "C7Shotgun": "C790",
     "C7M16": "C758",
@@ -504,7 +550,7 @@ if "corridor7Poses" in WL_DRAW:
 if "corridor7Frame" in WL_DRAW:
     raise SystemExit("Corridor 7 definition check failed: weapon bob must not copy live Frames")
 require(r'C7CycleSpriteColor.*?color\s*>=\s*208\s*&&\s*color\s*<=\s*239.*?'
-        r'gamestate\.TimeCount\s*>>\s*3.*?C7ShadePlayerSpriteColor.*?'
+        r'gamestate\.TimeCount\s*>>\s*C7_RAMP_CYCLE_SHIFT.*?C7ShadePlayerSpriteColor.*?'
         r'color\s*>=\s*208\s*&&\s*color\s*<=\s*239.*?C7CycleSpriteColor\(color\).*?'
         r'luminous\s*\?\s*NormalLight\.Maps\[color\]\s*:\s*colormap\[color\].*?'
         r'R_DrawPlayerSprite.*?C7ShadePlayerSpriteColor\(src\[y>>FRACBITS\],\s*colormap\)',

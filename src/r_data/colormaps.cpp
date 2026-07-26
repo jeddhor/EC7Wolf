@@ -245,21 +245,48 @@ static void FreeSpecialLights()
 //
 //==========================================================================
 
-// Corridor 7 reserves palette entries 15 and 254 for the lamps embedded in wall
-// graphics, and the infrared visor deliberately exempts them from its monochrome
-// rewrite so those lamps stay white while everything else turns red. Nothing
-// else may shade ONTO them, or ordinary artwork inherits that exemption and
-// glares white at whatever distance the colour matcher happens to choose them:
-// index 39 (the structural white) picked 15 at shade rows 0 through 2, which
-// read in play as "white up close, correct further away", and after row 0 was
-// made identity, as a narrow band that still glares from just the right spot.
+// The infrared visor leaves a set of palette entries at their source colour --
+// the lamps embedded in wall graphics and the instrumentation meant to burn
+// through the tint. Nothing else may be shaded ONTO them, or ordinary artwork
+// inherits that exemption and shows untinted at whatever distance the colour
+// matcher happens to choose them.
 //
-// Returns the nearest entry that is not a reserved lamp, unless the source
-// texel IS one of them, in which case it keeps its own index.
+// The set is bigger than the two lamp entries this used to reserve. C7's
+// palette holds near-duplicates of its ramp greys down in the low EGA block --
+// index 7 is (170,170,170) against the ramp's (174,174,174), index 8 is
+// (85,85,85) against (81,81,81) -- and ColorMatcher.Pick returns the LOWEST of
+// a tie, so shaded wall art landed on 7 and 8 constantly. That stayed invisible
+// while the visor was a computed transform tinting everything except two
+// hand-written exemptions. Once the visor became the game's own measured DAC,
+// which leaves the whole low block alone, those texels began showing as raw
+// grey through infrared -- thousands of them in a single view.
+//
+// Which indices are exempt is data, not a rule chosen here:
+// V_IsCorridor7VisorExempt reads it back off the measured table. Index 254 is
+// reserved on top of that -- infrared blacks it out rather than leaving it, but
+// it is the lamp halo and equally must not collect ordinary artwork.
+static bool IsReservedIndex (int i)
+{
+	return i == 254 || V_IsCorridor7VisorExempt (i);
+}
+
+// The two entries the game actually wants to burn through the visor: the lamp
+// core and its halo ring. Those are allowed to survive as themselves; every
+// other reserved entry must be shaded away, because the original's own light
+// table never puts one on screen. Captured under infrared in the start
+// corridor, the released game emits index 15 (2608 texels of lamp) and not a
+// single texel of 7 or 8, even though its wall art contains both.
+static bool IsLampIndex (int i)
+{
+	return i == 15 || i == 254;
+}
+
+// Returns the nearest entry that is not reserved, unless the source texel IS
+// one of them, in which case it keeps its own index.
 static BYTE PickAvoidingReserved (int r, int g, int b, int src)
 {
 	const BYTE picked = ColorMatcher.Pick (r, g, b);
-	if ((picked != 15 && picked != 254) || src == 15 || src == 254 ||
+	if (!IsReservedIndex (picked) || IsLampIndex (src) ||
 		!IWad::CheckGameFilter("Corridor7"))
 	{
 		return picked;
@@ -268,7 +295,7 @@ static BYTE PickAvoidingReserved (int r, int g, int b, int src)
 	int best = picked, bestdist = INT_MAX;
 	for (int i = 0; i < 256; ++i)
 	{
-		if (i == 15 || i == 254)
+		if (IsReservedIndex (i))
 			continue;
 		const int dr = r - GPalette.BaseColors[i].r;
 		const int dg = g - GPalette.BaseColors[i].g;
@@ -346,7 +373,16 @@ void FDynamicColormap::BuildLights ()
 				// monochrome rewrite, so every close-up white wall texel (shade row
 				// 0) came out glaring white instead of red, while the same texel
 				// further away (row 3+, index 38) tinted correctly.
-				if (colors[c] == GPalette.BaseColors[c])
+				// Identity is right for ordinary entries, but not for a
+				// reserved one that is not a lamp: Corridor 7's wall art uses
+				// the low EGA greys 7 and 8, and keeping them at row 0 put
+				// thousands of untinted grey texels on screen under infrared,
+				// which leaves that whole block alone. Shade those away instead,
+				// as the original's light table does.
+				const bool keepIdentity = colors[c] == GPalette.BaseColors[c] &&
+					(IsLampIndex (c) || !IsReservedIndex (c) ||
+					 !IWad::CheckGameFilter("Corridor7"));
+				if (keepIdentity)
 					*shade++ = (BYTE)c;
 				else
 					*shade++ = PickAvoidingReserved (colors[c].r, colors[c].g,

@@ -135,6 +135,13 @@ void V_SetCorridor7PaletteMode (int mode, unsigned int phase=0);
 // rebuilt when the game palette changes.
 const BYTE *V_GetC7RampFloors ();
 
+// Whether the infrared visor leaves this palette index at its source colour.
+// Those indices are the lamps and instrumentation meant to burn through the
+// tint, so nothing else may be shaded ONTO them: ordinary artwork that lands
+// there inherits the exemption and shows untinted. Black is not reported,
+// since black reads the same tinted or not.
+bool V_IsCorridor7VisorExempt (int index);
+
 
 // Colorspace conversion RGB <-> HSV
 void RGBtoHSV (float r, float g, float b, float *h, float *s, float *v);

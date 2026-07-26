@@ -694,6 +694,25 @@ static const BYTE Corridor7InfraredPal[256][3] =
 	{227,190,  0}, {255,255,  0}, {  0,  0,  0}, {154,  0,138},
 };
 
+// The infrared table is the released game's own DAC, so the set of indices it
+// leaves alone is data rather than a rule we chose: the low 16 EGA entries, the
+// black base of each 24-entry ramp, and the top of the palette. Whether an
+// index is exempt therefore comes straight from comparing the table with the
+// base palette.
+bool V_IsCorridor7VisorExempt (int index)
+{
+	if(index < 0 || index > 255)
+		return false;
+	const BYTE *const e = Corridor7InfraredPal[index];
+	if(e[0] == 0 && e[1] == 0 && e[2] == 0)
+		return false;	// black tints to black; nothing shows through
+	// Compare against the loaded palette, NOT Corridor7BasePalette: that copy is
+	// only taken the first time a visor mode is set, so it is still zeroed while
+	// the colormaps are being built, which is exactly when this is asked.
+	const PalEntry &src = GPalette.BaseColors[index];
+	return e[0] == src.r && e[1] == src.g && e[2] == src.b;
+}
+
 void V_SetCorridor7PaletteMode (int mode, unsigned int phase)
 {
 	if(screen == NULL)

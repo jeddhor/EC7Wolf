@@ -29,6 +29,7 @@
 #include "wl_game.h"
 #include "wl_inter.h"
 #include "wl_net.h"
+#include "c7_automap.h"
 #include "wl_play.h"
 #include "g_mapinfo.h"
 #include "a_inventory.h"
@@ -104,20 +105,26 @@ ControlScheme controlScheme[] =
 	{ bt_nextweapon,		"Next Weapon",	4,			-1,				-1, CS_AxisDigital, 0 },
 	{ bt_prevweapon,		"Prev Weapon",	5, 			-1,				-1, CS_AxisDigital, 0 },
 	{ bt_altattack,			"Alt Attack",	-1,			-1,				-1, CS_AxisDigital, 0 },
-	{ bt_reload,			"Drop Mine", -1,				sc_M,			-1, CS_AxisDigital, 0 },
+	{ bt_reload,			"Drop Mine", -1,				sc_B,			-1, CS_AxisDigital, 0 },
 	{ bt_zoom,				"Visor Mode", -1,				sc_Enter,		-1, CS_AxisDigital, 0 },
-	// Tab is the map key in Corridor 7 (and wl_debug.cpp already expects the
-	// automap to live there -- it jams the debug-key sequence for exactly the
-	// sc_Tab/sc_BackSpace/sc_Grave bindings).
-	{ bt_automap,			"Automap",		-1,			sc_Tab,			-1, CS_AxisDigital, 0 },
+	// Corridor 7 has two maps and both are kept. Tab raises the game's own
+	// inset panel, which is what the original put there; ECWolf's
+	// full-viewport automap moves to M. wl_debug.cpp jams its debug-key
+	// sequence for whichever of these holds sc_Tab -- see schemeAutomapKey.
+	{ bt_automap,			"Automap",		-1,			sc_M,			-1, CS_AxisDigital, 0 },
 	{ bt_showstatusbar,		"Show Status",	-1,			-1,				-1,	CS_AxisDigital, 0 },
+	{ bt_c7map,				"Floor Map",	-1,			sc_Tab,			-1, CS_AxisDigital, 0 },
 	{ bt_pause,				"Pause",		-1,			sc_Pause,		-1, CS_AxisDigital, 0 },
 	{ bt_esc,				"Main Menu",	-1,			-1,				-1, CS_AxisDigital, 0 },
 
 	// End of List
 	{ bt_nobutton,			NULL, -1, -1, -1, CS_AxisDigital, 0 }
 };
-ControlScheme &schemeAutomapKey = controlScheme[25]; // When the input system is redone, hopefully we don't need this kind of thing
+// The entry wl_debug.cpp consults to decide whether a Tab press is a map
+// key rather than the start of a debug chord. That is the Corridor 7 panel
+// now, not bt_automap. When the input system is redone, hopefully we don't
+// need this kind of thing.
+ControlScheme &schemeAutomapKey = controlScheme[27];
 
 ControlScheme amControlScheme[] =
 {
@@ -718,6 +725,9 @@ void PollControls (bool absolutes)
 		Net::PollControls();
 
 	// Check automap toggle before we set any buttons as held
+	if (cmd.buttonstate[bt_c7map] && !cmd.buttonheld[bt_c7map])
+		C7Map_Toggle();
+
 	if (cmd.buttonstate[bt_automap] && !cmd.buttonheld[bt_automap])
 	{
 		AM_Toggle();
@@ -1212,9 +1222,15 @@ static void DrawPausedOverlay()
 		VWB_DrawGraphic(TexMan("PAUSED"), (20 - 4)*8, 80 - 2*8);
 }
 
+static void DrawC7MapOverlay()
+{
+	C7Map_Draw();
+}
+
 void R_DrawPlayViewOverlays()
 {
 	DrawTopOverlayThunk();
+	DrawC7MapOverlay();
 	DrawPausedOverlay();
 }
 
@@ -1239,6 +1255,9 @@ void PlayFrame()
 	// compositing backend has to be told which texels it painted (see
 	// IRenderer::DrawViewOverlay). The software backend just draws it.
 	Renderer->DrawViewOverlay(DrawTopOverlayThunk);
+	// Corridor 7's inset panel sits over the view in the same way, so it
+	// goes through the same seam.
+	Renderer->DrawViewOverlay(DrawC7MapOverlay);
 
 	if(automap && !gamestate.victoryflag)
 		BasicOverhead();

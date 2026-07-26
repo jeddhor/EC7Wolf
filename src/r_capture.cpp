@@ -22,6 +22,7 @@
 #include "m_crc32.h"
 #include "m_png.h"
 #include "v_video.h"
+#include "c7_automap.h"
 #include "v_palette.h"
 #include "files.h"
 #include "c_cvars.h"
@@ -78,6 +79,7 @@ namespace
 	bool     g_haveExtraLight = false;
 	int      g_extraLight     = 0;
 
+	bool     g_c7Map          = false;   // --capture-c7map: raise the C7 inset panel
 	bool     g_haveVisorMode  = false;   // --capture-visormode: force the C7 visor
 	int      g_visorMode      = 0;       // 0 off, 1 night vision, 2 infrared, 3 shock
 
@@ -281,6 +283,11 @@ void ParseArgs(int argc, char **argv)
 			if(el.frame <= 0)
 				g_extraLight = el.value;	// active from the first frame
 			g_haveExtraLight = true;
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-c7map") == 0)
+		{
+			g_c7Map = true;
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-visormode") == 0 && i + 1 < argc)
@@ -490,6 +497,12 @@ void ApplyPaletteOverride()
 	// the original -- without scripted input.
 	if(g_haveVisorMode)
 		V_SetCorridor7PaletteMode(g_visorMode, 0);
+
+	// Raise Corridor 7's inset map panel. It is a toggle held in c7_automap.cpp
+	// rather than a palette or view setting, so forcing it each frame is what
+	// makes it reachable without scripted input.
+	if(g_c7Map && !C7Map_Active())
+		C7Map_Toggle();
 
 	if(!g_haveBlend)
 		return;

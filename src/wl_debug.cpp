@@ -760,7 +760,7 @@ void CheckDebugKeys()
 		// likely to be put in the Tab space and be tapped while using other controls
 		bool keyDown = Keyboard[sc_Tab] || Keyboard[sc_BackSpace] || Keyboard[sc_Grave];
 		if ((schemeAutomapKey.keyboard == sc_Tab || schemeAutomapKey.keyboard == sc_BackSpace || schemeAutomapKey.keyboard == sc_Grave)
-			&& (control[ConsolePlayer].buttonstate[bt_automap] || control[ConsolePlayer].buttonheld[bt_automap]))
+			&& (control[ConsolePlayer].buttonstate[bt_c7map] || control[ConsolePlayer].buttonheld[bt_c7map]))
 			keyDown = false;
 
 #ifdef __ANDROID__

@@ -7,6 +7,7 @@
 #endif
 
 #include <math.h>
+#include "c7_automap.h"
 #include "wl_def.h"
 #include "wl_menu.h"
 #include "render/r_dynamicwalls.h"
@@ -295,6 +296,10 @@ void UpdateSoundLoc(void)
 
 void SetupGameLevel (void)
 {
+	// The inset panel closes on a floor change, like the floor plan that
+	// widens it: neither survives the elevator.
+	C7Map_LevelReset();
+
 	if (!loadedgame)
 	{
 		gamestate.victoryflag = false;

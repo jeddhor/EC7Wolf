@@ -297,6 +297,9 @@ enum Button
 	bt_zoom,
 	bt_automap,
 	bt_showstatusbar,
+	// Corridor 7's own inset map panel (c7_automap.h), separate from
+	// ECWolf's full-viewport automap on bt_automap.
+	bt_c7map,
 	NUMBUTTONS,
 
 	// AM buttons

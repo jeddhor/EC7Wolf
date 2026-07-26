@@ -63,6 +63,14 @@ Copyright: 2013, Simon Howard
 License: textscreen
 Comment: Optional dependency on GPL releases only
 
+Files: deps/xbrz/*
+Copyright: Zenju <zenju@gmx.de>
+License: GPL-3
+Comment: The xBRZ pixel-art upscaler, vendored unmodified at version 1.8. This
+ is the only GPL-3 component here; every other part is GPL-2+ or permissive, so
+ the combination is lawful, but it does mean the linked binary as a whole is
+ distributable under GPL-3 rather than GPL-2. Full text in deps/xbrz/License.txt.
+
 Files: deps/zlib/*
 Copyright: 1995-2017, Jean-loup Gailly and Mark Adler
 License: Zlib

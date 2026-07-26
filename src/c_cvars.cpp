@@ -55,6 +55,7 @@ bool vid_vsync = false;
 FString vid_renderer = "software";
 bool vid_gldebug = false;
 int vid_maxfps = 0;					// 0 = unlimited
+int vid_xbrz = 0;					// 0 = off, 1 = auto, 2-6 = fixed factor
 bool r_interpolate = true;
 bool r_interpolate_camera = true;
 bool r_interpolate_actors = true;
@@ -211,6 +212,7 @@ void ReadConfig(void)
 	config.CreateSetting("Vid_Renderer", FString("software"));
 	config.CreateSetting("Vid_GLDebug", false);
 	config.CreateSetting("Vid_MaxFPS", 0);
+	config.CreateSetting("Vid_xBRZ", 0);
 	config.CreateSetting("R_Interpolate", true);
 	config.CreateSetting("R_InterpolateCamera", true);
 	config.CreateSetting("R_InterpolateActors", true);
@@ -311,6 +313,7 @@ void ReadConfig(void)
 	vid_renderer = config.GetSetting("Vid_Renderer")->GetString();
 	vid_gldebug = config.GetSetting("Vid_GLDebug")->GetInteger() != 0;
 	vid_maxfps = config.GetSetting("Vid_MaxFPS")->GetInteger();
+	vid_xbrz = config.GetSetting("Vid_xBRZ")->GetInteger();
 	r_interpolate = config.GetSetting("R_Interpolate")->GetInteger() != 0;
 	r_interpolate_camera = config.GetSetting("R_InterpolateCamera")->GetInteger() != 0;
 	r_interpolate_actors = config.GetSetting("R_InterpolateActors")->GetInteger() != 0;
@@ -473,6 +476,7 @@ void WriteConfig(void)
 	config.GetSetting("Vid_Renderer")->SetValue(vid_renderer);
 	config.GetSetting("Vid_GLDebug")->SetValue(vid_gldebug);
 	config.GetSetting("Vid_MaxFPS")->SetValue(vid_maxfps);
+	config.GetSetting("Vid_xBRZ")->SetValue(vid_xbrz);
 	config.GetSetting("R_Interpolate")->SetValue(r_interpolate);
 	config.GetSetting("R_InterpolateCamera")->SetValue(r_interpolate_camera);
 	config.GetSetting("R_InterpolateActors")->SetValue(r_interpolate_actors);

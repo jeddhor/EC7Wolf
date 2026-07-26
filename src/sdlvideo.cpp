@@ -12,6 +12,7 @@
 //#include "stats.h"
 #include "v_palette.h"
 #include "sdlvideo.h"
+#include "r_xbrz.h"
 //#include "r_swrenderer.h"
 #include "thingdef/thingdef.h"
 #include "wl_main.h"
@@ -315,6 +316,8 @@ private:
 	};
 	SDL_GLContext GLContext;	// non-NULL when presenting through the GL backend
 	bool UsingGL;
+	SDL_Texture *XBRZTexture;	// upscaled frame; separate from the Texture union
+	int XBRZFactor;				// factor XBRZTexture was sized for; 0 = none
 #else
 	SDL_Surface *Screen;
 #endif
@@ -325,7 +328,12 @@ private:
 	bool NotPaletted;
 
 	void UpdateColors ();
+	void GetPresentPalette (PalEntry pal[256]);
 	void ResetSDLRenderer ();
+#if SDL_VERSION_ATLEAST(2,0,0)
+	bool PresentXBRZ ();
+	void DestroyXBRZTexture ();
+#endif
 
 	SDLFB () {}
 };
@@ -690,11 +698,17 @@ SDLFB::SDLFB (int width, int height, bool fullscreen)
 	UpdatePending = false;
 	NotPaletted = false;
 	FlashAmount = 0;
+	// Only ever assigned in ResetSDLRenderer, which the GL path skips entirely,
+	// so without this it stays uninitialized for the whole life of a GL
+	// framebuffer.
+	UsingRenderer = false;
 
 #if SDL_VERSION_ATLEAST(2,0,0)
 	Renderer = NULL;
 	Texture = NULL;
 	GLContext = NULL;
+	XBRZTexture = NULL;
+	XBRZFactor = 0;
 	// The OpenGL backend presents by compositing on the game window itself, so
 	// the window must be GL-capable and must not also drive an SDL_Renderer.
 	UsingGL = R_GLLiveWantPresent();
@@ -820,6 +834,7 @@ SDLFB::~SDLFB ()
 
 	if (Renderer)
 	{
+		DestroyXBRZTexture ();
 		if (Texture)
 			SDL_DestroyTexture (Texture);
 		SDL_DestroyRenderer (Renderer);
@@ -830,6 +845,10 @@ SDLFB::~SDLFB ()
 		SDL_DestroyWindow (Screen);
 	}
 #endif
+
+	// The scratch buffers are sized for this framebuffer's resolution; a mode
+	// change builds a new SDLFB, so do not carry the old one's memory into it.
+	R_XBRZFreeScratch ();
 }
 
 bool SDLFB::IsValid ()
@@ -934,6 +953,13 @@ void SDLFB::Update ()
 	//BlitCycles.Clock();
 
 #if SDL_VERSION_ATLEAST(2,0,0)
+	// Image scaling, when it is on and the frame can be filtered. Anything that
+	// stops it -- the setting being off, no room to scale into, a texture that
+	// would not allocate -- reports false and falls through to the plain path
+	// below, so a frame is never lost to it.
+	if (PresentXBRZ ())
+		return;
+
 	void *pixels;
 	int pitch;
 	if (UsingRenderer)
@@ -1040,24 +1066,33 @@ void SDLFB::Update ()
 	//BlitCycles.Unclock();
 }
 
+// The palette a frame is actually shown through: the source palette after gamma
+// and after any full-screen flash (damage, pickups, the visor tints) has been
+// blended in. Factored out of UpdateColors because the xBRZ path needs the same
+// colours but resolves them itself rather than through GPfx.
+void SDLFB::GetPresentPalette (PalEntry pal[256])
+{
+	for (int i = 0; i < 256; ++i)
+	{
+		pal[i].r = GammaTable[0][SourcePalette[i].r];
+		pal[i].g = GammaTable[1][SourcePalette[i].g];
+		pal[i].b = GammaTable[2][SourcePalette[i].b];
+	}
+	if (FlashAmount)
+	{
+		DoBlending (pal, pal,
+			256, GammaTable[0][Flash.r], GammaTable[1][Flash.g], GammaTable[2][Flash.b],
+			FlashAmount);
+	}
+}
+
 void SDLFB::UpdateColors ()
 {
 	if (NotPaletted)
 	{
 		PalEntry palette[256];
-		
-		for (int i = 0; i < 256; ++i)
-		{
-			palette[i].r = GammaTable[0][SourcePalette[i].r];
-			palette[i].g = GammaTable[1][SourcePalette[i].g];
-			palette[i].b = GammaTable[2][SourcePalette[i].b];
-		}
-		if (FlashAmount)
-		{
-			DoBlending (palette, palette,
-				256, GammaTable[0][Flash.r], GammaTable[1][Flash.g], GammaTable[2][Flash.b],
-				FlashAmount);
-		}
+
+		GetPresentPalette (palette);
 		GPfx.SetPalette (palette);
 	}
 	else
@@ -1166,6 +1201,7 @@ void SDLFB::ResetSDLRenderer ()
 
 	if (Renderer)
 	{
+		DestroyXBRZTexture ();
 		if (Texture)
 			SDL_DestroyTexture (Texture);
 		SDL_DestroyRenderer (Renderer);
@@ -1228,6 +1264,96 @@ void SDLFB::ResetSDLRenderer ()
 	}
 #endif
 }
+
+#if SDL_VERSION_ATLEAST(2,0,0)
+void SDLFB::DestroyXBRZTexture ()
+{
+	if (XBRZTexture)
+	{
+		SDL_DestroyTexture (XBRZTexture);
+		XBRZTexture = NULL;
+	}
+	XBRZFactor = 0;
+}
+
+// Present the frame through xBRZ instead of uploading it at 1:1. Returns false
+// if scaling is not being done, in which case the caller presents normally.
+bool SDLFB::PresentXBRZ ()
+{
+	if (!UsingRenderer || Renderer == NULL || Texture == NULL)
+		return false;
+
+	// Measure against the renderer's output rather than the window: on a HiDPI
+	// display those differ, and it is the output that the frame is stretched to.
+	int outW = Width, outH = Height;
+	SDL_GetRendererOutputSize (Renderer, &outW, &outH);
+
+	const int factor = R_XBRZFactor (Width, Height, outW, outH);
+	if (factor < 2)
+	{
+		DestroyXBRZTexture ();
+		return false;
+	}
+
+	PalEntry pal[256];
+	GetPresentPalette (pal);
+	const uint32_t *const scaled =
+		R_XBRZScaleIndexed (MemBuffer, Pitch, Width, Height, pal, factor);
+	if (scaled == NULL)
+	{
+		DestroyXBRZTexture ();
+		return false;
+	}
+
+	const int tw = Width * factor, th = Height * factor;
+	if (XBRZTexture == NULL || XBRZFactor != factor)
+	{
+		DestroyXBRZTexture ();
+
+		// The upscaled frame is larger than the window as often as not (6x from
+		// 640x400 overshoots any display), and it is rarely an exact multiple of
+		// it either way, so the final fit to the window is filtered. Point
+		// sampling here would put the staircase edges back that xBRZ just spent
+		// a frame's work removing. The hint is read when the texture is created,
+		// so it is set around this call and restored straight after rather than
+		// changed globally -- the unscaled path still wants point sampling.
+		char prev[8];
+		const char *const cur = SDL_GetHint (SDL_HINT_RENDER_SCALE_QUALITY);
+		snprintf (prev, sizeof prev, "%s", cur ? cur : "0");
+		SDL_SetHint (SDL_HINT_RENDER_SCALE_QUALITY, "1");
+		XBRZTexture = SDL_CreateTexture (Renderer, SDL_PIXELFORMAT_ARGB8888,
+			SDL_TEXTUREACCESS_STREAMING, tw, th);
+		SDL_SetHint (SDL_HINT_RENDER_SCALE_QUALITY, prev);
+
+		if (XBRZTexture == NULL)
+			return false;
+		XBRZFactor = factor;
+	}
+
+	void *pixels;
+	int pitch;
+	if (SDL_LockTexture (XBRZTexture, NULL, &pixels, &pitch))
+		return false;
+	if (pitch == tw*(int)sizeof(uint32_t))
+	{
+		memcpy (pixels, scaled, (size_t)tw*th*sizeof(uint32_t));
+	}
+	else
+	{
+		for (int y = 0; y < th; ++y)
+		{
+			memcpy ((BYTE *)pixels + (size_t)y*pitch, scaled + (size_t)y*tw,
+				(size_t)tw*sizeof(uint32_t));
+		}
+	}
+	SDL_UnlockTexture (XBRZTexture);
+
+	SDL_RenderClear (Renderer);
+	SDL_RenderCopy (Renderer, XBRZTexture, NULL, NULL);
+	SDL_RenderPresent (Renderer);
+	return true;
+}
+#endif
 
 void SDLFB::SetVSync (bool vsync)
 {

@@ -23,6 +23,7 @@
 #include "m_png.h"
 #include "v_video.h"
 #include "c7_automap.h"
+#include "r_xbrz.h"
 #include "v_palette.h"
 #include "files.h"
 #include "c_cvars.h"
@@ -80,6 +81,13 @@ namespace
 	bool     g_haveExtraLight = false;
 	int      g_extraLight     = 0;
 
+	// --capture-xbrz FACTOR: also write the screenshot upscaled through xBRZ, to
+	// PATH with a "-xbrzN" suffix. The upscaler runs at presentation time, past
+	// the point a normal capture is taken, so this is the only way to see its
+	// output headlessly; it deliberately calls the same entry point the present
+	// path does, with the same flashed palette, rather than a test-only copy.
+	int      g_xbrzFactor     = 0;
+
 	bool     g_c7Map          = false;   // --capture-c7map: raise the C7 inset panel
 	bool     g_c7FloorPlan    = false;   // --capture-floorplan: as if the plan were picked up
 	// --capture-exitlevel: complete the level at this tic, taking the same path
@@ -134,6 +142,56 @@ namespace
 		}
 
 		return crc;
+	}
+
+	// Companion to the screenshot below: the same frame, run through the same
+	// upscaler the present path uses. Written as a separate file so the plain
+	// screenshot keeps its exact former contents and every existing test that
+	// diffs it is unaffected.
+	void WriteXBRZ(const char *path, const BYTE *buffer, int pitch,
+		ESSType color_type, const PalEntry *shotPal)
+	{
+		if(g_xbrzFactor < 2 || buffer == NULL)
+			return;
+		if(color_type != SS_PAL)
+		{
+			// The upscaler is fed the indexed frame on purpose: that is what the
+			// present path has, and expanding it here through the flashed palette
+			// is the step being tested.
+			Printf("Capture: --capture-xbrz needs an 8-bit screenshot buffer.\n");
+			return;
+		}
+
+		const uint32_t *const scaled = R_XBRZScaleIndexed(buffer, pitch,
+			SCREENWIDTH, SCREENHEIGHT, shotPal, g_xbrzFactor);
+		if(scaled == NULL)
+		{
+			Printf("Capture: xBRZ %dx refused the frame.\n", g_xbrzFactor);
+			return;
+		}
+
+		const int w = SCREENWIDTH * g_xbrzFactor, h = SCREENHEIGHT * g_xbrzFactor;
+		FString outPath;
+		const char *const dot = strrchr(path, '.');
+		if(dot != NULL)
+			outPath.Format("%.*s-xbrz%d%s", (int)(dot - path), path, g_xbrzFactor, dot);
+		else
+			outPath.Format("%s-xbrz%d", path, g_xbrzFactor);
+
+		FILE *file = fopen(outPath.GetChars(), "wb");
+		if(file == NULL)
+		{
+			Printf("Capture: FAILED to open '%s'\n", outPath.GetChars());
+			return;
+		}
+		// 0xAARRGGBB in memory is B,G,R,A on a little-endian host, which is what
+		// SS_BGRA means to the PNG writer.
+		M_CreatePNG(file, (const BYTE *)scaled, NULL, SS_BGRA, w, h,
+			w * (int)sizeof(uint32_t));
+		M_FinishPNG(file);
+		fclose(file);
+		Printf("Capture: wrote xBRZ %dx screenshot '%s' (%dx%d).\n",
+			g_xbrzFactor, outPath.GetChars(), w, h);
 	}
 
 	void WriteScreenshot(const char *path)
@@ -199,6 +257,8 @@ namespace
 		else
 			Printf("Capture: FAILED to open screenshot '%s'\n", path);
 
+		WriteXBRZ(path, buffer, pitch, color_type, shotPal);
+
 		screen->ReleaseScreenshotBuffer();
 	}
 
@@ -253,6 +313,11 @@ void ParseArgs(int argc, char **argv)
 		else if(strcmp(arg, "--capture-file") == 0 && i + 1 < argc)
 		{
 			g_captureFile = argv[++i];
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-xbrz") == 0 && i + 1 < argc)
+		{
+			g_xbrzFactor = atoi(argv[++i]);
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-maxframes") == 0 && i + 1 < argc)

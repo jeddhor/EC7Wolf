@@ -207,6 +207,9 @@ add_subdirectory(deps/gdtoa)
 add_subdirectory(deps/lzma)
 
 if(NOT TOOLS_ONLY)
+	# xBRZ, the pixel-art upscaler behind the Image Scaling setting.
+	add_subdirectory(deps/xbrz)
+
 	if(GPL AND USE_LIBTEXTSCREEN)
 		add_subdirectory(deps/textscreen)
 	endif()

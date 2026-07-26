@@ -363,6 +363,18 @@ MENU_LISTENER(SetMaxFPS)
 	return true;
 }
 
+// Kept in the same order as xbrzOptions below: Off, Auto, then the fixed
+// factors, which are the values vid_xbrz itself stores.
+static const int kXBRZValues[] = { 0, 1, 2, 3, 4, 5, 6 };
+
+MENU_LISTENER(SetXBRZ)
+{
+	// Takes effect on the next presented frame; the upscaled texture is
+	// reallocated by the present path when the factor it was built for changes.
+	vid_xbrz = kXBRZValues[which];
+	return true;
+}
+
 MENU_LISTENER(SetFOV)
 {
 	localDesiredFOV = kFOVValues[which];
@@ -733,7 +745,18 @@ void CreateMenus()
 		AddLabeled(displayMenu, new SliderMenuItem(viewsize, 110, 21, language["STR_SMALL"], language["STR_LARGE"], AdjustViewSize), "View Size");
 		displayMenu.addItem(new MenuSwitcherMenuItem("Advanced Graphics", advancedGraphics));
 
+		static const char *xbrzOptions[] = { "Off", "Auto", "2x", "3x", "4x", "5x", "6x" };
+
 		advancedGraphics.setHeadText("Advanced Graphics");
+		advancedGraphics.addItem(new LabelMenuItem("Image Scaling"));
+		MenuItem *const xbrzItem = new MultipleChoiceMenuItem(SetXBRZ, xbrzOptions, 7,
+			NearestOption(kXBRZValues, vid_xbrz));
+		// The filter runs in the software present path, so under OpenGL there is
+		// nothing for it to hook into yet and the control would do nothing.
+		// Greyed out rather than hidden: it is a renderer the setting has not
+		// reached, not a setting that does not exist.
+		xbrzItem->setEnabled(vid_renderer.CompareNoCase("opengl") != 0);
+		AddLabeled(advancedGraphics, xbrzItem, "xBRZ Smoothing");
 		advancedGraphics.addItem(new LabelMenuItem("Motion"));
 		AddLabeled(advancedGraphics, new BooleanMenuItem("Motion Interpolation", r_interpolate), "Motion Interpolation");
 		AddLabeled(advancedGraphics, new BooleanMenuItem("Camera", r_interpolate_camera), "Camera");

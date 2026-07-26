@@ -120,6 +120,7 @@ initial_sources(
 	name.cpp
 	p_switch.cpp
 	r_capture.cpp
+	r_xbrz.cpp
 	render/r_renderer.cpp
 	render/r_interpolation.cpp
 	render/r_worldbuilder.cpp
@@ -339,6 +340,7 @@ target_link_libraries(engine PRIVATE
 	${JPEG_LIBRARIES}
 	lzma
 	gdtoa
+	xbrz
 	ZLIB::ZLIB
 )
 target_include_directories(engine PRIVATE

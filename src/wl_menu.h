@@ -19,6 +19,11 @@ extern int BORDCOLOR, BORD2COLOR, BORD3COLOR, BKGDCOLOR, STRIPE,
 	MENUWINHGLT_BACKGROUND, MENUWINHGLT_TOPBORDER, MENUWINHGLT_BOTBORDER;
 void MenuFadeOut();
 void MenuFadeIn();
+// True while the palette fade is holding the display black. The menu-to-menu
+// transition substitutes a column fade for the palette one, and must not do so
+// when the display is already dark -- the whole picture has to come back then,
+// not just the column.
+extern bool menusAreFaded;
 
 #define SENSITIVE       60
 #define CENTERX         ((int) screenWidth / 2)

@@ -178,17 +178,41 @@ MenuSwitcherMenuItem::MenuSwitcherMenuItem(const char string[36], Menu &menu, ME
 {
 }
 
+// Moving between two menu screens changes only the column of items; under the
+// Corridor 7 skin the splash art on the left is identical either side of the
+// switch, so dipping the whole display to black to swap a list of words throws
+// away the one part of the picture that was never going to change. Fade just the
+// column instead, and leave the art standing.
+//
+// Both guards matter. The skin declines for every other game, which keeps their
+// menus exactly as they were; and an already-faded screen needs the whole
+// picture brought back rather than the column, which is the state the F-key
+// entry points from gameplay arrive in.
+static bool MenuColumnFade(const Menu *menu, bool out)
+{
+	if(screenfaded || menusAreFaded)
+		return false;
+	return C7Menu_FadeColumn(menu, out);
+}
+
 void MenuSwitcherMenuItem::activate()
 {
 	// If there is an activateListener then use it to determine if the menu should switch
 	if(activateListener == NULL || activateListener(MenuItem::menu->getCurrentPosition()))
 	{
-		MenuFadeOut();
+		if(!MenuColumnFade(MenuItem::menu, true))
+			MenuFadeOut();
 		menu.show();
 		if(!Menu::areMenusClosed())
 		{
-			MenuItem::menu->draw();
-			MenuFadeIn();
+			// The column fade draws as it goes. Drawing first would put the
+			// returned-to screen on the display at full strength for a frame
+			// before the fade began.
+			if(!MenuColumnFade(MenuItem::menu, false))
+			{
+				MenuItem::menu->draw();
+				MenuFadeIn();
+			}
 		}
 	}
 }
@@ -1252,15 +1276,21 @@ void Menu::show()
 		return;
 	validateCurPos();
 
-	draw();
-	MenuFadeIn();
+	if(!MenuColumnFade(this, false))
+	{
+		draw();
+		MenuFadeIn();
+	}
 	WaitKeyUp();
 
 	int item = 0;
 	while((item = handle()) != -1) {}
 
 	if(!Menu::areMenusClosed())
-		MenuFadeOut ();
+	{
+		if(!MenuColumnFade(this, true))
+			MenuFadeOut ();
+	}
 }
 
 void Menu::validateCurPos()

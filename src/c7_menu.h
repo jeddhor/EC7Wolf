@@ -24,6 +24,20 @@ bool C7Menu_Active();
 // presentation rather than showing nothing.
 bool C7Menu_Draw(const Menu *menu);
 
+// Transitions between two menu screens by fading only the menu column, leaving
+// the splash art standing. Moving between screens changes nothing on the left,
+// so dipping the whole display to black to swap a list of words throws away the
+// one part of the picture that was never going to change.
+//
+// `out` darkens the column to black; false brings it back, drawing `menu` as it
+// goes so the caller does not draw it first -- a full-strength draw before the
+// fade would flash the new screen for a frame.
+//
+// Returns false when the skin is not drawing, so the caller can fall back to the
+// palette fade. Callers must also not use this while the screen is already
+// faded: there the whole picture has to come back, not just the column.
+bool C7Menu_FadeColumn(const Menu *menu, bool out);
+
 // Drops the cached backdrop. Called on resolution and palette changes, since
 // the backdrop is composited for a specific screen size.
 void C7Menu_Invalidate();

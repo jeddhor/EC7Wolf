@@ -15,6 +15,7 @@
 #include "wl_def.h"
 #include "wl_iwad.h"
 #include "m_classes.h"
+#include "id_vh.h"
 #include "r_artscale.h"
 #include "v_video.h"
 #include "colormatcher.h"
@@ -164,6 +165,39 @@ bool C7Menu_Active()
 void C7Menu_Invalidate()
 {
 	V_TTFlushCache();
+}
+
+bool C7Menu_FadeColumn(const Menu *menu, bool out)
+{
+	if(menu == NULL || screen == NULL || !C7Menu_Active() || !LoadFonts())
+		return false;
+
+	// Left edge of the fade. The rows all start at kLabelX and the selection
+	// chevron hangs a little to their left, so this starts left of both and runs
+	// to the right edge. It reaches slightly into the art's own fade to black,
+	// which is what keeps the boundary invisible: there is nothing at full
+	// strength anywhere near it.
+	const int x0 = (int)((kLabelX - 0.05) * SCREENWIDTH);
+	const int w = SCREENWIDTH - x0;
+	if(x0 < 0 || w <= 0)
+		return false;
+
+	// Same span as the palette fade this replaces, so the menu keeps the pacing
+	// it has always had and only the area being faded changes.
+	const int steps = 10;
+	for(int i = 0;i <= steps;++i)
+	{
+		const double t = (double)i / steps;
+		const float alpha = (float)(out ? t : 1.0 - t);
+		if(!C7Menu_Draw(menu))
+			return false;	// mid-fade is an awkward place to fail, but a half
+							// drawn column beats leaving the screen mid-dim
+		if(alpha > 0.0f)
+			screen->Dim(0, alpha, x0, 0, w, SCREENHEIGHT);
+		VW_UpdateScreen();
+		SDL_Delay(TICS2MS(1));
+	}
+	return true;
 }
 
 bool C7Menu_Draw(const Menu *menu)

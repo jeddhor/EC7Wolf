@@ -119,6 +119,7 @@ initial_sources(
 	m_png.cpp
 	name.cpp
 	p_switch.cpp
+	r_artscale.cpp
 	r_capture.cpp
 	r_xbrz.cpp
 	render/r_renderer.cpp

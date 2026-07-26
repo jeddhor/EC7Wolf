@@ -35,6 +35,7 @@
 #include "thingdef/thingdef.h"
 #include "wl_loadsave.h"
 #include "am_map.h"
+#include "r_artscale.h"
 
 #include <climits>
 
@@ -137,19 +138,25 @@ MENU_LISTENER(C7AbortMission)
 	return true;
 }
 // Corridor 7 does not just cut to DOS: it holds a full-screen sign-off page
-// (C7G0013) for a moment, then fades that out and exits. Drawn as a stretched
-// 320x200 picture page like the game's other full-screen art, so it fills the
-// window at any resolution instead of sitting native-size in a corner.
+// (C7G0013) for a moment, then fades that out and exits. Stretched to fill the
+// window at any resolution rather than sitting native-size in a corner.
 static void Corridor7ExitScreen()
 {
-	FTexture *const page = TexMan(TexMan.CheckForTexture("C7G0013", FTexture::TEX_Any));
+	FTexture *page = TexMan(TexMan.CheckForTexture("C7G0013", FTexture::TEX_Any));
 	if(page == NULL)
 		return;
 
+	// Upscaled like the menu splash: this is 320x200 art shown across the whole
+	// window, so it is magnified more than anything else the game draws.
+	page = R_UpscaledArt(page);
+
 	VW_FadeOut();
 	screen->Lock(true);
+	// Sized in real pixels rather than through the 320x200 virtual space, since
+	// the upscaled page is no longer 320x200 and would be drawn several times
+	// too large if its own dimensions were read as virtual units.
 	screen->DrawTexture(page, 0, 0,
-		DTA_VirtualWidth, 320, DTA_VirtualHeight, 200,
+		DTA_DestWidth, SCREENWIDTH, DTA_DestHeight, SCREENHEIGHT,
 		DTA_TopOffset, 0, DTA_LeftOffset, 0, TAG_DONE);
 	screen->Unlock();
 	VW_UpdateScreen();

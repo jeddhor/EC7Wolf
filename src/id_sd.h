@@ -154,6 +154,10 @@ extern  void    SD_StopSound(void);
 extern  void    SD_WaitSoundDone(void);
 
 extern  void    SD_StartMusic(const char* chunk);
+// Streams a music file straight off disk, once. Used for the Corridor 7 CD
+// soundtrack, which lives beside the player's game data rather than in a lump.
+extern  bool    SD_StartMusicFile(const char* path);
+extern  bool    SD_MusicFilePlaying(void);
 extern  void    SD_ContinueMusic(const char* chunk, int startoffs);
 extern  void    SD_MusicOn(void);
 extern  void    SD_FadeOutMusic(void);

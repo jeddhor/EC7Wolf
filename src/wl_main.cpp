@@ -35,6 +35,7 @@
 #include "wl_draw.h"
 #include "wl_inter.h"
 #include "wl_iwad.h"
+#include "c7_cdaudio.h"
 #include "wl_play.h"
 #include "r_capture.h"
 #include "render/r_renderer.h"
@@ -1386,6 +1387,10 @@ int WL_Main (int argc, char *argv[])
 			LumpRemapper::RemapAll();
 			language.SetupStrings();
 		}
+
+		// Reports whether the player's ripped CD soundtrack was found, before
+		// anything can ask to play music.
+		C7CD::Init();
 
 		R_InitRenderer();
 

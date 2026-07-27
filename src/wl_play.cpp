@@ -30,6 +30,7 @@
 #include "wl_inter.h"
 #include "wl_net.h"
 #include "c7_automap.h"
+#include "c7_cdaudio.h"
 #include "wl_play.h"
 #include "g_mapinfo.h"
 #include "a_inventory.h"
@@ -962,6 +963,13 @@ void CheckKeys (void)
 */
 int StopMusic (void)
 {
+	// The disc plays straight through a floor change, the control panel and the
+	// pause key -- StartLevelTrack only moves the playlist on once a song has
+	// actually run out, so stopping here would restart the soundtrack every
+	// time the player opened a menu.
+	if(C7CD::Available())
+		return 0;
+
 	return SD_MusicOff();
 }
 
@@ -1002,13 +1010,28 @@ static FString SelectLevelMusic()
 
 void StartMusic ()
 {
+	// Chosen even when the disc's soundtrack is in use. Floors past 30 draw
+	// their AdLib song out of the random number stream, and skipping that draw
+	// would make a game with the CD music installed play out differently from
+	// one without it.
+	const FString adlibMusic = SelectLevelMusic();
+
+	if(C7CD::Available())
+	{
+		C7CD::StartLevelTrack();
+		return;
+	}
+
 	SD_MusicOff ();
-	currentLevelMusic = SelectLevelMusic();
+	currentLevelMusic = adlibMusic;
 	SD_StartMusic(currentLevelMusic);
 }
 
 void ContinueMusic (int offs)
 {
+	if(C7CD::Available())
+		return;
+
 	SD_MusicOff ();
 	if(!(Paused & 1))
 		SD_ContinueMusic(currentLevelMusic.IsEmpty() ? levelInfo->GetMusic(map) : currentLevelMusic, offs);

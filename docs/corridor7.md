@@ -19,6 +19,24 @@ The recognized CD executable is 250,776 bytes. ECWolf reads its gameplay
 palette at runtime; the palette and other commercial resources are not
 embedded or redistributed.
 
+### The CD soundtrack
+
+The disc's music is redbook audio and is not in any of the files above. To use
+it, rip your own disc into a `cdaudio` directory beside the game data, naming
+each file for its physical track number:
+
+```sh
+tools/make_cdaudio.py Corridor7.cue /path/to/game-data/cdaudio
+```
+
+That writes `track02.ogg` … `track09.ogg`; the game plays tracks 3, 5, 7 and 9,
+which are the four pieces of music. When they are present the AdLib songs are
+not used at all, exactly as on the disc — including at the title screen and
+between floors, where the CD release plays nothing and lets the current track
+run on. Without the directory the game says so on startup and uses the AdLib
+soundtrack. See the notes at the top of `src/c7_cdaudio.cpp` for how the disc
+chose tracks.
+
 Launch through the normal IWAD picker or directly from the data directory:
 
 ```sh

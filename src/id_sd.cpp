@@ -1588,6 +1588,70 @@ SD_StartMusic(const char* chunk)
 	}
 }
 
+///////////////////////////////////////////////////////////////////////////
+//
+//      SD_StartMusicFile() - plays a music file from disk, once, streamed
+//
+// The Corridor 7 CD soundtrack is not game data: it is whatever the player
+// ripped from their own disc, sitting in a directory beside the .CO7 files.
+// It is deliberately not loaded as a lump -- the longest track is ten minutes
+// of Vorbis and there is no reason to hold it in memory, and lumps would put
+// commercial audio inside the resource system where a mod could read it out.
+//
+// Plays once rather than looping, because that is what the disc did: MSCDEX
+// was handed a start address and a length, and when the track ran out the
+// floor went quiet until the next one began.
+//
+///////////////////////////////////////////////////////////////////////////
+bool SD_StartMusicFile(const char *path)
+{
+	SD_MusicOff();
+
+	if (MusicMode == smm_Off)
+		return false;
+
+	SDL_LockMutex(audioMutex);
+	musicFinished();
+	SDL_UnlockMutex(audioMutex);
+
+	music = Mix_LoadMUS(path);
+	if (music == NULL)
+	{
+		Printf("Unable to load music file %s: %s\n", path, Mix_GetError());
+		return false;
+	}
+
+	SDL_LockMutex(audioMutex);
+	musicchunk = -1;
+	const bool played = Mix_PlayMusic(music, 0) != -1;
+	SDL_UnlockMutex(audioMutex);
+
+	if (!played)
+	{
+		Printf("Unable to play music file %s: %s\n", path, Mix_GetError());
+		Mix_FreeMusic(music);
+		music = NULL;
+		return false;
+	}
+
+	SD_UpdateMusicVolume(0);
+	return true;
+}
+
+///////////////////////////////////////////////////////////////////////////
+//
+//      SD_MusicFilePlaying() - is a streamed music file still running?
+//
+// A track the player paused counts as finished, so that turning music off and
+// on again gets a fresh track at the next floor instead of resuming one that
+// is no longer audible.
+//
+///////////////////////////////////////////////////////////////////////////
+bool SD_MusicFilePlaying(void)
+{
+	return music != NULL && Mix_PlayingMusic() == 1 && Mix_PausedMusic() == 0;
+}
+
 void
 SD_ContinueMusic(const char* chunk, int startoffs)
 {

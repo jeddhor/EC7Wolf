@@ -1,8 +1,10 @@
 /*
-** wl_iwad.h
+** c7_cdaudio.h
+**
+** Redbook soundtrack playback for the Corridor 7 CD release.
 **
 **---------------------------------------------------------------------------
-** Copyright 2012 Braden Obrzut
+** Copyright 2026 EC7Wolf contributors
 ** All rights reserved.
 **
 ** Redistribution and use in source and binary forms, with or without
@@ -27,55 +29,26 @@
 ** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 ** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 ** THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-**---------------------------------------------------------------------------
-**
 **
 */
 
-#ifndef __WL_IWAD_H__
-#define __WL_IWAD_H__
+#ifndef __C7_CDAUDIO_H__
+#define __C7_CDAUDIO_H__
 
-#include "zstring.h"
-
-// For IWad Pickers so not in namespace
-struct WadStuff
+namespace C7CD
 {
-	WadStuff() : Type(-1), Hidden(false) {}
+	// Looks for the ripped soundtrack next to the player's game data. Safe to
+	// call for any game; it does nothing unless this is Corridor 7.
+	void Init();
 
-	TArray<FString> Path;
-	FString Extension;
-	FString Name;
-	int Type;
-	bool Hidden;
-};
+	// True once a usable soundtrack has been found. While this is true the
+	// AdLib songs are not played at all, which is exactly what the CD release
+	// does -- its song-start routine returns immediately when a disc is in the
+	// drive.
+	bool Available();
 
-namespace IWad
-{
-	enum Flags
-	{
-		REGISTERED = 1, // Enables not-shareware warning
-		HELPHACK = 2,   // Fixes helpart art assets
-		PREVIEW = 4,    // Only show in picker if user opts in
-		RESOURCE = 8    // Used as a component of another option
-	};
-
-	struct IWadData
-	{
-		FString Name;
-		FString Autoname;
-		FString Mapinfo;
-		TArray<FString> Ident;
-		TArray<FString> Required;
-		FName Game;
-		unsigned int Flags;
-		bool LevelSet;
-	};
-
-	bool CheckGameFilter(FName filter);
-	const IWadData &GetGame();
-	const FString &GetGameDataDirectory();
-	unsigned int GetNumIWads();
-	void SelectGame(TArray<FString> &wadfiles, const char* iwad, const char* datawad, const FString &progdir);
+	// Called where the AdLib path would start a floor's song.
+	void StartLevelTrack();
 }
 
 #endif

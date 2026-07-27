@@ -10,6 +10,7 @@
 #include "wl_def.h"
 #include "wl_menu.h"
 #include "wl_iwad.h"
+#include "c7_cdaudio.h"
 #include "id_ca.h"
 #include "id_sd.h"
 #include "id_in.h"
@@ -1496,6 +1497,14 @@ int StartCPMusic (const char* song)
 {
 	int lastoffs;
 
+	// With a disc in the drive the CD release plays no title, menu,
+	// intermission or high-score song at all: its song-start routine
+	// (19f8:2769) returns immediately. Whatever the disc is playing carries on
+	// over the menus, which is the whole point of a soundtrack that runs for
+	// ten minutes at a stretch.
+	if(C7CD::Available())
+		return 0;
+
 	//lastmusic = song;
 	lastoffs = SD_MusicOff ();
 
@@ -1514,7 +1523,9 @@ void CheckPause (void)
 	static int pauseofs = 0;
 	if (LastScan == sc_Pause)
 	{
-		switch (SoundStatus)
+		// The disc is left running, as it was on real hardware -- MSCDEX had no
+		// idea the game was paused.
+		switch (C7CD::Available() ? -1 : SoundStatus)
 		{
 			case 0:
 				SD_ContinueMusic(gameinfo.MenuMusic, pauseofs);

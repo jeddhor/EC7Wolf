@@ -71,6 +71,7 @@ static TArray<FString> iwadNames;
 static TArray<LevelSet> levelSets;
 static const IWadData *selectedGame;
 static unsigned int NumIWads;
+static FString gameDataDir;
 
 static bool CheckIWadNotYetFound(const TArray<WadStuff> &iwads, int type)
 {
@@ -246,6 +247,16 @@ const IWadData &GetGame()
 unsigned int GetNumIWads()
 {
 	return NumIWads;
+}
+
+// The directory the player's own game files were found in, with a trailing
+// separator (empty if they were found in the working directory). Anything that
+// derives from the commercial release has to live beside those files rather
+// than in the source tree or the pk3, so this is where such things are looked
+// for: the optional menu backdrop, and the ripped CD soundtrack.
+const FString &GetGameDataDirectory()
+{
+	return gameDataDir;
 }
 
 enum
@@ -820,18 +831,21 @@ void SelectGame(TArray<FString> &wadfiles, const char* iwad, const char* datawad
 
 	NumIWads = base.Path.Size();
 
+	// Remember where the player's data files live. See GetGameDataDirectory().
+	if(base.Path.Size() > 0)
+	{
+		const long slash = base.Path[0].LastIndexOfAny("/\\");
+		gameDataDir = slash >= 0 ? base.Path[0].Left(slash + 1) : FString("");
+	}
+
 	// Optional replacement menu art, for anyone who would rather supply their own
 	// upscale than use the one the menu builds. It derives from the commercial
 	// splash screen either way, so it must never live in the source tree or the
 	// pk3; it sits next to the game data instead. Without it the menu upscales
 	// VGA chunk 6 out of the player's own data files (see c7_menu.cpp), so this
 	// is an override rather than the only source of a backdrop.
-	if(base.Path.Size() > 0)
 	{
-		FString dir = base.Path[0];
-		long slash = dir.LastIndexOfAny("/\\");
-		dir = slash >= 0 ? dir.Left(slash + 1) : FString("");
-		FString extra = dir + "c7menu.pk3";
+		FString extra = gameDataDir + "c7menu.pk3";
 		if(File(extra).exists())
 			wadfiles.Push(extra);
 	}

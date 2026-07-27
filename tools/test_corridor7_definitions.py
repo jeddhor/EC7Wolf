@@ -52,6 +52,11 @@ def require(pattern: str, text: str, description: str) -> None:
         raise SystemExit(f"Corridor 7 definition check failed: {description}")
 
 
+def forbid(pattern: str, text: str, description: str) -> None:
+    if re.search(pattern, text, re.MULTILINE | re.DOTALL) is not None:
+        raise SystemExit(f"Corridor 7 definition check failed: {description}")
+
+
 for object_id, actor in {
     24: "C7Static001",       # red card
     25: "C7Static002",       # blue card
@@ -77,11 +82,22 @@ for object_id, actor in {
         f"object {object_id} must translate to {actor}",
     )
 
-for ignored_id in (93,):
-    require(
-        rf"^\s*ignore\s+{ignored_id};",
+# 93 is one of the eight patrol turning points (90..97), not a sprite. The
+# guard is kept, because the thing it protects against is real -- read as a
+# graphics page, 93 becomes a collectible, room-sized mine-explosion frame --
+# but it now asserts what 93 actually is instead of asserting that it is
+# ignored, which it no longer is.
+require(
+    r"^\s*\{90,\s*PatrolPoint,\s*8,",
+    XLAT,
+    "objects 90..97 must be the inherited patrol turning points, so that "
+    "PATHING aliens have a route to follow and 93 stays out of the sprite pages",
+)
+for sprite_actor in ("C7Static", "C7Ammo", "C7Medic"):
+    forbid(
+        rf"^\s*\{{9[0-7],\s*{sprite_actor}",
         XLAT,
-        f"internal object {ignored_id} must not spawn a graphics-page sprite",
+        f"no patrol turning point may translate to a {sprite_actor}* sprite",
     )
 
 require(r"^\s*\{32,\s*C7DamageField,", XLAT,

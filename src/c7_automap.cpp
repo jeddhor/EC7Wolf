@@ -253,10 +253,25 @@ void C7Map_Draw()
 
 	// Aliens. Without the floor plan only the ones already inside the painted
 	// window show, which is what "monsters close to you" amounts to.
+	//
+	// The panel is a motion detector, not an X-ray. It paints aliens that are
+	// moving, which is why the guide tells the player to read dot speed as a
+	// rough species classifier, and why it warns that motionless actors and
+	// still-disguised Bandors may not show up at all. Painting every living
+	// alien gives away the two things the game deliberately hides: an ambush
+	// waiting around a corner, and the filing cabinet that is about to unfold
+	// into one.
+	//
+	// dir is the existing state that already answers this, so nothing new has
+	// to be stored or saved: map setup leaves a standing actor at nodir and
+	// only gives a direction to one placed on patrol, and an actor that wakes
+	// gets a direction from SelectChaseDir on its first A_Chase.
 	for(AActor::Iterator iter = AActor::GetIterator();iter.Next();)
 	{
 		AActor *const actor = iter;
 		if(actor == player || !(actor->flags & FL_ISMONSTER) || actor->health <= 0)
+			continue;
+		if(actor->dir == nodir)
 			continue;
 		const int tx = actor->tilex, ty = actor->tiley;
 		if(tx < firstDrawX || tx > lastDrawX || ty < firstDrawY || ty > lastDrawY)

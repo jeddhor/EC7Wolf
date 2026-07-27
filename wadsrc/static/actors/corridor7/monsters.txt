@@ -27,7 +27,15 @@ actor C7OrganicEye : C7Monster
 			AILO ABCD 8 NOP A_Chase
 			loop
 		See:
-			AILO ABCD 6 NOP A_Chase
+			// The alarm is the Ailoprobe's whole job -- it is a sentry that
+			// trades lethality for the ability to bring other aliens down on
+			// the player ("clear it quickly before it draws traffic"). Raising
+			// it only from the attack sequence made a sentry that has seen the
+			// player but not yet fired stay silent, so it goes here, on
+			// sighting, the same way the Eitak calls for support.
+			AILO A 6 NOP A_C7AlienAlarm
+			AILO A 6 NOP A_Chase
+			AILO BCD 6 NOP A_Chase
 			loop
 		Missile:
 			C119 A 5 A_FaceTarget

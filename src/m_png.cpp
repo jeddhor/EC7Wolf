@@ -770,7 +770,7 @@ DWORD CalcSum(Byte *row, int len)
 //==========================================================================
 
 #if USE_FILTER_HEURISTIC
-static int SelectFilter(Byte row[5][1 + MAXWIDTH*3], Byte prior[MAXWIDTH*3], int width)
+static int SelectFilter(Byte *const row[5], Byte *prior, int width)
 {
 	// As it turns out, it seems no filtering is the best for Doom screenshots,
 	// no matter what the heuristic might determine.
@@ -905,11 +905,23 @@ static int SelectFilter(Byte row[5][1 + MAXWIDTH*3], Byte prior[MAXWIDTH*3], int
 
 bool M_SaveBitmap(const BYTE *from, ESSType color_type, int width, int height, int pitch, FILE *file)
 {
+	// The row scratch is sized from the image rather than from MAXWIDTH. These
+	// were fixed stack arrays, which quietly made MAXWIDTH a cap on how wide a
+	// PNG this can write -- and nothing on the way in enforces that cap, so a
+	// wider image did not fail, it ran off the end of the stack. Reachable from
+	// an ordinary screenshot above 5120 pixels, and hit every time by the xBRZ
+	// parity capture, which writes the frame at its scaled size.
+	const int rowlen = 1 + width*3;
 #if USE_FILTER_HEURISTIC
-	Byte prior[MAXWIDTH*3];
-	Byte temprow[5][1 + MAXWIDTH*3];
+	TArray<Byte> rowstore((unsigned)(rowlen*5 + width*3));
+	rowstore.Resize((unsigned)(rowlen*5 + width*3));
+	Byte *const prior = &rowstore[rowlen*5];
+	Byte *const temprow[5] = { &rowstore[0], &rowstore[rowlen],
+		&rowstore[rowlen*2], &rowstore[rowlen*3], &rowstore[rowlen*4] };
 #else
-	Byte temprow[1][1 + MAXWIDTH*3];
+	TArray<Byte> rowstore((unsigned)rowlen);
+	rowstore.Resize((unsigned)rowlen);
+	Byte *const temprow[1] = { &rowstore[0] };
 #endif
 	Byte buffer[PNG_WRITE_SIZE];
 	z_stream stream;

@@ -608,7 +608,22 @@ c7/monster/attack/class17	{ C7DS0051 C7AL0051 C7PC0051 }
 c7/monster/attack/class18	{ C7DS0024 C7AL0024 C7PC0024 }
 c7/monster/attack/class19	{ C7DS0051 C7AL0051 C7PC0051 }
 c7/monster/attack/class20	{ C7DS0051 C7AL0051 C7PC0051 }
+// The three sounds below are the audible tells the strategy guide tells the
+// player to listen for -- it lists door movement, footsteps, morphing, squeals
+// and laughs as the way to place a threat you cannot see yet, so they are
+// gameplay, not flavour. All three were recovered by DMA capture from the DOS
+// executable rather than inferred: an otherwise empty lab room with a single
+// alien three tiles ahead, run twice, once with the alien facing the player and
+// once facing away. Each sound appears only in the facing-the-player run, once,
+// immediately before that class's known attack sample.
+//
+// 19 is shared by both eye probes, which is why the guide describes the same
+// electronic whine for each. 27 doubles as the level-entry sound.
+c7/monster/active/class3	{ C7DS0019 C7AL0019 C7PC0019 }	// Alioprobe whine
+c7/monster/active/class4	{ C7DS0019 C7AL0019 C7PC0019 }	// Animated Probe whine
 c7/monster/active/class6	{ C7DS0055 C7AL0055 C7PC0055 }
+c7/monster/active/class7	{ C7DS0020 C7AL0020 C7PC0020 }	// Rodex squeal
+c7/monster/morph/class8		{ C7DS0027 C7AL0027 C7PC0027 }	// Bandor unfolding
 c7/monster/active/class13	{ C7DS0057 C7AL0057 C7PC0057 }
 c7/monster/active/class20	{ C7DS0068 C7AL0068 C7PC0068 }
 c7/monster/active/class21	{ C7DS0068 C7AL0068 C7PC0068 }

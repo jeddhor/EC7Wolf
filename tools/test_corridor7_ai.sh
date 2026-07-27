@@ -155,3 +155,82 @@ sys.exit(0 if ok else 1)
 PY
 
 printf 'PASS: patrol routes are walked and sentries hold their posts\n'
+
+# ---------------------------------------------------------------------------
+# Part two: a disguised Bandor is furniture until the player is close to it.
+#
+# The disguise is the whole actor. If it unfolds because a firefight happened
+# somewhere else on the floor, the player never meets it disguised, and an alien
+# that spends the game pretending to be a filing cabinet becomes an alien that
+# stands in the open. So the assertion is a pair, on one map: an alien three
+# tiles away wakes, an identical one twelve tiles away does not -- while the
+# near one is shooting, which is what makes the distant one's silence mean
+# something. A build with no range limit wakes both at the same tic.
+#
+# Built as a bare corridor rather than taken from a released floor, because on a
+# real map the nearest cover, door or second alien would decide the outcome
+# instead of the range.
+# ---------------------------------------------------------------------------
+
+lab="$work/lab"
+mkdir -p "$lab"
+cp "$build_dir/ec7wolf" "$build_dir/ec7wolf.pk3" "$lab/"
+for f in "$data_dir"/*.CO7 "$data_dir"/CORR7CD.EXE; do
+	[ -e "$f" ] && cp "$f" "$lab/" || true
+done
+
+# Written into the lab's OWN copy. Never hand this a path in the data directory:
+# it writes a whole archive, and the released maps are not replaceable.
+python3 "$(dirname "$0")/make_corridor7_ai_lab.py" \
+	"$data_dir/MAPTEMP.CO7" "$lab/MAPTEMP.CO7" 118:7 128:16 >/dev/null
+
+(
+	cd "$lab"
+	timeout 600s env SDL_AUDIODRIVER=dummy \
+		xvfb-run -a -s "-screen 0 640x400x24" ./ec7wolf \
+		--data CO7 --nowait --vid-renderer software --res 640 400 \
+		--config "$work/labcfg" --savedir "$work/labsv" \
+		--tedlevel MAP01 --skill 2 --capture-rngseed 12345 \
+		--capture-actors "$work/lab.txt" --capture-maxtics 500
+) >"$work/lab.log" 2>&1 || true
+
+if [ ! -s "$work/lab.txt" ]; then
+	printf 'FAIL: the ambush lab produced no actor trace; see %s/lab.log\n' "$work" >&2
+	exit 1
+fi
+
+python3 - "$work/lab.txt" <<'PY'
+import sys
+
+near_woke = far_woke = False
+seen_near = seen_far = False
+for line in open(sys.argv[1]):
+    if line.startswith("#"):
+        continue
+    _, name, _, _, _, _, attack, _ = line.split()
+    if name == "C7ProbeEye":
+        seen_near = True
+        near_woke |= attack == "1"
+    elif name == "C7MorphChair":
+        seen_far = True
+        far_woke |= attack == "1"
+
+ok = True
+if not seen_near or not seen_far:
+    print("FAIL: the lab did not contain both aliens, so nothing was compared")
+    ok = False
+elif not near_woke:
+    print("FAIL: the near alien never engaged, so no noise was made and the "
+          "distant Bandor was never actually tested")
+    ok = False
+elif far_woke:
+    print("FAIL: the Bandor twelve tiles away unfolded anyway. Its disguise is "
+          "supposed to survive a firefight happening elsewhere on the floor.")
+    ok = False
+else:
+    print("ambush  near alien engaged; Bandor 12 tiles away stayed furniture")
+
+sys.exit(0 if ok else 1)
+PY
+
+printf 'PASS: a distant Bandor keeps its disguise through a firefight elsewhere\n'

@@ -13,6 +13,9 @@ actor C7Monster : WolfensteinMonster
 actor C7OrganicEye : C7Monster
 {
 	// Ailoprobe / ORGANIC EYE (released executable class 3).
+	// seesound, not activesound: the capture shows the whine exactly once, on
+	// noticing the player, which is where FirstSighting plays seesound.
+	seesound "c7/monster/active/class3"
 	attacksound "c7/monster/attack/class3"
 	deathsound "c7/monster/death/class3"
 	points 100
@@ -57,6 +60,7 @@ actor C7OrganicEye : C7Monster
 actor C7ProbeEye : C7Monster
 {
 	// Animated Probe / PROBE EYE (class 4).
+	seesound "c7/monster/active/class4"
 	attacksound "c7/monster/attack/class4"
 	deathsound "c7/monster/death/class4"
 	points 400
@@ -90,6 +94,34 @@ actor C7ProbeEye : C7Monster
 			stop
 	}
 }
+
+// Bandor disguise tuning, shared by the four furniture slots below.
+//
+// A Bandor is supposed to be scenery until the player is on top of it -- the
+// guide tells the player to check behind them after walking into a furnished
+// room. Left as an ordinary monster it unfolds the moment it sees or hears
+// anything, so a shot fired two rooms away turns every chair on the floor into
+// an alien before the player has even opened the door, and the ambush never
+// happens once.
+//
+// The original's trigger condition is not documented and no radius survives in
+// any source, so this is a deliberate design choice rather than a
+// reconstruction: sight and hearing are both capped at four tiles. Beyond that
+// it is furniture and stays furniture.
+//
+// Distances are in the engine's sight units, which are fixed-point times 64 --
+// one tile is 65536*64 = 4194304, so four tiles is 16777216. (Compare MINSIGHT
+// in wl_state.cpp, which is 1.5 tiles written the same way.)
+//
+// What this produces in play: facing the player it unfolds at four tiles;
+// facing away the field-of-view test holds it until the player is inside the
+// automatic close-range radius of 1.5 tiles, so they walk past it and it comes
+// up behind them. Both read as an ambush, which is the point.
+//
+// Deliberately NOT limited: a Bandor killed nearby still calls the others in.
+// That path is P_AlertCorridor7MonstersNear, which wakes them directly instead
+// of going through the sight check, so the documented loyalty behaviour is
+// unaffected by the hearing cap.
 
 actor C7Bandor : C7Monster
 {
@@ -182,8 +214,10 @@ actor C7MorphChair : C7Bandor
 	dropitem "C7ChargePack", 64
 	states
 	{
-		Spawn: C124 A -1 NOP A_Look stop
+		// Four tiles of sight and hearing: furniture until you are close.
+		Spawn: C124 A -1 NOP A_Look(0, 0, 16777216, 16777216) stop
 		See:
+			C125 A 0 A_PlaySound("c7/monster/morph/class8")
 			C125 A 5
 			C126 A 5
 			C127 A 5
@@ -201,8 +235,10 @@ actor C7MorphFile : C7Bandor
 	dropitem "C7ChargePack", 64
 	states
 	{
-		Spawn: C129 A -1 NOP A_Look stop
+		// Four tiles of sight and hearing: furniture until you are close.
+		Spawn: C129 A -1 NOP A_Look(0, 0, 16777216, 16777216) stop
 		See:
+			C130 A 0 A_PlaySound("c7/monster/morph/class8")
 			C130 A 5
 			C131 A 5
 			C132 A 5
@@ -220,8 +256,10 @@ actor C7MorphPlant : C7Bandor
 	dropitem "C7ChargePack", 64
 	states
 	{
-		Spawn: C134 A -1 NOP A_Look stop
+		// Four tiles of sight and hearing: furniture until you are close.
+		Spawn: C134 A -1 NOP A_Look(0, 0, 16777216, 16777216) stop
 		See:
+			C135 A 0 A_PlaySound("c7/monster/morph/class8")
 			C135 A 5
 			C136 A 5
 			C137 A 5
@@ -239,8 +277,10 @@ actor C7MorphBarrel : C7Bandor
 	dropitem "C7ChargePack", 64
 	states
 	{
-		Spawn: C139 A -1 NOP A_Look stop
+		// Four tiles of sight and hearing: furniture until you are close.
+		Spawn: C139 A -1 NOP A_Look(0, 0, 16777216, 16777216) stop
 		See:
+			C140 A 0 A_PlaySound("c7/monster/morph/class8")
 			C140 A 5
 			C141 A 5
 			C142 A 5
@@ -252,6 +292,7 @@ actor C7MorphBarrel : C7Bandor
 actor C7Rodex : C7Monster
 {
 	// Rodex: native common class 4 (runtime class 7), fast and cowardly.
+	seesound "c7/monster/active/class7"
 	attacksound "c7/monster/attack/class7"
 	deathsound "c7/monster/death/class7"
 	points 700

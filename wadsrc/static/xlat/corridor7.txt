@@ -2122,19 +2122,22 @@ things
 	ignore 86;
 	ignore 87;
 	ignore 88;
-	// The executable's object switch has no action for 89..105. Some values
-	// overlap walls or internal counters, but none spawn a map object.
+	// The executable's object switch has no action for 89 or 98..105. Some
+	// values overlap walls or internal counters, but none spawn a map object.
 	ignore 89;
-	ignore 90;
-	ignore 91;
-	ignore 92;
-	// The executable's object switch has no case for 93. Treating it as sprite
-	// page 71 creates a collectible, room-sized mine-explosion frame.
-	ignore 93;
-	ignore 94;
-	ignore 95;
-	ignore 96;
-	ignore 97;
+	// 90..97 are the inherited patrol turning points, and they are NOT part of
+	// the object switch in Wolf3D either -- map setup consumes them before it
+	// runs, which is why looking for them there found nothing and they were
+	// dropped. Without them every PATHING alien walks in its spawn direction
+	// until something blocks it and then stands there forever (SelectPathDir
+	// sets dir = nodir, and A_Chase stops on that), which is why the released
+	// maps looked like they had no patrols at all.
+	//
+	// The direction convention is Wolf3D's, unchanged: 90 = east, then 45
+	// degrees per step counter-clockwise. Measured rather than assumed -- over
+	// the 30 base floors, 254 of 288 markers point straight at another marker
+	// under this reading, and no other rotation or handedness manages 46%.
+	{90, PatrolPoint, 8, 0, 0}
 	// 98 is declared as a disintegrating secret wall above.
 	// Value 99 has no standalone object action. On a tile-63 cell the native
 	// map setup promotes that wall's elevator trigger to a bonus exit.

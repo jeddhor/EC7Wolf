@@ -1148,6 +1148,7 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 		// value token where present) so they are not misread as data files.
 		else IFARG("--capture-rngseed") { ++i; }
 		else IFARG("--capture-checksum") { ++i; }
+		else IFARG("--capture-actors") { ++i; }
 		else IFARG("--capture-frame") { ++i; }
 		else IFARG("--capture-file") { ++i; }
 		else IFARG("--capture-maxframes") { ++i; }

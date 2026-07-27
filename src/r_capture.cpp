@@ -90,6 +90,13 @@ namespace
 	// path does, with the same flashed palette, rather than a test-only copy.
 	int      g_xbrzFactor     = 0;
 
+	// --capture-actors PATH: trace every monster's position and state each tic.
+	// Enemy behavior is otherwise invisible to the test harness -- a screenshot
+	// says nothing about whether an alien patrolled, backed off, or stood still
+	// for 500 tics -- so the AI work is measured from this rather than by eye.
+	FString  g_actorPath;
+	FILE    *g_actorFile      = NULL;
+
 	bool     g_c7Map          = false;   // --capture-c7map: raise the C7 inset panel
 	bool     g_c7FloorPlan    = false;   // --capture-floorplan: as if the plan were picked up
 	// --capture-exitlevel: complete the level at this tic, taking the same path
@@ -144,6 +151,30 @@ namespace
 		}
 
 		return crc;
+	}
+
+	// One line per living monster per tic. Deliberately records dir and the
+	// pathing flag alongside the tile: "did it move" is not the same question as
+	// "is it patrolling", and a patrol that has run into a wall shows up here as
+	// dir == nodir with FL_PATHING still set.
+	void TraceActors()
+	{
+		if(g_actorFile == NULL)
+			return;
+
+		for(AActor::Iterator iter = AActor::GetIterator(); iter.Next();)
+		{
+			if(!(iter->flags & FL_ISMONSTER) || iter->health <= 0)
+				continue;
+			fprintf(g_actorFile, "%lu %s %d %d %d %d %d %d\n",
+				(unsigned long)g_ticCount,
+				iter->GetClass()->GetName().GetChars(),
+				iter->tilex, iter->tiley,
+				(int)iter->dir,
+				(iter->flags & FL_PATHING) ? 1 : 0,
+				(iter->flags & FL_ATTACKMODE) ? 1 : 0,
+				iter->health);
+		}
 	}
 
 	// Companion to the screenshot below: the same frame, run through the same
@@ -284,6 +315,12 @@ namespace
 			g_checksumFile = NULL;
 		}
 
+		if(g_actorFile != NULL)
+		{
+			fclose(g_actorFile);
+			g_actorFile = NULL;
+		}
+
 		Printf("Capture: summary tics=%lu frames=%lu checksum=%08x\n",
 			(unsigned long)g_ticCount,
 			(unsigned long)g_frameCount,
@@ -305,6 +342,11 @@ void ParseArgs(int argc, char **argv)
 		else if(strcmp(arg, "--capture-checksum") == 0 && i + 1 < argc)
 		{
 			g_checksumPath = argv[++i];
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-actors") == 0 && i + 1 < argc)
+		{
+			g_actorPath = argv[++i];
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-frame") == 0 && i + 1 < argc)
@@ -444,6 +486,16 @@ void ParseArgs(int argc, char **argv)
 		if(g_checksumFile == NULL)
 			Printf("Capture: FAILED to open checksum log '%s'\n",
 				g_checksumPath.GetChars());
+	}
+
+	if(g_armed && !g_actorPath.IsEmpty())
+	{
+		g_actorFile = fopen(g_actorPath.GetChars(), "w");
+		if(g_actorFile == NULL)
+			Printf("Capture: FAILED to open actor trace '%s'\n",
+				g_actorPath.GetChars());
+		else
+			fprintf(g_actorFile, "# tic class tilex tiley dir pathing attack health\n");
 	}
 
 #ifdef ECWOLF_RENDERER_OPENGL
@@ -666,6 +718,8 @@ void PerTic()
 	if(g_checksumFile != NULL)
 		fprintf(g_checksumFile, "tic %lu %08x\n",
 			(unsigned long)g_ticCount, (unsigned int)ticCrc);
+
+	TraceActors();
 
 	// A tic-based quit keeps the determinism gate reproducible under the
 	// current wall-clock frame pacing, where the tic-per-frame ratio varies.

@@ -5,3 +5,4 @@ android-libs/launcher/src/com/beloko/idtech/R.java
 /results/
 /release/
 /.idea/
+__pycache__/

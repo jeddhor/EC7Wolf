@@ -280,6 +280,69 @@ towards rebuilding. That removed the upload (0.38 → 0.12 ms) and left the buil
 Both are in the plan's optimization list. Neither survives contact with the
 measurements, and doing them anyway would trade real complexity for nothing.
 
+## Hardware renderer options
+
+Two settings the software raycaster cannot offer, both under **Advanced
+Graphics → Hardware Renderer**, both **off by default** so every parity gate goes
+on measuring the untouched renderer.
+
+### Texture Filter — Sharp / Bilinear / Smooth (`Vid_GLFilter`)
+
+The constraint that shapes all of this: **a palette index is a name, not a
+colour.** The world texture is `R8UI`, which the hardware can only sample
+nearest, and averaging indices would be meaningless anyway — index 5 and index
+200 average to 102, an unrelated entry. So filtering cannot happen at the
+sampler. Each tap is resolved the whole way — colour cycle, full-bright rules,
+colormap row, palette — and only the resulting RGB is mixed.
+
+The same taps produce **coverage**: a transparent tap contributes no colour and
+lowers the weight instead, and that fraction is written to alpha.
+
+* **Sharp** — one tap. Bit-identical to the renderer without the feature.
+* **Bilinear** — four taps, weighted by the fractional sample position.
+* **Smooth** — four bilinear samples on a rotated grid across the pixel's
+  footprint in texture space, taken from `dFdx`/`dFdy`.
+
+**There is no trilinear or anisotropic option, and that is not an omission.**
+Both need a mip chain. A mip chain of palette indices is meaningless for the
+reason above, and a mip chain of *resolved colour* would have to be rebuilt every
+time Corridor 7 rewrites the palette — which it does for night vision, infrared,
+electric, damage and pickup flashes. **Smooth** is what those settings are for:
+it samples the actual pixel footprint, narrows with distance the same way, and
+needs no precomputation that a palette change could invalidate.
+
+### Antialiasing — Off / 2x / 4x / 8x (`Vid_GLMSAA`)
+
+The world renders into a multisampled framebuffer and is resolved into the
+texture the compositor samples, so nothing downstream knows MSAA is on. The
+sample count is clamped to `GL_MAX_SAMPLES`, and an incomplete framebuffer falls
+back to no antialiasing rather than rendering nothing.
+
+MSAA alone cannot smooth a **sprite or masked-wall silhouette**, because those
+edges come from a shader `discard` and a discarded fragment kills every sample.
+With filtering also on, the coverage fraction described above is fed to
+`GL_SAMPLE_ALPHA_TO_COVERAGE`, which turns it into a sample mask — so cutout
+edges get antialiased too. Coverage rather than blending on purpose: **blending
+would make the pass order-dependent and break the state-sorted draw batching**
+that the optimization work depends on.
+
+### Cost and caveats
+
+Smooth + 4× MSAA measured 4.01 ms/frame on MAP01 against 4.13 ms with both off —
+inside the noise, because the frame is CPU-bound on the weapon draw and the GPU
+has the headroom. On weaker hardware the extra taps are real work; that is what
+the three levels are for.
+
+MSAA applies to the **live** renderer only. The offscreen `--capture-glframe`
+path used by the parity gate does not multisample, which is why turning it on
+cannot move those numbers.
+
+`tools/test_gl_filtering.sh` asserts the parts that could silently rot: that
+Sharp is untouched, that bilinear introduces colours outside the on-screen
+palette set (proving taps are resolved *before* mixing rather than after), that a
+256-entry palette rewrite still reaches the screen with filtering on, and that
+MSAA changes edges and only edges.
+
 ## Verification status
 
 * Determinism gate green — `checksum=ae626557`, unchanged by the cutover and

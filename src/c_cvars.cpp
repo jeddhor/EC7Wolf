@@ -60,6 +60,8 @@ FString vid_renderer = "opengl";
 FString vid_renderer_requested = "opengl";
 bool vid_gldebug = false;
 bool vid_glprofile = false;
+int vid_glfilter = 0;
+int vid_glmsaa = 0;
 int vid_maxfps = 0;					// 0 = unlimited
 int vid_xbrz = 0;					// 0 = off, 1 = auto, 2-6 = fixed factor
 int vid_renderscale = 1;			// divides the video mode to get the render size
@@ -224,6 +226,8 @@ void ReadConfig(void)
 	config.CreateSetting("Vid_Vsync", false);
 	config.CreateSetting("Vid_Renderer", FString("opengl"));
 	config.CreateSetting("Vid_GLDebug", false);
+	config.CreateSetting("Vid_GLFilter", 0);
+	config.CreateSetting("Vid_GLMSAA", 0);
 	config.CreateSetting("Vid_MaxFPS", 0);
 	config.CreateSetting("Vid_xBRZ", 0);
 	config.CreateSetting("Vid_RenderScale", 1);
@@ -326,6 +330,8 @@ void ReadConfig(void)
 	vid_vsync = config.GetSetting("Vid_Vsync")->GetInteger() != 0;
 	vid_renderer = vid_renderer_requested = config.GetSetting("Vid_Renderer")->GetString();
 	vid_gldebug = config.GetSetting("Vid_GLDebug")->GetInteger() != 0;
+	vid_glfilter = config.GetSetting("Vid_GLFilter")->GetInteger();
+	vid_glmsaa = config.GetSetting("Vid_GLMSAA")->GetInteger();
 	vid_maxfps = config.GetSetting("Vid_MaxFPS")->GetInteger();
 	vid_xbrz = config.GetSetting("Vid_xBRZ")->GetInteger();
 	vid_renderscale = config.GetSetting("Vid_RenderScale")->GetInteger();
@@ -492,6 +498,8 @@ void WriteConfig(void)
 	config.GetSetting("Vid_Vsync")->SetValue(vid_vsync);
 	config.GetSetting("Vid_Renderer")->SetValue(vid_renderer_requested);
 	config.GetSetting("Vid_GLDebug")->SetValue(vid_gldebug);
+	config.GetSetting("Vid_GLFilter")->SetValue(vid_glfilter);
+	config.GetSetting("Vid_GLMSAA")->SetValue(vid_glmsaa);
 	config.GetSetting("Vid_MaxFPS")->SetValue(vid_maxfps);
 	config.GetSetting("Vid_xBRZ")->SetValue(vid_xbrz);
 	config.GetSetting("Vid_RenderScale")->SetValue(vid_renderscale);

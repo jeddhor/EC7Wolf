@@ -309,6 +309,7 @@ namespace
 		"uniform int   uPhase;\n"           // gamestate.TimeCount>>3 (cycle/dissolve)
 		"uniform int   uLaserColor;\n"      // physical index for lit laser texels
 		"uniform int   uDebug;\n"           // 0 normal, 1 shade-row visualization
+		"uniform int   uFilter;\n"          // 0 nearest, 1 bilinear, 2 supersampled
 		"const float FRACUNIT = 65536.0;\n"
 		"const float MINZ = 8192.0;\n"      // 2048*4
 		"float bayer4(ivec2 p){\n"
@@ -324,6 +325,87 @@ namespace
 		"    uint h = u*73856093u ^ (v>>3u)*19349663u ^ uint(phase)*83492791u;\n"
 		"    h ^= h >> 13u; h *= 0x9E3779B1u; h ^= h >> 16u;\n"
 		"    return (h % 3u) != 0u;\n"
+		"}\n"
+		// --- texture filtering -------------------------------------------------
+		//
+		// A palette index is a name, not a colour: averaging index 5 and index 200
+		// gives 102, which is an unrelated entry. So the hardware cannot filter
+		// this texture (it is R8UI, which is nearest-only anyway) and neither can
+		// we, until each tap has been resolved all the way through the colour
+		// cycle, the colormap row and the palette. Filtering therefore means
+		// running the whole per-texel chain once per tap and mixing the RGB.
+		//
+		// The same taps produce coverage: a tap that is transparent contributes no
+		// colour and lowers the weight instead. That fraction is written to alpha,
+		// where GL_SAMPLE_ALPHA_TO_COVERAGE turns it into an antialiased silhouette
+		// -- which is why sprite edges can be smoothed without blending, and
+		// therefore without breaking the order-independence the draw batching
+		// relies on.
+		"int c7Cycle(int idx, bool isWall){\n"
+		"    if(uCorridor7 == 1 && isWall && idx >= 208 && idx <= 239){\n"
+		"        int base = idx & ~7;\n"
+		"        return base + ((idx - base + uCyclePhase) & 7);\n"
+		"    }\n"
+		"    return idx;\n"
+		"}\n"
+		// Transparency exactly as the unfiltered path tests it, per texel.
+		"bool tapOpaque(ivec2 texel, int idx){\n"
+		"    if(uHasOpacity == 1) return texelFetch(uOpacityTex, texel, 0).r != 0u;\n"
+		"    if(uMasked == 1 && idx == uMaskColor) return false;\n"
+		"    if(uSprite == 1 && idx == 0) return false;\n"
+		"    if(uSprite == 1 && uSpriteLaser == 1) return c7LaserLit(texel, uPhase);\n"
+		"    return true;\n"
+		"}\n"
+		// Wall / door / masked / sprite texel -> RGB.
+		"vec3 tapWall(int idx0, int shadeRow){\n"
+		"    if(uSprite == 1 && uSpriteLaser == 1)\n"
+		"        return texelFetch(uPaletteTex, ivec2(uLaserColor,0), 0).rgb;\n"
+		"    bool isWall = uSurfKind == 2;\n"
+		"    int idx = c7Cycle(idx0, isWall);\n"
+		"    int row = shadeRow;\n"
+		"    bool fullbright = uCorridor7 == 1 && isWall &&\n"
+		"        (idx == uRemap15 || idx == uRemap254 ||\n"
+		"        (idx >= uRemap208 && idx <= uRemap239));\n"
+		"    if(fullbright) row = 0;\n"
+		"    if(uSprite == 1 && uSpriteFullbright == 1) row = 0;\n"
+		"    row = clamp(row, 0, uNumColormaps - 1);\n"
+		"    int shaded = int(texelFetch(uColormapTex, ivec2(idx, row), 0).r);\n"
+		"    return texelFetch(uPaletteTex, ivec2(shaded, 0), 0).rgb;\n"
+		"}\n"
+		// Corridor 7 plane texel -> RGB (walks the palette, never the colormap).
+		"vec3 tapPlane(int idx, int litBand){\n"
+		"    int rampBase = int(texelFetch(uC7RampFloor, ivec2(idx, 0), 0).r);\n"
+		"    int planeIdx = max(rampBase, idx - litBand);\n"
+		"    return texelFetch(uPaletteTex, ivec2(planeIdx, 0), 0).rgb;\n"
+		"}\n"
+		// Sprites clamp at their border; everything else tiles, as the raycaster's
+		// per-cell texture addressing does. Wrapping a sprite would fetch the far
+		// side of the silhouette into its own edge.
+		"ivec2 tapWrap(ivec2 texel, ivec2 isz){\n"
+		"    if(uSprite == 1) return clamp(texel, ivec2(0), isz - 1);\n"
+		"    return ((texel % isz) + isz) % isz;\n"
+		"}\n"
+		"void tapAt(ivec2 texel, ivec2 isz, int shadeRow, int litBand, float w,\n"
+		"           inout vec3 acc, inout float cov){\n"
+		"    ivec2 t = tapWrap(texel, isz);\n"
+		"    int idx = int(texelFetch(uIndexTex, t, 0).r);\n"
+		"    if(!tapOpaque(t, idx)) return;\n"
+		"    vec3 c = (uSurfKind == 2) ? tapWall(idx, shadeRow)\n"
+		"                              : ((uCorridor7 == 1) ? tapPlane(idx, litBand)\n"
+		"                                                   : tapWall(idx, shadeRow));\n"
+		"    acc += w * c; cov += w;\n"
+		"}\n"
+		// One bilinear sample: four taps around the sample point, weighted by the
+		// fractional position, each resolved before it is mixed.
+		"void sampleBilinear(vec2 uvs, ivec2 isz, int shadeRow, int litBand,\n"
+		"                    inout vec3 acc, inout float cov, float weight){\n"
+		"    vec2 sp = uvs * vec2(isz) - 0.5;\n"
+		"    ivec2 t0 = ivec2(floor(sp));\n"
+		"    vec2 f = sp - vec2(t0);\n"
+		"    tapAt(t0,               isz, shadeRow, litBand, weight*(1.0-f.x)*(1.0-f.y), acc, cov);\n"
+		"    tapAt(t0+ivec2(1,0),    isz, shadeRow, litBand, weight*f.x*(1.0-f.y),       acc, cov);\n"
+		"    tapAt(t0+ivec2(0,1),    isz, shadeRow, litBand, weight*(1.0-f.x)*f.y,       acc, cov);\n"
+		"    tapAt(t0+ivec2(1,1),    isz, shadeRow, litBand, weight*f.x*f.y,             acc, cov);\n"
 		"}\n"
 		"void main(){\n"
 		"    // Door-leaf slide: reproduce the software CheckSlidePass /\n"
@@ -345,37 +427,10 @@ namespace
 		"        uv.x = fract(intercept + off);\n"
 		"    }\n"
 		"    ivec2 isz = textureSize(uIndexTex,0);\n"
-		"    ivec2 texel = ivec2(floor(uv * vec2(isz)));\n"
-		"    texel = ((texel % isz) + isz) % isz;\n"   // tile (repeat) within one cell
-		"    int idx = int(texelFetch(uIndexTex, texel, 0).r);\n"
-		"    // Masked-wall transparency, mirroring the software postopacity test:\n"
-		"    // an explicit per-column opacity buffer wins when present (C7 grate /\n"
-		"    // fence FFlatTextures); otherwise a masked wall (or door leaf) is keyed\n"
-		"    // on the index-255 remap colour. Never write a transparent texel, so\n"
-		"    // freshly rendered geometry behind the pane shows through.\n"
-		"    if(uHasOpacity == 1){\n"
-		"        if(texelFetch(uOpacityTex, texel, 0).r == 0u) discard;\n"
-		"    } else if(uMasked == 1 && idx == uMaskColor){\n"
-		"        discard;\n"
-		"    } else if(uSprite == 1 && idx == 0){\n"
-		"        discard;\n"   // sprite silhouette: raw index 0 is transparent
-		"    }\n"
-		"    // Corridor 7 laser barrier: within the silhouette, paint animated\n"
-		"    // bright energy where the dissolve is lit and leave the rest clear.\n"
-		"    if(uSprite == 1 && uSpriteLaser == 1){\n"
-		"        if(!c7LaserLit(texel, uPhase)) discard;\n"
-		"        vec3 lc = texelFetch(uPaletteTex, ivec2(uLaserColor,0), 0).rgb;\n"
-		"        fragColor = vec4(lc, 1.0); return;\n"
-		"    }\n"
-		"    // Colour-cycle + full-bright are wall-only in the software renderer\n"
-		"    // (ShadeWallColor); planes draw c7PlaneShades[c] with neither.\n"
-		"    bool isWall = uSurfKind == 2;\n"
-		"    if(uCorridor7 == 1 && isWall && idx >= 208 && idx <= 239){\n"
-		"        int base = idx & ~7;\n"
-		"        idx = base + ((idx - base + uCyclePhase) & 7);\n"
-		"    }\n"
-		"    // Shade row selection mirrors the software renderer per surface type.\n"
-		"    int shadeRow;\n"
+		"\n"
+		"    // --- per-fragment shade selection (independent of which texel) ---\n"
+		"    int shadeRow = 0;\n"
+		"    int litBand = 0;\n"
 		"    if(uSurfKind == 2){\n"
 		"        // Wall: perpendicular forward distance -> raycaster wallheight rule.\n"
 		"        float d = max(-vViewPos.z, 0.0001);\n"
@@ -392,7 +447,7 @@ namespace
 		"        float edge = max(0.0, uHorizon - 1.0 - rowFromHorizon);\n"
 		"        int ver = int(min(79.0, edge * 80.0 / max(1.0, uHorizon)));\n"
 		"        int band = ver / 3;\n"
-		"        int litBand = band > uExtraLight / 8 ? band - uExtraLight / 8 : 0;\n"
+		"        litBand = band > uExtraLight / 8 ? band - uExtraLight / 8 : 0;\n"
 		"        int virtualX = int(min(319.0, gl_FragCoord.x * 320.0 / float(uViewW)));\n"
 		"        int a = (virtualX >> 2) & 1;\n"
 		"        int b = (ver % 3 == 1) ? 1 : 0;\n"
@@ -400,20 +455,6 @@ namespace
 		// Four-pixel alternation: the software picks c7NextPlaneShades, i.e. the
 		// NEXT band -- one more palette step.
 		"        if((a ^ b ^ c) == 0) litBand += 1;\n"
-		// The plane never goes through the colormap: Corridor 7 walks the palette
-		// one index darker per band and clamps at the bottom of the colour's own
-		// 16-aligned ramp (see wl_floorceiling.cpp for the measurement). Resolve
-		// and return here -- the wall-only full-bright and colour-cycle rules
-		// below do not apply to planes, and uSurfKind is 0/1 only for planes
-		// (doors, masked walls and sprites are all bound as WSURF_Wall).
-		"        int rampBase = int(texelFetch(uC7RampFloor, ivec2(idx, 0), 0).r);\n"
-		"        int planeIdx = max(rampBase, idx - litBand);\n"
-		"        if(uDebug == 1){\n"
-		"            float g = float(idx - planeIdx) / 15.0;\n"
-		"            fragColor = vec4(g, g, g, 1.0); return;\n"
-		"        }\n"
-		"        vec3 prgb = texelFetch(uPaletteTex, ivec2(planeIdx, 0), 0).rgb;\n"
-		"        fragColor = vec4(prgb, 1.0); return;\n"
 		"    } else {\n"
 		"        // Generic (non-C7) plane distance formula.\n"
 		"        float rowFromHorizon = abs(gl_FragCoord.y - uHorizon);\n"
@@ -422,26 +463,50 @@ namespace
 		"        float palf = (uShade - visv) / FRACUNIT;\n"
 		"        shadeRow = int(floor(palf));\n"
 		"    }\n"
-		"    // Corridor 7 full-bright reserved indices ignore distance shading.\n"
-		"    // Sprites too, not just walls: the lamps on world props are the same\n"
-		"    // reserved indices as the lamps painted into wall art and stay lit the\n"
-		"    // same way (C7ShadeWorldSpriteColor). uSurfKind is 0/1 only for planes,\n"
-		"    // which have already returned, so isWall covers walls and sprites.\n"
-		"    bool fullbright = uCorridor7 == 1 && isWall &&\n"
-		"        (idx == uRemap15 || idx == uRemap254 ||\n"
-		"        (idx >= uRemap208 && idx <= uRemap239));\n"
-		"    if(fullbright) shadeRow = 0;\n"
-		"    // A full-bright sprite (FL_BRIGHT / frame->fullbright) ignores the\n"
-		"    // distance shade entirely, matching ScaleSprite's colormap=Maps path.\n"
-		"    if(uSprite == 1 && uSpriteFullbright == 1) shadeRow = 0;\n"
 		"    shadeRow = clamp(shadeRow, 0, uNumColormaps - 1);\n"
+		"\n"
+		"    // --- debug visualizations read the centre texel only ---\n"
 		"    if(uDebug == 1){\n"
+		"        ivec2 dt = tapWrap(ivec2(floor(uv * vec2(isz))), isz);\n"
+		"        int didx = int(texelFetch(uIndexTex, dt, 0).r);\n"
+		"        if(uSurfKind != 2 && uCorridor7 == 1){\n"
+		"            int rampBase = int(texelFetch(uC7RampFloor, ivec2(didx, 0), 0).r);\n"
+		"            float g = float(didx - max(rampBase, didx - litBand)) / 15.0;\n"
+		"            fragColor = vec4(g, g, g, 1.0); return;\n"
+		"        }\n"
 		"        float g = float(shadeRow) / float(uNumColormaps - 1);\n"
 		"        fragColor = vec4(g, g, g, 1.0); return;\n"
 		"    }\n"
-		"    int shaded = int(texelFetch(uColormapTex, ivec2(idx, shadeRow), 0).r);\n"
-		"    vec3 rgb = texelFetch(uPaletteTex, ivec2(shaded, 0), 0).rgb;\n"
-		"    fragColor = vec4(rgb, 1.0);\n"
+		"\n"
+		"    vec3 acc = vec3(0.0);\n"
+		"    float cov = 0.0;\n"
+		"    if(uFilter == 0){\n"
+		"        // Nearest: one tap, bit-identical to the unfiltered renderer.\n"
+		"        tapAt(ivec2(floor(uv * vec2(isz))), isz, shadeRow, litBand, 1.0, acc, cov);\n"
+		"    } else if(uFilter == 1){\n"
+		"        sampleBilinear(uv, isz, shadeRow, litBand, acc, cov, 1.0);\n"
+		"    } else {\n"
+		"        // Supersampled: four bilinear samples on a rotated grid across the\n"
+		"        // pixel's footprint in texture space. This is what stands in for\n"
+		"        // trilinear/anisotropic filtering here -- both of those need a mip\n"
+		"        // chain, and a mip chain of palette indices is meaningless while a\n"
+		"        // mip chain of resolved colour would have to be rebuilt every time\n"
+		"        // Corridor 7 rewrites the palette (night vision, infrared, damage).\n"
+		"        // Sampling the footprint directly needs no such precomputation and\n"
+		"        // narrows with distance the same way, which is what stops the\n"
+		"        // shimmer.\n"
+		"        vec2 dx = dFdx(uv), dy = dFdy(uv);\n"
+		"        sampleBilinear(uv + (-0.375)*dx + (-0.125)*dy, isz, shadeRow, litBand, acc, cov, 0.25);\n"
+		"        sampleBilinear(uv + ( 0.125)*dx + (-0.375)*dy, isz, shadeRow, litBand, acc, cov, 0.25);\n"
+		"        sampleBilinear(uv + ( 0.375)*dx + ( 0.125)*dy, isz, shadeRow, litBand, acc, cov, 0.25);\n"
+		"        sampleBilinear(uv + (-0.125)*dx + ( 0.375)*dy, isz, shadeRow, litBand, acc, cov, 0.25);\n"
+		"    }\n"
+		"    if(cov <= 0.0) discard;\n"
+		"    // Colour is the average of the taps that were opaque; alpha is how much\n"
+		"    // of the pixel they covered. Without alpha-to-coverage the alpha is\n"
+		"    // ignored (the target is RGB and nothing blends), so edges stay hard\n"
+		"    // and only the colour is filtered.\n"
+		"    fragColor = vec4(acc / cov, cov);\n"
 		"}\n";
 
 	// --- Phase 10 compositor: a screen-space quad that either blits the RGB
@@ -1265,6 +1330,11 @@ namespace
 		w.su.floorPlaneH  = floorPlaneH;
 		w.su.ceilPlaneH   = ceilPlaneH;
 		w.uDebug = glGetUniformLocation(w.prog, "uDebug");
+		// Texture filtering is a whole-frame setting, so it is set once here
+		// rather than per surface. 0 keeps the renderer bit-identical to the
+		// unfiltered path, which is what every parity gate measures.
+		glUniform1i(glGetUniformLocation(w.prog, "uFilter"),
+			clamp(vid_glfilter, 0, 2));
 
 		// Palette (unit 1) and colormap (unit 2) are shared across every surface.
 		glActiveTexture(GL_TEXTURE1);
@@ -1858,6 +1928,10 @@ namespace
 		const void *lastMap;           // invalidate caches on level change
 		GLuint worldFbo, worldTex, worldDepth;
 		int    worldW, worldH;
+		// Multisampled render target, resolved into worldTex each frame. Zero
+		// when antialiasing is off, which is the default.
+		GLuint msaaFbo, msaaColor, msaaDepth;
+		int    worldSamples;
 		bool   haveWorld;              // a world was rendered for this frame
 		int    vx, vy, vw, vh, fw, fh; // view rect / frame size (8-bit space)
 		TArray<unsigned char> weaponCover; // per-view-rect: 1 where the weapon drew
@@ -1879,7 +1953,9 @@ namespace
 		bool      staticCacheValid;
 		GLLive() : inited(false), prog(0), screenProg(0), paletteTex(0),
 			colormapTex(0), c7RampFloorTex(0), lastMap(NULL), worldFbo(0), worldTex(0),
-			worldDepth(0), worldW(0), worldH(0), haveWorld(false),
+			worldDepth(0), worldW(0), worldH(0),
+			msaaFbo(0), msaaColor(0), msaaDepth(0), worldSamples(0),
+			haveWorld(false),
 			vx(0), vy(0), vw(0), vh(0), fw(0), fh(0),
 			wcx(0), wcy(0), wcw(0), wch(0), haveWeaponCover(false),
 			haveOverlayCover(false), lastW(0), lastH(0),
@@ -1934,13 +2010,39 @@ namespace
 		GLCheckErrors("EnsureLiveResources");
 	}
 
+	// Requested MSAA sample count, clamped to what the driver will actually give
+	// and to the values the menu offers. 0/1 means no multisampling at all, in
+	// which case the single-sampled path below is used unchanged.
+	int WantedSamples()
+	{
+		int want = vid_glmsaa;
+		if(want <= 1)
+			return 0;
+		if(want != 2 && want != 4 && want != 8)
+			want = 4;
+		GLint maxs = 0;
+		glGetIntegerv(GL_MAX_SAMPLES, &maxs);
+		if(maxs < 2)
+			return 0;
+		while(want > maxs)
+			want >>= 1;
+		return want >= 2 ? want : 0;
+	}
+
 	void EnsureWorldFbo(int w, int h)
 	{
-		if(gLive.worldFbo && gLive.worldW == w && gLive.worldH == h)
+		const int samples = WantedSamples();
+		if(gLive.worldFbo && gLive.worldW == w && gLive.worldH == h &&
+			gLive.worldSamples == samples)
 			return;
 		if(gLive.worldTex)   { glDeleteTextures(1, &gLive.worldTex);      gLedger.tex--; }
 		if(gLive.worldDepth) { glDeleteRenderbuffers(1, &gLive.worldDepth); gLedger.rbo--; }
 		if(gLive.worldFbo)   { glDeleteFramebuffers(1, &gLive.worldFbo);   gLedger.fbo--; }
+		if(gLive.msaaFbo)    { glDeleteFramebuffers(1, &gLive.msaaFbo);    gLedger.fbo--; }
+		if(gLive.msaaColor)  { glDeleteRenderbuffers(1, &gLive.msaaColor); gLedger.rbo--; }
+		if(gLive.msaaDepth)  { glDeleteRenderbuffers(1, &gLive.msaaDepth); gLedger.rbo--; }
+		gLive.msaaFbo = gLive.msaaColor = gLive.msaaDepth = 0;
+		gLive.worldSamples = samples;
 		glGenFramebuffers(1, &gLive.worldFbo);
 		gLedger.fbo++;
 		glBindFramebuffer(GL_FRAMEBUFFER, gLive.worldFbo);
@@ -1963,6 +2065,43 @@ namespace
 			GL_RENDERBUFFER, gLive.worldDepth);
 		gLive.worldW = w;
 		gLive.worldH = h;
+
+		// Multisampling renders into its own multisampled framebuffer and is
+		// resolved into worldTex afterwards, because the compositor samples
+		// worldTex as an ordinary texture. Rendering straight to a multisampled
+		// texture would work too, but this keeps everything downstream unaware
+		// that MSAA is on at all.
+		if(samples > 0)
+		{
+			glGenFramebuffers(1, &gLive.msaaFbo);
+			gLedger.fbo++;
+			glBindFramebuffer(GL_FRAMEBUFFER, gLive.msaaFbo);
+			glGenRenderbuffers(1, &gLive.msaaColor);
+			gLedger.rbo++;
+			glBindRenderbuffer(GL_RENDERBUFFER, gLive.msaaColor);
+			glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples,
+				GL_RGBA8, w, h);
+			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+				GL_RENDERBUFFER, gLive.msaaColor);
+			glGenRenderbuffers(1, &gLive.msaaDepth);
+			gLedger.rbo++;
+			glBindRenderbuffer(GL_RENDERBUFFER, gLive.msaaDepth);
+			glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples,
+				GL_DEPTH_COMPONENT24, w, h);
+			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+				GL_RENDERBUFFER, gLive.msaaDepth);
+			if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+			{
+				// Fall back rather than render nothing.
+				Printf("GL: %dx MSAA framebuffer incomplete; antialiasing off.\n",
+					samples);
+				glDeleteFramebuffers(1, &gLive.msaaFbo);   gLedger.fbo--;
+				glDeleteRenderbuffers(1, &gLive.msaaColor); gLedger.rbo--;
+				glDeleteRenderbuffers(1, &gLive.msaaDepth); gLedger.rbo--;
+				gLive.msaaFbo = gLive.msaaColor = gLive.msaaDepth = 0;
+				gLive.worldSamples = 0;
+			}
+		}
 	}
 
 	void UpdateLivePalette()
@@ -2039,14 +2178,41 @@ namespace
 		// the previous frame's palette and full-screen effects would miss it.
 		UpdateLivePalette();
 
-		glBindFramebuffer(GL_FRAMEBUFFER, gLive.worldFbo);
+		const bool msaa = gLive.worldSamples > 0 && gLive.msaaFbo != 0;
+		glBindFramebuffer(GL_FRAMEBUFFER, msaa ? gLive.msaaFbo : gLive.worldFbo);
 		glViewport(0, 0, vw, vh);
 		glEnable(GL_DEPTH_TEST);
 		glDepthFunc(GL_LESS);
 		glDisable(GL_CULL_FACE);
+		if(msaa)
+		{
+			glEnable(GL_MULTISAMPLE);
+			// The silhouettes of sprites and masked walls come from a shader
+			// `discard`, which multisampling cannot smooth on its own -- a
+			// discarded fragment kills every sample. The filtered path writes
+			// the fraction of opaque taps to alpha, and alpha-to-coverage turns
+			// that into a sample mask, so the cutout gets antialiased too.
+			//
+			// Coverage rather than blending on purpose: blending would make the
+			// pass order-dependent and break the state-sorted draw batching.
+			if(vid_glfilter > 0)
+				glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+		}
 		{
 			GLProf::Scope s(GLProf::B_Draw);
 			DrawWorldColourPass(wr);
+		}
+		if(msaa)
+		{
+			glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+			// Resolve the multisampled colour into the texture the compositor
+			// samples. Depth is not needed downstream.
+			glBindFramebuffer(GL_READ_FRAMEBUFFER, gLive.msaaFbo);
+			glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gLive.worldFbo);
+			glBlitFramebuffer(0, 0, vw, vh, 0, 0, vw, vh,
+				GL_COLOR_BUFFER_BIT, GL_NEAREST);
+			glBindFramebuffer(GL_FRAMEBUFFER, gLive.worldFbo);
+			glDisable(GL_MULTISAMPLE);
 		}
 		DestroyWorldGL(wr);	// frees per-frame VBOs; borrowed resources kept
 		gLive.haveWorld = true;
@@ -2491,6 +2657,9 @@ static void FreeLiveResources(bool audit)
 	if(gLive.worldTex)    { glDeleteTextures(1, &gLive.worldTex);       gLedger.tex--; }
 	if(gLive.worldDepth)  { glDeleteRenderbuffers(1, &gLive.worldDepth); gLedger.rbo--; }
 	if(gLive.worldFbo)    { glDeleteFramebuffers(1, &gLive.worldFbo);    gLedger.fbo--; }
+	if(gLive.msaaColor)   { glDeleteRenderbuffers(1, &gLive.msaaColor);  gLedger.rbo--; }
+	if(gLive.msaaDepth)   { glDeleteRenderbuffers(1, &gLive.msaaDepth);  gLedger.rbo--; }
+	if(gLive.msaaFbo)     { glDeleteFramebuffers(1, &gLive.msaaFbo);     gLedger.fbo--; }
 	if(gLive.screenProg)  { glDeleteProgram(gLive.screenProg);          gLedger.prog--; }
 	if(gLive.prog)        { glDeleteProgram(gLive.prog);                gLedger.prog--; }
 	if(gLive.paletteTex)  { glDeleteTextures(1, &gLive.paletteTex);      gLedger.tex--; }

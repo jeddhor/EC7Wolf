@@ -72,6 +72,13 @@ extern bool		vid_gldebug;	// install KHR_debug callback + GL error checks
 // Per-frame GL timing breakdown, printed periodically. Off by default and free
 // when off; the timers are only read inside the live render path.
 extern bool		vid_glprofile;
+// OpenGL texture filtering: 0 nearest (the original look), 1 bilinear,
+// 2 supersampled. Palette indices cannot be averaged, so every tap is resolved
+// to RGB before it is mixed; see the world fragment shader.
+extern int		vid_glfilter;
+// OpenGL multisample antialiasing: 0 off, or 2/4/8 samples. Smooths geometry
+// edges, and with it sprite/masked silhouettes via alpha-to-coverage.
+extern int		vid_glmsaa;
 extern int		vid_maxfps;		// frame-rate cap; 0 = unlimited
 extern int		vid_xbrz;		// xBRZ image scaling: 0 = off, 1 = auto, 2-6 = factor
 extern int		vid_renderscale;// 1 = render at the video mode, 2-4 = render that

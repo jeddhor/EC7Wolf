@@ -367,6 +367,24 @@ MENU_LISTENER(SetRenderer)
 	return true;
 }
 
+// Kept in the same order as glMSAAOptions.
+static const int kGLMSAAValues[] = { 0, 2, 4, 8 };
+
+MENU_LISTENER(SetGLFilter)
+{
+	// Read by the world shader each frame, so this takes effect immediately.
+	vid_glfilter = which;
+	return true;
+}
+
+MENU_LISTENER(SetGLMSAA)
+{
+	// The world framebuffer is rebuilt when the sample count changes, which
+	// EnsureWorldFbo notices on the next frame.
+	vid_glmsaa = kGLMSAAValues[which];
+	return true;
+}
+
 MENU_LISTENER(SetMaxFPS)
 {
 	vid_maxfps = kMaxFPSValues[which];
@@ -781,6 +799,10 @@ void CreateMenus()
 
 		static const char *xbrzOptions[] = { "Off", "Auto", "2x", "3x", "4x", "5x", "6x" };
 		static const char *renderScaleOptions[] = { "Native", "1/2", "1/3", "1/4" };
+		// "Sharp" rather than "Off" because nearest is a deliberate look here,
+		// not the absence of a feature -- it is what the game shipped as.
+		static const char *glFilterOptions[] = { "Sharp", "Bilinear", "Smooth" };
+		static const char *glMSAAOptions[] = { "Off", "2x", "4x", "8x" };
 
 		advancedGraphics.setHeadText("Advanced Graphics");
 		advancedGraphics.addItem(new LabelMenuItem("Image Scaling"));
@@ -797,6 +819,16 @@ void CreateMenus()
 		// same factor for a given window, so it is not qualified by renderer.
 		AddLabeled(advancedGraphics, new MultipleChoiceMenuItem(SetXBRZ, xbrzOptions, 7,
 			NearestOption(kXBRZValues, vid_xbrz)), "xBRZ Smoothing");
+
+		// OpenGL only: both of these live in the world shader and the world
+		// framebuffer, neither of which the software raycaster has.
+		advancedGraphics.addItem(new LabelMenuItem("Hardware Renderer"));
+		AddLabeled(advancedGraphics, new MultipleChoiceMenuItem(SetGLFilter,
+			glFilterOptions, 3, clamp(vid_glfilter, 0, 2)), "Texture Filter");
+		AddLabeled(advancedGraphics, new MultipleChoiceMenuItem(SetGLMSAA,
+			glMSAAOptions, 4, NearestOption(kGLMSAAValues, vid_glmsaa)),
+			"Antialiasing");
+
 		advancedGraphics.addItem(new LabelMenuItem("Motion"));
 		AddLabeled(advancedGraphics, new BooleanMenuItem("Motion Interpolation", r_interpolate), "Motion Interpolation");
 		AddLabeled(advancedGraphics, new BooleanMenuItem("Camera", r_interpolate_camera), "Camera");

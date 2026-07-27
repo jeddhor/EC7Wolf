@@ -5,8 +5,19 @@
 
 //===========================================================================
 
+// Beyond a quarter there is nothing left to render: a 640x400 window would be
+// drawing at 160x100, well under the floor VL_UpdateRenderSize enforces.
+#define VL_MAX_RENDERSCALE 4
+
 extern  bool	fullscreen;
+// screenWidth/screenHeight are the size the game renders at -- the framebuffer,
+// what SCREENWIDTH ends up as, and what every piece of layout code measures
+// against. windowWidth/windowHeight are the size that reaches the display. They
+// are equal unless vid_renderscale asks for a smaller frame, in which case the
+// present path stretches one to the other (see VL_UpdateRenderSize).
 extern  unsigned screenWidth, screenHeight, screenBits, curPitch;
+extern  unsigned windowWidth, windowHeight;
+// The video mode the user picked, which is a window size, not a render size.
 extern  unsigned fullScreenWidth, fullScreenHeight;
 extern  unsigned windowedScreenWidth, windowedScreenHeight;
 extern  unsigned scaleFactorX, scaleFactorY;
@@ -24,6 +35,11 @@ extern	bool  screenfaded;
 
 void VL_ToggleFullscreen();
 void VL_SetFullscreen(bool isFull);
+
+// Recomputes screenWidth/Height from windowWidth/Height and vid_renderscale.
+// Call after changing either the video mode or the scale, before setting the
+// mode. Returns true if the render size moved.
+bool VL_UpdateRenderSize();
 
 void VL_ReadPalette(const char* lump);
 

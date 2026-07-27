@@ -382,6 +382,26 @@ MENU_LISTENER(SetXBRZ)
 	return true;
 }
 
+// Kept in the same order as renderScaleOptions below.
+static const int kRenderScaleValues[] = { 1, 2, 3, 4 };
+
+MENU_LISTENER(SetRenderScale)
+{
+	if(vid_renderscale == kRenderScaleValues[which])
+		return true;
+	vid_renderscale = kRenderScaleValues[which];
+
+	// A different render size is a different framebuffer, so this goes through
+	// the same mode set the resolution menu does rather than taking effect at
+	// present time the way xBRZ can.
+	MenuFadeOut();
+	VL_UpdateRenderSize();
+	VH_Startup();	// fizzlefade tables are sized to the frame
+	VL_SetVGAPlaneMode();
+	MenuFadeIn();
+	return true;
+}
+
 MENU_LISTENER(SetFOV)
 {
 	localDesiredFOV = kFOVValues[which];
@@ -418,22 +438,23 @@ MENU_LISTENER(SetResolution)
 		Video->StartModeIterator(DisplayBits, vid_fullscreen);
 		for(int i = 0;i <= which;++i)
 			Video->NextMode(&width, &height, &lb);
-		screenWidth = width;
-		screenHeight = height;
+		windowWidth = width;
+		windowHeight = height;
+		VL_UpdateRenderSize();
 
 		if(vid_fullscreen)
 		{
-			fullScreenWidth = screenWidth;
-			fullScreenHeight = screenHeight;
+			fullScreenWidth = windowWidth;
+			fullScreenHeight = windowHeight;
 		}
 		else
 		{
-			windowedScreenWidth = screenWidth;
-			windowedScreenHeight = screenHeight;
+			windowedScreenWidth = windowWidth;
+			windowedScreenHeight = windowHeight;
 		}
 	}
 
-	r_ratio = static_cast<Aspect>(CheckRatio(screenWidth, screenHeight));
+	r_ratio = static_cast<Aspect>(CheckRatio(windowWidth, windowHeight));
 	VH_Startup(); // Recalculate fizzlefade stuff.
 	VL_SetVGAPlaneMode();
 	EnterResolutionSelection(which);
@@ -457,7 +478,10 @@ MENU_LISTENER(EnterResolutionSelection)
 			MenuItem *item = new MenuItem(resolution, SetResolution);
 			resolutionMenu.addItem(item);
 
-			if(width == SCREENWIDTH && height == SCREENHEIGHT)
+			// The list is a list of window sizes, so it highlights against the
+			// window, not against SCREENWIDTH -- which is the render size and
+			// smaller than any entry once vid_renderscale is above 1.
+			if((unsigned)width == windowWidth && (unsigned)height == windowHeight)
 			{
 				selected = resolutionMenu.countItems()-1;
 				item->setHighlighted(true);
@@ -753,9 +777,17 @@ void CreateMenus()
 		displayMenu.addItem(new MenuSwitcherMenuItem("Advanced Graphics", advancedGraphics));
 
 		static const char *xbrzOptions[] = { "Off", "Auto", "2x", "3x", "4x", "5x", "6x" };
+		static const char *renderScaleOptions[] = { "Native", "1/2", "1/3", "1/4" };
 
 		advancedGraphics.setHeadText("Advanced Graphics");
 		advancedGraphics.addItem(new LabelMenuItem("Image Scaling"));
+		// Sits above xBRZ because it is what gives xBRZ anything to do: the
+		// filter enlarges the frame to fit the window, so at Native -- where the
+		// frame already is the window -- there is nothing to enlarge into and it
+		// costs a frame of work to hand back the picture unchanged.
+		AddLabeled(advancedGraphics, new MultipleChoiceMenuItem(SetRenderScale,
+			renderScaleOptions, 4,
+			NearestOption(kRenderScaleValues, vid_renderscale)), "Render Resolution");
 		// Both renderers filter now: the software path on the CPU at scanout, the
 		// OpenGL path as a shader over the composited frame (render/opengl/
 		// r_glxbrz.cpp). The setting means the same thing to each and picks the

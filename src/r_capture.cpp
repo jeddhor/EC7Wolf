@@ -726,9 +726,10 @@ void PostFrame()
 			continue;
 		Printf("Capture: switching video mode to %dx%d at frame %d.\n",
 			g_vidModes[i].w, g_vidModes[i].h, g_vidModes[i].frame);
-		screenWidth = windowedScreenWidth = g_vidModes[i].w;
-		screenHeight = windowedScreenHeight = g_vidModes[i].h;
-		r_ratio = static_cast<Aspect>(CheckRatio(screenWidth, screenHeight));
+		windowWidth = windowedScreenWidth = g_vidModes[i].w;
+		windowHeight = windowedScreenHeight = g_vidModes[i].h;
+		VL_UpdateRenderSize();
+		r_ratio = static_cast<Aspect>(CheckRatio(windowWidth, windowHeight));
 		VH_Startup();	// recalculate fizzlefade tables for the new size
 		VL_SetVGAPlaneMode();
 	}

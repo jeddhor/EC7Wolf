@@ -970,12 +970,15 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 			}
 			else
 			{
-				screenWidth = atoi(argv[++i]);
-				screenHeight = atoi(argv[++i]);
-				if(screenWidth < 320)
+				// --res names the window, as the video mode always has;
+				// vid_renderscale then decides what is drawn inside it.
+				windowWidth = atoi(argv[++i]);
+				windowHeight = atoi(argv[++i]);
+				if(windowWidth < 320)
 					printf("Screen width must be at least 320!\n"), hasError = true;
-				if(screenHeight < 200)
+				if(windowHeight < 200)
 					printf("Screen height must be at least 200!\n"), hasError = true;
+				VL_UpdateRenderSize();
 			}
 		}
 		else IFARG("--aspect")
@@ -1207,7 +1210,7 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 		Quit();
 	}
 
-	r_ratio = static_cast<Aspect>(CheckRatio(screenWidth, screenHeight));
+	r_ratio = static_cast<Aspect>(CheckRatio(windowWidth, windowHeight));
 
 	if(sampleRateGiven && !audioBufferGiven)
 		param_audiobuffer = 2048 / (44100 / param_samplerate);

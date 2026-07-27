@@ -198,18 +198,26 @@ bool IVideo::SetResolution (int width, int height, int bits)
 		oldbits = bits;
 	}
 
-	I_ClosestResolution (&width, &height, bits);
-	if (!I_CheckResolution (width, height, bits))
-	{ // Try specified resolution
-		if (!I_CheckResolution (oldwidth, oldheight, oldbits))
-		{ // Try previous resolution (if any)
-	   		return false;
-		}
-		else
-		{
-			width = oldwidth;
-			height = oldheight;
-			bits = oldbits;
+	// The mode list is a list of things a display can show, and it is only the
+	// window that has to be one of them. A render-scaled frame is a framebuffer
+	// size -- any size is valid, and snapping it to the nearest listed mode would
+	// silently change its shape: 1280x800 at 1/3 is 426x266, whose nearest entry
+	// is 480x270, which would then be stretched to a 16:10 window.
+	if ((unsigned)width == windowWidth && (unsigned)height == windowHeight)
+	{
+		I_ClosestResolution (&width, &height, bits);
+		if (!I_CheckResolution (width, height, bits))
+		{ // Try specified resolution
+			if (!I_CheckResolution (oldwidth, oldheight, oldbits))
+			{ // Try previous resolution (if any)
+				return false;
+			}
+			else
+			{
+				width = oldwidth;
+				height = oldheight;
+				bits = oldbits;
+			}
 		}
 	}
 	return V_DoModeSetup (width, height, bits);
@@ -318,6 +326,9 @@ private:
 	bool UsingGL;
 	SDL_Texture *XBRZTexture;	// upscaled frame; separate from the Texture union
 	int XBRZFactor;				// factor XBRZTexture was sized for; 0 = none
+	// The window this framebuffer asked for, which is not Width/Height once
+	// vid_renderscale has the game drawing smaller than it displays.
+	int WinWidth, WinHeight;
 #else
 	SDL_Surface *Screen;
 #endif
@@ -586,8 +597,14 @@ DFrameBuffer *SDLVideo::CreateFrameBuffer (int width, int height, bool fullscree
 	if (old != NULL)
 	{ // Reuse the old framebuffer if its attributes are the same
 		SDLFB *fb = static_cast<SDLFB *> (old);
+		// The window is part of "the same attributes": changing vid_renderscale
+		// and the video mode together can leave the render size untouched while
+		// the window has to resize, and reusing the framebuffer then would keep
+		// the old window forever.
 		if (fb->Width == width &&
-			fb->Height == height)
+			fb->Height == height &&
+			fb->WinWidth == MAX<int>((int)windowWidth, width) &&
+			fb->WinHeight == MAX<int>((int)windowHeight, height))
 		{
 #if SDL_VERSION_ATLEAST(2,0,0)
 			bool fsnow = (SDL_GetWindowFlags (fb->Screen) & SDL_WINDOW_FULLSCREEN_DESKTOP) != 0;
@@ -709,6 +726,15 @@ SDLFB::SDLFB (int width, int height, bool fullscreen)
 	GLContext = NULL;
 	XBRZTexture = NULL;
 	XBRZFactor = 0;
+	// The window takes the video mode; width/height above are the render size,
+	// which vid_renderscale may have divided down. Equal in the ordinary case.
+	//
+	// Except on the surface path, which blits the frame into the window at 1:1
+	// and has nothing that could stretch it -- there the window is pinned back
+	// to the frame, so the setting is merely inert rather than drawing the game
+	// into a corner of an oversized window.
+	WinWidth = MAX<int>(vid_forcesurface ? width : (int)windowWidth, width);
+	WinHeight = MAX<int>(vid_forcesurface ? height : (int)windowHeight, height);
 	// The OpenGL backend presents by compositing on the game window itself, so
 	// the window must be GL-capable and must not also drive an SDL_Renderer.
 	UsingGL = R_GLLiveWantPresent();
@@ -731,14 +757,14 @@ SDLFB::SDLFB (int width, int height, bool fullscreen)
 		// appears to inevitably happen while compositor animations are running. So lets try
 		// to reuse the existing window.
 		Screen = oldwin;
-		SDL_SetWindowSize (Screen, width, height);
+		SDL_SetWindowSize (Screen, WinWidth, WinHeight);
 		SetFullscreen (fullscreen);
 	}
 	else
 	{
 		Screen = SDL_CreateWindow (GetGameCaption(),
 			SDL_WINDOWPOS_UNDEFINED_DISPLAY(vid_adapter), SDL_WINDOWPOS_UNDEFINED_DISPLAY(vid_adapter),
-			width, height, winflags);
+			WinWidth, WinHeight, winflags);
 
 		if (Screen == NULL)
 			return;
@@ -1255,6 +1281,12 @@ void SDLFB::ResetSDLRenderer ()
 
 	// In fullscreen, set logical size according to animorphic ratio.
 	// Windowed modes are rendered to fill the window (usually 1:1)
+	//
+	// A render-scaled window falls under "fill the window" too: SDL_RenderCopy
+	// stretches the frame over the whole output on its own, and the frame is the
+	// window divided down so the two are the same shape by construction. Running
+	// it through ScaleWithAspect instead would letterbox -- 640x400 is classed as
+	// a 4:3 mode -- and the picture would move when the render scale changed.
 	if (IsFullscreen ())
 	{
 		int w, h;

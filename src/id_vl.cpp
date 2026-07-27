@@ -34,6 +34,8 @@
 bool fullscreen = true;
 unsigned screenWidth = 640;
 unsigned screenHeight = 480;
+unsigned windowWidth = 640;
+unsigned windowHeight = 480;
 unsigned fullScreenWidth = 640;
 unsigned fullScreenHeight = 480;
 unsigned windowedScreenWidth = 640;
@@ -54,23 +56,46 @@ void VL_ToggleFullscreen()
 	VL_SetFullscreen(!fullscreen);
 }
 
+// Splits the video mode into the size that reaches the display and the smaller
+// size the game actually draws. Rendering below the display is what gives a
+// filter like xBRZ something to work with: at 1:1 it enlarges the frame and the
+// window immediately throws the enlargement away.
+//
+// The floor is the original's own 320x200. Below that the 2D layout code stops
+// having room for a status bar, and V_DoModeSetup asserts on it outright.
+bool VL_UpdateRenderSize()
+{
+	const unsigned scale = clamp(vid_renderscale, 1, VL_MAX_RENDERSCALE);
+	const unsigned w = MAX<unsigned>(windowWidth / scale, 320);
+	const unsigned h = MAX<unsigned>(windowHeight / scale, 200);
+
+	const bool changed = (w != screenWidth || h != screenHeight);
+	screenWidth = w;
+	screenHeight = h;
+	return changed;
+}
+
 void VL_SetFullscreen(bool isFull)
 {
 	vid_fullscreen = fullscreen = isFull;
 
 	if (fullscreen)
 	{
-		screenWidth = fullScreenWidth;
-		screenHeight = fullScreenHeight;
+		windowWidth = fullScreenWidth;
+		windowHeight = fullScreenHeight;
 	}
 	else
 	{
-		screenWidth = windowedScreenWidth;
-		screenHeight = windowedScreenHeight;
+		windowWidth = windowedScreenWidth;
+		windowHeight = windowedScreenHeight;
 	}
+	VL_UpdateRenderSize();
 
-	// Recalculate the aspect ratio, because this can change from fullscreen to windowed now
-	r_ratio = static_cast<Aspect>(CheckRatio(screenWidth, screenHeight));
+	// Recalculate the aspect ratio, because this can change from fullscreen to
+	// windowed now. It is taken from the window rather than the render size: the
+	// aspect the player sees is the window's, and a scale that does not divide
+	// evenly would otherwise nudge the ratio for no reason.
+	r_ratio = static_cast<Aspect>(CheckRatio(windowWidth, windowHeight));
 	VL_SetVGAPlaneMode();
 	if(playstate)
 	{

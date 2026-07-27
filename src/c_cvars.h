@@ -66,6 +66,8 @@ extern FString	vid_renderer;	// "software" | "opengl" | "vulkan"
 extern bool		vid_gldebug;	// install KHR_debug callback + GL error checks
 extern int		vid_maxfps;		// frame-rate cap; 0 = unlimited
 extern int		vid_xbrz;		// xBRZ image scaling: 0 = off, 1 = auto, 2-6 = factor
+extern int		vid_renderscale;// 1 = render at the video mode, 2-4 = render that
+								// many times smaller and scale up to the window
 extern bool		r_interpolate;				// master motion interpolation switch
 extern bool		r_interpolate_camera;		// interpolate the player camera
 extern bool		r_interpolate_actors;		// interpolate non-camera actors

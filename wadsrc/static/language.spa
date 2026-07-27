@@ -38,7 +38,7 @@ STR_JOYEN = "Palanca Encendido";
 STR_PORT2 = "Utilizar Puerta 2";
 STR_GAMEPAD = "Gravis GamePad Encendido";
 STR_SENS = "Sensitividad de Raton";
-STR_DISABLEYAXIS = "Apagar el Eje Y";
+STR_MOUSEMOVE = "Raton Mueve Adelante";
 
 STR_CUSTOM = "Personalizar Controles";
 STR_HOWTOUGH = "Eres macho?";

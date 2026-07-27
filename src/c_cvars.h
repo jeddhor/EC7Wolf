@@ -79,6 +79,6 @@ extern float	localDesiredFOV;
 // control info
 //
 extern  bool		alwaysrun;
-extern  bool		mouseenabled, mouseyaxisdisabled, joystickenabled;
+extern  bool		mouseenabled, mousemovesforward, joystickenabled;
 
 #endif /* __C_CVARS__ */

@@ -45,7 +45,7 @@ STR_PORT2 = "Use joystick port 2";
 STR_GAMEPAD = "Gravis GamePad Enabled";
 STR_SENS = "Mouse Sensitivity";
 STR_JOYSENS = "Joystick Sensitivity";
-STR_DISABLEYAXIS = "Disable Y Axis";
+STR_MOUSEMOVE = "Mouse Moves Forward";
 STR_CUSTOM = "Customize controls";
 STR_HOWTOUGH = "How tough are you?";
 // Corridor 7 words its difficulty prompt differently.

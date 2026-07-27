@@ -65,7 +65,7 @@ bool quitonescape = false;
 fixed movebob = FRACUNIT;
 
 bool alwaysrun;
-bool mouseenabled, mouseyaxisdisabled, joystickenabled;
+bool mouseenabled, mousemovesforward, joystickenabled;
 float localDesiredFOV = 90.0f;
 
 #if SDL_VERSION_ATLEAST(2,0,0)
@@ -202,7 +202,13 @@ void ReadConfig(void)
 	config.CreateSetting("DigitalSoundDevice", sds_SoundBlaster);
 	config.CreateSetting("N3DTempoEmulation", false);
 	config.CreateSetting("AlwaysRun", 0);
-	config.CreateSetting("MouseYAxisDisabled", 0);
+	// Pushing the mouse forward walks the player, the way Wolfenstein 3D did,
+	// is off by default: every shooter since has used the mouse for aiming
+	// alone. Deliberately a NEW key rather than the old MouseYAxisDisabled
+	// with its sense flipped -- an existing config already answers the old
+	// question, so flipping the default in place would change nothing for
+	// anyone who has played the game before, which is everyone it matters to.
+	config.CreateSetting("MouseYMovesPlayer", 0);
 	config.CreateSetting("SoundVolume", MAX_VOLUME);
 	config.CreateSetting("MusicVolume", MAX_VOLUME);
 	config.CreateSetting("DigitizedVolume", MAX_VOLUME);
@@ -302,7 +308,7 @@ void ReadConfig(void)
 	mouseyadjustment = config.GetSetting("MouseYAdjustment")->GetInteger();
 	panxadjustment = config.GetSetting("PanXAdjustment")->GetInteger();
 	panyadjustment = config.GetSetting("PanYAdjustment")->GetInteger();
-	mouseyaxisdisabled = config.GetSetting("MouseYAxisDisabled")->GetInteger() != 0;
+	mousemovesforward = config.GetSetting("MouseYMovesPlayer")->GetInteger() != 0;
 	alwaysrun = config.GetSetting("AlwaysRun")->GetInteger() != 0;
 	AdlibVolume = config.GetSetting("SoundVolume")->GetInteger();
 	MusicVolume = config.GetSetting("MusicVolume")->GetInteger();
@@ -461,7 +467,7 @@ void WriteConfig(void)
 	config.GetSetting("MouseYAdjustment")->SetValue(mouseyadjustment);
 	config.GetSetting("PanXAdjustment")->SetValue(panxadjustment);
 	config.GetSetting("PanYAdjustment")->SetValue(panyadjustment);
-	config.GetSetting("MouseYAxisDisabled")->SetValue(mouseyaxisdisabled);
+	config.GetSetting("MouseYMovesPlayer")->SetValue(mousemovesforward);
 	config.GetSetting("AlwaysRun")->SetValue(alwaysrun);
 	config.GetSetting("SoundDevice")->SetValue(SoundMode);
 	config.GetSetting("MusicDevice")->SetValue(MusicMode);

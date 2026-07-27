@@ -589,7 +589,7 @@ void PollMouseMove (void)
 		else if(players[ConsolePlayer].mo->pitch+ANGLE_180 < ANGLE_180-56*ANGLE_1)
 			players[ConsolePlayer].mo->pitch = ANGLE_NEG(56*ANGLE_1);
 	}
-	else if(!mouseyaxisdisabled)
+	else if(mousemovesforward)
 		control[ConsolePlayer].controly += control[ConsolePlayer].controlpany * 40 / (21 - mouseyadjustment);
 }
 

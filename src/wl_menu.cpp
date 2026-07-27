@@ -221,6 +221,39 @@ MENU_LISTENER(SetMusic)
 	}
 	return true;
 }
+// Corridor 7 with a ripped soundtrack installed: None / AdLib / CD Audio.
+//
+// Switching has to silence whichever device was playing, or a ten-minute CD
+// track carries on underneath the AdLib song that just started -- the two share
+// one output, but not one code path.
+MENU_LISTENER(SetMusicC7)
+{
+	const bool wantCD = (which == 2);
+
+	if(which == 0)
+	{
+		C7CD::Stop();
+		SD_SetMusicMode(smm_Off);
+		return true;
+	}
+
+	snd_cdmusic = wantCD;
+	if(MusicMode == smm_Off)
+		SD_SetMusicMode(smm_AdLib);
+
+	if(wantCD)
+	{
+		SD_MusicOff();			// stop the AdLib song
+		C7CD::StartLevelTrack();	// and put the disc on straight away
+	}
+	else
+	{
+		C7CD::Stop();
+		StartCPMusic(gameinfo.MenuMusic);
+	}
+	return true;
+}
+
 MENU_LISTENER(EnterControlBase)
 {
 	controlBase[2]->setEnabled(mouseenabled);
@@ -679,7 +712,7 @@ void CreateMenus()
 		// Four categories under one Options screen, so the main menu stays
 		// short. The submenus themselves are the engine's existing ones -- only
 		// the grouping and the titles change.
-		optionsMenu.addItem(new MenuSwitcherMenuItem("Gameplay", automapMenu));
+		optionsMenu.addItem(new MenuSwitcherMenuItem("Automap", automapMenu));
 		optionsMenu.addItem(new MenuSwitcherMenuItem("Graphics", displayMenu));
 		optionsMenu.addItem(new MenuSwitcherMenuItem("Audio", soundBase));
 		optionsMenu.addItem(new MenuSwitcherMenuItem("Controls", controlBase));
@@ -732,7 +765,19 @@ void CreateMenus()
 	AddLabeled(soundBase, new MultipleChoiceMenuItem(SetSoundEffects, soundEffectsOptions, 3, soundEffectsMode), "Device");
 	AddLabeled(soundBase, new SliderMenuItem(AdlibVolume, 150, MAX_VOLUME, language["STR_SOFT"], language["STR_LOUD"], SD_UpdatePCSpeakerVolume), "Volume");
 	AddLabeled(soundBase, new LabelMenuItem(language["STR_MUSICDEVICE"]), "Music");
-	AddLabeled(soundBase, new MultipleChoiceMenuItem(SetMusic, musicOptions, 3, musicMode), "Device");
+	if(C7CD::Present())
+	{
+		// The disc's soundtrack is a device like any other once it is installed,
+		// so it belongs here rather than being an invisible override. It stays
+		// the default when present -- that is what the CD release did -- but the
+		// player can drop back to the AdLib score without deleting the rip.
+		static const char *c7MusicOptions[] = { "None", "AdLib/SB", "CD Audio" };
+		AddLabeled(soundBase, new MultipleChoiceMenuItem(SetMusicC7,
+			c7MusicOptions, 3,
+			MusicMode == smm_Off ? 0 : (snd_cdmusic ? 2 : 1)), "Device");
+	}
+	else
+		AddLabeled(soundBase, new MultipleChoiceMenuItem(SetMusic, musicOptions, 3, musicMode), "Device");
 	AddLabeled(soundBase, new SliderMenuItem(MusicVolume, 150, MAX_VOLUME, language["STR_SOFT"], language["STR_LOUD"], SD_UpdateMusicVolume), "Volume");
 
 	controlBase.setHeadText(language["STR_CL"], true);
@@ -834,7 +879,6 @@ void CreateMenus()
 		AddLabeled(advancedGraphics, new BooleanMenuItem("Camera", r_interpolate_camera), "Camera");
 		AddLabeled(advancedGraphics, new BooleanMenuItem("Actors", r_interpolate_actors), "Actors");
 		AddLabeled(advancedGraphics, new BooleanMenuItem("Doors & Pushwalls", r_interpolate_dynamicwalls), "Doors & Pushwalls");
-		AddLabeled(advancedGraphics, new BooleanMenuItem("Late Mouse Latch", r_latelatch_mouse), "Late Mouse Latch");
 		advancedGraphics.addItem(new LabelMenuItem("Diagnostics"));
 		AddLabeled(advancedGraphics, new BooleanMenuItem("GL Debug Output", vid_gldebug), "GL Debug Output");
 	}
@@ -884,7 +928,12 @@ void CreateMenus()
 		// Applied last on purpose: every menu above sets its own generic title,
 		// so anything assigned earlier is overwritten before it is ever drawn.
 		optionsMenu.setHeadText("Options");
-		automapMenu.setHeadText("Gameplay");
+		// "Automap", not "Gameplay": every item on this menu is an automap
+		// setting, and calling it Gameplay promised options that were never
+		// there. They apply to the full-viewport automap (bound to F1), not to
+		// Corridor 7's own inset floor-plan panel, which is drawn by
+		// c7_automap.cpp and reads none of these.
+		automapMenu.setHeadText("Automap");
 		displayMenu.setHeadText("Graphics");
 		soundBase.setHeadText("Audio");
 		controlBase.setHeadText("Controls");

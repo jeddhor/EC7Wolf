@@ -650,16 +650,32 @@ static void C7DrawPlate(FTexture *tex, int x, int y)
 	VWB_DrawGraphic(R_UpscaledArt(tex), x, y, w, h);
 }
 
-// The skull pattern behind those plates is deliberately NOT upscaled. xBRZ reads
-// the edges of what it is given as edges of the image, but these are seams in
-// the middle of a repeating pattern, so every tile boundary would be filtered as
-// though the pattern stopped there -- a grid of seams across the backdrop.
-// Upscaling a tile correctly means telling the filter how it wraps, which it has
-// no way to express.
+// The skull pattern behind those plates.
+//
+// It cannot be upscaled one tile at a time: xBRZ reads the edges of what it is
+// given as edges of the image, and these are seams in the middle of a repeating
+// pattern, so every tile boundary would come out filtered as though the pattern
+// stopped there -- a grid of seams across the backdrop. Tiling the whole page
+// first and upscaling that fixes it, because then the seams are interior pixels
+// like any other and the only edges the filter sees are the screen's own. Left
+// unfiltered until now, which is why this was the most obviously blocky thing on
+// the loading screen while the plate in front of it was smooth.
 static void C7DrawTiledBackdrop(FTexture *tex)
 {
 	if(tex == NULL)
 		return;
+
+	FTexture *const page = R_UpscaledTiledPage(tex, 320, 200);
+	if(page != NULL && page != tex)
+	{
+		// Sized in real pixels: the upscaled page is no longer 320x200.
+		screen->DrawTexture(page, 0, 0,
+			DTA_DestWidth, screenWidth, DTA_DestHeight, screenHeight,
+			DTA_TopOffset, 0, DTA_LeftOffset, 0, TAG_DONE);
+		return;
+	}
+
+	// No upscale to be had (the window is no bigger than the art): tile it.
 	const int tileW = tex->GetScaledWidth();
 	const int tileH = tex->GetScaledHeight();
 	if(tileW <= 0 || tileH <= 0)

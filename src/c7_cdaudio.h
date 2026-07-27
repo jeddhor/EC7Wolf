@@ -41,14 +41,24 @@ namespace C7CD
 	// call for any game; it does nothing unless this is Corridor 7.
 	void Init();
 
-	// True once a usable soundtrack has been found. While this is true the
+	// True when a usable soundtrack was found on disk. Fixed for the run; this
+	// is what decides whether the Audio menu offers CD Audio at all.
+	bool Present();
+
+	// True when the CD soundtrack is the music device in use. While it is, the
 	// AdLib songs are not played at all, which is exactly what the CD release
 	// does -- its song-start routine returns immediately when a disc is in the
-	// drive.
+	// drive. Unlike the disc, this can be turned off without removing the
+	// files: it also requires snd_cdmusic and a music device that is not Off.
 	bool Available();
 
 	// Called where the AdLib path would start a floor's song.
 	void StartLevelTrack();
+
+	// Silence the streamed track. Used when switching the music device away
+	// from CD audio, where otherwise a ten-minute track would keep playing
+	// underneath the AdLib song that just started.
+	void Stop();
 }
 
 #endif

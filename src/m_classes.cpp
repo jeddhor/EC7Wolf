@@ -1250,6 +1250,16 @@ void Menu::setBackground(const char* picture, int cursorX, int cursorY)
 
 void Menu::setHeadPicture(const char* picture, bool isAlt)
 {
+	// Corridor 7's menus are titled with text over its own backdrop, and it has
+	// none of Wolfenstein's banner art. The names still resolve, though --
+	// textures.txt maps M_CUSTOM, M_CONTRL and friends by ART chunk index, which
+	// under Corridor 7 lands on entirely unrelated graphics. The Controls screen
+	// drew one of those next to its title as a small block of garbage; worse,
+	// the non-alternate path draws the picture *and* the text, so it was extra
+	// rather than instead.
+	if(MenuStyle == MENUSTYLE_Corridor7)
+		return;
+
 	FTextureID picID = TexMan.CheckForTexture(picture, FTexture::TEX_Any);
 	if(picID.isValid())
 	{

@@ -72,6 +72,10 @@ extern bool		vid_gldebug;	// install KHR_debug callback + GL error checks
 // Per-frame GL timing breakdown, printed periodically. Off by default and free
 // when off; the timers are only read inside the live render path.
 extern bool		vid_glprofile;
+// Use the ripped CD soundtrack when it is installed. The Audio menu exposes
+// this as a Music device choice, so the disc can be switched off without
+// deleting the files.
+extern bool		snd_cdmusic;
 // OpenGL texture filtering: 0 nearest (the original look), 1 bilinear,
 // 2 supersampled. Palette indices cannot be averaged, so every tap is resolved
 // to RGB before it is mixed; see the world fragment shader.
@@ -87,7 +91,6 @@ extern bool		r_interpolate;				// master motion interpolation switch
 extern bool		r_interpolate_camera;		// interpolate the player camera
 extern bool		r_interpolate_actors;		// interpolate non-camera actors
 extern bool		r_interpolate_dynamicwalls;	// interpolate doors/pushwalls (Phase 7)
-extern bool		r_latelatch_mouse;			// render-only mouse-look late latch
 extern bool		quitonescape;
 extern fixed	movebob;
 

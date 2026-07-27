@@ -83,16 +83,35 @@ unsigned tics;
 #define CS_AxisDigital -1
 ControlScheme controlScheme[] =
 {
-	{ bt_moveforward,		"Forward",		JoyAx(1),	sc_UpArrow,		-1, offsetof(TicCmd_t, controly), 1 },
-	{ bt_movebackward,		"Backward",		JoyAx(1)+1,	sc_DownArrow,	-1, offsetof(TicCmd_t, controly), 0 },
-	{ bt_strafeleft,		"Strafe Left",	JoyAx(0),	sc_Comma,		-1, offsetof(TicCmd_t, controlstrafe), 1 },
-	{ bt_straferight,		"Strafe Right",	JoyAx(0)+1,	sc_Peroid,		-1, offsetof(TicCmd_t, controlstrafe), 0 },
+	// Modern defaults: WASD to move and strafe, the mouse to turn, E to use.
+	// The arrow keys stay on turning so the original layout still works for
+	// anyone who reaches for it, and the mouse turns by default because
+	// mousemovesforward is off (a mouse push no longer walks the player).
+	//
+	// Gamepad values >= 32 are axis directions, JoyAx(n) being axis n's negative
+	// side and JoyAx(n)+1 its positive side (see the decode in PollControls).
+	// Corridor 7 was built for keyboard and joystick, so the pad layout is a
+	// choice rather than a reconstruction; it follows what an Xbox controller
+	// does in any modern shooter:
+	//
+	//   left stick   move / strafe        A      use            LB / RB  weapons
+	//   right stick  turn                 X      drop mine      LT / RT  alt / fire
+	//   L3           run                  Y      visor mode     Back     floor map
+	//   R3           full automap                                Start    menu
+	//
+	// Start is not listed in the table because it cannot be: id_in.cpp routes
+	// SDL_CONTROLLER_BUTTON_START straight to bt_esc so a pad can always reach
+	// the menu, and never reports it as a bindable button.
+	{ bt_moveforward,		"Forward",		JoyAx(1),	sc_W,			-1, offsetof(TicCmd_t, controly), 1 },
+	{ bt_movebackward,		"Backward",		JoyAx(1)+1,	sc_S,			-1, offsetof(TicCmd_t, controly), 0 },
+	{ bt_strafeleft,		"Strafe Left",	JoyAx(0),	sc_A,			-1, offsetof(TicCmd_t, controlstrafe), 1 },
+	{ bt_straferight,		"Strafe Right",	JoyAx(0)+1,	sc_D,			-1, offsetof(TicCmd_t, controlstrafe), 0 },
 	{ bt_turnleft,			"Turn Left",	JoyAx(3),	sc_LeftArrow,	-1, offsetof(TicCmd_t, controlx), 1 },
 	{ bt_turnright,			"Turn Right",	JoyAx(3)+1,	sc_RightArrow,	-1, offsetof(TicCmd_t, controlx), 0 },
-	{ bt_attack,			"Attack",		0,			sc_Control,		0,  CS_AxisDigital, 0},
-	{ bt_strafe,			"Strafe",		3,			sc_Alt,			-1, CS_AxisDigital, 0 },
-	{ bt_run,				"Run",			2,			sc_LShift,		-1, CS_AxisDigital, 0 },
-	{ bt_use,				"Use",			1,			sc_Space,		-1, CS_AxisDigital, 0 },
+	{ bt_attack,			"Attack",		JoyAx(5)+1,	sc_Control,		0,  CS_AxisDigital, 0},
+	{ bt_strafe,			"Strafe",		-1,			sc_Alt,			-1, CS_AxisDigital, 0 },
+	{ bt_run,				"Run",			7,			sc_LShift,		-1, CS_AxisDigital, 0 },
+	{ bt_use,				"Use",			0,			sc_E,			-1, CS_AxisDigital, 0 },
 	{ bt_slot1,				"Slot 1",		-1,			sc_1,			-1, CS_AxisDigital, 0 },
 	{ bt_slot2,				"Slot 2", 		-1,			sc_2,			-1, CS_AxisDigital, 0 },
 	{ bt_slot3,				"Slot 3",		-1,			sc_3,			-1, CS_AxisDigital, 0 },
@@ -103,20 +122,23 @@ ControlScheme controlScheme[] =
 	{ bt_slot8,				"Slot 8",		-1,			sc_8,			-1, CS_AxisDigital, 0 },
 	{ bt_slot9,				"Slot 9",		-1,			sc_9,			-1, CS_AxisDigital, 0 },
 	{ bt_slot0,				"Slot 0",		-1,			sc_0,			-1, CS_AxisDigital, 0 },
-	{ bt_nextweapon,		"Next Weapon",	4,			-1,				-1, CS_AxisDigital, 0 },
-	{ bt_prevweapon,		"Prev Weapon",	5, 			-1,				-1, CS_AxisDigital, 0 },
-	{ bt_altattack,			"Alt Attack",	-1,			-1,				-1, CS_AxisDigital, 0 },
-	{ bt_reload,			"Drop Mine", -1,				sc_M,			-1, CS_AxisDigital, 0 },
-	{ bt_zoom,				"Visor Mode", -1,				sc_Enter,		-1, CS_AxisDigital, 0 },
+	// Shoulder buttons cycle weapons, which is where a modern pad puts them.
+	// They were on Back and Guide, and Guide is the system button.
+	{ bt_nextweapon,		"Next Weapon",	10,			-1,				-1, CS_AxisDigital, 0 },
+	{ bt_prevweapon,		"Prev Weapon",	9, 			-1,				-1, CS_AxisDigital, 0 },
+	{ bt_altattack,			"Alt Attack",	JoyAx(4)+1,	-1,				-1, CS_AxisDigital, 0 },
+	{ bt_reload,			"Drop Mine",	2,			sc_M,			-1, CS_AxisDigital, 0 },
+	{ bt_zoom,				"Visor Mode",	3,			sc_Enter,		-1, CS_AxisDigital, 0 },
 	// Corridor 7 has two maps and both are kept. Tab raises the game's own
 	// inset panel, which is what the original put there. ECWolf's
 	// full-viewport automap goes on F1, which the original leaves unused
 	// (F2 saves, F3 loads, and so on), so no original binding moves.
 	// wl_debug.cpp jams its debug-key sequence for whichever of these holds
 	// sc_Tab -- see schemeAutomapKey.
-	{ bt_automap,			"Automap",		-1,			sc_F1,			-1, CS_AxisDigital, 0 },
+	{ bt_automap,			"Automap",		8,			sc_F1,			-1, CS_AxisDigital, 0 },
 	{ bt_showstatusbar,		"Show Status",	-1,			-1,				-1,	CS_AxisDigital, 0 },
-	{ bt_c7map,				"Floor Map",	-1,			sc_Tab,			-1, CS_AxisDigital, 0 },
+	// Back/Select raises the floor map, which is the map button on a modern pad.
+	{ bt_c7map,				"Floor Map",	4,			sc_Tab,			-1, CS_AxisDigital, 0 },
 	{ bt_pause,				"Pause",		-1,			sc_Pause,		-1, CS_AxisDigital, 0 },
 	{ bt_esc,				"Main Menu",	-1,			-1,				-1, CS_AxisDigital, 0 },
 
@@ -1031,6 +1053,14 @@ void ContinueMusic (int offs)
 {
 	if(C7CD::Available())
 		return;
+
+	// Switched off the disc from the menu mid-level: no AdLib song was ever
+	// picked for this floor, so pick one now rather than resuming nothing.
+	if(currentLevelMusic.IsEmpty() && C7CD::Present())
+	{
+		StartMusic();
+		return;
+	}
 
 	SD_MusicOff ();
 	if(!(Paused & 1))

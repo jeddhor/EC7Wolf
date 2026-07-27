@@ -89,6 +89,7 @@
 #include "filesys.h"
 #include "id_sd.h"
 #include "wl_iwad.h"
+#include "c_cvars.h"
 #include "zstring.h"
 
 namespace
@@ -163,10 +164,26 @@ void Init()
 	EnsureInitialized();
 }
 
-bool Available()
+bool Present()
 {
 	EnsureInitialized();
 	return Found != 0;
+}
+
+bool Available()
+{
+	// snd_cdmusic is the player's choice in the Audio menu; MusicMode is the
+	// master music switch. Either one turning this off has to hand the floor's
+	// music back to the AdLib path rather than leaving it silent, which is why
+	// every caller asks this rather than Present().
+	return Present() && snd_cdmusic && MusicMode != smm_Off;
+}
+
+void Stop()
+{
+	if(!Present())
+		return;
+	SD_MusicOff();
 }
 
 void StartLevelTrack()

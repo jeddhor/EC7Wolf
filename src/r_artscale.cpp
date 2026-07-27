@@ -120,6 +120,17 @@ namespace
 	};
 	TArray<CacheEntry> Cache;
 
+	// Composed tiled pages, kept so the tiling is done once rather than per
+	// frame. These are the *source* handed to R_UpscaledArt, which caches the
+	// upscale of them separately.
+	struct TiledEntry
+	{
+		FTexture *tile;
+		FTexture *page;
+		int w, h;
+	};
+	TArray<TiledEntry> TiledCache;
+
 	// Rebuilds `src` at `factor` times its authored size.
 	//
 	// The result has to land back in the 256-colour palette, because every 2D
@@ -172,6 +183,53 @@ namespace
 		}
 		return new FUpscaledTexture(bw, bh, out);
 	}
+}
+
+FTexture *R_UpscaledTiledPage(FTexture *tile, int w, int h)
+{
+	if(tile == NULL || w <= 0 || h <= 0)
+		return tile;
+
+	const int tw = tile->GetWidth();
+	const int th = tile->GetHeight();
+	if(tw <= 0 || th <= 0)
+		return tile;
+
+	// Keyed on the tile and the page size, not on the screen: the composed page
+	// is resolution-independent, and R_UpscaledArt below does its own rebuild
+	// when the window changes.
+	for(unsigned int i = 0;i < TiledCache.Size();++i)
+	{
+		if(TiledCache[i].tile == tile && TiledCache[i].w == w &&
+			TiledCache[i].h == h)
+			return R_UpscaledArt(TiledCache[i].page);
+	}
+
+	const BYTE *const src = tile->GetPixels();
+	if(src == NULL)
+		return tile;
+
+	// Column-major, as every FTexture's pixels are.
+	BYTE *const pixels = new BYTE[(size_t)w * h];
+	for(int x = 0; x < w; ++x)
+	{
+		const BYTE *const col = src + (size_t)(x % tw) * th;
+		BYTE *const dst = pixels + (size_t)x * h;
+		for(int y = 0; y < h; ++y)
+			dst[y] = col[y % th];
+	}
+
+	FTexture *const page = new FUpscaledTexture(w, h, pixels);
+	TiledEntry entry = { tile, page, w, h };
+	TiledCache.Push(entry);
+
+	FTexture *const scaled = R_UpscaledArt(page);
+	// Once per tile per page size, so this is a handful of lines a run rather
+	// than noise -- and it is the only way to tell from a log whether a backdrop
+	// was actually enlarged or quietly handed back at its authored size.
+	Printf("Art: tiled %dx%d backdrop from a %dx%d tile -> %dx%d.\n",
+		w, h, tw, th, scaled->GetWidth(), scaled->GetHeight());
+	return scaled;
 }
 
 FTexture *R_UpscaledArt(FTexture *src)

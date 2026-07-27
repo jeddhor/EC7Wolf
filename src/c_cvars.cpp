@@ -60,6 +60,7 @@ FString vid_renderer = "opengl";
 FString vid_renderer_requested = "opengl";
 bool vid_gldebug = false;
 bool vid_glprofile = false;
+bool snd_cdmusic = true;
 int vid_glfilter = 0;
 int vid_glmsaa = 0;
 int vid_maxfps = 0;					// 0 = unlimited
@@ -69,7 +70,6 @@ bool r_interpolate = true;
 bool r_interpolate_camera = true;
 bool r_interpolate_actors = true;
 bool r_interpolate_dynamicwalls = true;
-bool r_latelatch_mouse = false;
 bool quitonescape = false;
 fixed movebob = FRACUNIT;
 
@@ -225,6 +225,7 @@ void ReadConfig(void)
 	config.CreateSetting("Vid_Aspect", ASPECT_NONE);
 	config.CreateSetting("Vid_Vsync", false);
 	config.CreateSetting("Vid_Renderer", FString("opengl"));
+	config.CreateSetting("Snd_CDMusic", true);
 	config.CreateSetting("Vid_GLDebug", false);
 	config.CreateSetting("Vid_GLFilter", 0);
 	config.CreateSetting("Vid_GLMSAA", 0);
@@ -235,7 +236,6 @@ void ReadConfig(void)
 	config.CreateSetting("R_InterpolateCamera", true);
 	config.CreateSetting("R_InterpolateActors", true);
 	config.CreateSetting("R_InterpolateDynamicWalls", true);
-	config.CreateSetting("R_LateLatchMouse", false);
 	config.CreateSetting("FullScreenWidth", fullScreenWidth);
 	config.CreateSetting("FullScreenHeight", fullScreenHeight);
 	config.CreateSetting("WindowedScreenWidth", windowedScreenWidth);
@@ -329,6 +329,7 @@ void ReadConfig(void)
 	vid_aspect = static_cast<Aspect>(config.GetSetting("Vid_Aspect")->GetInteger());
 	vid_vsync = config.GetSetting("Vid_Vsync")->GetInteger() != 0;
 	vid_renderer = vid_renderer_requested = config.GetSetting("Vid_Renderer")->GetString();
+	snd_cdmusic = config.GetSetting("Snd_CDMusic")->GetInteger() != 0;
 	vid_gldebug = config.GetSetting("Vid_GLDebug")->GetInteger() != 0;
 	vid_glfilter = config.GetSetting("Vid_GLFilter")->GetInteger();
 	vid_glmsaa = config.GetSetting("Vid_GLMSAA")->GetInteger();
@@ -339,7 +340,6 @@ void ReadConfig(void)
 	r_interpolate_camera = config.GetSetting("R_InterpolateCamera")->GetInteger() != 0;
 	r_interpolate_actors = config.GetSetting("R_InterpolateActors")->GetInteger() != 0;
 	r_interpolate_dynamicwalls = config.GetSetting("R_InterpolateDynamicWalls")->GetInteger() != 0;
-	r_latelatch_mouse = config.GetSetting("R_LateLatchMouse")->GetInteger() != 0;
 	fullScreenWidth = config.GetSetting("FullScreenWidth")->GetInteger();
 	fullScreenHeight = config.GetSetting("FullScreenHeight")->GetInteger();
 	windowedScreenWidth = config.GetSetting("WindowedScreenWidth")->GetInteger();
@@ -497,6 +497,7 @@ void WriteConfig(void)
 	config.GetSetting("Vid_Aspect")->SetValue(vid_aspect);
 	config.GetSetting("Vid_Vsync")->SetValue(vid_vsync);
 	config.GetSetting("Vid_Renderer")->SetValue(vid_renderer_requested);
+	config.GetSetting("Snd_CDMusic")->SetValue(snd_cdmusic);
 	config.GetSetting("Vid_GLDebug")->SetValue(vid_gldebug);
 	config.GetSetting("Vid_GLFilter")->SetValue(vid_glfilter);
 	config.GetSetting("Vid_GLMSAA")->SetValue(vid_glmsaa);
@@ -507,7 +508,6 @@ void WriteConfig(void)
 	config.GetSetting("R_InterpolateCamera")->SetValue(r_interpolate_camera);
 	config.GetSetting("R_InterpolateActors")->SetValue(r_interpolate_actors);
 	config.GetSetting("R_InterpolateDynamicWalls")->SetValue(r_interpolate_dynamicwalls);
-	config.GetSetting("R_LateLatchMouse")->SetValue(r_latelatch_mouse);
 	config.GetSetting("FullScreenWidth")->SetValue(fullScreenWidth);
 	config.GetSetting("FullScreenHeight")->SetValue(fullScreenHeight);
 	config.GetSetting("WindowedScreenWidth")->SetValue(windowedScreenWidth);

@@ -51,6 +51,7 @@
 #include "colormatcher.h"
 #include "c_cvars.h"
 #include "r_data/colormaps.h"
+#include "render/opengl/r_glxbrz.h"
 
 // Software raycaster wall pass. In the live GL path it is run only for its
 // side-effects -- it stamps each ray-touched cell `visible` (which the GL sprite
@@ -1975,8 +1976,19 @@ void R_GLLivePresent(const unsigned char *mem, int pitch, int fw, int fh,
 	if(drawableW <= 0) drawableW = fw;
 	if(drawableH <= 0) drawableH = fh;
 
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glViewport(0, 0, drawableW, drawableH);
+	// Image scaling, when it is on: compositing is redirected into an offscreen
+	// buffer the size of the 8-bit frame, and R_GLXBRZEnd filters that onto the
+	// window. Compositing 1:1 rather than straight to a larger window is not just
+	// plumbing -- the filter has to see the frame at the resolution its pixels
+	// were reasoned about, or it would be reading the driver's magnification of
+	// them. Every exit below goes through R_GLXBRZEnd, which restores the default
+	// framebuffer whether or not it scaled anything, so nothing else here has to
+	// know which of the two is in force.
+	if(R_GLXBRZBegin(fw, fh, drawableW, drawableH) == 0)
+	{
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glViewport(0, 0, drawableW, drawableH);
+	}
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_POLYGON_OFFSET_FILL);
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -1989,7 +2001,11 @@ void R_GLLivePresent(const unsigned char *mem, int pitch, int fw, int fh,
 	// until the first 3D frame lazily initializes these resources.
 	EnsureLiveResources();
 	if(!gLive.inited || !gLive.screenProg || mem == NULL)
-		return;	// resources failed to build, or nothing to composite: black frame
+	{
+		// Resources failed to build, or nothing to composite: black frame.
+		R_GLXBRZEnd(drawableW, drawableH);
+		return;
+	}
 
 	UpdateLivePalette();
 
@@ -2067,6 +2083,9 @@ void R_GLLivePresent(const unsigned char *mem, int pitch, int fw, int fh,
 	gLedger.tex--;
 	glDeleteTextures(1, &oOpac);
 	gLedger.tex--;
+
+	R_GLXBRZEnd(drawableW, drawableH);
+	R_GLXBRZWriteParity(mem, pitch, fw, fh, gLive.haveWorld);
 	GLCheckErrors("R_GLLivePresent");
 
 	// Headless verification: keep the just-composited frame (still in the default
@@ -2101,6 +2120,7 @@ static void FreeLiveResources(bool audit)
 	const long cacheTex = (long)gLive.texCache.CountUsed() +
 		(long)gLive.opacCache.CountUsed();
 	ClearLiveCaches();
+	R_GLXBRZShutdown();
 	if(gLive.worldTex)    { glDeleteTextures(1, &gLive.worldTex);       gLedger.tex--; }
 	if(gLive.worldDepth)  { glDeleteRenderbuffers(1, &gLive.worldDepth); gLedger.rbo--; }
 	if(gLive.worldFbo)    { glDeleteFramebuffers(1, &gLive.worldFbo);    gLedger.fbo--; }

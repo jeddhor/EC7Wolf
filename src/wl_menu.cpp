@@ -756,14 +756,12 @@ void CreateMenus()
 
 		advancedGraphics.setHeadText("Advanced Graphics");
 		advancedGraphics.addItem(new LabelMenuItem("Image Scaling"));
-		MenuItem *const xbrzItem = new MultipleChoiceMenuItem(SetXBRZ, xbrzOptions, 7,
-			NearestOption(kXBRZValues, vid_xbrz));
-		// The filter runs in the software present path, so under OpenGL there is
-		// nothing for it to hook into yet and the control would do nothing.
-		// Greyed out rather than hidden: it is a renderer the setting has not
-		// reached, not a setting that does not exist.
-		xbrzItem->setEnabled(vid_renderer.CompareNoCase("opengl") != 0);
-		AddLabeled(advancedGraphics, xbrzItem, "xBRZ Smoothing");
+		// Both renderers filter now: the software path on the CPU at scanout, the
+		// OpenGL path as a shader over the composited frame (render/opengl/
+		// r_glxbrz.cpp). The setting means the same thing to each and picks the
+		// same factor for a given window, so it is not qualified by renderer.
+		AddLabeled(advancedGraphics, new MultipleChoiceMenuItem(SetXBRZ, xbrzOptions, 7,
+			NearestOption(kXBRZValues, vid_xbrz)), "xBRZ Smoothing");
 		advancedGraphics.addItem(new LabelMenuItem("Motion"));
 		AddLabeled(advancedGraphics, new BooleanMenuItem("Motion Interpolation", r_interpolate), "Motion Interpolation");
 		AddLabeled(advancedGraphics, new BooleanMenuItem("Camera", r_interpolate_camera), "Camera");

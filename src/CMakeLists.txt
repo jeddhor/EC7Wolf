@@ -383,6 +383,7 @@ if(ECWOLF_RENDERER_OPENGL)
 			render/opengl/r_glshader.cpp
 			render/opengl/r_glpalette.cpp
 			render/opengl/r_glworld.cpp
+			render/opengl/r_glxbrz.cpp
 			render/opengl/r_glrenderer.cpp
 		)
 	else()

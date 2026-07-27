@@ -34,6 +34,7 @@
 #include "thingdef/thingdef.h"
 #ifdef ECWOLF_RENDERER_OPENGL
 #include "render/opengl/r_glworld.h"
+#include "render/opengl/r_glxbrz.h"
 #endif
 
 namespace Capture
@@ -55,6 +56,7 @@ namespace
 	FString  g_glWorldPath;              // Phase 5 GL world offscreen capture
 	FString  g_glFramePath;              // Phase 10 full-frame composite capture
 	FString  g_glPresentPath;            // Phase 10 live GL-presented frame
+	FString  g_glXBRZPath;               // Phase 11 GL-vs-CPU xBRZ parity pair
 
 	int      g_maxFrames      = -1;      // quit after this many rendered frames
 	int      g_maxTics        = -1;      // quit after this many simulation tics
@@ -345,6 +347,11 @@ void ParseArgs(int argc, char **argv)
 			g_glPresentPath = argv[++i];
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-glxbrz") == 0 && i + 1 < argc)
+		{
+			g_glXBRZPath = argv[++i];
+			g_armed = true;
+		}
 		else if(strcmp(arg, "--capture-open-doors") == 0 && i + 1 < argc)
 		{
 			g_openDoors = atoi(argv[++i]);
@@ -444,6 +451,12 @@ void ParseArgs(int argc, char **argv)
 	// write it at the chosen gameplay frame in PostFrame).
 	if(!g_glPresentPath.IsEmpty())
 		R_GLLiveArmCapture(g_glPresentPath.GetChars(), g_captureFrame);
+	// The xBRZ parity pair is written by the first 2D-only present after this,
+	// which is the title or menu page the game opens on -- deliberately not tied
+	// to --capture-frame, since frames are only counted once a level is running
+	// and the comparison is only meaningful before one is.
+	if(!g_glXBRZPath.IsEmpty())
+		R_GLXBRZArmParityCapture(g_glXBRZPath.GetChars());
 #endif
 }
 

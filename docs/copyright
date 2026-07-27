@@ -71,6 +71,16 @@ Comment: The xBRZ pixel-art upscaler, vendored unmodified at version 1.8. This
  the combination is lawful, but it does mean the linked binary as a whole is
  distributable under GPL-3 rather than GPL-2. Full text in deps/xbrz/License.txt.
 
+Files: src/render/opengl/r_glxbrz.cpp
+Copyright: Zenju <zenju@gmx.de>
+License: GPL-3
+Comment: The GLSL fragment shaders embedded in this file are a line-for-line port
+ of the xBRZ algorithm in deps/xbrz, written so the OpenGL present path gets the
+ same filter the software path does. Being a translation of that code rather
+ than an independent implementation, it carries the same authorship and licence.
+ The surrounding C++ that drives the passes is EC7Wolf's own and is GPL-2+, but
+ the file as a whole is distributable only under GPL-3, as the binary already is.
+
 Files: deps/zlib/*
 Copyright: 1995-2017, Jean-loup Gailly and Mark Adler
 License: Zlib

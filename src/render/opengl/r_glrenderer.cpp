@@ -65,6 +65,30 @@ IRenderer *R_CreateOpenGLRenderer()
 	return new OpenGLRenderer;
 }
 
+bool R_GLProbeAvailable()
+{
+	// Asked before the game's window exists, because the answer decides how
+	// that window is created: a GL-presenting window carries no SDL_Renderer,
+	// so choosing GL on a machine that cannot provide a 3.3 core context would
+	// leave the software fallback with nothing to draw into. Committing to the
+	// backend after the window is up is too late to change course.
+	//
+	// The probe is a hidden 32x32 window that is destroyed immediately. It
+	// costs a context creation once per launch, and it is the only honest test:
+	// a driver can advertise GL and still fail to give out a core profile.
+	static int cached = -1;
+	if(cached >= 0)
+		return cached != 0;
+
+	GLDevice dev;
+	const bool ok = dev.Create(32, 32, false, /*hidden=*/true, "EC7Wolf GL probe");
+	if(ok)
+		dev.Destroy();
+
+	cached = ok ? 1 : 0;
+	return ok;
+}
+
 bool R_GLRunSelfTest(const char *outPath)
 {
 	const int W = 256, H = 64;

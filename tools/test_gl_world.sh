@@ -37,8 +37,12 @@ trap cleanup EXIT HUP INT TERM
 set +e
 (
 	cd "$data_dir"
+	# Pinned to software for the same reason as test_gl_parity.sh: the
+	# --capture-file reference only holds a 3D view when the software renderer
+	# is the one drawing it.
 	timeout 90s env SDL_AUDIODRIVER=dummy xvfb-run -a "$ec7wolf" \
 		--data CO7 --config "$cfg/ec7wolf.cfg" --savedir "$save" \
+		--vid-renderer software \
 		--nowait --tedlevel "$map" --skill 2 --capture-rngseed 1 \
 		--capture-frame 30 --capture-file "$out_dir/software.png" \
 		--capture-glworld "$out_dir/glworld.ppm" --capture-maxframes 60

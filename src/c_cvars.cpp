@@ -52,7 +52,12 @@ Aspect r_ratio = ASPECT_4_3, vid_aspect = ASPECT_NONE;
 bool forcegrabmouse = false;
 bool vid_fullscreen = false;
 bool vid_vsync = false;
-FString vid_renderer = "software";
+// The default since the renderer redesign reached parity. A machine that cannot
+// provide a GL 3.3 core context is demoted to software at startup
+// (CheckRendererAvailable in wl_main.cpp), and the Display menu keeps software
+// selectable for anyone who wants it.
+FString vid_renderer = "opengl";
+FString vid_renderer_requested = "opengl";
 bool vid_gldebug = false;
 int vid_maxfps = 0;					// 0 = unlimited
 int vid_xbrz = 0;					// 0 = off, 1 = auto, 2-6 = fixed factor
@@ -216,7 +221,7 @@ void ReadConfig(void)
 	config.CreateSetting("Vid_FullScreen", false);
 	config.CreateSetting("Vid_Aspect", ASPECT_NONE);
 	config.CreateSetting("Vid_Vsync", false);
-	config.CreateSetting("Vid_Renderer", FString("software"));
+	config.CreateSetting("Vid_Renderer", FString("opengl"));
 	config.CreateSetting("Vid_GLDebug", false);
 	config.CreateSetting("Vid_MaxFPS", 0);
 	config.CreateSetting("Vid_xBRZ", 0);
@@ -318,7 +323,7 @@ void ReadConfig(void)
 	vid_fullscreen = config.GetSetting("Vid_FullScreen")->GetInteger() != 0;
 	vid_aspect = static_cast<Aspect>(config.GetSetting("Vid_Aspect")->GetInteger());
 	vid_vsync = config.GetSetting("Vid_Vsync")->GetInteger() != 0;
-	vid_renderer = config.GetSetting("Vid_Renderer")->GetString();
+	vid_renderer = vid_renderer_requested = config.GetSetting("Vid_Renderer")->GetString();
 	vid_gldebug = config.GetSetting("Vid_GLDebug")->GetInteger() != 0;
 	vid_maxfps = config.GetSetting("Vid_MaxFPS")->GetInteger();
 	vid_xbrz = config.GetSetting("Vid_xBRZ")->GetInteger();
@@ -484,7 +489,7 @@ void WriteConfig(void)
 	config.GetSetting("Vid_FullScreen")->SetValue(vid_fullscreen);
 	config.GetSetting("Vid_Aspect")->SetValue(vid_aspect);
 	config.GetSetting("Vid_Vsync")->SetValue(vid_vsync);
-	config.GetSetting("Vid_Renderer")->SetValue(vid_renderer);
+	config.GetSetting("Vid_Renderer")->SetValue(vid_renderer_requested);
 	config.GetSetting("Vid_GLDebug")->SetValue(vid_gldebug);
 	config.GetSetting("Vid_MaxFPS")->SetValue(vid_maxfps);
 	config.GetSetting("Vid_xBRZ")->SetValue(vid_xbrz);

@@ -49,8 +49,14 @@ trap cleanup EXIT HUP INT TERM
 set +e
 (
 	cd "$data_dir"
+	# Pinned to software: this run's reference half is a software screenshot,
+	# and only the software renderer draws the 3D world into the framebuffer
+	# --capture-file reads. See the long note in test_gl_parity.sh -- leaving
+	# this to the default silently turned that gate into a comparison against a
+	# blank view when OpenGL became the default.
 	timeout 90s env SDL_AUDIODRIVER=dummy xvfb-run -a "$ec7wolf" \
 		--data CO7 --config "$cfg/ec7wolf.cfg" --savedir "$save" \
+		--vid-renderer software \
 		--nowait --tedlevel "$map" --skill 2 --capture-rngseed 1 \
 		--capture-frame 30 --capture-file "$out_dir/software.png" \
 		--capture-glframe "$out_dir/glframe.ppm" --capture-maxframes 60

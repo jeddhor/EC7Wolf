@@ -62,7 +62,12 @@ extern bool		r_depthfog;
 extern bool		vid_fullscreen;
 extern Aspect	vid_aspect;
 extern bool		vid_vsync;
-extern FString	vid_renderer;	// "software" | "opengl" | "vulkan"
+extern FString	vid_renderer;	// "software" | "opengl" | "vulkan" -- what is running
+// What the player asked for, which is what gets written back to the config. The
+// two differ when a machine cannot provide the requested renderer and startup
+// demotes it for this run; saving the demotion would quietly discard the
+// player's choice the first time they launched on a broken driver.
+extern FString	vid_renderer_requested;
 extern bool		vid_gldebug;	// install KHR_debug callback + GL error checks
 extern int		vid_maxfps;		// frame-rate cap; 0 = unlimited
 extern int		vid_xbrz;		// xBRZ image scaling: 0 = off, 1 = auto, 2-6 = factor

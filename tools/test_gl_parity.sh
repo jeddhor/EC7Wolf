@@ -123,8 +123,25 @@ for map in $maps; do
 	set +e
 	(
 		cd "$data_dir"
+		# The live renderer is pinned to software because the reference half of
+		# this comparison is a software screenshot, and only the software
+		# renderer draws the 3D world into the framebuffer that --capture-file
+		# reads. Under the OpenGL renderer the GPU owns the world and that
+		# framebuffer holds just the 2D overlay, so the "software" reference
+		# comes out ~95% black in the view region.
+		#
+		# This is pinned rather than left to the default because it silently
+		# broke the gate when OpenGL became the default: RMSE went from
+		# 0.04-0.08 to 0.35-0.46 -- comparing the GL composite against a blank
+		# frame -- and the run still reported PASS, because that is still under
+		# the 0.55 ceiling. A parity gate that passes while measuring nothing is
+		# worse than no gate at all.
+		#
+		# --capture-glframe builds its GL composite offscreen either way; it is
+		# byte-identical whichever renderer is live.
 		timeout 120s env SDL_AUDIODRIVER=dummy xvfb-run -a "$ec7wolf" \
 			--data CO7 --config "$cfg/$map.cfg" --savedir "$save" \
+			--vid-renderer software \
 			--nowait --tedlevel "$map" --skill 2 --capture-rngseed 1 \
 			--capture-frame "$frame" --capture-file "$out_dir/$map.software.png" \
 			--capture-glframe "$gl" --capture-maxframes $((frame + 30))

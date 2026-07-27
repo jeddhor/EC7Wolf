@@ -420,6 +420,33 @@ static bool DrawStartupConsole(FString statusStr)
 }
 
 void I_ShutdownGraphics();
+
+//
+// Demote vid_renderer to software if the requested hardware renderer cannot be
+// had on this machine. Only the setting used for this run is changed; the
+// config keeps whatever the player chose.
+//
+static void CheckRendererAvailable()
+{
+	FString requested = vid_renderer;
+	requested.ToLower();
+	if(requested.Compare("opengl") != 0 && requested.Compare("gl") != 0)
+		return;
+
+#ifdef ECWOLF_RENDERER_OPENGL
+	if(R_GLProbeAvailable())
+		return;
+
+	Printf("Renderer: no OpenGL 3.3 core context available on this display; "
+		"using the software renderer.\n");
+#else
+	Printf("Renderer: this build has no OpenGL support; "
+		"using the software renderer.\n");
+#endif
+
+	vid_renderer = "software";
+}
+
 static void InitGame()
 {
 	// initialize SDL
@@ -470,6 +497,15 @@ static void InitGame()
 //
 
 	BuildTables ();          // trig tables
+
+	// OpenGL is the default renderer, so the machine has to be asked whether it
+	// can actually provide one before the window is built. SDLFB reads
+	// vid_renderer to decide whether to make the window GL-capable and to leave
+	// out the SDL_Renderer the software path presents through, and that
+	// decision cannot be revisited once the window exists. Demoting the setting
+	// here keeps the two agreeing, and leaves the player's own choice intact in
+	// the config -- a machine that gains a working driver gets GL back.
+	CheckRendererAvailable();
 
 	// Setup a temporary window so if we have to terminate we don't do extra mode sets
 	VL_SetVGAPlaneMode (true);
@@ -1344,7 +1380,9 @@ int WL_Main (int argc, char *argv[])
 
 		// Command-line renderer override (used by the headless GL tests; the
 		// config's Vid_Renderer is the normal path). Must run before the first
-		// video mode is set so SDLFB can create a GL-capable window.
+		// video mode is set so SDLFB can create a GL-capable window. Only
+		// vid_renderer is set, not vid_renderer_requested, so a test run pinned
+		// to one renderer does not rewrite the player's config on exit.
 		for(int i = 1; i < argc - 1; ++i)
 		{
 			if(strcmp(argv[i], "--vid-renderer") == 0)

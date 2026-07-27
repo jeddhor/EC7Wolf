@@ -102,4 +102,37 @@ else
 	printf 'WARN: could not derive an interpolation-off config; skipped invariant\n'
 fi
 
+# Renderer invariant: the simulation must not depend on what is drawing it.
+#
+# This became a live concern at the Phase 11 cutover, when OpenGL became the
+# default: the runs above now use whichever renderer a fresh config selects, so
+# without this the gate would silently stop covering the other one. The two are
+# not merely different draw paths -- the GL window has no SDL_Renderer, mode
+# setting takes a different branch, and the frame loop's pacing differs -- and
+# any of that leaking into the simulation would show up here as a divergent
+# checksum rather than as something a player would notice weeks later.
+if [ -f "$workdir/on.cfg" ] && grep -q 'Vid_Renderer' "$workdir/on.cfg"; then
+	for renderer in software opengl; do
+		sed "s/Vid_Renderer = \".*\";/Vid_Renderer = \"$renderer\";/" \
+			"$workdir/on.cfg" > "$workdir/$renderer.cfg"
+		run_capture "$workdir/run-$renderer.txt" "$workdir/$renderer.cfg"
+		if [ ! -s "$workdir/run-$renderer.txt" ]; then
+			printf 'FAIL: the %s run produced no checksum output (see %s.log)\n' \
+				"$renderer" "$workdir/run-$renderer.txt" >&2
+			tail -n 20 "$workdir/run-$renderer.txt.log" >&2 || true
+			exit 1
+		fi
+	done
+
+	if diff -q "$workdir/run-software.txt" "$workdir/run-opengl.txt" >/dev/null; then
+		printf 'PASS: software and OpenGL produce identical simulation\n'
+	else
+		printf 'FAIL: the renderer changed the simulation (software != opengl)\n' >&2
+		diff "$workdir/run-software.txt" "$workdir/run-opengl.txt" | head -n 20 >&2
+		exit 1
+	fi
+else
+	printf 'WARN: no Vid_Renderer in the generated config; skipped the renderer invariant\n'
+fi
+
 exit 0

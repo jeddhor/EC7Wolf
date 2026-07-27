@@ -14,4 +14,9 @@ IRenderer *R_CreateOpenGLRenderer();
 // palette exactly. Writes a PPM to outPath when non-NULL. Returns true on pass.
 bool R_GLRunSelfTest(const char *outPath);
 
+// Can this machine give out a GL 3.3 core context at all? Answered by creating
+// and destroying a hidden window, cached for the rest of the run. Must be asked
+// before the game's window is created -- see the definition for why.
+bool R_GLProbeAvailable();
+
 #endif

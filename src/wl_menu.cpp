@@ -361,7 +361,9 @@ MENU_LISTENER(SetRenderer)
 {
 	// Read once before the first video mode is set, so this cannot take effect
 	// until the game is next started. Saying so beats silently doing nothing.
-	vid_renderer = which == 0 ? "opengl" : "software";
+	// Both, so the choice survives into the config even on a machine whose
+	// startup demoted vid_renderer for want of a GL context.
+	vid_renderer = vid_renderer_requested = which == 0 ? "opengl" : "software";
 	return true;
 }
 

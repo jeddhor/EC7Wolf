@@ -194,17 +194,91 @@ does not necessarily tell you.
 
 ### Deliberately not done
 
-* **Optimization.** The scene is rebuilt per frame; there is no batching, static
-  mesh caching, culling, or precaching. Phase 11 lists these as profile-driven
-  and *"only now consider"*, and nothing in the acceptance runs pointed at a
-  frame-rate problem worth trading complexity for. Retiring the raycaster's
-  visibility pass belongs with this work, not before it.
 * **Alt-tab / context loss.** Video mode changes tear down and rebuild the
   context and are covered by `test_gl_modeswitch`; a compositor yanking the
   context out from under a running game is the same code path but is not
   exercised by a test.
 * **HiDPI drawable scaling** beyond what the present path already parametrises.
 * **Android GLES 3** — a separate platform milestone, as planned.
+
+## Optimization
+
+Done after the cutover, and profile-driven as the plan requires — which turned
+out to matter, because the plan's own headline item was worth almost nothing and
+two costs it did not emphasise dominated the frame.
+
+### Measuring first (`vid_glprofile` / `--gl-profile`)
+
+Splits a live frame into the stages that could plausibly dominate and prints a
+breakdown every 100 frames. The GPU bucket is *submission* time — the driver may
+return before the work is done — so it reads as "what the draw calls cost this
+thread", not GPU milliseconds. Numbers below are 640×400 on a Radeon RX 580.
+(The headless test environment is llvmpipe and is useless for this: it puts
+rasterisation on the CPU.)
+
+| stage | before | after |
+| --- | --- | --- |
+| visibility (software raycast) | 4.06 ms | 0.21 |
+| draw submission | 3.85 | **0.00** |
+| weapon | 2.90 | 2.50 |
+| static build | 0.41 | 0.43 |
+| upload | 0.08 | 0.12 |
+| present | 1.11 | 0.79 |
+| **MAP01 total** | **12.48 ms** | **4.13 ms** |
+
+MAP20 14.91 → 3.81 ms; MAP40 14.90 → 1.39 ms.
+
+### What actually cost the frame
+
+**Draw submission (31–50%).** The world arrived as one surface per wall face,
+floor tile and ceiling tile — 3878 of them on MAP01 — and each got its own
+`glDrawArrays` with its own uniform updates. Surfaces are now sorted by draw
+state and merged into runs, which collapses that to a few dozen draws and takes
+submission to zero. Safe only because this pass has **no blending**: every
+transparent texel is a shader `discard` and depth testing decides the rest, so
+the image does not depend on draw order. A blended surface type would break that
+assumption, and `MeshDraw` is where it would have to be handled.
+
+**The retained raycaster (28–33%).** The software wall pass is still run under
+GL for its side effects — it stamps cell visibility for the automap and the
+sprite cull, collects masked-wall hits, and sets `viewz`. Its *pixels*, though,
+were being texture-mapped column by column and then thrown away: the GL path
+clears the whole view region on the very next statement.
+`WallRefreshVisibilityOnly()` skips `ScalePost` and nothing else, so the
+traversal — and therefore the visibility set — is bit-for-bit identical. This is
+**not** the "retire the raycaster" item; the traversal still runs, and portal
+traversal is still what would be needed to remove it.
+
+**The weapon, drawn twice (23%).** The second draw builds the coverage mask the
+compositor needs. Coverage is a silhouette, so it depends only on which sprite is
+drawn and where — and every input to that is a function of the simulation tic
+(`BobWeapon` derives its offsets from `gamestate.TimeCount`, as does the
+Corridor 7 walk-cycle pose). Frames run several times per tic, so the mask is now
+rebuilt only when its key changes. The remaining ~2.5 ms is the one mandatory CPU
+draw of the weapon into the 8-bit frame; removing that means moving the view
+model onto the GPU, which is a Phase 10-shaped change, not an optimization.
+
+**Static geometry (3% + 1%).** The plan's headline optimization, and the profile
+says it was never the problem. It is cached anyway, but by **comparing content**
+rather than by guessing when to invalidate: the mesh is still built each frame
+and `memcmp`'d against the last upload. A pushwall settling into its final cell
+silently rewrites the static world, and a missed invalidation would leave a wall
+standing where the player just walked; a content compare can only ever fail
+towards rebuilding. That removed the upload (0.38 → 0.12 ms) and left the build.
+
+### Measured, and deliberately not done
+
+* **Frustum culling.** Draw submission is now 0.00 ms and the GPU is not the
+  bottleneck at these resolutions, so culling has nothing left to win — and it
+  would actively cost: the visible set changes every frame, so a culled static
+  mesh would differ every frame and defeat the content-compared cache above.
+* **Texture precaching.** `BuildStatic` spans the whole map, not just what is
+  visible, so every wall texture is already uploaded during the first frame on a
+  level. Upload sits at 0.09–0.12 ms. There is no hitch left for a precache pass
+  to remove.
+
+Both are in the plan's optimization list. Neither survives contact with the
+measurements, and doing them anyway would trade real complexity for nothing.
 
 ## Verification status
 

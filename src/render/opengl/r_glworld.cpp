@@ -23,6 +23,7 @@
 
 #include <stdio.h>
 #include <math.h>
+#include <algorithm>
 
 #include <epoxy/gl.h>
 
@@ -53,11 +54,122 @@
 #include "r_data/colormaps.h"
 #include "render/opengl/r_glxbrz.h"
 
+#include <SDL.h>
+
+// ===========================================================================
+//
+// Frame profiler (vid_glprofile)
+//
+// Phase 11's optimization work is required to be profile-driven, so this exists
+// before any of it: it splits a live frame into the stages that could plausibly
+// dominate, so effort goes where the time actually is rather than where it is
+// assumed to be.
+//
+// Deliberately coarse. Every bucket is wall-clock around a stage that already
+// exists, which is enough to rank them; a sampling profiler would give better
+// attribution inside a stage, but the question here is which stage.
+//
+// The GPU bucket is submission time, not execution time -- the driver is free to
+// return before the work is done. Under llvmpipe (which is what the headless
+// tests run on) rasterisation is on the CPU and does land in it. Read it as
+// "time the draw calls cost this thread", not "GPU milliseconds".
+//
+// ===========================================================================
+
+namespace GLProf
+{
+	enum Bucket
+	{
+		B_Visibility,	// software raycast kept for cell visibility + viewz
+		B_Weapon,		// view-model draw, twice, plus the coverage mask
+		B_Static,		// static world mesh construction
+		B_Dynamic,		// doors/pushwalls
+		B_Masked,		// masked walls
+		B_Sprites,		// actor billboards
+		B_Upload,		// VBO creation + texture upload
+		B_Draw,			// world colour pass submission
+		B_Present,		// composite + xBRZ + swap
+		NUM_BUCKETS
+	};
+
+	const char *const kNames[NUM_BUCKETS] =
+	{
+		"visibility", "weapon", "static", "dynamic", "masked", "sprites",
+		"upload", "draw", "present"
+	};
+
+	double   gAcc[NUM_BUCKETS] = { 0 };
+	unsigned gFrames = 0;
+	double   gInvFreq = 0.0;
+
+	inline double Now()
+	{
+		if(gInvFreq == 0.0)
+			gInvFreq = 1.0 / (double)SDL_GetPerformanceFrequency();
+		return (double)SDL_GetPerformanceCounter() * gInvFreq;
+	}
+
+	// Scoped timer. Constructing one when profiling is off costs a bool test.
+	struct Scope
+	{
+		double start;
+		Bucket bucket;
+		bool on;
+		explicit Scope(Bucket b) : start(0.0), bucket(b), on(vid_glprofile)
+		{
+			if(on)
+				start = Now();
+		}
+		~Scope()
+		{
+			if(on)
+				gAcc[bucket] += Now() - start;
+		}
+	};
+
+	// Called once per presented frame. Reports in blocks rather than per frame:
+	// a per-frame line would itself cost more than some of the stages it claims
+	// to measure.
+	void EndFrame()
+	{
+		if(!vid_glprofile)
+			return;
+
+		++gFrames;
+		if(gFrames < 100)
+			return;
+
+		double total = 0.0;
+		for(int i = 0; i < NUM_BUCKETS; ++i)
+			total += gAcc[i];
+
+		FString line;
+		line.Format("GL profile: %.2f ms/frame over %u frames =",
+			1000.0 * total / (double)gFrames, gFrames);
+		for(int i = 0; i < NUM_BUCKETS; ++i)
+		{
+			FString part;
+			part.Format(" %s %.2f (%.0f%%)", kNames[i],
+				1000.0 * gAcc[i] / (double)gFrames,
+				total > 0.0 ? 100.0 * gAcc[i] / total : 0.0);
+			line += part;
+		}
+		Printf("%s\n", line.GetChars());
+
+		for(int i = 0; i < NUM_BUCKETS; ++i)
+			gAcc[i] = 0.0;
+		gFrames = 0;
+	}
+}
+
 // Software raycaster wall pass. In the live GL path it is run only for its
 // side-effects -- it stamps each ray-touched cell `visible` (which the GL sprite
 // culling and the automap read) and sets viewz/viewshift for the plane-height
 // uniforms -- while its wall pixels are discarded. Defined in wl_draw.cpp.
 void WallRefresh(void);
+// The same traversal with the per-column texture mapping skipped, since those
+// pixels are overwritten before anything reads them. Same visibility set.
+void WallRefreshVisibilityOnly(void);
 
 // Distance-shade inputs owned by the software renderer.
 extern int r_extralight;
@@ -564,20 +676,74 @@ namespace
 
 	// One mesh's GPU resources: interleaved VBO + a per-surface index/opacity
 	// texture list (parallel to mesh.surfaces).
+	// One merged glDrawArrays: a run of surfaces that need identical GL state.
+	//
+	// The mesh arrives as one surface per wall face, floor tile and ceiling tile
+	// -- 3878 of them on MAP01 -- and drawing them one at a time cost 31-50% of
+	// the frame in submission alone, measured, before any of them reached the
+	// GPU. Sorting by state and merging the runs collapses that to a few dozen
+	// draws.
+	//
+	// Reordering is safe here specifically because this pass has no blending:
+	// every transparent texel is a shader `discard` and depth testing decides
+	// the rest, so the image does not depend on the order surfaces are drawn in.
+	// Introducing a blended surface type would break that, and this is where it
+	// would have to be handled.
+	struct MeshDraw
+	{
+		GLuint tex, opac;
+		int kind;			// shader surface kind (doors/masked/sprites -> wall)
+		int masked, sprite, spriteFb, spriteLaser, isDoor;
+		int slideStyle;
+		unsigned int slideAmount;
+		GLuint first, count;
+	};
+
 	struct MeshGL
 	{
 		GLuint vao, vbo;
-		TArray<GLuint> tex;
-		TArray<GLuint> opac;
+		TArray<MeshDraw> draws;
 		MeshGL() : vao(0), vbo(0) {}
 	};
+
+	// Byte-identical meshes produce byte-identical GPU buffers, so this decides
+	// whether last frame's upload can stand. Padding inside WorldSurface is
+	// compared along with the fields, which can only ever report "different" for
+	// two meshes that are really the same -- that costs a rebuild, never a stale
+	// one.
+	bool MeshContentEqual(const WorldMesh &a, const WorldMesh &b)
+	{
+		if(a.vertices.Size() != b.vertices.Size() ||
+			a.surfaces.Size() != b.surfaces.Size())
+			return false;
+		if(a.vertices.Size() &&
+			memcmp(&a.vertices[0], &b.vertices[0],
+				a.vertices.Size() * sizeof(WorldVertex)) != 0)
+			return false;
+		if(a.surfaces.Size() &&
+			memcmp(&a.surfaces[0], &b.surfaces[0],
+				a.surfaces.Size() * sizeof(WorldSurface)) != 0)
+			return false;
+		return true;
+	}
+
+	// Everything the shader reads. Two surfaces that agree on all of it can be
+	// drawn together; `first`/`count` are the run itself and are not compared.
+	inline bool SameDrawState(const MeshDraw &a, const MeshDraw &b)
+	{
+		return a.tex == b.tex && a.opac == b.opac && a.kind == b.kind &&
+			a.masked == b.masked && a.sprite == b.sprite &&
+			a.spriteFb == b.spriteFb && a.spriteLaser == b.spriteLaser &&
+			a.isDoor == b.isDoor && a.slideStyle == b.slideStyle &&
+			a.slideAmount == b.slideAmount;
+	}
 
 	// Draw one mesh with the current program/uniforms. The framebuffer clear and
 	// uDebug are set by the caller so several meshes share one pass.
 	void RenderMesh(const WorldMesh &mesh, const MeshGL &gl,
 		const SurfaceUniforms &su)
 	{
-		if(mesh.vertices.Size() == 0)
+		if(gl.draws.Size() == 0)
 			return;
 		glBindVertexArray(gl.vao);
 
@@ -588,86 +754,73 @@ namespace
 		int boundSprite = -100;
 		int boundSpriteFb = -100;
 		int boundSpriteLaser = -100;
+		int boundSlide = -100;
 		int boundSlideStyle = -100;
 		unsigned int boundSlideAmt = 0xffffffffu;
-		for(unsigned int i = 0; i < mesh.surfaces.Size(); ++i)
+		for(unsigned int i = 0; i < gl.draws.Size(); ++i)
 		{
-			const WorldSurface &surf = mesh.surfaces[i];
-			const GLuint tex = gl.tex[i];
-			if(tex == 0)
-				continue;
-			if(tex != boundTex)
+			const MeshDraw &d = gl.draws[i];
+			if(d.tex != boundTex)
 			{
 				glActiveTexture(GL_TEXTURE0);
-				glBindTexture(GL_TEXTURE_2D, tex);
+				glBindTexture(GL_TEXTURE_2D, d.tex);
 				glUniform1i(su.uIndexTex, 0);
-				boundTex = tex;
+				boundTex = d.tex;
 			}
-			const GLuint opac = gl.opac[i];
-			if(opac != boundOpac)
+			if(d.opac != boundOpac)
 			{
-				glUniform1i(su.uHasOpacity, opac ? 1 : 0);
-				if(opac)
+				glUniform1i(su.uHasOpacity, d.opac ? 1 : 0);
+				if(d.opac)
 				{
 					glActiveTexture(GL_TEXTURE3);
-					glBindTexture(GL_TEXTURE_2D, opac);
+					glBindTexture(GL_TEXTURE_2D, d.opac);
 					glUniform1i(su.uOpacityTex, 3);
 				}
-				boundOpac = opac;
+				boundOpac = d.opac;
 			}
-			// Door leaves, masked walls, and sprites all shade as walls
-			// (perpendicular distance, C7 cycle). Walls/doors/masked alpha-test the
-			// index-255 colour key; sprites key on raw index 0 instead. A door leaf
-			// additionally runs the slide.
-			const bool isDoor = surf.kind == WSURF_DoorLeaf;
-			const bool isMasked = surf.kind == WSURF_Masked;
-			const bool isSprite = surf.kind == WSURF_Sprite;
-			const int shaderKind =
-				(isDoor || isMasked || isSprite) ? WSURF_Wall : surf.kind;
-			if(shaderKind != boundKind)
+			if(d.kind != boundKind)
 			{
-				glUniform1i(su.uSurfKind, shaderKind);
-				if(shaderKind == WSURF_Floor)
+				glUniform1i(su.uSurfKind, d.kind);
+				if(d.kind == WSURF_Floor)
 					glUniform1f(su.uPlaneHeight, su.floorPlaneH);
-				else if(shaderKind == WSURF_Ceiling)
+				else if(d.kind == WSURF_Ceiling)
 					glUniform1f(su.uPlaneHeight, su.ceilPlaneH);
-				boundKind = shaderKind;
+				boundKind = d.kind;
 			}
-			const int wantMasked = (isDoor || isMasked) ? 1 : 0;
-			if(wantMasked != boundMasked)
+			if(d.masked != boundMasked)
 			{
-				glUniform1i(su.uMasked, wantMasked);
-				boundMasked = wantMasked;
+				glUniform1i(su.uMasked, d.masked);
+				boundMasked = d.masked;
 			}
-			const int wantSprite = isSprite ? 1 : 0;
-			if(wantSprite != boundSprite)
+			if(d.sprite != boundSprite)
 			{
-				glUniform1i(su.uSprite, wantSprite);
-				boundSprite = wantSprite;
+				glUniform1i(su.uSprite, d.sprite);
+				boundSprite = d.sprite;
 			}
-			const int wantSpriteFb = (isSprite && surf.fullbright) ? 1 : 0;
-			if(wantSpriteFb != boundSpriteFb)
+			if(d.spriteFb != boundSpriteFb)
 			{
-				glUniform1i(su.uSpriteFullbright, wantSpriteFb);
-				boundSpriteFb = wantSpriteFb;
+				glUniform1i(su.uSpriteFullbright, d.spriteFb);
+				boundSpriteFb = d.spriteFb;
 			}
-			const int wantSpriteLaser = (isSprite && surf.laser) ? 1 : 0;
-			if(wantSpriteLaser != boundSpriteLaser)
+			if(d.spriteLaser != boundSpriteLaser)
 			{
-				glUniform1i(su.uSpriteLaser, wantSpriteLaser);
-				boundSpriteLaser = wantSpriteLaser;
+				glUniform1i(su.uSpriteLaser, d.spriteLaser);
+				boundSpriteLaser = d.spriteLaser;
 			}
-			glUniform1i(su.uSlide, isDoor ? 1 : 0);
-			if(isDoor && (surf.slideStyle != boundSlideStyle ||
-				surf.slideAmount != boundSlideAmt))
+			if(d.isDoor != boundSlide)
 			{
-				glUniform1i(su.uSlideStyle, surf.slideStyle);
-				glUniform1f(su.uSlideAmount, (float)surf.slideAmount);
-				boundSlideStyle = surf.slideStyle;
-				boundSlideAmt = surf.slideAmount;
+				glUniform1i(su.uSlide, d.isDoor);
+				boundSlide = d.isDoor;
 			}
-			glDrawArrays(GL_TRIANGLES, (GLint)surf.firstVertex,
-				(GLsizei)surf.vertexCount);
+			if(d.isDoor && (d.slideStyle != boundSlideStyle ||
+				d.slideAmount != boundSlideAmt))
+			{
+				glUniform1i(su.uSlideStyle, d.slideStyle);
+				glUniform1f(su.uSlideAmount, (float)d.slideAmount);
+				boundSlideStyle = d.slideStyle;
+				boundSlideAmt = d.slideAmount;
+			}
+			glDrawArrays(GL_TRIANGLES, (GLint)d.first, (GLsizei)d.count);
 		}
 	}
 
@@ -678,14 +831,135 @@ namespace
 		TMap<int, GLuint> &opacCache, MeshGL &out,
 		unsigned int *uniqueOut, unsigned int *maskedOut)
 	{
+		// Resolve each surface's textures first, then sort the surfaces into
+		// state order and rewrite the vertex buffer in that order, so a run of
+		// surfaces sharing state becomes one draw. The vertices are copied
+		// rather than indexed because the buffer is rebuilt every frame anyway;
+		// an index buffer would save nothing here and cost a second upload.
+		const unsigned int numSurf = mesh.surfaces.Size();
+		TArray<GLuint> surfTex(numSurf ? numSurf : 1);
+		TArray<GLuint> surfOpac(numSurf ? numSurf : 1);
+		surfTex.Resize(numSurf);
+		surfOpac.Resize(numSurf);
+		for(unsigned int i = 0; i < numSurf; ++i)
+		{
+			const FTextureID id = mesh.surfaces[i].texture;
+			if(!id.isValid())
+			{
+				surfTex[i] = 0;
+				surfOpac[i] = 0;
+				continue;
+			}
+			const int key = id.GetIndex();
+			GLuint *cached = texCache.CheckKey(key);
+			if(cached)
+			{
+				surfTex[i] = *cached;
+				surfOpac[i] = *opacCache.CheckKey(key);
+				continue;
+			}
+			FTexture *ftex = TexMan(id);
+			GLuint idxTex = CreateIndexTextureFor(ftex);
+			GLuint opacTex = CreateOpacityTextureFor(ftex);
+			texCache[key] = idxTex;
+			opacCache[key] = opacTex;
+			surfTex[i] = idxTex;
+			surfOpac[i] = opacTex;
+			if(idxTex && uniqueOut)
+				++*uniqueOut;
+			if(opacTex && maskedOut)
+				++*maskedOut;
+		}
+
+		// Per-surface draw state, then a stable sort into runs. Stable so that a
+		// given mesh always produces the same buffer for the same input, which
+		// keeps the offscreen captures the parity tests read reproducible.
+		struct SortItem
+		{
+			MeshDraw state;
+			unsigned int surface;
+		};
+		TArray<SortItem> items(numSurf ? numSurf : 1);
+		items.Clear();
+		for(unsigned int i = 0; i < numSurf; ++i)
+		{
+			if(surfTex[i] == 0)
+				continue;	// no texture resolved: the old path skipped these too
+			const WorldSurface &surf = mesh.surfaces[i];
+			// Door leaves, masked walls, and sprites all shade as walls
+			// (perpendicular distance, C7 cycle). Walls/doors/masked alpha-test
+			// the index-255 colour key; sprites key on raw index 0 instead. A
+			// door leaf additionally runs the slide.
+			const bool isDoor = surf.kind == WSURF_DoorLeaf;
+			const bool isMasked = surf.kind == WSURF_Masked;
+			const bool isSprite = surf.kind == WSURF_Sprite;
+			SortItem it;
+			it.state.tex = surfTex[i];
+			it.state.opac = surfOpac[i];
+			it.state.kind = (isDoor || isMasked || isSprite) ? WSURF_Wall : surf.kind;
+			it.state.masked = (isDoor || isMasked) ? 1 : 0;
+			it.state.sprite = isSprite ? 1 : 0;
+			it.state.spriteFb = (isSprite && surf.fullbright) ? 1 : 0;
+			it.state.spriteLaser = (isSprite && surf.laser) ? 1 : 0;
+			it.state.isDoor = isDoor ? 1 : 0;
+			// Only a door leaf's slide is read by the shader; forcing the rest to
+			// a fixed value keeps them from splitting runs needlessly.
+			it.state.slideStyle = isDoor ? surf.slideStyle : 0;
+			it.state.slideAmount = isDoor ? surf.slideAmount : 0;
+			it.state.first = 0;
+			it.state.count = 0;
+			it.surface = i;
+			items.Push(it);
+		}
+
+		// TArray has no begin()/end(); it is contiguous, so sort the raw range.
+		SortItem *const first = items.Size() ? &items[0] : NULL;
+		std::stable_sort(first, first + items.Size(),
+			[](const SortItem &a, const SortItem &b)
+			{
+				if(a.state.tex != b.state.tex) return a.state.tex < b.state.tex;
+				if(a.state.opac != b.state.opac) return a.state.opac < b.state.opac;
+				if(a.state.kind != b.state.kind) return a.state.kind < b.state.kind;
+				if(a.state.masked != b.state.masked) return a.state.masked < b.state.masked;
+				if(a.state.sprite != b.state.sprite) return a.state.sprite < b.state.sprite;
+				if(a.state.spriteFb != b.state.spriteFb) return a.state.spriteFb < b.state.spriteFb;
+				if(a.state.spriteLaser != b.state.spriteLaser) return a.state.spriteLaser < b.state.spriteLaser;
+				if(a.state.isDoor != b.state.isDoor) return a.state.isDoor < b.state.isDoor;
+				if(a.state.slideStyle != b.state.slideStyle) return a.state.slideStyle < b.state.slideStyle;
+				return a.state.slideAmount < b.state.slideAmount;
+			});
+
+		TArray<WorldVertex> ordered(mesh.vertices.Size() ? mesh.vertices.Size() : 1);
+		ordered.Clear();
+		out.draws.Clear();
+		for(unsigned int i = 0; i < items.Size(); ++i)
+		{
+			const WorldSurface &surf = mesh.surfaces[items[i].surface];
+			const GLuint first = (GLuint)ordered.Size();
+			for(unsigned int v = 0; v < surf.vertexCount; ++v)
+				ordered.Push(mesh.vertices[surf.firstVertex + v]);
+
+			// Extend the run in progress when nothing the shader reads changed.
+			if(out.draws.Size() > 0 && SameDrawState(out.draws[out.draws.Size()-1],
+				items[i].state))
+			{
+				out.draws[out.draws.Size()-1].count += surf.vertexCount;
+				continue;
+			}
+			MeshDraw d = items[i].state;
+			d.first = first;
+			d.count = surf.vertexCount;
+			out.draws.Push(d);
+		}
+
 		glGenVertexArrays(1, &out.vao);
 		glBindVertexArray(out.vao);
 		glGenBuffers(1, &out.vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, out.vbo);
-		if(mesh.vertices.Size() > 0)
+		if(ordered.Size() > 0)
 			glBufferData(GL_ARRAY_BUFFER,
-				(GLsizeiptr)(mesh.vertices.Size() * sizeof(WorldVertex)),
-				&mesh.vertices[0], GL_STATIC_DRAW);
+				(GLsizeiptr)(ordered.Size() * sizeof(WorldVertex)),
+				&ordered[0], GL_STATIC_DRAW);
 		const GLsizei stride = sizeof(WorldVertex);
 		glEnableVertexAttribArray(0);
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, (void*)0);
@@ -695,38 +969,6 @@ namespace
 		glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, stride, (void*)(5*sizeof(float)));
 		glEnableVertexAttribArray(3);
 		glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, stride, (void*)(6*sizeof(float)));
-
-		out.tex.Resize(mesh.surfaces.Size());
-		out.opac.Resize(mesh.surfaces.Size());
-		for(unsigned int i = 0; i < mesh.surfaces.Size(); ++i)
-		{
-			const FTextureID id = mesh.surfaces[i].texture;
-			if(!id.isValid())
-			{
-				out.tex[i] = 0;
-				out.opac[i] = 0;
-				continue;
-			}
-			const int key = id.GetIndex();
-			GLuint *cached = texCache.CheckKey(key);
-			if(cached)
-			{
-				out.tex[i] = *cached;
-				out.opac[i] = *opacCache.CheckKey(key);
-				continue;
-			}
-			FTexture *ftex = TexMan(id);
-			GLuint idxTex = CreateIndexTextureFor(ftex);
-			GLuint opacTex = CreateOpacityTextureFor(ftex);
-			texCache[key] = idxTex;
-			opacCache[key] = opacTex;
-			out.tex[i] = idxTex;
-			out.opac[i] = opacTex;
-			if(idxTex && uniqueOut)
-				++*uniqueOut;
-			if(opacTex && maskedOut)
-				++*maskedOut;
-		}
 	}
 
 	void DestroyMesh(MeshGL &gl)
@@ -759,12 +1001,22 @@ namespace
 		TMap<int, GLuint> *texCache;     // -> own caches, or a borrowed persistent set
 		TMap<int, GLuint> *opacCache;
 		bool ownResources;
+		// The static mesh's GL buffers belong to the cross-frame cache rather
+		// than to this frame, so DestroyWorldGL must not free them.
+		bool staticBorrowed;
+		// Cross-frame static-geometry cache, supplied by the live path. NULL on
+		// the offscreen paths, which are one-shot and have nothing to reuse.
+		WorldMesh *cacheMesh;
+		MeshGL    *cacheGL;
+		bool      *cacheValid;
 		WorldMesh mesh, dynMesh, maskedMesh, spriteMesh;
 		MeshGL staticGL, dynGL, maskedGL, spriteGL;
 		SurfaceUniforms su;
 		GLint uDebug;
 		WorldGL() : prog(0), paletteTex(0), colormapTex(0), c7RampFloorTex(0),
-			texCache(NULL), opacCache(NULL), ownResources(true), uDebug(-1) {}
+			texCache(NULL), opacCache(NULL), ownResources(true),
+			staticBorrowed(false), cacheMesh(NULL), cacheGL(NULL),
+			cacheValid(NULL), uDebug(-1) {}
 	};
 
 	// Build meshes/program/uniforms for a W x H world render (aspect W/H). The
@@ -775,16 +1027,25 @@ namespace
 		// Build the static world mesh plus the dynamic (door/pushwall) mesh. The
 		// dynamic mesh is interpolated at the current sub-tic alpha so doors and
 		// pushwalls render at their exact fractional positions.
-		WorldBuilder::BuildStatic(map, w.mesh);
+		{
+			GLProf::Scope s(GLProf::B_Static);
+			WorldBuilder::BuildStatic(map, w.mesh);
+		}
 		const float alpha = R_GetInterpolationAlpha();
-		WorldBuilder::BuildDynamic(map, w.dynMesh, alpha);
+		{
+			GLProf::Scope s(GLProf::B_Dynamic);
+			WorldBuilder::BuildDynamic(map, w.dynMesh, alpha);
+		}
 		// Masked geometry needs the camera position for its back-face cull (draw
 		// only the pane nearest the viewer, like the raycaster's entry-face DDA).
 		AActor *maskCam = players[ConsolePlayer].camera
 			? players[ConsolePlayer].camera : players[ConsolePlayer].mo;
-		WorldBuilder::BuildMasked(map, w.maskedMesh,
-			(float)maskCam->x / (float)TILEGLOBAL,
-			(float)maskCam->y / (float)TILEGLOBAL);
+		{
+			GLProf::Scope s(GLProf::B_Masked);
+			WorldBuilder::BuildMasked(map, w.maskedMesh,
+				(float)maskCam->x / (float)TILEGLOBAL,
+				(float)maskCam->y / (float)TILEGLOBAL);
+		}
 
 		// Actor sprites and the camera are drawn at their interpolated sub-tic
 		// transform, exactly as the software frame did: apply the interpolation,
@@ -793,7 +1054,10 @@ namespace
 		// then restore authoritative simulation state.
 		Interpolation::Apply(alpha);
 		CalcViewVariables();
-		WorldBuilder::BuildSprites(map, w.spriteMesh);
+		{
+			GLProf::Scope s(GLProf::B_Sprites);
+			WorldBuilder::BuildSprites(map, w.spriteMesh);
+		}
 		AActor *cam = players[ConsolePlayer].camera
 			? players[ConsolePlayer].camera : players[ConsolePlayer].mo;
 		const fixed camXFixed = cam->x;
@@ -844,14 +1108,35 @@ namespace
 		const int colormapRows = NUMCOLORMAPS;
 
 		unsigned int uniqueTextures = 0, maskedTextures = 0;
-		UploadMesh(w.mesh, *w.texCache, *w.opacCache, w.staticGL,
-			&uniqueTextures, &maskedTextures);
-		UploadMesh(w.dynMesh, *w.texCache, *w.opacCache, w.dynGL,
-			&uniqueTextures, &maskedTextures);
-		UploadMesh(w.maskedMesh, *w.texCache, *w.opacCache, w.maskedGL,
-			&uniqueTextures, &maskedTextures);
-		UploadMesh(w.spriteMesh, *w.texCache, *w.opacCache, w.spriteGL,
-			&uniqueTextures, &maskedTextures);
+		{
+			GLProf::Scope s(GLProf::B_Upload);
+			// The static mesh is the same tens of thousands of vertices on most
+			// frames -- it only changes when the map's geometry does. Only the
+			// live path caches it; the offscreen captures own their resources
+			// and are one-shot, so there is nothing for them to reuse.
+			if(w.cacheMesh != NULL)
+			{
+				if(!*w.cacheValid || !MeshContentEqual(w.mesh, *w.cacheMesh))
+				{
+					DestroyMesh(*w.cacheGL);
+					UploadMesh(w.mesh, *w.texCache, *w.opacCache,
+						*w.cacheGL, &uniqueTextures, &maskedTextures);
+					*w.cacheMesh = w.mesh;
+					*w.cacheValid = true;
+				}
+				w.staticGL = *w.cacheGL;
+				w.staticBorrowed = true;
+			}
+			else
+				UploadMesh(w.mesh, *w.texCache, *w.opacCache, w.staticGL,
+					&uniqueTextures, &maskedTextures);
+			UploadMesh(w.dynMesh, *w.texCache, *w.opacCache, w.dynGL,
+				&uniqueTextures, &maskedTextures);
+			UploadMesh(w.maskedMesh, *w.texCache, *w.opacCache, w.maskedGL,
+				&uniqueTextures, &maskedTextures);
+			UploadMesh(w.spriteMesh, *w.texCache, *w.opacCache, w.spriteGL,
+				&uniqueTextures, &maskedTextures);
+		}
 		// Same rule: once per offscreen capture, or on demand. The live path
 		// uploads new textures whenever an unseen wall comes into view, so this
 		// is intermittent rather than per-frame, but it is still noise.
@@ -1036,6 +1321,8 @@ namespace
 	{
 		// Per-frame VBOs are always freed; the persistent resources (program,
 		// palette, colormap, index-texture caches) are freed only when owned.
+		if(w.staticBorrowed)
+			w.staticGL = MeshGL();	// owned by gLive.staticCacheGL
 		DestroyMesh(w.staticGL);
 		DestroyMesh(w.dynGL);
 		DestroyMesh(w.maskedGL);
@@ -1581,12 +1868,22 @@ namespace
 		FString  capPath;              // headless: last presented frame is kept here
 		TArray<unsigned char> lastRGB; // most recent presented frame (top-down RGB)
 		int    lastW, lastH;
+		// Static world geometry, kept across frames. Held with the mesh it was
+		// built from so reuse is decided by comparing content rather than by
+		// guessing when the map's static geometry might have changed -- a
+		// pushwall settling into its final cell silently rewrites it, and a
+		// missed invalidation would leave a wall standing where the player just
+		// walked. Comparing can only fail towards rebuilding.
+		WorldMesh staticCacheMesh;
+		MeshGL    staticCacheGL;
+		bool      staticCacheValid;
 		GLLive() : inited(false), prog(0), screenProg(0), paletteTex(0),
 			colormapTex(0), c7RampFloorTex(0), lastMap(NULL), worldFbo(0), worldTex(0),
 			worldDepth(0), worldW(0), worldH(0), haveWorld(false),
 			vx(0), vy(0), vw(0), vh(0), fw(0), fh(0),
 			wcx(0), wcy(0), wcw(0), wch(0), haveWeaponCover(false),
-			haveOverlayCover(false), lastW(0), lastH(0) {}
+			haveOverlayCover(false), lastW(0), lastH(0),
+			staticCacheValid(false) {}
 	};
 	GLLive gLive;
 
@@ -1607,6 +1904,12 @@ namespace
 				glDeleteTextures(1, &pair->Value);
 		gLive.texCache.Clear();
 		gLive.opacCache.Clear();
+
+		// The cached static geometry belongs to the map that was just left, and
+		// its index textures have just been deleted out from under it.
+		DestroyMesh(gLive.staticCacheGL);
+		gLive.staticCacheMesh.Clear();
+		gLive.staticCacheValid = false;
 	}
 
 	void EnsureLiveResources()
@@ -1720,6 +2023,9 @@ namespace
 		wr.c7RampFloorTex = gLive.c7RampFloorTex;
 		wr.texCache = &gLive.texCache;
 		wr.opacCache = &gLive.opacCache;
+		wr.cacheMesh = &gLive.staticCacheMesh;
+		wr.cacheGL = &gLive.staticCacheGL;
+		wr.cacheValid = &gLive.staticCacheValid;
 		if(!BuildWorldGL(wr, vw, vh))
 		{
 			DestroyWorldGL(wr);
@@ -1738,11 +2044,19 @@ namespace
 		glEnable(GL_DEPTH_TEST);
 		glDepthFunc(GL_LESS);
 		glDisable(GL_CULL_FACE);
-		DrawWorldColourPass(wr);
+		{
+			GLProf::Scope s(GLProf::B_Draw);
+			DrawWorldColourPass(wr);
+		}
 		DestroyWorldGL(wr);	// frees per-frame VBOs; borrowed resources kept
 		gLive.haveWorld = true;
 		GLCheckErrors("RenderLiveWorld");
 	}
+}
+
+void R_GLProfileEndFrame()
+{
+	GLProf::EndFrame();
 }
 
 bool R_GLLiveWantPresent()
@@ -1822,7 +2136,12 @@ void R_GLLiveRenderScene()
 	vbufPitch = SCREENPITCH;
 
 	CalcViewVariables();
-	WallRefresh();	// stamps cell visibility + sets viewz; wall pixels discarded
+	{
+		GLProf::Scope s(GLProf::B_Visibility);
+		// Visibility, masked-wall hits and viewz; the wall pixels this would
+		// otherwise draw are cleared by the memset immediately below.
+		WallRefreshVisibilityOnly();
+	}
 
 	// Clear the 3D view region to the compositor key so only 2D drawn over it
 	// (the weapon now; banners/messages later in PlayFrame) stays opaque.
@@ -1830,7 +2149,10 @@ void R_GLLiveRenderScene()
 	for(int y = 0; y < viewheight; ++y)
 		memset(vbuf + y * vbufPitch, key, viewwidth);
 
-	DrawPlayerWeapon();
+	{
+		GLProf::Scope s(GLProf::B_Weapon);
+		DrawPlayerWeapon();
+	}
 
 	// Build a robust weapon coverage mask. The compositor keys the view region
 	// on == key (Remap[0]) to decide which texels reveal the GL world, but the
@@ -1842,29 +2164,70 @@ void R_GLLiveRenderScene()
 	// the same value over both clears while an uncovered texel keeps its
 	// (differing) background. Equal => the weapon drew here, so it is opaque
 	// regardless of colour.
+	//
+	// Rebuilt only when the silhouette can have moved. Coverage is the sprite's
+	// shape, so it depends on which frame is drawn and where -- not on shading
+	// or palette. Every input to that is a function of the simulation tic:
+	// BobWeapon derives its offsets from gamestate.TimeCount, and the Corridor 7
+	// walk-cycle pose advances once per TimeCount too. Frames run several times
+	// per tic, and each one was redrawing the weapon a second time and comparing
+	// a quarter of a million texels to re-derive an identical mask; that was 59%
+	// of the frame once the raycaster stopped dominating it.
 	{
+		// Same bucket as the draw above: this is the weapon's second draw plus
+		// the per-texel comparison, which is the other half of its cost.
+		GLProf::Scope s(GLProf::B_Weapon);
 		const byte alt = (byte)(key ^ 0xFF);
 		const int vw = viewwidth, vh = viewheight;
-		TArray<unsigned char> scratch((unsigned)(SCREENPITCH * vh));
-		scratch.Resize((unsigned)(SCREENPITCH * vh));
-		for(int y = 0; y < vh; ++y)
-			memset(&scratch[y * SCREENPITCH], alt, vw);
 
-		byte *saveVbuf = vbuf;
-		vbuf = &scratch[0];		// pitch unchanged; scratch[0] is the view origin
-		DrawPlayerWeapon();
-		vbuf = saveVbuf;
+		struct CoverKey
+		{
+			const void *frame;
+			const void *weapon;
+			int32_t time;
+			fixed sx, sy;
+			int vw, vh, vx, vy;
+		};
+		static CoverKey lastKey = { NULL, NULL, -1, 0, 0, 0, 0, 0, 0 };
+		CoverKey nowKey;
+		nowKey.frame = (const void *)players[ConsolePlayer].psprite[0].frame;
+		nowKey.weapon = (const void *)players[ConsolePlayer].ReadyWeapon;
+		nowKey.time = (int32_t)gamestate.TimeCount;
+		nowKey.sx = players[ConsolePlayer].psprite[0].sx;
+		nowKey.sy = players[ConsolePlayer].psprite[0].sy;
+		nowKey.vw = vw; nowKey.vh = vh;
+		nowKey.vx = viewscreenx; nowKey.vy = viewscreeny;
 
-		const byte *real = surf + screenofs;
-		gLive.weaponCover.Resize((unsigned)(vw * vh));
-		for(int r = 0; r < vh; ++r)
-			for(int c = 0; c < vw; ++c)
-				gLive.weaponCover[r * vw + c] =
-					(real[r * SCREENPITCH + c] == scratch[r * SCREENPITCH + c])
-						? 1 : 0;
-		gLive.wcx = viewscreenx; gLive.wcy = viewscreeny;
-		gLive.wcw = vw; gLive.wch = vh;
-		gLive.haveWeaponCover = true;
+		// Only the mask work is skipped -- never the real weapon draw above, and
+		// never anything after this block, which still has to unlock the surface
+		// and render the world.
+		const bool reusable = gLive.haveWeaponCover &&
+			memcmp(&lastKey, &nowKey, sizeof(CoverKey)) == 0;
+		if(!reusable)
+		{
+			lastKey = nowKey;
+
+			TArray<unsigned char> scratch((unsigned)(SCREENPITCH * vh));
+			scratch.Resize((unsigned)(SCREENPITCH * vh));
+			for(int y = 0; y < vh; ++y)
+				memset(&scratch[y * SCREENPITCH], alt, vw);
+
+			byte *saveVbuf = vbuf;
+			vbuf = &scratch[0];	// pitch unchanged; scratch[0] is the view origin
+			DrawPlayerWeapon();
+			vbuf = saveVbuf;
+
+			const byte *real = surf + screenofs;
+			gLive.weaponCover.Resize((unsigned)(vw * vh));
+			for(int r = 0; r < vh; ++r)
+				for(int c = 0; c < vw; ++c)
+					gLive.weaponCover[r * vw + c] =
+						(real[r * SCREENPITCH + c] == scratch[r * SCREENPITCH + c])
+							? 1 : 0;
+			gLive.wcx = viewscreenx; gLive.wcy = viewscreeny;
+			gLive.wcw = vw; gLive.wch = vh;
+			gLive.haveWeaponCover = true;
+		}
 	}
 
 	// Mark the player's own cell visible for the automap (as R_RenderView does).
@@ -1975,6 +2338,10 @@ void R_GLLivePresent(const unsigned char *mem, int pitch, int fw, int fh,
 {
 	if(drawableW <= 0) drawableW = fw;
 	if(drawableH <= 0) drawableH = fh;
+
+	// Closes when this function returns -- every exit path goes through
+	// R_GLXBRZEnd, so there is no early return that would escape it.
+	GLProf::Scope presentScope(GLProf::B_Present);
 
 	// Image scaling, when it is on: compositing is redirected into an offscreen
 	// buffer the size of the 8-bit frame, and R_GLXBRZEnd filters that onto the

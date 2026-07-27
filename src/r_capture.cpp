@@ -119,6 +119,9 @@ namespace
 	uint64_t g_frameCount     = 0;
 	DWORD    g_worldChecksum  = 0;       // folds every tic's state
 	bool     g_finalized      = false;
+	// Set by a capture that produced its artifact outside the gameplay loop; the
+	// next presented frame ends the run. See Capture::NoteArtifactComplete().
+	bool     g_artifactComplete = false;
 
 	inline DWORD Fold(DWORD crc, const void *p, unsigned int len)
 	{
@@ -728,6 +731,23 @@ void PerTic()
 		Finalize();
 		Quit();
 	}
+}
+
+void NoteArtifactComplete()
+{
+	g_artifactComplete = true;
+}
+
+void PostPresent()
+{
+	if(!g_armed || !g_artifactComplete)
+		return;
+
+	// Cleared first: Quit() unwinds by throwing, and a handler that presented
+	// another frame on the way out would otherwise re-enter this.
+	g_artifactComplete = false;
+	Finalize();
+	Quit();
 }
 
 void PostFrame()

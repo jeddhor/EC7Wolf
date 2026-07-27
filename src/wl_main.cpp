@@ -1405,6 +1405,18 @@ int WL_Main (int argc, char *argv[])
 				break;
 			}
 		}
+		// Per-frame GL timing breakdown. Separate from --gl-debug: that one
+		// enables synchronous driver diagnostics, which would distort exactly
+		// the numbers this reports.
+		for(int i = 1; i < argc; ++i)
+		{
+			if(strcmp(argv[i], "--gl-profile") == 0)
+			{
+				vid_glprofile = true;
+				Printf("Renderer: GL frame profiling enabled (command line).\n");
+				break;
+			}
+		}
 
 		{
 			TArray<FString> wadfiles, files;

@@ -71,12 +71,15 @@ for factor in $factors; do
 		printf 'Vid_Renderer = "opengl";\n'
 	} >"$work/xbrz.cfg"
 
-	# The exit status is not checked: the game is left sitting on its title page,
-	# where no gameplay frames are counted, so --capture-maxframes cannot end the
-	# run and the timeout is the normal way out. The artifacts are the result.
+	# The run ends itself: the parity pair is written on the title page, and the
+	# capture harness quits at the next present once the files are closed
+	# (Capture::NoteArtifactComplete). The timeout is a safety net for a run that
+	# never gets that far, not the normal way out -- it used to be, which cost
+	# ten minutes per factor for a few seconds of work. The exit status is still
+	# not checked; the artifacts are the result.
 	(
 		cd "$data_dir"
-		timeout 600s env SDL_AUDIODRIVER=dummy \
+		timeout 120s env SDL_AUDIODRIVER=dummy \
 			xvfb-run -a -s "-screen 0 640x400x24" "$ec7wolf" \
 			--data CO7 --config "$work/xbrz.cfg" --savedir "$work/sv" \
 			--nowait --res 640 400 --vid-renderer opengl \

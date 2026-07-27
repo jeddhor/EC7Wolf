@@ -297,8 +297,28 @@ static inline BYTE ShadeWallColor(BYTE color, const BYTE *shades)
 	return shades[color];
 }
 
+// The OpenGL renderer runs the wall pass only for its side effects: the DDA
+// stamps every ray-touched cell visible (the automap and the GL sprite cull read
+// that), collects the masked-wall hits, and sets viewz/viewshift. Its pixels are
+// dead on arrival -- the GL path clears the entire view region on the very next
+// statement -- yet drawing them was 30-60% of a GL frame, measured. This skips
+// the per-column texture mapping and nothing else, so the traversal, and
+// therefore the visibility set, stays bit-for-bit identical.
+static bool wallPixelsWanted = true;
+
+void WallRefresh(void);
+
+void WallRefreshVisibilityOnly()
+{
+	wallPixelsWanted = false;
+	WallRefresh();
+	wallPixelsWanted = true;
+}
+
 void ScalePost()
 {
+	if(!wallPixelsWanted)
+		return;
 	if(postsource == NULL)
 		return;
 

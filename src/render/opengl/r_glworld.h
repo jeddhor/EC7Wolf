@@ -33,6 +33,10 @@ bool R_GLFrameCapture(const char *outPath);
 // whether to create a GL-capable window and present through GL.
 bool R_GLLiveWantPresent();
 
+// Per-frame GL timing report (vid_glprofile). Call once per presented frame,
+// after the swap. No-op unless profiling is on.
+void R_GLProfileEndFrame();
+
 // Reduced software frame + GL world render for one gameplay frame. Called from
 // OpenGLRenderer::RenderScene (inside the interpolation Apply/Restore that wraps
 // the software path too).

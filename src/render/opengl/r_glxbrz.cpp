@@ -25,6 +25,7 @@
 #include "wl_def.h"
 #include "c_cvars.h"
 #include "m_png.h"
+#include "r_capture.h"
 #include "r_xbrz.h"
 #include "xbrz.h"
 #include "tarray.h"
@@ -758,6 +759,11 @@ void R_GLXBRZWriteParity(const unsigned char *mem, int pitch, int fw, int fh,
 
 	Printf("GL xBRZ: wrote %dx parity pair '%s' / '%s' (%dx%d).\n",
 		factor, glPath.GetChars(), cpuPath.GetChars(), w, h);
+
+	// Both files are closed by now, so the run has produced everything it was
+	// asked for and can end at the next present. This page counts no gameplay
+	// frames, so nothing else would ever end it.
+	Capture::NoteArtifactComplete();
 }
 
 void R_GLXBRZShutdown()

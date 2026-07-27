@@ -59,6 +59,7 @@ bool vid_vsync = false;
 FString vid_renderer = "opengl";
 FString vid_renderer_requested = "opengl";
 bool vid_gldebug = false;
+bool vid_glprofile = false;
 int vid_maxfps = 0;					// 0 = unlimited
 int vid_xbrz = 0;					// 0 = off, 1 = auto, 2-6 = fixed factor
 int vid_renderscale = 1;			// divides the video mode to get the render size

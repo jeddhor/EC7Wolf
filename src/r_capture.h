@@ -74,6 +74,20 @@ namespace Capture
 	// Handle screenshot-on-frame-N and the frame-count quit condition.  Call
 	// exactly once per rendered/presented frame.
 	void PostFrame();
+
+	// Report that the artifact this run exists to produce has been written.
+	//
+	// PostFrame() only runs inside the gameplay loop, so it cannot end a run
+	// whose artifact belongs to a 2D page -- the xBRZ parity pair is written on
+	// the title screen, which counts no gameplay frames. Such a run has nothing
+	// to end it and sits there until the harness times it out, which cost
+	// tools/test_glxbrz_parity.sh ten minutes per factor for a few seconds of
+	// actual work.
+	void NoteArtifactComplete();
+
+	// End the run if an artifact reported itself complete. Call once per
+	// presented frame, after the swap, where it is safe to unwind.
+	void PostPresent();
 }
 
 #endif

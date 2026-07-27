@@ -16,6 +16,7 @@
 //#include "r_swrenderer.h"
 #include "thingdef/thingdef.h"
 #include "wl_main.h"
+#include "r_capture.h"
 #include "version.h"
 
 #include <SDL.h>
@@ -27,6 +28,7 @@
 static inline bool R_GLLiveWantPresent() { return false; }
 static inline void R_GLLivePresent(const unsigned char *, int, int, int, int, int) {}
 static inline void R_GLLiveSetContextActive(bool) {}
+static inline void R_GLProfileEndFrame() {}
 #endif
 
 IVideo *Video = NULL;
@@ -941,6 +943,10 @@ void SDLFB::Update ()
 		SDL_GL_GetDrawableSize (Screen, &dw, &dh);
 		R_GLLivePresent (MemBuffer, Pitch, Width, Height, dw, dh);
 		SDL_GL_SwapWindow (Screen);
+		R_GLProfileEndFrame ();
+		// After the swap, where unwinding is safe: a capture whose artifact is
+		// produced outside the gameplay loop ends its run here.
+		Capture::PostPresent ();
 		return;
 	}
 #endif

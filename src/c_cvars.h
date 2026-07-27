@@ -69,6 +69,9 @@ extern FString	vid_renderer;	// "software" | "opengl" | "vulkan" -- what is runn
 // player's choice the first time they launched on a broken driver.
 extern FString	vid_renderer_requested;
 extern bool		vid_gldebug;	// install KHR_debug callback + GL error checks
+// Per-frame GL timing breakdown, printed periodically. Off by default and free
+// when off; the timers are only read inside the live render path.
+extern bool		vid_glprofile;
 extern int		vid_maxfps;		// frame-rate cap; 0 = unlimited
 extern int		vid_xbrz;		// xBRZ image scaling: 0 = off, 1 = auto, 2-6 = factor
 extern int		vid_renderscale;// 1 = render at the video mode, 2-4 = render that

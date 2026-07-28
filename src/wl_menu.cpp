@@ -1380,6 +1380,20 @@ void DrawOutline (int x, int y, int w, int h, int color1, int color2)
 ////////////////////////////////////////////////////////////////////
 void SetupControlPanel (void)
 {
+	// The menu is not seen through the visor. Corridor 7's night and infrared
+	// modes are a whole-DAC rewrite, not a tint over the 3D view, so anything
+	// drawn while one is active comes out green or red -- including the menu,
+	// which UpdatePaletteShifts had no chance to undo because the play loop is
+	// not running. Reset here rather than on the way in: US_ControlPanel has
+	// already faded the view out, so the change happens on a black screen. The
+	// visor comes back by itself, since PlayFrame updates the palette from the
+	// player's C7VisorMode before it renders or fades back in.
+	//
+	// FinishPaletteShifts also drops a damage or pickup flash that was still
+	// decaying, which is the same argument: it is a moment of the game, not a
+	// property of the menu.
+	FinishPaletteShifts();
+
 	WindowH = 200;
 	if(screenHeight % 200 != 0)
 		VL_ClearScreen(0);

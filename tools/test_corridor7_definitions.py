@@ -45,6 +45,7 @@ LOCKDEFS = (ROOT / "wadsrc/static/lockdefs.txt").read_text()
 THINGDEF_CODEPTR = (ROOT / "src/thingdef/thingdef_codeptr.cpp").read_text()
 WL_DEF = (ROOT / "src/wl_def.h").read_text()
 GLWORLD = (ROOT / "src/render/opengl/r_glworld.cpp").read_text()
+WL_MENU = (ROOT / "src/wl_menu.cpp").read_text()
 
 
 def require(pattern: str, text: str, description: str) -> None:
@@ -223,6 +224,12 @@ for _idx, _want, _table, _why in (
                          % (_why, _idx, _table[_idx], _want))
 if re.search(r'mode\s*!=\s*3.*?i\s*==\s*39', V_PALETTE, re.DOTALL):
     raise SystemExit("Corridor 7 definition check failed: visor palettes must tint ordinary white 39")
+# The visor modes are a whole-DAC rewrite, not a tint over the 3D view, so every
+# 2D surface inherits them -- and UpdatePaletteShifts, which would undo it, only
+# runs inside the play loop. The menu is entered from within that loop, so it has
+# to reset the palette itself or it comes out green or red.
+require(r'void SetupControlPanel \(void\)\s*\{.*?FinishPaletteShifts\(\);', WL_MENU,
+        "the menu resets the Corridor 7 visor palette on the way in")
 if len(re.findall(r'ShadeWallColor\((?:postsource|source)\[yw\],\s*curshades\)', WL_DRAW)) != 3:
     raise SystemExit("Corridor 7 definition check failed: solid and masked wall posts must share emissive shading")
 require(r'actor\s+C7DamageField\s*\{.*?C010\s+A\s+-1\s+bright', STATICS,

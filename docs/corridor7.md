@@ -275,8 +275,10 @@ Append an output directory and `--all` to load-check every map in the archive.
   original pixel-dissolve title transition, and paced fading credit sequence;
   episode and five rank choices (including randomized President placement),
   the documented 10/75/100/100-percent alien objective gate, body armor,
-  normal/night/infrared visor modes and charge, infrared-revealed laser
-  barriers and cloaked enemies, and electric wall IDs 6/14
+  normal/night/infrared visor modes and charge (the menu resets the visor
+  palette on the way in — the modes rewrite the whole DAC rather than tinting
+  the 3D view, so without that the menu came out green or red), infrared-revealed
+  laser barriers and cloaked enemies, and electric wall IDs 6/14
   with their original palette shock, MAP01-MAP40 progression and victory, six routed bonus maps,
   the released per-floor hit/miss award, original loading/death/high-score
   pages, the rare non-counting C718-C725 red-skull taunt and its original

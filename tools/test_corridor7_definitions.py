@@ -265,8 +265,12 @@ if "2nd Lieutenant" in MAPINFO:
 require(r'RandomizeCorridor7PresidentThings.*?FL_ISMONSTER.*?NATIVE_CLASS\(Inventory\).*?pr_c7president',
         GAMEMAP, "President relocates monsters and pickups")
 require(r'P_AlertCorridor7Monsters.*?AActor::GetIterator.*?FL_SHOOTABLE.*?FirstSighting', WL_STATE, "intruder alert wakes every live monster")
-require(r'DrawC7TopMessage.*?CR_BLACK,\s*5,\s*5.*?DTA_FillColor.*?BlackIndex.*?CR_YELLOW,\s*4,\s*4.*?DTA_FillColor.*?BaseColors\[3\]', WOLF_SBAR,
-        "Corridor 7 top notifications use a full-bright yellow stencil and one-pixel black drop shadow")
+# The yellow is measured off a DOSBox capture of the CD release on MAP01, where
+# the banner is exactly (255,255,0) with no intermediate shades. This check used
+# to assert BaseColors[3] -- (215,215,0) -- which is the value the code had, not
+# the value the game had, and only looks wrong over a pale background.
+require(r'DrawC7TopMessage.*?CR_BLACK,\s*5,\s*5.*?DTA_FillColor.*?BlackIndex.*?CR_YELLOW,\s*4,\s*4.*?DTA_FillColor,\s*PalEntry\(255, 255, 0\)', WOLF_SBAR,
+        "Corridor 7 top notifications use the DOS release's (255,255,0) stencil and a one-pixel black drop shadow")
 require(r'void\s+WolfStatusBar::DrawTopOverlay.*?TimeCount\s*<\s*5\*TICRATE.*?DrawC7TopMessage\("Eliminate Aliens To Secure Floor"\)', WOLF_SBAR, "Corridor 7 objective is a timed top overlay")
 require(r'SetTopMessage.*?topMessageUntil.*?DrawTopOverlay', WOLF_SBAR, "Corridor 7 transient gameplay messages draw above the view")
 require(r'TryUseC7HealthChamber.*?c7ChamberState\s*=\s*1.*?TickC7HealthChamber.*?C7ChamberExitAngle.*?SetC7HealthChamberPower',
@@ -300,10 +304,17 @@ require(r'GiveCorridor7Cheat.*?GiveAllWeaponsAndAmmo.*?P_GiveKeys.*?gamestate\.f
 # texels it paints. The property is the same -- rendered scene, then overlay.
 require(r'Renderer->RenderScene\s*\(\s*\).*?Renderer->DrawViewOverlay\(DrawTopOverlayThunk\)',
         WL_PLAY, "top overlay redraws every rendered frame, through the renderer seam")
-require(r'if\(Paused\s*&\s*1\).*?CheckGameFilter\("Corridor7"\).*?'
-        r'pauseText\s*=\s*"PAUSED".*?DrawText\(SmallFont.*?else\s*'
-        r'VWB_DrawGraphic\(TexMan\("PAUSED"\)', WL_PLAY,
-        "Corridor 7 pause uses text instead of absent Wolf PAUSED art")
+# The Wolf PAUSED art was never absent for Corridor 7 -- VGAGRAPH chunk 72 holds
+# it, and it was simply still under its numeric name, so TexMan found nothing and
+# the label was stencilled out of the small font instead. A DOSBox capture of the
+# CD release matches that 64x32 picture at exactly (128, 64), which is where the
+# stock call already draws it: naming the chunk is the whole fix, and the
+# game-specific branch is gone with it.
+require(r'^\t"PAUSED",$', CO7MAP, "VGAGRAPH chunk 72 must be named PAUSED")
+require(r'if\(Paused\s*&\s*1\).*?VWB_DrawGraphic\(TexMan\("PAUSED"\), \(20 - 4\)\*8, 80 - 2\*8\);',
+        WL_PLAY, "the pause label is Corridor 7's own picture, drawn at (128, 64)")
+forbid(r'DrawPausedOverlay.*?CheckGameFilter\("Corridor7"\)',
+       WL_PLAY, "the pause overlay must not need a Corridor 7 special case")
 require(r'hasSignon\s*&&\s*IWad::CheckGameFilter\("Corridor7"\).*?VH_UpdateScreen\(\).*?return\s+false', WL_MAIN, "Corridor 7 startup keeps its splash free of EC7Wolf initialization text")
 if len(re.findall(r'Time\s*=\s*-4', MAPINFO)) != 5 or len(re.findall(r'FadeType\s*=\s*FadeOut', MAPINFO)) < 6:
     raise SystemExit("Corridor 7 definition check failed: credits must hold for four seconds and fade between slides")

@@ -45,6 +45,20 @@ Palette entry 3 — (215,215,0) — was used here previously and reads as dull o
 over the bright ceiling gradient MAP01 opens on, while looking right over the
 darker walls most floors start on. `tools/test_corridor7_topmessage.sh` pins it.
 
+### The pause label
+
+Corridor 7 has its own pause picture — VGAGRAPH chunk 72, 64×32, the word
+"paused" in chrome — and it is now named `PAUSED` in `co7map.txt` and drawn
+through the same path as Wolf3D's. It used to be stencilled out of the small
+font, because the chunk was still under its numeric name and `TexMan("PAUSED")`
+found nothing. A DOSBox capture of the CD release matches that picture at
+exactly (128, 64), which is where the stock call already put it.
+
+Rebuilding an upscaled asset pack after this change is worth doing: a pack built
+earlier carries the picture under the old name `c7g0072`, which no longer
+matches anything the game draws. The game says so on startup and leaves the
+pause label at its original resolution.
+
 ### Upscaled assets
 
 The game can draw a neural-network upscale of its own art instead of the

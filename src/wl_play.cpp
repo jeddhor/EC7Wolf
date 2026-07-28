@@ -1277,27 +1277,14 @@ static void DrawPausedOverlay()
 	if(!(Paused & 1))
 		return;
 
-	if(IWad::CheckGameFilter("Corridor7"))
-	{
-		// Corridor 7 has no Wolf3D PAUSED art chunk. Drawing that absent
-		// texture produced the checkerboard placeholder and an Unknown Texture
-		// warning. Render the pause label with the game's remapped font instead.
-		const char *pauseText = "PAUSED";
-		const int pauseX = 160-SmallFont->StringWidth(pauseText)/2;
-		screen->DrawText(SmallFont, CR_BLACK, pauseX+1, 73, pauseText,
-			DTA_FillColor, GPalette.BaseColors[GPalette.BlackIndex].d,
-			DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
-		// Same full-bright yellow as the objective banner, for the same reason:
-		// palette entry 3 is (215,215,0) and reads as dull olive over anything
-		// pale. Unlike the banner this one has no DOS reference behind it --
-		// the pause label there is a picture, not text (see C7G0072) -- so this
-		// is only consistency with the game's other stencilled text.
-		screen->DrawText(SmallFont, CR_YELLOW, pauseX, 72, pauseText,
-			DTA_FillColor, PalEntry(255, 255, 0).d,
-			DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
-	}
-	else
-		VWB_DrawGraphic(TexMan("PAUSED"), (20 - 4)*8, 80 - 2*8);
+	// Corridor 7 has its own pause picture; it was being drawn as stencilled
+	// text because the chunk holding it was still under its numeric name and
+	// TexMan("PAUSED") found nothing. co7map.txt now names it, so both games
+	// take the same path -- and the DOS release happens to put it at the same
+	// place this always did: a DOSBox capture of the CD version matches the
+	// 64x32 picture at exactly (128, 64), centred in the view above the status
+	// bar.
+	VWB_DrawGraphic(TexMan("PAUSED"), (20 - 4)*8, 80 - 2*8);
 }
 
 static void DrawC7MapOverlay()

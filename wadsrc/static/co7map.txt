@@ -75,7 +75,7 @@ graphics
 	"C7G0069",
 	"C7G0070",
 	"C7G0071",
-	"C7G0072",
+	"PAUSED",
 	"C7G0073",
 	"STBAR",
 	"C7G0075",

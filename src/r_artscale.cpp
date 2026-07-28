@@ -195,6 +195,20 @@ FTexture *R_UpscaledTiledPage(FTexture *tile, int w, int h)
 	if(tw <= 0 || th <= 0)
 		return tile;
 
+	// `w` and `h` are the page in the 320x200 space the caller lays out in, but
+	// the tile is copied by its real texels -- and a hires replacement has four
+	// times as many of those per virtual pixel. Composing at the tile's own
+	// density keeps the pattern repeating the number of times the layout asks
+	// for; composing at 320x200 would show a quarter of the tiles at four times
+	// the size.
+	const int sw = tile->GetScaledWidth(), sh = tile->GetScaledHeight();
+	const bool tileIsHires = sw > 0 && sh > 0 && (tw > sw || th > sh);
+	if(sw > 0 && sh > 0)
+	{
+		w = (int)(((int64_t)w * tw) / sw);
+		h = (int)(((int64_t)h * th) / sh);
+	}
+
 	// Keyed on the tile and the page size, not on the screen: the composed page
 	// is resolution-independent, and R_UpscaledArt below does its own rebuild
 	// when the window changes.
@@ -202,7 +216,8 @@ FTexture *R_UpscaledTiledPage(FTexture *tile, int w, int h)
 	{
 		if(TiledCache[i].tile == tile && TiledCache[i].w == w &&
 			TiledCache[i].h == h)
-			return R_UpscaledArt(TiledCache[i].page);
+			return tileIsHires ? TiledCache[i].page
+				: R_UpscaledArt(TiledCache[i].page);
 	}
 
 	const BYTE *const src = tile->GetPixels();
@@ -223,7 +238,10 @@ FTexture *R_UpscaledTiledPage(FTexture *tile, int w, int h)
 	TiledEntry entry = { tile, page, w, h };
 	TiledCache.Push(entry);
 
-	FTexture *const scaled = R_UpscaledArt(page);
+	// A page composed from an already-upscaled tile is not run through the
+	// filter again: it is at the pack's resolution, not the game's, and xBRZ has
+	// nothing left to find in art a network has already enlarged.
+	FTexture *const scaled = tileIsHires ? page : R_UpscaledArt(page);
 	// Once per tile per page size, so this is a handful of lines a run rather
 	// than noise -- and it is the only way to tell from a log whether a backdrop
 	// was actually enlarged or quietly handed back at its authored size.
@@ -235,6 +253,14 @@ FTexture *R_UpscaledTiledPage(FTexture *tile, int w, int h)
 FTexture *R_UpscaledArt(FTexture *src)
 {
 	if(src == NULL)
+		return src;
+
+	// Art that is already a hires replacement is handed straight back. The two
+	// upscalers are alternatives, not a pipeline: xBRZ looks for the staircases
+	// that point sampling leaves behind, and there are none in a page a network
+	// has already redrawn four times the size.
+	if(src->GetWidth() > src->GetScaledWidth() ||
+		src->GetHeight() > src->GetScaledHeight())
 		return src;
 
 	// Sized to the screen it will be stretched onto, so the upscale does the

@@ -87,6 +87,7 @@ initial_sources(
 	c7_automap.cpp
 	c7_cdaudio.cpp
 	c7_menu.cpp
+	c7_upscale.cpp
 	v_ttf.cpp
 	colormatcher.cpp
 	config.cpp

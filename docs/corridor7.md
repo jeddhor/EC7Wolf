@@ -37,6 +37,44 @@ run on. Without the directory the game says so on startup and uses the AdLib
 soundtrack. See the notes at the top of `src/c7_cdaudio.cpp` for how the disc
 chose tracks.
 
+### Upscaled assets
+
+The game can draw a neural-network upscale of its own art instead of the
+original 64×64 pages. Build the pack from your own data files — nothing derived
+from the commercial release is distributed, so there is no pack to download:
+
+```sh
+tools/make_c7_upscaled_pk3.py --dir /path/to/game-data
+```
+
+That runs every wall, sprite and picture through Real-ESRGAN (downloading the
+ncnn/Vulkan build on first use) and writes `c7_assets_upscaled.pk3` beside the
+data files. The game finds it there, or beside the executable, and uses it
+automatically; **Advanced Graphics → Upscaled Assets** switches between the two
+copies without a restart, because both stay loaded. Deleting the pack is not
+required to go back, and the original art is still needed either way.
+
+The pack is all-or-nothing. It carries a manifest of every image the build set
+out to write, and the game checks each one against what actually arrived — an
+upscaler that dies partway through still leaves a loadable pk3, and half an
+upscale looks worse than none. A pack that fails the check is refused whole,
+named in the startup log, and shown in the menu as *Pack Incomplete*.
+
+Upscaled assets and xBRZ are mutually exclusive: xBRZ looks for staircases to
+smooth, and there are none left in art a network has already enlarged four
+times. Turning either on turns the other off.
+
+Two notes for anyone rebuilding the pack:
+
+* The upscaled art is quantised back into the 256-colour palette on load. That
+  is not a limitation to work around — Corridor 7 rewrites the palette for the
+  infrared visor and for damage flashes, and art that had left the palette
+  would stop responding to either. What survives quantisation is the resolution
+  and the reshaped edges, which is the part that matters.
+* Wall pages that use index 255 as a transparency key (grates, force-field
+  frames — 50 of the 256) are written as RGBA so their holes survive; the engine
+  reads a hires wall's transparency from the PNG's alpha channel.
+
 Launch through the normal IWAD picker or directly from the data directory:
 
 ```sh

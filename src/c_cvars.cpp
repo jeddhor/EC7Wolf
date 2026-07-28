@@ -64,6 +64,7 @@ bool snd_cdmusic = true;
 int vid_glfilter = 0;
 int vid_glmsaa = 0;
 int vid_maxfps = 0;					// 0 = unlimited
+bool vid_upscaled_assets = true;	// used only when a valid pack is installed
 int vid_xbrz = 0;					// 0 = off, 1 = auto, 2-6 = fixed factor
 int vid_renderscale = 1;			// divides the video mode to get the render size
 bool r_interpolate = true;
@@ -230,6 +231,7 @@ void ReadConfig(void)
 	config.CreateSetting("Vid_GLFilter", 0);
 	config.CreateSetting("Vid_GLMSAA", 0);
 	config.CreateSetting("Vid_MaxFPS", 0);
+	config.CreateSetting("Vid_UpscaledAssets", true);
 	config.CreateSetting("Vid_xBRZ", 0);
 	config.CreateSetting("Vid_RenderScale", 1);
 	config.CreateSetting("R_Interpolate", true);
@@ -334,6 +336,7 @@ void ReadConfig(void)
 	vid_glfilter = config.GetSetting("Vid_GLFilter")->GetInteger();
 	vid_glmsaa = config.GetSetting("Vid_GLMSAA")->GetInteger();
 	vid_maxfps = config.GetSetting("Vid_MaxFPS")->GetInteger();
+	vid_upscaled_assets = config.GetSetting("Vid_UpscaledAssets")->GetInteger() != 0;
 	vid_xbrz = config.GetSetting("Vid_xBRZ")->GetInteger();
 	vid_renderscale = config.GetSetting("Vid_RenderScale")->GetInteger();
 	r_interpolate = config.GetSetting("R_Interpolate")->GetInteger() != 0;
@@ -502,6 +505,7 @@ void WriteConfig(void)
 	config.GetSetting("Vid_GLFilter")->SetValue(vid_glfilter);
 	config.GetSetting("Vid_GLMSAA")->SetValue(vid_glmsaa);
 	config.GetSetting("Vid_MaxFPS")->SetValue(vid_maxfps);
+	config.GetSetting("Vid_UpscaledAssets")->SetValue(vid_upscaled_assets);
 	config.GetSetting("Vid_xBRZ")->SetValue(vid_xbrz);
 	config.GetSetting("Vid_RenderScale")->SetValue(vid_renderscale);
 	config.GetSetting("R_Interpolate")->SetValue(r_interpolate);

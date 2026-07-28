@@ -79,7 +79,7 @@ for factor in $factors; do
 	# not checked; the artifacts are the result.
 	(
 		cd "$data_dir"
-		timeout 120s env SDL_AUDIODRIVER=dummy \
+		timeout 120s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 \
 			xvfb-run -a -s "-screen 0 640x400x24" "$ec7wolf" \
 			--data CO7 --config "$work/xbrz.cfg" --savedir "$work/sv" \
 			--nowait --res 640 400 --vid-renderer opengl \

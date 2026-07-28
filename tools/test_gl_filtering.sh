@@ -73,7 +73,7 @@ shoot() {
 	} >"$work/$label.cfg"
 	(
 		cd "$data_dir"
-		timeout 120s env SDL_AUDIODRIVER=dummy xvfb-run -a "$ec7wolf" \
+		timeout 120s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 xvfb-run -a "$ec7wolf" \
 			--data CO7 --config "$work/$label.cfg" --savedir "$work/sv" \
 			--nowait --vid-renderer opengl --res 640 400 \
 			--tedlevel MAP01 --skill 2 --capture-rngseed 1 \

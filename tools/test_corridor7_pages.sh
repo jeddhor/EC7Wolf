@@ -68,6 +68,7 @@ shoot() { # $1 width  $2 height
 	xvfb-run -a -s "-screen 0 ${PG_W}x${PG_H}x24" sh -c '
 		cd "$PG_DATA"
 		export SDL_AUDIODRIVER=dummy
+		export SDL_VIDEODRIVER=x11
 		"$PG_BUILD/ec7wolf" --data CO7 --nowait --vid-renderer software \
 			--res "$PG_W" "$PG_H" --config "$PG_WORK/cfg-$PG_W" \
 			--savedir "$PG_WORK/sv" >"$PG_WORK/run-$PG_W.log" 2>&1 &

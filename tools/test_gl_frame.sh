@@ -54,7 +54,7 @@ set +e
 	# --capture-file reads. See the long note in test_gl_parity.sh -- leaving
 	# this to the default silently turned that gate into a comparison against a
 	# blank view when OpenGL became the default.
-	timeout 90s env SDL_AUDIODRIVER=dummy xvfb-run -a "$ec7wolf" \
+	timeout 90s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 xvfb-run -a "$ec7wolf" \
 		--data CO7 --config "$cfg/ec7wolf.cfg" --savedir "$save" \
 		--vid-renderer software \
 		--nowait --tedlevel "$map" --skill 2 --capture-rngseed 1 \

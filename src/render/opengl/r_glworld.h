@@ -60,6 +60,13 @@ void R_GLLivePresent(const unsigned char *mem, int pitch, int fw, int fh,
 // Free all live GL resources (called from OpenGLRenderer::Shutdown).
 void R_GLLiveShutdown();
 
+// Drop every uploaded index/opacity texture and the cached static geometry that
+// points at them. The world caches art by texture id and holds the upload for
+// the run, so anything that changes what an id resolves to -- switching the
+// upscaled asset pack on or off -- has to say so here or the old pixels stay on
+// screen until the next map. Safe to call when the backend is not live.
+void R_GLLiveInvalidateTextures();
+
 // SDLFB reports whether it created a GL context on the game window; the OpenGL
 // backend goes live only when this is true (else it falls back to software).
 void R_GLLiveSetContextActive(bool active);

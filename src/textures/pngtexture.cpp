@@ -66,6 +66,7 @@ public:
 	~FPNGTexture ();
 
 	const BYTE *GetColumn (unsigned int column, const Span **spans_out);
+	const BYTE *GetColumnOpacity (unsigned int column);
 	const BYTE *GetPixels ();
 	void InvalidatePalette ();
 	void Unload ();
@@ -78,6 +79,18 @@ protected:
 	FString SourceFile;
 	BYTE *Pixels;
 	Span **Spans;
+
+	// 0 where the source pixel was transparent, 1 elsewhere; NULL when the PNG
+	// carries no alpha channel at all.
+	//
+	// The paletted Pixels buffer above cannot answer this question: it stores a
+	// transparent pixel as index 0, which is also an ordinary black in the
+	// Corridor 7 palette, so a wall that is merely dark would read as full of
+	// holes. Both renderers ask for transparency explicitly rather than
+	// inferring it from an index (see FFlatTexture, which does the same for the
+	// game's own index-255 colour key), and an upscaled replacement for a masked
+	// wall has to be able to answer them or it comes out solid.
+	BYTE *Opacity;
 
 	BYTE BitDepth;
 	BYTE ColorType;
@@ -216,7 +229,7 @@ FTexture *PNGTexture_CreateFromFile(PNGHandle *png, const FString &filename)
 
 FPNGTexture::FPNGTexture (FileReader &lump, int lumpnum, const FString &filename, int width, int height,
 						  BYTE depth, BYTE colortype, BYTE interlace)
-: FTexture(NULL, lumpnum), SourceFile(filename), Pixels(0), Spans(0),
+: FTexture(NULL, lumpnum), SourceFile(filename), Pixels(0), Spans(0), Opacity(0),
   BitDepth(depth), ColorType(colortype), Interlace(interlace), HaveTrans(false),
   PaletteMap(0), PaletteSize(0), StartOfIDAT(0)
 {
@@ -420,6 +433,11 @@ void FPNGTexture::Unload ()
 		delete[] Pixels;
 		Pixels = NULL;
 	}
+	if (Opacity != NULL)
+	{
+		delete[] Opacity;
+		Opacity = NULL;
+	}
 }
 
 //==========================================================================
@@ -475,6 +493,36 @@ const BYTE *FPNGTexture::GetColumn (unsigned int column, const Span **spans_out)
 		*spans_out = Spans[column];
 	}
 	return Pixels + column*Height;
+}
+
+//==========================================================================
+//
+//
+//
+//==========================================================================
+
+const BYTE *FPNGTexture::GetColumnOpacity (unsigned int column)
+{
+	if (Pixels == NULL)
+	{
+		MakeTexture ();
+	}
+	if (Opacity == NULL)
+	{
+		return NULL;
+	}
+	if ((unsigned)column >= (unsigned)Width)
+	{
+		if (WidthMask + 1 == Width)
+		{
+			column &= WidthMask;
+		}
+		else
+		{
+			column %= Width;
+		}
+	}
+	return Opacity + column*Height;
 }
 
 //==========================================================================
@@ -568,6 +616,20 @@ void FPNGTexture::MakeTexture ()
 			in = tempix;
 			out = Pixels;
 
+			// An alpha channel is the only thing that can make a PNG partly
+			// transparent here, so the opacity plane is built alongside the
+			// pixels for exactly those two colour types. It is written in the
+			// same column-major order as `out`.
+			BYTE *opac = NULL;
+			if (ColorType == 4 || ColorType == 6)
+			{
+				if (Opacity == NULL)
+				{
+					Opacity = new BYTE[Width*Height];
+				}
+				opac = Opacity;
+			}
+
 			// Convert from source format to paletted, column-major.
 			// Formats with alpha maps are reduced to only 1 bit of alpha.
 			switch (ColorType)
@@ -611,6 +673,7 @@ void FPNGTexture::MakeTexture ()
 					{
 						for (y = Height; y > 0; --y)
 						{
+							*opac++ = in[1] < 128 ? 0 : 1;
 							*out++ = in[1] < 128 ? 0 : PaletteMap[in[0]];
 							in += pitch;
 						}
@@ -623,6 +686,7 @@ void FPNGTexture::MakeTexture ()
 					{
 						for (y = Height; y > 0; --y)
 						{
+							*opac++ = in[1] < 128 ? 0 : 1;
 							*out++ = in[1] < 128 ? 0 : in[0];
 							in += pitch;
 						}
@@ -638,6 +702,7 @@ void FPNGTexture::MakeTexture ()
 				{
 					for (y = Height; y > 0; --y)
 					{
+						*opac++ = in[3] < 128 ? 0 : 1;
 						*out++ = in[3] < 128 ? 0 : RGB32k[in[0]>>3][in[1]>>3][in[2]>>3];
 						in += pitch;
 					}

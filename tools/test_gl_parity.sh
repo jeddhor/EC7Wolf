@@ -139,7 +139,7 @@ for map in $maps; do
 		#
 		# --capture-glframe builds its GL composite offscreen either way; it is
 		# byte-identical whichever renderer is live.
-		timeout 120s env SDL_AUDIODRIVER=dummy xvfb-run -a "$ec7wolf" \
+		timeout 120s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 xvfb-run -a "$ec7wolf" \
 			--data CO7 --config "$cfg/$map.cfg" --savedir "$save" \
 			--vid-renderer software \
 			--nowait --tedlevel "$map" --skill 2 --capture-rngseed 1 \

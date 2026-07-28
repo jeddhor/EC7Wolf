@@ -36,6 +36,7 @@
 #include "wl_inter.h"
 #include "wl_iwad.h"
 #include "c7_cdaudio.h"
+#include "c7_upscale.h"
 #include "wl_play.h"
 #include "r_capture.h"
 #include "render/r_renderer.h"
@@ -481,6 +482,9 @@ static void InitGame()
 	//
 
 	TexMan.Init();
+	// The upscale pack is applied as the texture manager loads it; this puts the
+	// textures back if the player has the option switched off.
+	C7Upscale::ApplyPreference();
 	printf("VL_ReadPalette: Setting up the Palette...\n");
 	VL_ReadPalette(gameinfo.GamePalette);
 	atterm(R_DeinitColormaps);
@@ -1441,6 +1445,10 @@ int WL_Main (int argc, char *argv[])
 		// Reports whether the player's ripped CD soundtrack was found, before
 		// anything can ask to play music.
 		C7CD::Init();
+
+		// Checks the upscaled asset pack, before the texture manager consumes
+		// it in InitGame() below.
+		C7Upscale::Init();
 
 		R_InitRenderer();
 

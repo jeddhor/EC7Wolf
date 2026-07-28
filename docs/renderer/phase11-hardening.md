@@ -343,6 +343,58 @@ palette set (proving taps are resolved *before* mixing rather than after), that 
 256-entry palette rewrite still reaches the screen with filtering on, and that
 MSAA changes edges and only edges.
 
+## Upscaled assets (`Vid_UpscaledAssets`)
+
+Both renderers, so it sits under **Advanced Graphics → Image Scaling** rather
+than under Hardware Renderer. `tools/make_c7_upscaled_pk3.py` builds
+`c7_assets_upscaled.pk3` from the player's own data files; the engine finds it
+beside them (or beside the executable), validates it, and installs it over the
+stock art. See `docs/corridor7.md` for the player-facing side.
+
+Three things about the implementation are worth knowing before touching it.
+
+**Both copies stay in memory, and the switch is a pointer swap.** The pack
+arrives through ZDoom's `hires/` namespace, whose normal behaviour is
+`ReplaceTexture(id, newtex, /*free=*/true)` — the original is deleted. For this
+pack the free is suppressed and the pair recorded, so `C7Upscale::SetEnabled()`
+can swap `Textures[i].Texture` back and forth. Nothing else has to know: every
+consumer in the engine reaches art through an `FTextureID`, so the id keeps
+resolving and only what it resolves to changes.
+
+The exceptions are the places that cached the resolved `FTexture *` instead, and
+they are what makes the switch look broken rather than fail loudly:
+
+* the GL world caches uploads per texture id for the run —
+  `R_GLLiveInvalidateTextures()` forgets the map so the next frame re-uploads;
+* `Menu::cursor` was looked up once and kept — `Menu::forgetCachedArt()`;
+* `DrawPlayBorderSides` held a `static FTexture *const[8]` — now looked up per
+  draw, which is eight lookups on the frames that draw a border.
+
+**A hires wall has to carry its own transparency.** Corridor 7 keys wall
+transparency on palette index 255, and `FFlatTexture` builds an opacity plane
+from it; both renderers ask for transparency *explicitly* rather than inferring
+it from an index, which is exactly what makes the replacement possible. But
+`FPNGTexture` had no `GetColumnOpacity` at all, so 50 of the 256 wall pages —
+grates, force-field frames — would have come back solid. It now builds an
+opacity plane from the PNG's alpha channel, and the build script writes those
+pages as RGBA. The paletted pixels cannot answer the question themselves: a
+transparent PNG texel becomes index 0, which is also an ordinary black.
+
+**Validation is all-or-nothing on purpose.** An upscaler that dies partway
+through still writes a loadable pk3, and a level where some walls are sharp and
+their neighbours are not is worse than one where none are. The pack carries
+`c7upscal.lst`, the manifest of what the build *intended* to write, and every
+name in it must resolve as a hires lump in that same file. A pack that fails is
+skipped entirely — `AddHiresTextures` is not called for it — rather than partly
+applied.
+
+`tools/test_corridor7_upscale.sh` builds a pack with `fake_upscaler.py` (a
+nearest-neighbour stand-in, so the test needs no GPU and takes seconds) and
+checks the four states: absent, complete, switched off, incomplete. The case
+that would rot silently is *switched off*: it is the only one where a texture has
+to be put back, and it asserts the frame is **byte-identical** to having no pack
+installed at all.
+
 ## Verification status
 
 * Determinism gate green — `checksum=ae626557`, unchanged by the cutover and

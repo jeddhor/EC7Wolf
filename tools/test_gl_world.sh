@@ -40,7 +40,7 @@ set +e
 	# Pinned to software for the same reason as test_gl_parity.sh: the
 	# --capture-file reference only holds a 3D view when the software renderer
 	# is the one drawing it.
-	timeout 90s env SDL_AUDIODRIVER=dummy xvfb-run -a "$ec7wolf" \
+	timeout 90s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 xvfb-run -a "$ec7wolf" \
 		--data CO7 --config "$cfg/ec7wolf.cfg" --savedir "$save" \
 		--vid-renderer software \
 		--nowait --tedlevel "$map" --skill 2 --capture-rngseed 1 \
@@ -118,7 +118,7 @@ if command -v compare >/dev/null 2>&1 || command -v magick >/dev/null 2>&1; then
 		save2=$(mktemp -d "$save.door.XXXXXX" 2>/dev/null || mktemp -d)
 		(
 			cd "$data_dir"
-			timeout 90s env SDL_AUDIODRIVER=dummy xvfb-run -a "$ec7wolf" \
+			timeout 90s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 xvfb-run -a "$ec7wolf" \
 				--data CO7 --config "$cfg/door$amt.cfg" --savedir "$save2" \
 				--nowait --tedlevel "$map" --skill 2 --capture-rngseed 1 \
 				--capture-frame 30 --capture-file "$out_dir/sw_door$amt.png" \

@@ -33,6 +33,7 @@
 */
 
 #include "resourcefiles/resourcefile.h"
+#include "c7_upscale.h"
 #include "config.h"
 #include "filesys.h"
 #include "lumpremap.h"
@@ -848,6 +849,16 @@ void SelectGame(TArray<FString> &wadfiles, const char* iwad, const char* datawad
 		FString extra = gameDataDir + "c7menu.pk3";
 		if(File(extra).exists())
 			wadfiles.Push(extra);
+	}
+
+	// Optional Real-ESRGAN upscales of the game's own art, built by the player
+	// from their own data files. Loaded here rather than as an autoload so that
+	// it can be checked and switched off without editing the config; see
+	// C7Upscale::Init(), which runs once these wads are open.
+	{
+		FString pack = C7Upscale::FindPack(gameDataDir, progdir);
+		if(!pack.IsEmpty())
+			wadfiles.Push(pack);
 	}
 
 	// Load in config autoloads

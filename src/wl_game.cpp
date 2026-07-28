@@ -365,7 +365,10 @@ void DrawPlayBorderSides(void)
 
 	if(!gameinfo.Border.issolid)
 	{
-		static FTexture * const BorderTextures[8] =
+		// Not cached: a texture id can start resolving to a different texture
+		// while the game runs (the upscaled asset pack switching on or off), and
+		// eight lookups on the frames that draw a border is nothing.
+		FTexture * const BorderTextures[8] =
 		{
 			TexMan(gameinfo.Border.tl), TexMan(gameinfo.Border.t), TexMan(gameinfo.Border.tr),
 			TexMan(gameinfo.Border.l), TexMan(gameinfo.Border.r),

@@ -11,6 +11,7 @@
 #include "wl_menu.h"
 #include "wl_iwad.h"
 #include "c7_cdaudio.h"
+#include "c7_upscale.h"
 #include "id_ca.h"
 #include "id_sd.h"
 #include "id_in.h"
@@ -428,11 +429,41 @@ MENU_LISTENER(SetMaxFPS)
 // factors, which are the values vid_xbrz itself stores.
 static const int kXBRZValues[] = { 0, 1, 2, 3, 4, 5, 6 };
 
+// The two scaling options turn each other off, so each has to be able to move
+// the other's row. Both are NULL outside the Corridor 7 menu, which does not
+// build them.
+static MultipleChoiceMenuItem *xbrzItem = NULL;
+static MultipleChoiceMenuItem *upscaleItem = NULL;
+
 MENU_LISTENER(SetXBRZ)
 {
 	// Takes effect on the next presented frame; the upscaled texture is
 	// reallocated by the present path when the factor it was built for changes.
 	vid_xbrz = kXBRZValues[which];
+
+	// Running an edge filter over art a neural network already enlarged four
+	// times has nothing left to find -- the staircases it looks for are gone --
+	// and it costs a full frame of work per frame to say so.
+	if(vid_xbrz != 0 && C7Upscale::Enabled())
+	{
+		C7Upscale::SetEnabled(false);
+		if(upscaleItem)
+			upscaleItem->setCurrentOption(0);
+	}
+	return true;
+}
+
+MENU_LISTENER(SetUpscaledAssets)
+{
+	C7Upscale::SetEnabled(which != 0);
+	vid_upscaled_assets = C7Upscale::Enabled();
+
+	if(vid_upscaled_assets && vid_xbrz != 0)
+	{
+		vid_xbrz = 0;
+		if(xbrzItem)
+			xbrzItem->setCurrentOption(0);
+	}
 	return true;
 }
 
@@ -849,8 +880,34 @@ void CreateMenus()
 		static const char *glFilterOptions[] = { "Sharp", "Bilinear", "Smooth" };
 		static const char *glMSAAOptions[] = { "Off", "2x", "4x", "8x" };
 
+		static const char *upscaleOptions[] = { "Off", "On" };
+		// Disabled rows, so the option is visible and says why it cannot be
+		// used rather than vanishing and leaving the player wondering whether
+		// the game noticed their pack at all.
+		static const char *upscaleMissing[] = { "Not Installed" };
+		static const char *upscaleBroken[] = { "Pack Incomplete" };
+
 		advancedGraphics.setHeadText("Advanced Graphics");
 		advancedGraphics.addItem(new LabelMenuItem("Image Scaling"));
+
+		// First, because it replaces the art the rest of this section filters:
+		// it is a different and better answer to the same question, and turning
+		// it on makes the row below it moot.
+		if(C7Upscale::Valid())
+		{
+			upscaleItem = new MultipleChoiceMenuItem(SetUpscaledAssets,
+				upscaleOptions, 2, C7Upscale::Enabled() ? 1 : 0);
+			AddLabeled(advancedGraphics, upscaleItem, "Upscaled Assets");
+		}
+		else
+		{
+			MenuItem *unavailable = AddLabeled(advancedGraphics,
+				new MultipleChoiceMenuItem(NULL,
+					C7Upscale::Present() ? upscaleBroken : upscaleMissing, 1, 0),
+				"Upscaled Assets");
+			unavailable->setEnabled(false);
+		}
+
 		// Sits above xBRZ because it is what gives xBRZ anything to do: the
 		// filter enlarges the frame to fit the window, so at Native -- where the
 		// frame already is the window -- there is nothing to enlarge into and it
@@ -862,8 +919,9 @@ void CreateMenus()
 		// OpenGL path as a shader over the composited frame (render/opengl/
 		// r_glxbrz.cpp). The setting means the same thing to each and picks the
 		// same factor for a given window, so it is not qualified by renderer.
-		AddLabeled(advancedGraphics, new MultipleChoiceMenuItem(SetXBRZ, xbrzOptions, 7,
-			NearestOption(kXBRZValues, vid_xbrz)), "xBRZ Smoothing");
+		xbrzItem = new MultipleChoiceMenuItem(SetXBRZ, xbrzOptions, 7,
+			NearestOption(kXBRZValues, vid_xbrz));
+		AddLabeled(advancedGraphics, xbrzItem, "xBRZ Smoothing");
 
 		// OpenGL only: both of these live in the world shader and the world
 		// framebuffer, neither of which the software raycaster has.

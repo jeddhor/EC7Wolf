@@ -49,7 +49,7 @@ shoot() { # $1 label  $2.. extra engine arguments
 	label=$1; shift
 	(
 		cd "$data_dir"
-		timeout 120s env DISPLAY="$display" SDL_AUDIODRIVER=dummy \
+		timeout 120s env DISPLAY="$display" SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 \
 			"$build_dir/ec7wolf" --data CO7 --nowait --normal --tedlevel MAP01 \
 			--vid-renderer software --res 320 200 \
 			--capture-rngseed 1 --capture-warp 17 31 0 \

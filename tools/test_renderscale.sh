@@ -79,6 +79,7 @@ run() {
 	xvfb-run -a -s "-screen 0 ${WIN_W}x${WIN_H}x24" sh -c '
 		cd "$RS_DATA"
 		export SDL_AUDIODRIVER=dummy
+		export SDL_VIDEODRIVER=x11
 		# A level is started because the frame counter only advances once one is
 		# running, and the frame dump is how the render size gets measured.
 		"$RS_BIN" --data CO7 --nowait --vid-renderer "$RS_RENDERER" \

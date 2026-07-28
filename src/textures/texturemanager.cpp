@@ -36,6 +36,7 @@
 
 #include "wl_def.h"
 #include "w_wad.h"
+#include "c7_upscale.h"
 #include "templates.h"
 //#include "i_system.h"
 #include "r_data/r_translate.h"
@@ -630,7 +631,15 @@ void FTextureManager::AddHiresTextures (int wadnum)
 							newtex->SetScaledSize(oldtex->GetScaledWidth(), oldtex->GetScaledHeight());
 							newtex->LeftOffset = FixedMul(oldtex->GetScaledLeftOffset(), newtex->xScale);
 							newtex->TopOffset = FixedMul(oldtex->GetScaledTopOffset(), newtex->yScale);
-							ReplaceTexture(tlist[i], newtex, true);
+
+							// The Corridor 7 upscale pack is a layer the player
+							// can switch off, so the art it displaces has to
+							// survive; every other hires wad keeps the stock
+							// behaviour of replacing outright.
+							const bool keep = C7Upscale::OwnsWad(wadnum);
+							ReplaceTexture(tlist[i], newtex, !keep);
+							if (keep)
+								C7Upscale::NoteSwap(tlist[i], oldtex, newtex);
 						}
 					}
 				}
@@ -949,8 +958,11 @@ void FTextureManager::AddTexturesForWad(int wadnum)
 	LoadTextureDefs(wadnum, "TEXTURES");
 	//LoadTextureDefs(wadnum, "HIRESTEX");
 
-	// Seventh step: Check for hires replacements.
-	AddHiresTextures(wadnum);
+	// Seventh step: Check for hires replacements. A rejected upscale pack is
+	// skipped entirely rather than partly applied -- the whole point of the
+	// manifest check is that half an upscale is worse than none.
+	if (!C7Upscale::IsPackWad(wadnum) || C7Upscale::Valid())
+		AddHiresTextures(wadnum);
 
 	SortTexturesByType(firsttexture, Textures.Size());
 }

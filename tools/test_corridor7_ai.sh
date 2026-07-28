@@ -68,7 +68,7 @@ done
 # point (about 1150 tics) and then keep going well past it.
 (
 	cd "$work"
-	timeout 600s env SDL_AUDIODRIVER=dummy \
+	timeout 600s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 \
 		xvfb-run -a -s "-screen 0 640x400x24" ./ec7wolf \
 		--data CO7 --nowait --vid-renderer software --res 640 400 \
 		--config "$work/cfg" --savedir "$work/sv" \
@@ -186,7 +186,7 @@ python3 "$(dirname "$0")/make_corridor7_ai_lab.py" \
 
 (
 	cd "$lab"
-	timeout 600s env SDL_AUDIODRIVER=dummy \
+	timeout 600s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 \
 		xvfb-run -a -s "-screen 0 640x400x24" ./ec7wolf \
 		--data CO7 --nowait --vid-renderer software --res 640 400 \
 		--config "$work/labcfg" --savedir "$work/labsv" \

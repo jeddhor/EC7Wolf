@@ -69,7 +69,7 @@ run_with_cheat() {
 	label=$1; frame=$2; shift 2
 	(
 		cd "$run_dir"
-		env DISPLAY="$display" SDL_AUDIODRIVER=dummy stdbuf -oL -eL \
+		env DISPLAY="$display" SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 stdbuf -oL -eL \
 			"$build_dir/ec7wolf" --data CO7 --nowait --normal --tedlevel MAP01 \
 			--vid-renderer software --res 640 400 \
 			--capture-rngseed 1 --capture-frame "$frame" \

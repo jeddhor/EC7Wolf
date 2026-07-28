@@ -309,6 +309,14 @@ void MultipleChoiceMenuItem::activate()
 	right();
 }
 
+void MultipleChoiceMenuItem::setCurrentOption(int option)
+{
+	if(option < 0 || (unsigned)option >= numOptions || options[option] == NULL)
+		return;
+	curOption = option;
+	setText(options[option]);
+}
+
 void MultipleChoiceMenuItem::draw()
 {
 	DrawWindow(PrintX, PrintY, menu->getWidth()-menu->getIndent()-menu->getX(), BigFont->GetHeight(), BKGDCOLOR, BKGDCOLOR, BKGDCOLOR);

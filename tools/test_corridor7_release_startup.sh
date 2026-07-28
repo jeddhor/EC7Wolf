@@ -61,6 +61,7 @@ xvfb-run -a sh -c '
 	}
 	trap cleanup_child EXIT HUP INT TERM
 	export SDL_AUDIODRIVER=dummy
+	export SDL_VIDEODRIVER=x11
 	export EC7WOLF_CONFIG="$C7_CONFIG_FILE"
 	export EC7WOLF_SAVEDIR="$C7_SAVE_DIR"
 	run_corridor7() {

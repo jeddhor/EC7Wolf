@@ -171,6 +171,11 @@ class MultipleChoiceMenuItem : public MenuItem
 		void	left();
 		void	right();
 		FString	getValueText() const;
+		/**
+		 * Moves the selection without running the change listener, for options
+		 * that another menu item can turn off on the player's behalf.
+		 */
+		void	setCurrentOption(int option);
 };
 
 class TextInputMenuItem : public MenuItem
@@ -252,6 +257,13 @@ class Menu
 		void			addItem(MenuItem *item);
 		static bool		areMenusClosed() { return close; }
 		void			clear();
+		/**
+		 * Drops the menu's own cached texture pointers. The cursor is looked up
+		 * once and kept, which is wrong the moment a texture id starts
+		 * resolving to a different texture -- as it does when the upscaled
+		 * asset pack is switched on or off.
+		 */
+		static void		forgetCachedArt() { cursor = NULL; }
 		static void		closeMenus(bool close=true);
 		unsigned int	countItems() const;
 		void			drawMenu() const;

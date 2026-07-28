@@ -84,6 +84,10 @@ extern int		vid_glfilter;
 // edges, and with it sprite/masked silhouettes via alpha-to-coverage.
 extern int		vid_glmsaa;
 extern int		vid_maxfps;		// frame-rate cap; 0 = unlimited
+// Use the Real-ESRGAN asset pack when one is installed beside the game data.
+// Mutually exclusive with vid_xbrz, which would be filtering art that has
+// already been enlarged; the menu turns each off as the other goes on.
+extern bool		vid_upscaled_assets;
 extern int		vid_xbrz;		// xBRZ image scaling: 0 = off, 1 = auto, 2-6 = factor
 extern int		vid_renderscale;// 1 = render at the video mode, 2-4 = render that
 								// many times smaller and scale up to the window

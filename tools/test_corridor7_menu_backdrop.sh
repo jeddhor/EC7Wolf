@@ -72,6 +72,7 @@ shoot() { # $1 output png
 	xvfb-run -a -s "-screen 0 960x600x24" sh -c '
 		cd "$MB_DATA"
 		export SDL_AUDIODRIVER=dummy
+		export SDL_VIDEODRIVER=x11
 		"$MB_BUILD/ec7wolf" --data CO7 --nowait --vid-renderer software \
 			--res 960 600 --config "$MB_WORK/cfg" --savedir "$MB_WORK/sv" \
 			>"$MB_WORK/run.log" 2>&1 &

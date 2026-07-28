@@ -43,7 +43,7 @@ for map in $maps; do
 	set +e
 	(
 		cd "$data_dir"
-		timeout "${validation_timeout}s" env SDL_AUDIODRIVER=dummy \
+		timeout "${validation_timeout}s" env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 \
 			xvfb-run -a stdbuf -oL -eL "$ec7wolf" --data CO7 --config "$config" \
 			--savedir "$save" --nowait --tedlevel "$map" --skill 2
 	) >"$log" 2>&1

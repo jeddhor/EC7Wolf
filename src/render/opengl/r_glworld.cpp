@@ -2697,3 +2697,12 @@ void R_GLLiveShutdown()
 {
 	FreeLiveResources(/*audit=*/true);
 }
+
+void R_GLLiveInvalidateTextures()
+{
+	// Deferred to the next frame rather than done here, because the caller is
+	// menu code and the GL context is only reliably current inside the render
+	// path. Forgetting the map is the same signal a level change gives, and it
+	// runs ClearLiveCaches() at the top of the next RenderLiveWorld().
+	gLive.lastMap = NULL;
+}

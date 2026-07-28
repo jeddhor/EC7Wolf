@@ -48,7 +48,7 @@ shoot() { # $1 label  $2 tile x  $3 tile y  $4.. extra engine arguments
 	label=$1; tx=$2; ty=$3; shift 3
 	(
 		cd "$data_dir"
-		timeout 90s env DISPLAY="$display" SDL_AUDIODRIVER=dummy \
+		timeout 90s env DISPLAY="$display" SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 \
 			"$build_dir/ec7wolf" --data CO7 --nowait --normal --tedlevel MAP01 \
 			--vid-renderer software --res 640 400 \
 			--capture-rngseed 1 --capture-c7map \

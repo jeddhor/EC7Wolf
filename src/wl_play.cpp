@@ -1287,8 +1287,13 @@ static void DrawPausedOverlay()
 		screen->DrawText(SmallFont, CR_BLACK, pauseX+1, 73, pauseText,
 			DTA_FillColor, GPalette.BaseColors[GPalette.BlackIndex].d,
 			DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
+		// Same full-bright yellow as the objective banner, for the same reason:
+		// palette entry 3 is (215,215,0) and reads as dull olive over anything
+		// pale. Unlike the banner this one has no DOS reference behind it --
+		// the pause label there is a picture, not text (see C7G0072) -- so this
+		// is only consistency with the game's other stencilled text.
 		screen->DrawText(SmallFont, CR_YELLOW, pauseX, 72, pauseText,
-			DTA_FillColor, GPalette.BaseColors[3].d,
+			DTA_FillColor, PalEntry(255, 255, 0).d,
 			DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
 	}
 	else

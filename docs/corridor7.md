@@ -37,6 +37,14 @@ run on. Without the directory the game says so on startup and uses the AdLib
 soundtrack. See the notes at the top of `src/c7_cdaudio.cpp` for how the disc
 chose tracks.
 
+### The floor objective banner
+
+"Eliminate Aliens To Secure Floor" is drawn as a solid stencil in **(255,255,0)**,
+measured from a DOSBox capture of the CD release on MAP01 rather than chosen.
+Palette entry 3 — (215,215,0) — was used here previously and reads as dull olive
+over the bright ceiling gradient MAP01 opens on, while looking right over the
+darker walls most floors start on. `tools/test_corridor7_topmessage.sh` pins it.
+
 ### Upscaled assets
 
 The game can draw a neural-network upscale of its own art instead of the

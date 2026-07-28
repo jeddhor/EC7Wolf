@@ -691,11 +691,24 @@ static void DrawC7TopMessage(const char *message)
 	// before painting a solid, full-bright yellow stencil. Using the regular
 	// font color ramp preserved the font's dark shades, which made the letters
 	// look smoke-stained by the scene lighting.
+	//
+	// The yellow is measured, not chosen: a DOSBox capture of the CD release on
+	// MAP01 draws this message in exactly (255,255,0), with no intermediate
+	// shades at all. Palette entry 3 was used here before and is (215,215,0),
+	// which is close enough to look right over a dark wall and visibly dull --
+	// smoky, which is the word the symptom keeps attracting -- over the bright
+	// ceiling gradient that MAP01 opens on.
+	//
+	// Asking for the colour rather than an index because the palette holds three
+	// identical pure yellows (111, 231 and 253) and a screenshot cannot say
+	// which one the DOS code named. They differ only under the palette rewrites
+	// C7 does for the visor and for damage, and picking by eye there would be
+	// guessing.
 	screen->DrawText(SmallFont, CR_BLACK, 5, 5, message,
 		DTA_FillColor, GPalette.BaseColors[GPalette.BlackIndex].d,
 		DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
 	screen->DrawText(SmallFont, CR_YELLOW, 4, 4, message,
-		DTA_FillColor, GPalette.BaseColors[3].d,
+		DTA_FillColor, PalEntry(255, 255, 0).d,
 		DTA_VirtualWidth, 320, DTA_VirtualHeight, 200, TAG_DONE);
 }
 

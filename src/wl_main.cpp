@@ -1406,7 +1406,10 @@ int WL_Main (int argc, char *argv[])
 		{
 			if(strcmp(argv[i], "--no-upscale") == 0)
 			{
-				vid_upscaled_assets = false;
+				// Deliberately does not touch vid_upscaled_assets: that is what
+				// gets written back on exit, and a test run must not turn the
+				// player's pack off for them. With no pack loaded the setting
+				// has nothing to act on anyway.
 				C7Upscale::Disable();
 				break;
 			}

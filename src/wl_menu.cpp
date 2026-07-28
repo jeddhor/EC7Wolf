@@ -434,6 +434,7 @@ static const int kXBRZValues[] = { 0, 1, 2, 3, 4, 5, 6 };
 // build them.
 static MultipleChoiceMenuItem *xbrzItem = NULL;
 static MultipleChoiceMenuItem *upscaleItem = NULL;
+static MultipleChoiceMenuItem *glFilterItem = NULL;
 
 MENU_LISTENER(SetXBRZ)
 {
@@ -463,6 +464,16 @@ MENU_LISTENER(SetUpscaledAssets)
 		vid_xbrz = 0;
 		if(xbrzItem)
 			xbrzItem->setCurrentOption(0);
+	}
+
+	// Nearest sampling and a four-times pack are a bad pair, and the pack is the
+	// half that just changed. See C7Upscale::WantedFilter().
+	const int filter = C7Upscale::WantedFilter(vid_glfilter);
+	if(filter != vid_glfilter)
+	{
+		vid_glfilter = filter;
+		if(glFilterItem)
+			glFilterItem->setCurrentOption(filter);
 	}
 	return true;
 }
@@ -926,8 +937,9 @@ void CreateMenus()
 		// OpenGL only: both of these live in the world shader and the world
 		// framebuffer, neither of which the software raycaster has.
 		advancedGraphics.addItem(new LabelMenuItem("Hardware Renderer"));
-		AddLabeled(advancedGraphics, new MultipleChoiceMenuItem(SetGLFilter,
-			glFilterOptions, 3, clamp(vid_glfilter, 0, 2)), "Texture Filter");
+		glFilterItem = new MultipleChoiceMenuItem(SetGLFilter,
+			glFilterOptions, 3, clamp(vid_glfilter, 0, 2));
+		AddLabeled(advancedGraphics, glFilterItem, "Texture Filter");
 		AddLabeled(advancedGraphics, new MultipleChoiceMenuItem(SetGLMSAA,
 			glMSAAOptions, 4, NearestOption(kGLMSAAValues, vid_glmsaa)),
 			"Antialiasing");

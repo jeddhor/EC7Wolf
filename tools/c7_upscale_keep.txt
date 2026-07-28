@@ -1,0 +1,48 @@
+// Lumps to leave at their original resolution when building an upscaled asset
+// pack. Used by default; pass --keep-file /dev/null to build without it.
+//
+// These are the images where a generative upscaler does more harm than good.
+// The common factor is small bitmap text: a glyph five pixels tall carries no
+// information a model trained on photographs can work with, so it invents a
+// plausible-looking letter instead of the one that was there. ACCESS GRANTED
+// comes back as ACCE55 GRVNITED and the status bar reads MIDICS where it should
+// read MINES. Keypad grids and dot-matrix panels go the same way, into scribble.
+//
+// Every entry below was checked by eye against realesrgan-x4plus at 4x, on the
+// side-by-side strips --compare writes. Two automatic ways of finding them were
+// tried first and both failed: they rank tiles by how much the model changed,
+// which puts a detailed tile it handled well above a sign it destroyed. If you
+// use a different model, re-check with --compare -- the list will differ, and
+// realesr-animevideov3 in particular keeps some of these readable.
+//
+// A kept lump is left out of the pack AND out of its manifest, so the game
+// draws its own art for it and still sees a complete pack.
+
+// Wall signage and control panels
+c7w0006     // keypad grid -> scribble
+c7w0009     // ACCESS GRANTED (red)
+c7w0011     // ACCESS GRANTED (blue)
+c7w0014     // keypad grid -> scribble
+c7w0018     // yellow dot-matrix display
+c7w0030     // INTRUDER ALERT
+c7w0069     // green terminal text
+c7w0089     // equipment panel with dot grids
+c7w0110     // AMMO / EJECT labels
+c7w0111     // EJECT label
+
+// HUD and menu text
+stbar       // the status bar: LEVEL, SCORE, ARMOR, MINES, VISOR
+fontn048    // the large HUD digits: 8 in particular comes back as U,
+fontn049    // and the set has to stay consistent with itself
+fontn050
+fontn051
+fontn052
+fontn053
+fontn054
+fontn055
+fontn056
+fontn057
+m_savegm    // SAVE GAME
+m_loadgm    // LOAD GAME
+m_lding1    // LOADING
+m_lding2

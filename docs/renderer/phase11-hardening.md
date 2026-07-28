@@ -388,6 +388,17 @@ name in it must resolve as a hires lump in that same file. A pack that fails is
 skipped entirely — `AddHiresTextures` is not called for it — rather than partly
 applied.
 
+**Nearest sampling is the wrong filter for the pack**, and switching it on is
+what changes that. The game's own art is 64x64 and the renderer nearly always
+magnifies it, which is why Sharp is the default and why the parity gates measure
+it. A four-times pack inverts that: a wall at any distance is being *reduced*,
+and point-sampling a reduction keeps a shrinking fraction of the texels and keeps
+a different fraction as the view moves -- the pack's detail turns into crawling
+speckle. So `C7Upscale::WantedFilter()` raises Sharp to Smooth whenever the pack
+is in use, at startup and on the menu toggle, and never touches a deliberate
+Bilinear. Measured on the user's own 4x pack: the coupled frame is identical to
+an explicit Smooth capture, and differs from Sharp on 35% of pixels.
+
 `tools/test_corridor7_upscale.sh` builds a pack with `fake_upscaler.py` (a
 nearest-neighbour stand-in, so the test needs no GPU and takes seconds) and
 checks the four states: absent, complete, switched off, incomplete. The case

@@ -44,7 +44,7 @@ for map in $maps; do
 	(
 		cd "$data_dir"
 		timeout "${validation_timeout}s" env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 \
-			xvfb-run -a stdbuf -oL -eL "$ec7wolf" --data CO7 --config "$config" \
+			xvfb-run -a stdbuf -oL -eL "$ec7wolf" --data CO7 --no-upscale --config "$config" \
 			--savedir "$save" --nowait --tedlevel "$map" --skill 2
 	) >"$log" 2>&1
 	status=$?

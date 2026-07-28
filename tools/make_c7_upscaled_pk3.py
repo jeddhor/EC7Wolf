@@ -78,6 +78,9 @@ MODELS = {
 
 DEFAULT_MODEL = "realesrgan-x4plus"
 
+# Lumps a generative upscaler reliably ruins, checked by eye; see the file.
+KEEP_FILE = "c7_upscale_keep.txt"
+
 
 def default_cache_dir() -> Path:
     base = os.environ.get("XDG_CACHE_HOME")
@@ -642,12 +645,18 @@ class Job:
 
 
 def decode_assets(args, files: dict[str, Path], names: dict[str, list[str]], in_dir: Path):
-    """Decode every requested asset into in_dir as a PNG. Returns the job list."""
+    """Decode every requested asset into in_dir/<group> as a PNG.
+
+    Returns (jobs, originals), where originals maps a source name to the
+    decoded 1x image so --compare can put the two side by side later.
+    """
     palette = load_palette(files["EXE"].read_bytes())
     jobs: list[Job] = []
     seen: dict[bytes, str] = {}
     used: set[str] = set()
     skipped: list[str] = []
+    kept: list[str] = []
+    originals: dict[str, tuple[int, int, int, bytes]] = {}
 
     def emit(name: str, group: str, width: int, height: int, pixels: bytes, alpha: bool) -> None:
         name = name.lower()
@@ -655,16 +664,27 @@ def decode_assets(args, files: dict[str, Path], names: dict[str, list[str]], in_
             skipped.append(f"{group} {name}: duplicate lump name")
             return
         used.add(name)
+        # Deliberately left at the original resolution: excluded from the pack
+        # AND from its manifest, so the game keeps its own art for this lump and
+        # still treats the pack as complete. See --keep.
+        if name in args.keep:
+            kept.append(name)
+            return
         # Identical pages are common (256 wall pages hold 246 distinct
-        # images); upscale each distinct image once and alias the rest.
-        key = hashlib.sha1(pixels).digest() + bytes([alpha])
+        # images); upscale each distinct image once and alias the rest. Keyed
+        # per group because each group can be upscaled by a different model,
+        # and an alias has to come out of its own group's output directory.
+        key = hashlib.sha1(pixels).digest() + bytes([alpha, len(group)]) + group.encode()
         source = seen.get(key)
         if source is None:
             seen[key] = name
             source = name
-            (in_dir / f"{name}.png").write_bytes(
+            group_dir = in_dir / group
+            group_dir.mkdir(parents=True, exist_ok=True)
+            group_dir.joinpath(f"{name}.png").write_bytes(
                 encode_png(width, height, pixels, alpha=alpha, level=1)
             )
+            originals[f"{group}/{name}"] = (width, height, 4 if alpha else 3, pixels)
         jobs.append(Job(name, group, width, height, alpha, source))
 
     if "walls" in args.groups or "sprites" in args.groups:
@@ -727,17 +747,21 @@ def decode_assets(args, files: dict[str, Path], names: dict[str, list[str]], in_
 
     for message in skipped:
         print(f"  skipped {message}")
-    return jobs
+    if kept:
+        print(f"  keeping {len(kept)} lump(s) at the original resolution: "
+              + ", ".join(sorted(kept)[:8]) + ("..." if len(kept) > 8 else ""))
+    return jobs, originals
 
 
-def run_upscaler(args, binary: Path, model_dir: Path, in_dir: Path, out_dir: Path, total: int):
-    native = MODELS.get(args.model)
+def run_upscaler(args, binary: Path, model_dir: Path, in_dir: Path, out_dir: Path,
+                 total: int, model: str):
+    native = MODELS.get(model)
     command = [
         str(binary),
         "-i", str(in_dir),
         "-o", str(out_dir),
         "-m", str(model_dir),
-        "-n", args.model,
+        "-n", model,
         "-f", "png",
     ]
     if native is None:
@@ -752,7 +776,7 @@ def run_upscaler(args, binary: Path, model_dir: Path, in_dir: Path, out_dir: Pat
     if args.tta:
         command.append("-x")
 
-    print(f"upscaling {total} images with {args.model} ...")
+    print(f"upscaling {total} images with {model} ...")
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
@@ -795,10 +819,58 @@ def run_upscaler(args, binary: Path, model_dir: Path, in_dir: Path, out_dir: Pat
         print(f"  warning: only {done} of {total} images came back from the upscaler")
 
 
+def write_comparisons(originals, out_dir: Path, compare_dir: Path, scale: int) -> int:
+    """Write original-beside-upscaled strips, one PNG per distinct image.
+
+    No neural upscaler can be trusted with five-pixel-tall bitmap text: it will
+    happily turn ACCESS GRANTED into ACCE55 GRVNITED and report success. Two
+    automatic measures of "how wrong is this" were tried and both failed -- they
+    rank tiles by how much the model changed, which is not the same question, so
+    a detailed tile the model handled well scores worse than a sign it ruined.
+    That judgement needs eyes, so this makes it a two-minute job: browse the
+    folder, note the names that got worse, and pass them to --keep.
+    """
+    compare_dir.mkdir(parents=True, exist_ok=True)
+    written = 0
+    for key, (w, h, channels, pixels) in sorted(originals.items()):
+        group, name = key.split("/", 1)
+        upscaled = out_dir / group / f"{name}.png"
+        if not upscaled.is_file():
+            continue
+        bw, bh, bch, big = decode_png(upscaled.read_bytes())
+        # Nearest-neighbour so the left half is exactly what the game draws
+        # today, magnified -- not a second opinion about how it should look.
+        factor = max(1, bw // w)
+        gap = 4
+        out_w, out_h = w * factor + gap + bw, max(h * factor, bh)
+        strip = bytearray(b"\x00" * (out_w * out_h * 3))
+        # Transparent texels keep the palette's key colour underneath, which on a
+        # masked wall is a magenta field that has nothing to do with how the
+        # tile looks in game. Show a checkerboard through them instead.
+        def blit(src, sw, sch, ox, dst_w, dst_h, mag):
+            for y in range(dst_h):
+                for x in range(dst_w):
+                    s0 = ((y // mag) * sw + (x // mag)) * sch
+                    d = (y * out_w + ox + x) * 3
+                    if sch == 4 and src[s0 + 3] < 128:
+                        v = 0x60 if ((x >> 3) + (y >> 3)) & 1 else 0x30
+                        strip[d:d+3] = bytes((v, v, v))
+                    else:
+                        strip[d:d+3] = src[s0:s0+3]
+
+        blit(pixels, w, channels, 0, w * factor, h * factor, factor)
+        blit(big, bw, bch, w * factor + gap, bw, bh, 1)
+        compare_dir.joinpath(f"{name}.png").write_bytes(
+            encode_png(out_w, out_h, bytes(strip), alpha=False)
+        )
+        written += 1
+        progress("comparing", written, len(originals))
+    progress_done()
+    return written
+
+
 def build_pk3(args, jobs: list[Job], out_dir: Path, output: Path, metadata: str) -> tuple[int, int]:
     """Pack the upscaled images into the pk3's hires/ namespace."""
-    native = MODELS.get(args.model) or args.scale
-    resize = args.scale != native
     cache: dict[str, bytes] = {}
     written = 0
 
@@ -815,12 +887,18 @@ def build_pk3(args, jobs: list[Job], out_dir: Path, output: Path, metadata: str)
         # against what actually arrived, so this list has to be the intent.
         pk3.writestr("c7upscal.lst", "".join(f"{job.name}\n" for job in jobs))
         for index, job in enumerate(jobs, 1):
-            data = cache.get(job.source)
+            key = f"{job.group}/{job.source}"
+            data = cache.get(key)
             if data is None:
-                path = out_dir / f"{job.source}.png"
+                path = out_dir / job.group / f"{job.source}.png"
                 if not path.is_file():
                     missing.append(job.source)
                     continue
+                # Each group can be upscaled by a different model, and the
+                # per-scale models produce their native size rather than the one
+                # asked for, so whether a resize is needed is a per-group answer.
+                native = MODELS.get(args.model_for[job.group]) or args.scale
+                resize = args.scale != native
                 data = path.read_bytes()
                 if resize or (job.alpha and args.alpha == "binary"):
                     width, height, channels, pixels = decode_png(data)
@@ -835,7 +913,7 @@ def build_pk3(args, jobs: list[Job], out_dir: Path, output: Path, metadata: str)
                     if channels == 4 and args.alpha == "binary":
                         binarize_alpha(pixels)
                     data = encode_png(width, height, bytes(pixels), alpha=channels == 4)
-                cache[job.source] = data
+                cache[key] = data
             # PNG payloads are already deflated; storing them keeps the pk3
             # small enough and the build fast.
             info = zipfile.ZipInfo(f"hires/{job.name}.png", date_time=(1996, 1, 1, 0, 0, 0))
@@ -867,7 +945,28 @@ def main() -> int:
     parser.add_argument("--dir", help="directory holding the Corridor 7 data files")
     parser.add_argument("-o", "--out", help="output pk3 (default <dir>/c7_assets_upscaled.pk3)")
     parser.add_argument("-s", "--scale", type=int, choices=(2, 3, 4), default=4)
-    parser.add_argument("-n", "--model", choices=sorted(MODELS), default=DEFAULT_MODEL)
+    parser.add_argument("-n", "--model", choices=sorted(MODELS), default=DEFAULT_MODEL,
+        help="model for every group that has no override below")
+    # The two useful models fail in opposite directions on this art, and which
+    # one wins is a property of the picture rather than of the pack:
+    # realesrgan-x4plus keeps flat colour and hard geometry (SECURITY OFFICE
+    # stays yellow and legible) but invents film grain on flat walls and
+    # rewrites small text; realesr-animevideov3 holds small text together
+    # (ACCESS GRANTED survives it) but softens fine line work and desaturates.
+    # Neither is right for everything, so the choice is per group.
+    for group in ("walls", "sprites", "graphics"):
+        parser.add_argument(f"--model-{group}", choices=sorted(MODELS), default=None,
+            help=f"override the model for {group}")
+    parser.add_argument("--keep", default="", metavar="NAMES",
+        help="comma separated lump names to leave at the original resolution; "
+             "they are left out of the pack and out of its manifest, so the game "
+             "keeps its own art for them and still sees a complete pack")
+    parser.add_argument("--keep-file", metavar="FILE", default=str(here / KEEP_FILE),
+        help="a file of lump names to --keep, one per line; defaults to the "
+             "checked list beside this script. Pass /dev/null to upscale "
+             "everything")
+    parser.add_argument("--compare", metavar="DIR",
+        help="also write original-beside-upscaled strips here, to pick --keep from")
     parser.add_argument(
         "--groups",
         default="walls,sprites,graphics",
@@ -897,6 +996,18 @@ def main() -> int:
     parser.add_argument("-j", "--threads", help="load:proc:save thread counts, e.g. 1:2:2")
     parser.add_argument("--tta", action="store_true", help="8x slower, slightly cleaner output")
     args = parser.parse_args()
+
+    args.keep = {n.strip().lower() for n in args.keep.split(",") if n.strip()}
+    keep_file = Path(args.keep_file).expanduser() if args.keep_file else None
+    if keep_file and keep_file.is_file():
+        for line in keep_file.read_text().splitlines():
+            line = line.split("//")[0].strip().lower()
+            if line:
+                args.keep.add(line)
+    args.model_for = {
+        group: getattr(args, f"model_{group}") or args.model
+        for group in ("walls", "sprites", "graphics")
+    }
 
     args.groups = {g.strip().lower() for g in args.groups.split(",") if g.strip()}
     unknown = args.groups - {"walls", "sprites", "graphics"}
@@ -936,23 +1047,41 @@ def main() -> int:
     started = time.monotonic()
     try:
         print("decoding original art ...")
-        jobs = decode_assets(args, files, names, in_dir)
+        jobs, originals = decode_assets(args, files, names, in_dir)
         if not jobs:
             raise SystemExit("no images were decoded")
-        distinct = len({job.source for job in jobs})
 
-        run_upscaler(args, binary, model_dir, in_dir, out_dir, distinct)
+        # One run per group, because each can name its own model. The upscaler
+        # is a directory-in, directory-out tool, so the groups were decoded into
+        # separate directories to begin with.
+        for group in sorted(args.groups):
+            group_in = in_dir / group
+            if not group_in.is_dir():
+                continue
+            group_out = out_dir / group
+            group_out.mkdir(parents=True, exist_ok=True)
+            run_upscaler(args, binary, model_dir, group_in, group_out,
+                         len(list(group_in.glob("*.png"))), args.model_for[group])
+
+        if args.compare:
+            compare_dir = Path(args.compare).expanduser()
+            print(f"writing comparisons to {compare_dir} ...")
+            n = write_comparisons(originals, out_dir, compare_dir, args.scale)
+            print(f"  {n} before/after strips; anything the model made worse "
+                  "belongs in --keep")
 
         counts = {group: sum(1 for job in jobs if job.group == group) for group in args.groups}
         metadata = "\n".join(
             [
                 "// Corridor 7 upscaled asset pack",
                 "// Built by make_c7_upscaled_pk3.py; load with -file c7_assets_upscaled.pk3",
-                f"model {args.model}",
+                *(f"model-{group} {args.model_for[group]}"
+                  for group in sorted(args.groups)),
                 f"scale {args.scale}",
                 f"alpha {args.alpha}",
                 f"bleed {args.bleed}",
                 f"tta {'on' if args.tta else 'off'}",
+                f"kept {len(args.keep)}",
                 # Read by the engine, along with c7upscal.lst, to decide whether
                 # the pack is complete enough to use at all.
                 f"lumps {len(jobs)}",

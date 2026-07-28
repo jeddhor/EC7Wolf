@@ -61,6 +61,13 @@ namespace C7Upscale
 	// still being assembled, so the pack's lumps exist by the time Init() runs.
 	FString FindPack(const FString &gameDataDir, const FString &progDir);
 
+	// Ignore any installed pack for this run, as if none were there: no lumps
+	// loaded, no replacements, no coupled filter change. Must be called before
+	// FindPack(). This is what --no-upscale gives the regression gates, which run
+	// from the player's own data directory and would otherwise measure whatever
+	// pack happened to be sitting in it.
+	void Disable();
+
 	// Reads the pack's manifest and checks that every lump it promises really
 	// arrived, then reports what it found. Must run after the wads are open and
 	// before the texture manager starts, since that is what consumes the pack.
@@ -90,6 +97,16 @@ namespace C7Upscale
 	// the texture manager has finished, since the replacements are applied as a
 	// side effect of loading and may need undoing.
 	void ApplyPreference();
+
+	// The texture filter that should be in force given the current pack state,
+	// out of the one the player has set. Nearest sampling is the right default
+	// for the game's own 64x64 art, which the renderer nearly always magnifies;
+	// it is the wrong one for a pack four times that size, where a wall at any
+	// distance is being reduced instead. Point-sampling a reduction throws away
+	// most of the texels and picks different ones as the view moves, which is
+	// what turns the pack's fine detail into crawling speckle. Only ever raises
+	// Sharp to Smooth: a player who chose Bilinear keeps it.
+	int WantedFilter(int current);
 
 	// Whether the upscaled art is the art currently in use. SetEnabled() swaps
 	// every recorded texture and drops the caches that were built from them, so

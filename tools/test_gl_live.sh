@@ -47,7 +47,7 @@ set +e
 (
 	cd "$data_dir"
 	timeout 120s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 xvfb-run -a "$ec7wolf" \
-		--data CO7 --config "$cfg/gl.cfg" --savedir "$save" \
+		--data CO7 --no-upscale --config "$cfg/gl.cfg" --savedir "$save" \
 		--nowait --tedlevel "$map" --skill 2 --vid-renderer opengl \
 		--capture-rngseed 1 --capture-frame 30 \
 		--capture-glpresent "$out_dir/gllive.ppm" --capture-maxframes 60
@@ -77,7 +77,7 @@ set +e
 (
 	cd "$data_dir"
 	timeout 90s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 xvfb-run -a "$ec7wolf" \
-		--data CO7 --config "$cfg/sw.cfg" --savedir "$save.sw" \
+		--data CO7 --no-upscale --config "$cfg/sw.cfg" --savedir "$save.sw" \
 		--nowait --tedlevel "$map" --skill 2 \
 		--capture-rngseed 1 --capture-frame 30 \
 		--capture-file "$out_dir/software.png" --capture-maxframes 60

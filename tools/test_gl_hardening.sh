@@ -59,7 +59,7 @@ for map in $maps; do
 	(
 		cd "$data_dir"
 		timeout 120s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 xvfb-run -a "$ec7wolf" \
-			--data CO7 --config "$cfg/$map.cfg" --savedir "$save" \
+			--data CO7 --no-upscale --config "$cfg/$map.cfg" --savedir "$save" \
 			--nowait --tedlevel "$map" --skill 2 --vid-renderer opengl \
 			--gl-debug --capture-rngseed 1 --capture-frame 20 \
 			--capture-maxframes 45

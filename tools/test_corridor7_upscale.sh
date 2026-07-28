@@ -17,7 +17,7 @@
 #
 # Cases:
 #   1. no pack             -- the reference frame, and nothing said about it
-#   2. complete pack       -- accepted, all 256 walls replaced
+#   2. complete pack       -- accepted, all 256 walls replaced, filter raised
 #   3. pack, switched off  -- byte-identical to case 1
 #   4. incomplete pack     -- rejected by name, not merely counted, and the art
 #                             left alone rather than half replaced
@@ -62,10 +62,22 @@ done
 printf 'Building a test asset pack (walls, 2x, nearest neighbour)...\n'
 python3 "$tools_dir/make_c7_upscaled_pk3.py" \
 	--dir "$work" --out "$work/pack.pk3" --groups walls --scale 2 \
-	--tool "$tools_dir/fake_upscaler.py" --models "$work" \
+	--tool "$tools_dir/fake_upscaler.py" --models "$work" --keep-file /dev/null \
 	--namemap "$tools_dir/../wadsrc/static/co7map.txt" >"$work/build.log" 2>&1 || {
 		printf 'FAIL: the test pack could not be built\n' >&2
 		tail -20 "$work/build.log" >&2
+		exit 1
+	}
+
+# The same pack built through the shipped keep list, which is what a player gets
+# by default: fewer lumps, and the kept names absent from the manifest so the
+# game still sees a pack that is complete.
+printf 'Building a test asset pack with the default keep list...\n'
+python3 "$tools_dir/make_c7_upscaled_pk3.py" \
+	--dir "$work" --out "$work/kept.pk3" --groups walls --scale 2 \
+	--tool "$tools_dir/fake_upscaler.py" --models "$work" \
+	--namemap "$tools_dir/../wadsrc/static/co7map.txt" >"$work/keep.log" 2>&1 || {
+		printf 'FAIL: the keep-list pack could not be built\n' >&2
 		exit 1
 	}
 
@@ -148,6 +160,14 @@ else
 	check 0 'the upscaled art actually reaches the screen'
 fi
 
+# Nearest sampling of a pack four times the game's own resolution is what makes
+# it crawl: every wall is being reduced rather than magnified, and point sampling
+# picks different texels as the view moves. Switching the pack on has to raise
+# the filter with it, or the pack looks worse than the art it replaced.
+grep -q 'texture filtering raised to Smooth' "$work/on.log" \
+	&& check 0 'raises the texture filter with the pack' \
+	|| check 1 'raises the texture filter with the pack'
+
 # The masked wall pages are the ones whose transparency has to survive the trip
 # through PNG, and the GL world reports how many textures came with an opacity
 # plane. Losing them would turn every grate into a solid block.
@@ -170,7 +190,24 @@ else
 	check 1 'the restored frame is byte-identical to having no pack at all'
 fi
 
-printf '\nCase 4: an incomplete pack\n'
+printf '\nCase 4: a pack built with the keep list\n'
+run_case kept "$work/kept.pk3" "$neutral_cfg"
+grep -q 'carries 246 images at 2x' "$work/kept.log" \
+	&& check 0 'accepts a pack that deliberately covers less' \
+	|| check 1 'accepts a pack that deliberately covers less'
+if python3 -c "
+import sys, zipfile
+z = zipfile.ZipFile('$work/kept.pk3')
+listed = set(z.read('c7upscal.lst').decode().split())
+sys.exit(0 if 'c7w0009' not in listed and 'hires/c7w0009.png' not in z.namelist()
+           and 'c7w0008' in listed else 1)
+"; then
+	check 0 'kept lumps are out of the pack and out of its manifest'
+else
+	check 1 'kept lumps are out of the pack and out of its manifest'
+fi
+
+printf '\nCase 5: an incomplete pack\n'
 run_case broken "$work/broken.pk3" "$neutral_cfg"
 grep -q 'is incomplete -- 1 of its 256 images are missing (c7w0005)' "$work/broken.log" \
 	&& check 0 'names the missing image rather than just counting' \

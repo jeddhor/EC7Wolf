@@ -51,7 +51,7 @@ xvfb-run -a -s "-screen 0 960x600x24" sh -c '
 	cd "$MF_DATA"
 	export SDL_AUDIODRIVER=dummy
 	export SDL_VIDEODRIVER=x11
-	"$MF_BUILD/ec7wolf" --data CO7 --nowait --vid-renderer software \
+	"$MF_BUILD/ec7wolf" --data CO7 --no-upscale --nowait --vid-renderer software \
 		--res 960 600 --config "$MF_WORK/cfg" --savedir "$MF_WORK/sv" \
 		>"$MF_WORK/run.log" 2>&1 &
 	pid=$!

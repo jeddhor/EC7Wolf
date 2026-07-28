@@ -45,11 +45,11 @@ set +e
 		export C7_SMOKE_SAVEDIR="$savedir"
 		timeout 8s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 \
 			xvfb-run -a script -qefc \
-			'exec "$C7_SMOKE_EC7WOLF" --data CO7 --config "$C7_SMOKE_CONFIG" --savedir "$C7_SMOKE_SAVEDIR" --nowait --tedlevel MAP01 --skill 2' \
+			'exec "$C7_SMOKE_EC7WOLF" --data CO7 --no-upscale --config "$C7_SMOKE_CONFIG" --savedir "$C7_SMOKE_SAVEDIR" --nowait --tedlevel MAP01 --skill 2' \
 			/dev/null
 	else
 		timeout 8s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 \
-			xvfb-run -a stdbuf -oL -eL "$ec7wolf" --data CO7 --config "$config_file" \
+			xvfb-run -a stdbuf -oL -eL "$ec7wolf" --data CO7 --no-upscale --config "$config_file" \
 			--savedir "$savedir" --nowait --tedlevel MAP01 --skill 2
 	fi
 ) >"$log_file" 2>&1

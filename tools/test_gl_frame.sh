@@ -55,7 +55,7 @@ set +e
 	# this to the default silently turned that gate into a comparison against a
 	# blank view when OpenGL became the default.
 	timeout 90s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 xvfb-run -a "$ec7wolf" \
-		--data CO7 --config "$cfg/ec7wolf.cfg" --savedir "$save" \
+		--data CO7 --no-upscale --config "$cfg/ec7wolf.cfg" --savedir "$save" \
 		--vid-renderer software \
 		--nowait --tedlevel "$map" --skill 2 --capture-rngseed 1 \
 		--capture-frame 30 --capture-file "$out_dir/software.png" \

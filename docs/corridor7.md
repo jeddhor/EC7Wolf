@@ -64,6 +64,44 @@ Upscaled assets and xBRZ are mutually exclusive: xBRZ looks for staircases to
 smooth, and there are none left in art a network has already enlarged four
 times. Turning either on turns the other off.
 
+**Choosing a model matters more than anything else here**, and no single choice
+is right for the whole game. Measured on Corridor 7's own art:
+
+| | `realesrgan-x4plus` (default) | `realesr-animevideov3` |
+|---|---|---|
+| Flat colour, hard geometry | keeps it — the SECURITY OFFICE sign stays yellow and legible | washes out, desaturates toward orange |
+| Fine line work (stripes, drips) | crisp | smeared |
+| Small bitmap text | rewrites it — ACCESS GRANTED became ACCE55 GRVNITED | survives, legible |
+| Flat walls | invents film grain, which quantises to speckle | cleaner |
+
+So the model is per group: `--model-walls`, `--model-sprites`,
+`--model-graphics`, each defaulting to `--model`. Sprites and the full-screen
+pages are what `realesrgan-x4plus` is good at, and they are the parts that come
+out best.
+
+**Nothing rescues five-pixel-tall bitmap text.** Any generative model guesses at
+glyphs that small, and two automatic ways of detecting which tiles it ruined
+were tried and both failed — they measure how much the model *changed* a tile,
+which ranks a detailed tile it handled well above a sign it destroyed. So the
+judgement is yours:
+
+```sh
+tools/make_c7_upscaled_pk3.py --dir /path/to/game-data --compare /tmp/c7compare
+```
+
+`--compare` writes an original-beside-upscaled strip for every image. Browse the
+folder, note the names that came out worse, and rebuild with
+`--keep c7w0009,c7w0030,...`. Kept lumps are left out of the pack *and* out of
+its manifest, so the game keeps its own art for exactly those and still sees a
+complete pack.
+
+That review has already been done once for the default model, and its result is
+`tools/c7_upscale_keep.txt` — 24 lumps, used automatically: the ACCESS GRANTED
+and INTRUDER ALERT signs, the keypad panels, the status bar, the large HUD
+digits, and the menu's LOAD/SAVE labels. Build with `--keep-file /dev/null` to
+upscale everything anyway, and re-check with `--compare` if you change model,
+because the list is specific to one.
+
 Two notes for anyone rebuilding the pack:
 
 * The upscaled art is quantised back into the 256-colour palette on load. That
@@ -71,6 +109,13 @@ Two notes for anyone rebuilding the pack:
   infrared visor and for damage flashes, and art that had left the palette
   would stop responding to either. What survives quantisation is the resolution
   and the reshaped edges, which is the part that matters.
+* Switching the pack on also raises **Texture Filter** to *Smooth* if it was on
+  *Sharp*. Nearest sampling is right for the game's own 64×64 art, which the
+  renderer nearly always magnifies, and wrong for art four times that size,
+  where every wall is being reduced instead — point-sampling a reduction throws
+  away most of the texels and picks different ones as the view moves, which is
+  what turns the pack's detail into crawling speckle. A deliberate *Bilinear*
+  choice is left alone.
 * Wall pages that use index 255 as a transparency key (grates, force-field
   frames — 50 of the 256) are written as RGBA so their holes survive; the engine
   reads a hires wall's transparency from the PNG's alpha channel.

@@ -82,7 +82,7 @@ run() {
 		export SDL_VIDEODRIVER=x11
 		# A level is started because the frame counter only advances once one is
 		# running, and the frame dump is how the render size gets measured.
-		"$RS_BIN" --data CO7 --nowait --vid-renderer "$RS_RENDERER" \
+		"$RS_BIN" --data CO7 --no-upscale --nowait --vid-renderer "$RS_RENDERER" \
 			--config "$RS_WORK/$RS_TAG.cfg" --savedir "$RS_WORK/sv-$RS_TAG" \
 			--res "$RS_W" "$RS_H" --tedlevel MAP01 --skill 2 \
 			--capture-frame 2 --capture-file "$RS_WORK/$RS_TAG-frame.png" \

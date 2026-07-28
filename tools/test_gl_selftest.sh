@@ -41,7 +41,7 @@ set +e
 (
 	cd "$data_dir"
 	timeout 60s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 xvfb-run -a "$ec7wolf" \
-		--data CO7 --config "$cfg/ec7wolf.cfg" --savedir "$save" \
+		--data CO7 --no-upscale --config "$cfg/ec7wolf.cfg" --savedir "$save" \
 		--gltest "${ppm_out:-/dev/null}"
 ) >"$log" 2>&1
 status=$?

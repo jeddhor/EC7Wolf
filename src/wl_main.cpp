@@ -1397,6 +1397,20 @@ int WL_Main (int argc, char *argv[])
 				break;
 			}
 		}
+		// Ignore any upscaled asset pack sitting beside the game data. The
+		// regression gates run from the player's own data directory, so a pack
+		// installed there would silently change the art every one of them
+		// measures -- and it would override the texture filter that the
+		// filtering gate exists to vary.
+		for(int i = 1; i < argc; ++i)
+		{
+			if(strcmp(argv[i], "--no-upscale") == 0)
+			{
+				vid_upscaled_assets = false;
+				C7Upscale::Disable();
+				break;
+			}
+		}
 		// GL debug output / error checking (KHR_debug). Off by default; opt in via
 		// the config's Vid_GLDebug or this flag. Must be set before the GL context
 		// is created so the debug context hint can be requested.

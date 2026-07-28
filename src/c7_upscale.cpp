@@ -76,6 +76,9 @@ namespace
 	// player has the option switched off.
 	bool		gApplied = true;
 
+	// Set by --no-upscale before the wad list is built.
+	bool		gDisabled = false;
+
 	// Splits a manifest lump into non-empty, non-comment lines.
 	void ReadLines(int lump, TArray<FString> &out)
 	{
@@ -119,9 +122,14 @@ namespace
 namespace C7Upscale
 {
 
+void Disable()
+{
+	gDisabled = true;
+}
+
 FString FindPack(const FString &gameDataDir, const FString &progDir)
 {
-	if(!IWad::CheckGameFilter("Corridor7"))
+	if(gDisabled || !IWad::CheckGameFilter("Corridor7"))
 		return FString();
 
 	// Beside the game data first: that is where the build script writes it, and
@@ -238,6 +246,13 @@ bool Present() { return !gPackPath.IsEmpty(); }
 bool Valid() { return gValid; }
 bool Enabled() { return gValid && gApplied; }
 
+int WantedFilter(int current)
+{
+	if(Enabled() && current <= 0)
+		return 2;	// Smooth: samples the pixel's footprint in texture space
+	return current;
+}
+
 bool IsPackWad(int wadnum)
 {
 	return gWadnum >= 0 && wadnum == gWadnum;
@@ -292,6 +307,18 @@ void ApplyPreference()
 	}
 	// gApplied is true here: the texture manager applied the pack as it loaded.
 	SetEnabled(vid_upscaled_assets);
+
+	// The menu couples these when the player switches the pack on; a config that
+	// already had it on has never been through that, so apply the same rule here
+	// rather than starting the game in the combination the menu will not let them
+	// select.
+	const int filter = WantedFilter(vid_glfilter);
+	if(filter != vid_glfilter)
+	{
+		vid_glfilter = filter;
+		Printf("Upscale: texture filtering raised to Smooth; nearest sampling of a "
+			"four-times pack is what makes it crawl.\n");
+	}
 	Printf("Upscale: %u of the game's textures have an upscaled copy; using the %s art.\n",
 		gSwaps.Size(), gApplied ? "upscaled" : "original");
 

@@ -86,7 +86,7 @@ run_case() {
 	(
 		cd "$data_dir"
 		timeout 180s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 xvfb-run -a -s "-screen 0 $screen_geom" \
-			"$ec7wolf" --data CO7 --config "$cfg/$name.gl.cfg" --savedir "$save" \
+			"$ec7wolf" --data CO7 --no-upscale --config "$cfg/$name.gl.cfg" --savedir "$save" \
 			--nowait --tedlevel "$map" --skill 2 --vid-renderer opengl \
 			--capture-rngseed 1 $switches \
 			--capture-frame "$capture_frame" --capture-glpresent "$gl" \
@@ -130,7 +130,7 @@ run_case() {
 	(
 		cd "$data_dir"
 		timeout 180s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 xvfb-run -a -s "-screen 0 $screen_geom" \
-			"$ec7wolf" --data CO7 --config "$cfg/$name.sw.cfg" --savedir "$save" \
+			"$ec7wolf" --data CO7 --no-upscale --config "$cfg/$name.sw.cfg" --savedir "$save" \
 			--nowait --tedlevel "$map" --skill 2 \
 			--capture-rngseed 1 $switches \
 			--capture-frame "$capture_frame" --capture-file "$swpng" \

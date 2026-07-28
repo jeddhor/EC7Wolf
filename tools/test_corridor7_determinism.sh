@@ -52,7 +52,7 @@ run_capture() {
 	(
 		cd "$data_dir"
 		timeout 120s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 xvfb-run -a "$ec7wolf" \
-			--data CO7 --config "$2" --savedir "$save" \
+			--data CO7 --no-upscale --config "$2" --savedir "$save" \
 			--nowait --tedlevel "$map" --skill 2 \
 			--capture-rngseed "$seed" --capture-checksum "$1" \
 			--capture-maxtics "$tics"

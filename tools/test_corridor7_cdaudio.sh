@@ -89,7 +89,7 @@ run_case() {
 	(
 		cd "$work"
 		env DISPLAY="$display" SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 stdbuf -oL -eL \
-			./ec7wolf --data CO7 --nowait --normal --tedlevel MAP01 \
+			./ec7wolf --data CO7 --no-upscale --nowait --normal --tedlevel MAP01 \
 			--vid-renderer software --res 640 400 \
 			--capture-rngseed 1 --capture-exitlevel 300 \
 			--capture-maxframes 4000 \

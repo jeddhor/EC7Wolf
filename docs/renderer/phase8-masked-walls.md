@@ -104,8 +104,9 @@ PASS: GL door slide renders (closed vs open differ by 1065 px).
 * **Static-mesh caching.** Animated-wall cells change texture with the clock, so
   they must stay out of any revision-cached static mesh; that caching lands with
   the persistent live context in Phase 10.
-* **Visor-dependent sprite visibility and the laser-barrier sprite dissolve** are
-  sprite/actor effects and belong to Phase 9.
+* **Visor-dependent sprite visibility** is a sprite/actor effect and belongs to
+  Phase 9. (The laser barrier's infrared energy turned out to need no effect at
+  all — it is the 232-239 ramp rotation applied to ordinary sprite artwork.)
 
 ## Exit gate — met (offscreen level)
 

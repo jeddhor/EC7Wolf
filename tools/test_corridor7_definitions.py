@@ -649,8 +649,8 @@ require(r'C7VisorCanSeeActor.*?C7Eniram.*?infrared',
 # rods, C012 strands) plainly in normal visor mode, so those classes may not
 # be gated on the visor. The strategy guide's "Infrared Invisible Barrier"
 # is the laser barrier static pair (map objects 28/84 = C7Static005 and
-# C7Static061): walk-through, drawn only under infrared with an animated
-# bright dissolve, and 10 points of contact damage on a cooldown.
+# C7Static061): walk-through, drawn only under infrared, and 10 points of
+# contact damage on a cooldown.
 for cls in ("C7DamageField", "C7Static011", "C7Static009"):
 	if re.search(r'C7VisorCanSeeActor.*?FindClass\("%s"\).*?return\s+infrared' % cls, R_SPRITES, re.S):
 		raise SystemExit(
@@ -663,8 +663,24 @@ require(r'Corridor7IsLaserBarrierActor.*?FindClass\("C7Static005"\).*?FindClass\
 		R_SPRITES, "the laser barrier is the object 28/84 static pair")
 require(r'C7VisorCanSeeActor.*?Corridor7IsLaserBarrierActor\(actor\)\s*\)\s*return\s+infrared',
 		R_SPRITES, "the laser barrier statics render only under the infrared visor")
-require(r'C7LaserDissolveLit', R_SPRITES,
-		"the laser barrier draws with the released game's animated dissolve")
+# The barrier's energy is the artwork plus the DAC, not a drawing special case.
+# C006 and C062 are painted entirely in indices 232-239 -- one of the four ramps
+# the released game rotates -- which are black in the base palette and a
+# 32..255 red sweep under infrared. Reintroducing a per-texel override here
+# throws that away: the previous hashed dissolve replaced the sprite with
+# speckled white and lost both the travelling sweep along C006's rods and the
+# ring's shape. The ordinary sprite path already cycles and full-brights the
+# ramp, so there must be nothing barrier-specific left in either scaler.
+for name in ("C7LaserDissolveLit", "laserColor", "laserBarrier"):
+	if name in R_SPRITES:
+		raise SystemExit(
+			"Corridor 7 definition check failed: %s -- the laser barrier must draw as an "
+			"ordinary sprite and take its animation from the 232-239 DAC ramp" % name)
+if "c7LaserLit" in (ROOT / "src/render/opengl/r_glworld.cpp").read_text():
+	raise SystemExit(
+		"Corridor 7 definition check failed: the GL shader must not special-case the laser barrier")
+require(r'luminous\s*=\s*color == GPalette\.Remap\[15\].*?GPalette\.Remap\[208\].*?GPalette\.Remap\[239\].*?C7CycleSpriteColor',
+		R_SPRITES, "world sprites cycle and full-bright the four rotating ramps, which is what animates the barrier")
 for cls in ("C7Static005", "C7Static061"):
 	if re.search(r'actor\s+%s\s*\{[^}]*?\+SOLID' % cls, STATICS, re.S):
 		raise SystemExit(

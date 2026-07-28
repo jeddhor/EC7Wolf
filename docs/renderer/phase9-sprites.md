@@ -19,8 +19,8 @@ the world depth buffer.
 * **`R_GetSpriteRenderInfo` (r_sprites.cpp)** reproduces the selection half of
   `ScaleSprite`/`Scale3DSprite` without drawing: the frame's `Sprite`, the eight-
   way rotation via `CalcRotate`, the mirror bit, full-bright (`FL_BRIGHT` or
-  `frame->fullbright`), world-orientation (`FL_BILLBOARD`), the laser-barrier
-  class test, and the Corridor 7 visor gate (`C7VisorCanSeeActor`). It returns
+  `frame->fullbright`), world-orientation (`FL_BILLBOARD`), and the Corridor 7
+  visor gate (`C7VisorCanSeeActor`). It returns
   false when the actor must not be drawn this instant. It lives in r_sprites.cpp
   because the sprite tables (`loadedSprites`/`spriteFrames`) are file-static
   there.
@@ -64,11 +64,14 @@ loop computes from `FixedMul(r_depthvisibility<<8, height)`. On top of that:
 * **Full-bright** — `FL_BRIGHT`/`frame->fullbright` forces shade row 0 (ignore
   distance), matching `colormap = NormalLight.Maps`. The wall-only reserved-index
   full-bright rule (indices 15/254) is suppressed for sprites.
-* **Laser barrier** — inside the silhouette the shader reproduces
-  `C7LaserDissolveLit`: a hashed on/off mask over 8-texel vertical blocks that
-  crawls with `gamestate.TimeCount>>3`, painting lit texels as full-bright white
-  (`ColorMatcher.Pick(0xFF,0xFF,0xFF)`) and discarding the rest, so each rod reads
-  as moving dashed energy — exactly the software infrared effect.
+* **Laser barrier** — no shader case at all, and deliberately so. Corridor 7's
+  infrared barrier statics are painted entirely in the 232-239 ramp, so the
+  colour-cycle and full-bright rules above *are* the effect: the rotation walks
+  the infrared red sweep along artwork whose indices already climb the ramp. An
+  earlier revision special-cased them here (a hashed dissolve painting
+  `ColorMatcher.Pick(0xFF,0xFF,0xFF)`); it was removed, along with the
+  `WorldSurface::laser` / `uSpriteLaser` plumbing that carried it. See
+  [corridor7.md](../corridor7.md#the-infrared-laser-barrier).
 
 ## Depth and draw order
 
@@ -118,11 +121,11 @@ PASS: GL door slide renders (closed vs open differ by 1065 px).
 * **Pixel-exact vertical placement.** Hanging/floating `z` offsets and the exact
   top-offset anchoring are approximated (feet on floor); pixel-exact sprite
   framing joins the software/GL parity matrix in Phase 11.
-* **Rotation and laser-barrier scenes** are verified by faithful code reuse
-  (`CalcRotate`, the mirror bit, and `C7LaserDissolveLit` are the same logic as
-  the software paths); the stationary capture demo has no enemy walking through a
-  rotation or an infrared barrier in frame, so those are re-checked live once the
-  GL backend owns the window in Phase 10.
+* **Rotation scenes** are verified by faithful code reuse (`CalcRotate` and the
+  mirror bit are the same logic as the software path); the stationary capture demo
+  has no enemy walking through a rotation in frame, so that is re-checked live once
+  the GL backend owns the window in Phase 10. (The infrared barrier is now covered
+  directly, in both renderers, by `tools/test_corridor7_laserbarrier.sh`.)
 * **Blended/translucent sprites.** None in Corridor 7 (binary alpha), so no sorted
   pass; a genuinely translucent effect would need one and is out of scope.
 * **Static-mesh caching** still excludes animated/actor geometry (a Phase 10 note).
@@ -131,7 +134,7 @@ PASS: GL door slide renders (closed vs open differ by 1065 px).
 
 Actor sprites build as depth-tested billboards with correct frame/rotation/mirror
 selection, scale and offsets, screen-facing or world-oriented orientation,
-index-0 transparency, Corridor 7 colour-cycle, full-bright, visor gating, and the
-infrared laser-barrier dissolve, occluding and occluded by walls and masked panes
+index-0 transparency, Corridor 7 colour-cycle, full-bright and visor gating —
+which is what lights the infrared laser barrier — occluding and occluded by walls and masked panes
 in one shared depth buffer, at interpolated positions without frame blending. The
 determinism gate remains green; the simulation is untouched.

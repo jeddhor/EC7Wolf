@@ -53,13 +53,11 @@ struct WorldSurface
 	// software CheckSlidePass()/SlideTextureOffset() along the quad's U axis.
 	int          slideStyle;	// SLIDE_Normal / SLIDE_Split / SLIDE_Invert
 	unsigned int slideAmount;	// 0 = closed .. 0xffff = fully open
-	// Sprite state (WSURF_Sprite only): full-bright ignores distance shade; a
-	// laser-barrier sprite is drawn as the animated infrared dissolve instead.
+	// Sprite state (WSURF_Sprite only): full-bright ignores distance shade.
 	int          fullbright;	// 1 = FL_BRIGHT / frame->fullbright
-	int          laser;			// 1 = Corridor 7 laser-barrier dissolve sprite
 
 	WorldSurface() : firstVertex(0), vertexCount(0), kind(0), side(-1),
-		slideStyle(0), slideAmount(0), fullbright(0), laser(0) {}
+		slideStyle(0), slideAmount(0), fullbright(0) {}
 };
 
 struct WorldMesh

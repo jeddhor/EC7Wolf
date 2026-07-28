@@ -32,6 +32,7 @@
 #include "id_vh.h"
 #include "gamemap.h"
 #include "thingdef/thingdef.h"
+#include "a_inventory.h"
 #ifdef ECWOLF_RENDERER_OPENGL
 #include "render/opengl/r_glworld.h"
 #include "render/opengl/r_glxbrz.h"
@@ -681,8 +682,23 @@ void ApplyPaletteOverride()
 	// the frame about to be rendered. Both renderers read the result through the
 	// framebuffer palette, so this compares the visor between them -- and against
 	// the original -- without scripted input.
+	//
+	// The C7VisorMode token is set to match. The palette is not the whole visor:
+	// r_sprites.cpp gates the laser-barrier statics on that token, so forcing the
+	// palette alone gives an infrared view with the one thing infrared exists to
+	// reveal still hidden. Mode 0/1/2 here is token 1/2/3 (UpdatePaletteShifts
+	// maps it the other way).
 	if(g_haveVisorMode)
+	{
+		if(players[ConsolePlayer].mo)
+		{
+			AInventory *mode = players[ConsolePlayer].mo->FindInventory(
+				ClassDef::FindClass("C7VisorMode"));
+			if(mode)
+				mode->amount = g_visorMode + 1;
+		}
 		V_SetCorridor7PaletteMode(g_visorMode, 0);
+	}
 
 	// Raise Corridor 7's inset map panel. It is a toggle held in c7_automap.cpp
 	// rather than a palette or view setting, so forcing it each frame is what

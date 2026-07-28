@@ -83,7 +83,7 @@ Corridor 7:
 - Glass panes (transparent, reveal geometry behind).
 - Force fields (palette-cycled, animated).
 - Night and infrared visor modes.
-- Laser barriers (animated dissolve).
+- Laser barriers (the rotating 232-239 DAC ramp lighting their own artwork).
 - Palette cycling and electric-shock palette rewrite.
 - Damage and pickup palette flashes.
 - Fizzle fade.

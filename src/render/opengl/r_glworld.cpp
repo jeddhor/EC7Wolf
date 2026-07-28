@@ -305,9 +305,6 @@ namespace
 		"uniform float uSlideAmount;\n"     // 0 closed .. 65535 fully open
 		"uniform int   uSprite;\n"          // 1 = billboard actor sprite
 		"uniform int   uSpriteFullbright;\n"// 1 = sprite ignores distance shade
-		"uniform int   uSpriteLaser;\n"     // 1 = C7 infrared laser-barrier dissolve
-		"uniform int   uPhase;\n"           // gamestate.TimeCount>>3 (cycle/dissolve)
-		"uniform int   uLaserColor;\n"      // physical index for lit laser texels
 		"uniform int   uDebug;\n"           // 0 normal, 1 shade-row visualization
 		"uniform int   uFilter;\n"          // 0 nearest, 1 bilinear, 2 supersampled
 		"const float FRACUNIT = 65536.0;\n"
@@ -316,15 +313,6 @@ namespace
 		"    int m[16] = int[16](0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5);\n"
 		"    int i = (p.y & 3)*4 + (p.x & 3);\n"
 		"    return (float(m[i]) + 0.5) / 16.0;\n"
-		"}\n"
-		// Corridor 7 infrared laser-barrier dissolve, mirroring C7LaserDissolveLit:\n"
-		"// a hashed on/off mask over 8-texel vertical blocks that crawls with the\n"
-		"// game clock, so each rod reads as moving dashed energy segments.\n"
-		"bool c7LaserLit(ivec2 t, int phase){\n"
-		"    uint u = uint(t.x); uint v = uint(t.y);\n"
-		"    uint h = u*73856093u ^ (v>>3u)*19349663u ^ uint(phase)*83492791u;\n"
-		"    h ^= h >> 13u; h *= 0x9E3779B1u; h ^= h >> 16u;\n"
-		"    return (h % 3u) != 0u;\n"
 		"}\n"
 		// --- texture filtering -------------------------------------------------
 		//
@@ -353,13 +341,10 @@ namespace
 		"    if(uHasOpacity == 1) return texelFetch(uOpacityTex, texel, 0).r != 0u;\n"
 		"    if(uMasked == 1 && idx == uMaskColor) return false;\n"
 		"    if(uSprite == 1 && idx == 0) return false;\n"
-		"    if(uSprite == 1 && uSpriteLaser == 1) return c7LaserLit(texel, uPhase);\n"
 		"    return true;\n"
 		"}\n"
 		// Wall / door / masked / sprite texel -> RGB.
 		"vec3 tapWall(int idx0, int shadeRow){\n"
-		"    if(uSprite == 1 && uSpriteLaser == 1)\n"
-		"        return texelFetch(uPaletteTex, ivec2(uLaserColor,0), 0).rgb;\n"
 		"    bool isWall = uSurfKind == 2;\n"
 		"    int idx = c7Cycle(idx0, isWall);\n"
 		"    int row = shadeRow;\n"
@@ -734,7 +719,6 @@ namespace
 		GLint uSlideAmount;
 		GLint uSprite;
 		GLint uSpriteFullbright;
-		GLint uSpriteLaser;
 		float floorPlaneH;
 		float ceilPlaneH;
 	};
@@ -758,7 +742,7 @@ namespace
 	{
 		GLuint tex, opac;
 		int kind;			// shader surface kind (doors/masked/sprites -> wall)
-		int masked, sprite, spriteFb, spriteLaser, isDoor;
+		int masked, sprite, spriteFb, isDoor;
 		int slideStyle;
 		unsigned int slideAmount;
 		GLuint first, count;
@@ -798,7 +782,7 @@ namespace
 	{
 		return a.tex == b.tex && a.opac == b.opac && a.kind == b.kind &&
 			a.masked == b.masked && a.sprite == b.sprite &&
-			a.spriteFb == b.spriteFb && a.spriteLaser == b.spriteLaser &&
+			a.spriteFb == b.spriteFb &&
 			a.isDoor == b.isDoor && a.slideStyle == b.slideStyle &&
 			a.slideAmount == b.slideAmount;
 	}
@@ -818,7 +802,6 @@ namespace
 		int boundMasked = -100;
 		int boundSprite = -100;
 		int boundSpriteFb = -100;
-		int boundSpriteLaser = -100;
 		int boundSlide = -100;
 		int boundSlideStyle = -100;
 		unsigned int boundSlideAmt = 0xffffffffu;
@@ -866,11 +849,6 @@ namespace
 			{
 				glUniform1i(su.uSpriteFullbright, d.spriteFb);
 				boundSpriteFb = d.spriteFb;
-			}
-			if(d.spriteLaser != boundSpriteLaser)
-			{
-				glUniform1i(su.uSpriteLaser, d.spriteLaser);
-				boundSpriteLaser = d.spriteLaser;
 			}
 			if(d.isDoor != boundSlide)
 			{
@@ -965,7 +943,6 @@ namespace
 			it.state.masked = (isDoor || isMasked) ? 1 : 0;
 			it.state.sprite = isSprite ? 1 : 0;
 			it.state.spriteFb = (isSprite && surf.fullbright) ? 1 : 0;
-			it.state.spriteLaser = (isSprite && surf.laser) ? 1 : 0;
 			it.state.isDoor = isDoor ? 1 : 0;
 			// Only a door leaf's slide is read by the shader; forcing the rest to
 			// a fixed value keeps them from splitting runs needlessly.
@@ -988,7 +965,6 @@ namespace
 				if(a.state.masked != b.state.masked) return a.state.masked < b.state.masked;
 				if(a.state.sprite != b.state.sprite) return a.state.sprite < b.state.sprite;
 				if(a.state.spriteFb != b.state.spriteFb) return a.state.spriteFb < b.state.spriteFb;
-				if(a.state.spriteLaser != b.state.spriteLaser) return a.state.spriteLaser < b.state.spriteLaser;
 				if(a.state.isDoor != b.state.isDoor) return a.state.isDoor < b.state.isDoor;
 				if(a.state.slideStyle != b.state.slideStyle) return a.state.slideStyle < b.state.slideStyle;
 				return a.state.slideAmount < b.state.slideAmount;
@@ -1308,13 +1284,6 @@ namespace
 		glUniform1i(glGetUniformLocation(w.prog, "uViewW"), W);
 		glUniform1i(glGetUniformLocation(w.prog, "uDither"), 1);
 		glUniform1f(glGetUniformLocation(w.prog, "uHorizon"), (float)H * 0.5f);
-		// Sprite colour-cycle / laser-dissolve clock and the lit-laser colour
-		// index (fullbright white, matching ScaleSprite's ColorMatcher.Pick).
-		glUniform1i(glGetUniformLocation(w.prog, "uPhase"),
-			(int)(gamestate.TimeCount >> 3));
-		glUniform1i(glGetUniformLocation(w.prog, "uLaserColor"),
-			(int)ColorMatcher.Pick(0xFF, 0xFF, 0xFF));
-
 		w.su.uIndexTex    = glGetUniformLocation(w.prog, "uIndexTex");
 		w.su.uOpacityTex  = glGetUniformLocation(w.prog, "uOpacityTex");
 		w.su.uHasOpacity  = glGetUniformLocation(w.prog, "uHasOpacity");
@@ -1326,7 +1295,6 @@ namespace
 		w.su.uSlideAmount = glGetUniformLocation(w.prog, "uSlideAmount");
 		w.su.uSprite           = glGetUniformLocation(w.prog, "uSprite");
 		w.su.uSpriteFullbright = glGetUniformLocation(w.prog, "uSpriteFullbright");
-		w.su.uSpriteLaser      = glGetUniformLocation(w.prog, "uSpriteLaser");
 		w.su.floorPlaneH  = floorPlaneH;
 		w.su.ceilPlaneH   = ceilPlaneH;
 		w.uDebug = glGetUniformLocation(w.prog, "uDebug");

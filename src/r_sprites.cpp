@@ -84,10 +84,22 @@ static TArray<SpriteInfo> loadedSprites;
 // Map objects 28 and 84 are the strategy guide's "Infrared Invisible
 // Barrier": floor-to-ceiling laser statics (the three-rod C006 sprite and
 // the C062 energy ring) placed across doorways, invisible outside the
-// infrared visor, solid, and damaging on contact. The released executable's
+// infrared visor, and damaging on contact. The released executable's
 // 10-point invisible-barrier routine keys on exactly these two object IDs.
 // On MAP01 both traps are object 28, in the corridor pinch beside each
 // health-unit wall.
+//
+// Nothing about how they are DRAWN is special, and this must not be used to
+// make it so. The artwork is painted entirely in palette indices 232-239 --
+// one of the four eight-entry ramps the released game rotates in the DAC --
+// and the ramp is black in the base palette and a 32/69/105/142/178/219/255/0
+// red sweep under infrared. That is the whole trick: the barrier is invisible
+// in normal vision because its colours are black, and it crawls with energy
+// under infrared because the DAC rotation moves the sweep along artwork whose
+// indices already climb the ramp (C006's outer rods run 0->7 top to bottom and
+// its centre rod 7->0, so they travel in opposite directions; C062's ring is a
+// random scatter of all eight, which reads as static). The sprite path handles
+// that for every other C7 sprite already -- see C7ShadeWorldSpriteColor.
 bool Corridor7IsLaserBarrierActor(AActor *actor)
 {
 	if(!actor || !IWad::CheckGameFilter("Corridor7"))
@@ -425,23 +437,6 @@ extern unsigned vbufPitch;
 extern int viewshift;
 extern fixed viewz;
 
-// Under infrared the released game does not draw the laser barrier's dark
-// artwork. It paints the silhouette as bright energy behind an animated
-// dissolve, so each rod reads as dashed segments whose layout crawls over
-// time (side-by-side DOSBox captures of the same barrier show different
-// segment patterns a moment apart). A hashed on/off mask over 8-texel
-// vertical blocks reproduces the segment size and motion; the brightest
-// palette entry displays as full red under the infrared palette.
-static bool C7LaserDissolveLit(unsigned int u, unsigned int v)
-{
-	const unsigned int phase = gamestate.TimeCount >> 3;
-	unsigned int h = u*73856093u ^ (v>>3)*19349663u ^ phase*83492791u;
-	h ^= h >> 13;
-	h *= 0x9E3779B1u;
-	h ^= h >> 16;
-	return h % 3u != 0;
-}
-
 // The released game rotates four dedicated eight-color VGA ramps continuously.
 // Weapon scanners, rangefinders, plasma energy, and selected world sprites use
 // these indices for animation without changing their shape frame.
@@ -550,8 +545,6 @@ void ScaleSprite(AActor *actor, int xcenter, const Frame *frame, unsigned height
 	byte *dest = destBase;
 	unsigned int i;
 	fixed x, y;
-	const bool laserBarrier = Corridor7IsLaserBarrierActor(actor);
-	const byte laserColor = laserBarrier ? ColorMatcher.Pick(0xFF, 0xFF, 0xFF) : 0;
 	for(i = actx+startX, x = startX*xStep;x < xRun;x += xStep, ++i, dest = ++destBase)
 	{
 		if(wallheight[i] > (signed)height)
@@ -562,15 +555,7 @@ void ScaleSprite(AActor *actor, int xcenter, const Frame *frame, unsigned height
 		for(y = startY*yStep;y < yRun;y += yStep)
 		{
 			if(src[y>>FRACBITS])
-			{
-				if(laserBarrier)
-				{
-					if(C7LaserDissolveLit(x>>FRACBITS, y>>FRACBITS))
-						*dest = laserColor;
-				}
-				else
-					*dest = C7ShadeWorldSpriteColor(src[y>>FRACBITS], colormap);
-			}
+				*dest = C7ShadeWorldSpriteColor(src[y>>FRACBITS], colormap);
 			dest += vbufPitch;
 		}
 	}
@@ -609,7 +594,6 @@ bool R_GetSpriteRenderInfo(AActor *actor, SpriteRenderInfo &info)
 	info.flip = flip;
 	info.fullbright = (actor->flags & FL_BRIGHT) || frame->fullbright;
 	info.worldAligned = (actor->flags & FL_BILLBOARD) != 0;
-	info.laserBarrier = Corridor7IsLaserBarrierActor(actor);
 	return true;
 }
 
@@ -652,8 +636,6 @@ void Scale3DSpriter(AActor *actor, int x1, int x2, FTexture *tex, bool flip, con
 	byte *dest;
 	int i;
 	unsigned int x;
-	const bool laserBarrier = Corridor7IsLaserBarrierActor(actor);
-	const byte laserColor = laserBarrier ? ColorMatcher.Pick(0xFF, 0xFF, 0xFF) : 0;
 
 	//printf("%f, %f, %f, %f\n", FIXED2FLOAT(ny1), FIXED2FLOAT(ny2), FIXED2FLOAT(nx1), FIXED2FLOAT(nx1));
 	fixed dxx=(ny2-ny1)<<8,dzz=(nx2-nx1)<<8;
@@ -690,15 +672,7 @@ void Scale3DSpriter(AActor *actor, int x1, int x2, FTexture *tex, bool flip, con
 		for(fixed y = startY*yStep;y < endY;y += yStep)
 		{
 			if(src[y>>FRACBITS])
-			{
-				if(laserBarrier)
-				{
-					if(C7LaserDissolveLit(x, y>>FRACBITS))
-						*dest = laserColor;
-				}
-				else
-					*dest = C7ShadeWorldSpriteColor(src[y>>FRACBITS], colormap);
-			}
+				*dest = C7ShadeWorldSpriteColor(src[y>>FRACBITS], colormap);
 			dest += vbufPitch;
 		}
 

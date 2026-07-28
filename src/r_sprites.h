@@ -67,7 +67,6 @@ struct SpriteRenderInfo
 	bool      flip;			// horizontal mirror for this rotation
 	bool      fullbright;	// FL_BRIGHT or frame->fullbright: ignore distance shade
 	bool      worldAligned;	// FL_BILLBOARD: the sprite plane lies along actor->angle
-	bool      laserBarrier;	// Corridor 7 infrared laser-barrier dissolve sprite
 };
 bool R_GetSpriteRenderInfo(AActor *actor, SpriteRenderInfo &info);
 

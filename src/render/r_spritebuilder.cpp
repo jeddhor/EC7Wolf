@@ -5,7 +5,7 @@
 // DrawScaleds() in the software renderer walks the actor list, tests each
 // actor's visibility, transforms it, selects a rotation frame, and scan-line
 // scales it into the framebuffer with the Corridor 7 colour-cycle, full-bright,
-// visor-visibility, and laser-barrier rules baked into the inner loop.
+// visor-visibility rules baked into the inner loop.
 //
 // The GPU renderer needs the same *selection* (which actors, which frame /
 // rotation / mirror, which material state) but expresses the *scaling* as a
@@ -55,7 +55,7 @@ namespace
 	// texture row); flipU mirrors the sprite horizontally for its rotation.
 	void PushSpriteQuad(WorldMesh &out,
 		const float p[4][3], bool flipU, const FTextureID &tex,
-		bool fullbright, bool laser)
+		bool fullbright)
 	{
 		const unsigned int first = out.vertices.Size();
 		const float texKey = (float)(tex.isValid() ? tex.GetIndex() : 0);
@@ -85,7 +85,6 @@ namespace
 		surf.kind = WSURF_Sprite;
 		surf.side = -1;
 		surf.fullbright = fullbright ? 1 : 0;
-		surf.laser = laser ? 1 : 0;
 		out.surfaces.Push(surf);
 		++out.wallFaces;
 	}
@@ -207,8 +206,7 @@ void BuildSprites(GameMap *gm, WorldMesh &out)
 		p[2][0] = cx + aR*rx; p[2][1] = cy + aR*ry; p[2][2] = zT;
 		p[3][0] = cx + aL*rx; p[3][1] = cy + aL*ry; p[3][2] = zT;
 
-		PushSpriteQuad(out, p, info.flip, tex->GetID(), info.fullbright,
-			info.laserBarrier);
+		PushSpriteQuad(out, p, info.flip, tex->GetID(), info.fullbright);
 	}
 }
 

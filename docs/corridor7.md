@@ -45,6 +45,41 @@ Palette entry 3 — (215,215,0) — was used here previously and reads as dull o
 over the bright ceiling gradient MAP01 opens on, while looking right over the
 darker walls most floors start on. `tools/test_corridor7_topmessage.sh` pins it.
 
+### The infrared laser barrier
+
+The "Infrared Invisible Barrier" traps (map objects 28 and 84) have no drawing
+code of their own, and adding some is how they get worse. Their artwork — C006,
+three floor-to-ceiling rods, and C062, a speckled energy ring — is painted
+**entirely in palette indices 232-239**, one of the four eight-entry ramps the
+released game rotates in the DAC. That single fact is the whole effect:
+
+* Those eight entries are **(0,0,0) in the base palette**, so the barrier is
+  black-on-black in normal vision. It is not hidden by a rule; it has no colour.
+* Under infrared they become a **32 / 69 / 105 / 142 / 178 / 219 / 255 / 0 red
+  sweep** (`Corridor7InfraredPal`), so the artwork lights up.
+* The ramp **rotates continuously**, and the artwork's indices already climb it:
+  C006's two outer rods run position 0→7 top to bottom and its centre rod 7→0,
+  so the bright band travels down the outer rods and up the middle one at the
+  same time. C062's ring is a random scatter of all eight positions, which
+  reshuffles into crackling static.
+
+Nothing there is barrier-specific. `C7ShadeWorldSpriteColor` already cycles and
+full-brights indices 208-239 for every Corridor 7 world sprite, and the GL
+shader's `c7Cycle` does the same, so the traps come out right by being drawn
+like anything else. The port previously replaced them with a hashed white
+dissolve; that lost the travelling sweep, lost the ring's shape, and could not
+have looked like the original because the original never draws over the sprite.
+
+The remaining special case is visibility: the statics are skipped outside
+infrared (`C7VisorCanSeeActor`). With the artwork understood that is nearly
+redundant — the rods would be black anyway — but it also suppresses the grey
+ceiling and floor mounts at the ends of each rod, and night vision's own table
+for 232-239, so it stays until a DOSBox capture settles what those look like.
+
+`tools/test_corridor7_laserbarrier.sh` pins the result in both renderers: all of
+the ramp's distinguishable levels present, no single level dominating, the
+pattern moving between frames, and not one ramp pixel in normal vision.
+
 ### The pause label
 
 Corridor 7 has its own pause picture — VGAGRAPH chunk 72, 64×32, the word
@@ -303,9 +338,7 @@ Append an output directory and `--all` to load-check every map in the archive.
   corridor pinch beside each yellow health-unit door). The executable's
   10-point invisible-barrier routine (`2f28:06d3`) keys on exactly those
   two object IDs. In the port, as in side-by-side DOSBox captures of the
-  released game, the statics are drawn only under the infrared visor —
-  rendered as bright dashed energy behind an animated dissolve whose
-  segment layout crawls over time rather than as their dark artwork — and
+  released game, the statics are drawn only under the infrared visor, and
   they never block movement; walking through the hidden beams deals the
   10-point damage through the standard rank/armor path roughly once per
   second while the player stays in the beam. The wall-73 family remains an ordinary always-visible marker-106

@@ -526,9 +526,11 @@ void APlayerPawn::Tick()
 		if(player->c7MuzzleFlashTics)
 			--player->c7MuzzleFlashTics;
 
-		// The infrared laser barrier statics (map objects 28/84) apply
-		// their contact damage from TryMove's solid-actor check
-		// (DamageC7LaserBarrier in wl_agent.cpp).
+		// The infrared laser barrier statics (map objects 28/84) zap a player
+		// standing in the beams, not only one walking into them. TryMove's
+		// contact check covers the walking half but is only reached while an
+		// input is moving the player, so this is what makes lingering hurt.
+		C7TouchLaserBarriers(this);
 
 		AInventory *energy = FindInventory(ClassDef::FindClass("C7Energy"));
 		AInventory *capacity = FindInventory(ClassDef::FindClass("C7EnergyCapacity"));

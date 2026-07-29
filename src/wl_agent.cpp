@@ -464,6 +464,38 @@ static void DamageC7LaserBarrier(APlayerPawn *pawn)
 	pawn->player->TakeDamage(10, NULL);
 }
 
+// Standing in the beams has to hurt as much as walking into them. The contact
+// test in TryMove is not enough on its own: TryMove is only reached from
+// Thrust, and Thrust only runs while an input is actually moving the player, so
+// someone who stepped into a barrier and stopped took the first zap and then
+// nothing at all. A barrier is not a wall to lean on -- which is what the 6/14
+// electric fields are, and why their contact damage belongs in TryMove where it
+// is -- it is a volume the player stands inside, so the overlap has to be
+// retested every tic regardless of movement.
+//
+// Both paths funnel through DamageC7LaserBarrier, so its cooldown is what sets
+// the rate and the two cannot double up on a tic where the player both moves
+// and is standing in the beams.
+void C7TouchLaserBarriers(APlayerPawn *pawn)
+{
+	if(!pawn || noclip || !IWad::CheckGameFilter("Corridor7"))
+		return;
+
+	for(AActor::Iterator iter = AActor::GetIterator();iter.Next();)
+	{
+		AActor *check = iter;
+		if(check == pawn || !Corridor7IsLaserBarrierActor(check))
+			continue;
+
+		const fixed r = check->radius + pawn->radius;
+		if(abs(pawn->x - check->x) <= r && abs(pawn->y - check->y) <= r)
+		{
+			DamageC7LaserBarrier(pawn);
+			return;
+		}
+	}
+}
+
 static bool TryMove (AActor *ob)
 {
 	if (noclip)

@@ -343,7 +343,12 @@ Append an output directory and `--all` to load-check every map in the archive.
   released game, the statics are drawn only under the infrared visor, and
   they never block movement; walking through the hidden beams deals the
   10-point damage through the standard rank/armor path roughly once per
-  second while the player stays in the beam. The wall-73 family remains an ordinary always-visible marker-106
+  second while the player stays in the beam. That includes standing still in
+  one: the barrier is a volume, not a wall to lean on, so contact is retested
+  every tic from the player's own Tick rather than only from TryMove — which
+  is reached from Thrust and therefore only runs while an input is moving the
+  player. Both paths share one cooldown, so the rate is the same either way.
+  `tools/test_corridor7_laserdamage.sh` pins it by reading the LIFE gauge. The wall-73 family remains an ordinary always-visible marker-106
   retracting doorway. All decorative statics (the C010 posts, C011 rods,
   and C012 strands) and the 57/61 glass panes are plainly visible in every
   visor mode, exactly as a controlled DOSBox run of the released game

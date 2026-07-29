@@ -698,6 +698,16 @@ require(r'DamageC7LaserBarrier.*?TakeDamage\(10,\s*NULL\)', WL_AGENT,
 		"beam barrier contact deals the executable's 10 points on a cooldown")
 require(r'Corridor7IsLaserBarrierActor\(check\).*?DamageC7LaserBarrier', WL_AGENT,
 		"pressing into the beam barrier zaps the player")
+# ...and standing still in one keeps zapping. TryMove is only reached from
+# Thrust, which only runs while an input is moving the player, so the movement
+# path cannot be the whole story: a player who stepped in and stopped took one
+# zap and then nothing, and one warped in took none at all. Both paths funnel
+# through DamageC7LaserBarrier so its cooldown still sets the rate.
+require(r'void C7TouchLaserBarriers.*?Corridor7IsLaserBarrierActor\(check\).*?'
+		r'check->radius \+ pawn->radius.*?DamageC7LaserBarrier\(pawn\)', WL_AGENT,
+		"the beam barrier retests overlap independently of movement")
+require(r'C7TouchLaserBarriers\(this\);', PLAYERPAWN,
+		"the player tests for beam-barrier contact every tic, not only when moving")
 require(r'"Drop Mine".*?"Visor Mode"', WL_PLAY, "configuration-safe Corridor 7 control labels")
 require(r'const fixed distance = 40 \* \(FRACUNIT / 64\);', PLAYERPAWN,
         "proximity-mine drop distance uses Corridor 7 world-unit scaling")

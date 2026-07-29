@@ -49,6 +49,11 @@ void	CreateStatusBar();
 void    CheckWeaponChange (AActor *self);
 void    ControlMovement (class APlayerPawn *self);
 
+// Corridor 7 laser barrier (map objects 28/84) contact damage for a player who
+// is standing in the beams rather than walking into them. Called once per tic
+// from the pawn's Tick; the movement-time contact test lives in TryMove.
+void    C7TouchLaserBarriers (class APlayerPawn *pawn);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class AWeapon;

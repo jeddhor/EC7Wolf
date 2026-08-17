@@ -130,6 +130,20 @@ MENU_LISTENER(C7ViewHighScores)
 	}
 	return true;
 }
+// Starting a new mission throws away the one in progress, so the released game
+// asks first -- the port went straight to the rank screen and the running game
+// was gone. Wired as the switcher's activate listener, which cancels the switch
+// when it returns false.
+MENU_LISTENER(C7ConfirmNewMission)
+{
+	if(!ingame)
+		return true;
+	if(Confirm(language["STR_C7NEWGAME"]))
+		return true;
+	mainMenu.draw();
+	return false;
+}
+
 MENU_LISTENER(C7AbortMission)
 {
 	if (ingame)
@@ -664,13 +678,13 @@ void CreateMenus()
 		mainMenu.setEscapeSound("");
 
 		if(gameinfo.PlayerClasses.Size() > 1)
-			mainMenu.addItem(new MenuSwitcherMenuItem("New Mission", playerClasses));
+			mainMenu.addItem(new MenuSwitcherMenuItem("New Mission", playerClasses, C7ConfirmNewMission));
 		else if(!Net::IsArbiter())
 			mainMenu.addItem(new MenuItem("New Mission", JoinNetGame));
 		else if(useEpisodeMenu)
-			mainMenu.addItem(new MenuSwitcherMenuItem("New Mission", episodes));
+			mainMenu.addItem(new MenuSwitcherMenuItem("New Mission", episodes, C7ConfirmNewMission));
 		else
-			mainMenu.addItem(new MenuSwitcherMenuItem("New Mission", skills));
+			mainMenu.addItem(new MenuSwitcherMenuItem("New Mission", skills, C7ConfirmNewMission));
 
 		// The released game stores and retrieves missions; it never says save
 		// or load. The items themselves are the engine's own.
@@ -1317,7 +1331,8 @@ int CP_CheckQuick (ScanCode scancode)
 int CP_EndGame (int)
 {
 	int res;
-	res = Confirm (language["ENDGAMESTR"]);
+	res = Confirm (language[MenuStyle == MENUSTYLE_Corridor7
+		? "STR_C7ENDGAME" : "ENDGAMESTR"]);
 	if (!ingame)
 		mainMenu.draw();
 	if(!res) return 0;

@@ -1154,12 +1154,17 @@ void UpdatePaletteShifts (void)
 {
 	int red, white;
 	int visorMode = 0;
+	int c7InvulnerabilityStrobe = 0;
 	if(IWad::CheckGameFilter("Corridor7") && players[ConsolePlayer].mo)
 	{
 		AInventory *mode = players[ConsolePlayer].mo->FindInventory(
 			ClassDef::FindClass("C7VisorMode"));
 		if(mode)
 			visorMode = mode->amount == 2 ? 1 : (mode->amount == 3 ? 2 : 0);
+		AInventory *sphere = players[ConsolePlayer].mo->FindInventory(
+			ClassDef::FindClass("C7Invulnerability"));
+		if(sphere)
+			c7InvulnerabilityStrobe = (int)sphere->amount;
 	}
 	if(c7ElectricFlashCount > 0)
 	{
@@ -1206,6 +1211,24 @@ void UpdatePaletteShifts (void)
 	{
 		c7ChamberFlashCount = MAX(0, c7ChamberFlashCount-static_cast<int>(tics));
 		V_SetBlend(0xFF, 0xF0, 0x00, 192);
+		palshifted = true;
+	}
+	// The Invulnerability Sphere announces itself for as long as it is running:
+	// the screen strobes yellow, which is the only thing that tells the player
+	// the timer has not expired -- there is no counter for it on the status bar.
+	// It sits below the damage and chamber flashes so a pickup still reads, and
+	// above the pickup shimmer so it is not interrupted by one.
+	else if(c7InvulnerabilityStrobe > 0)
+	{
+		// Eight tics lit, eight clear: fast enough to read as a strobe rather
+		// than a pulse, slow enough to live with for the sphere's full 30
+		// seconds. The dark half is a clean zero rather than a dim tint -- it
+		// makes the strobe unmistakable, and it gives back an untinted view of
+		// the level every other beat, which matters when the effect is on
+		// screen for half a minute. The lit alpha is well below the health
+		// chamber's 192 for the same reason.
+		const bool lit = ((gamestate.TimeCount >> 3) & 1) != 0;
+		V_SetBlend(0xFF, 0xF8, 0x00, lit ? 96 : 0);
 		palshifted = true;
 	}
 	else if (white)

@@ -696,6 +696,20 @@ for cls in ("C7Static005", "C7Static061"):
 			"Corridor 7 definition check failed: %s must not block movement (the released game lets the player walk through the beams)" % cls)
 	require(r'actor\s+%s\s*\{[^}]*?radius\s+32' % cls, STATICS,
 			"the laser barrier %s keeps its touch-zone radius" % cls)
+# The Invulnerability Sphere has to cover every damage source, not just the ones
+# that go through player_t::TakeDamage. The energized walls subtract from the
+# health counter directly -- which is what the released executable does, and the
+# reason the sphere silently failed to protect against them.
+require(r'bool C7IsInvulnerable', WL_AGENT,
+		"the invulnerability timer is available to damage paths outside TakeDamage")
+require(r'static void DamageC7ElectricField.*?if\(C7IsInvulnerable\(pawn\)\)\s*\n\s*return;',
+		WL_AGENT, "energized walls honour the Invulnerability Sphere")
+require(r'C7Invulnerability.*?amount > 0\)\s*\n\s*return;', WL_AGENT,
+		"TakeDamage honours the Invulnerability Sphere")
+# ...and it has to be visible, because nothing else tells the player it is still
+# running: there is no counter for it on the status bar.
+require(r'c7InvulnerabilityStrobe > 0.*?V_SetBlend\(0xFF, 0xF8, 0x00', WL_PLAY,
+		"the Invulnerability Sphere strobes the screen yellow while it runs")
 require(r'DamageC7LaserBarrier.*?TakeDamage\(10,\s*NULL\)', WL_AGENT,
 		"beam barrier contact deals the executable's 10 points on a cooldown")
 require(r'Corridor7IsLaserBarrierActor\(check\).*?DamageC7LaserBarrier', WL_AGENT,
@@ -710,6 +724,21 @@ require(r'void C7TouchLaserBarriers.*?Corridor7IsLaserBarrierActor\(check\).*?'
 		"the beam barrier retests overlap independently of movement")
 require(r'C7TouchLaserBarriers\(this\);', PLAYERPAWN,
 		"the player tests for beam-barrier contact every tic, not only when moving")
+# Starting a new mission discards the one in progress, so the released game asks
+# first -- with its own wording, which is a string in the executable rather than
+# Wolf3D's. The port went straight to the rank screen.
+WL_MENU_SRC = (ROOT / "src/wl_menu.cpp").read_text()
+require(r'MENU_LISTENER\(C7ConfirmNewMission\).*?if\(!ingame\)\s*\n\s*return true;.*?Confirm\(language\["STR_C7NEWGAME"\]\)',
+		WL_MENU_SRC, "starting a new mission over a running one asks for confirmation")
+require(r'MenuSwitcherMenuItem\("New Mission", skills, C7ConfirmNewMission\)',
+		WL_MENU_SRC, "the Corridor 7 New Mission entry is gated on that confirmation")
+LANGUAGE = (ROOT / "wadsrc/static/language.enu").read_text()
+for key, text in (("STR_C7NEWGAME", "Quit current game (Y/N)?"),
+                  ("STR_C7ENDGAME", "End current game (Y/N)?")):
+	if '%s = "%s";' % (key, text) not in LANGUAGE:
+		raise SystemExit("Corridor 7 definition check failed: %s must be the "
+			"released executable's own wording, %r" % (key, text))
+
 require(r'"Drop Mine".*?"Visor Mode"', WL_PLAY, "configuration-safe Corridor 7 control labels")
 require(r'const fixed distance = 40 \* \(FRACUNIT / 64\);', PLAYERPAWN,
         "proximity-mine drop distance uses Corridor 7 world-unit scaling")

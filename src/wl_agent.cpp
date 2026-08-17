@@ -401,9 +401,27 @@ void player_t::TakeDamage (int points, AActor *attacker)
 
 static int32_t c7LastElectricDamageTic[MAXPLAYERS];
 
+// The Invulnerability Sphere's timer. player_t::TakeDamage checks this too, but
+// Corridor 7's contact hazards do not all go through it -- the energized walls
+// subtract from the health counter directly, which is what the released
+// executable does -- so the ones that bypass it have to ask here.
+bool C7IsInvulnerable(APlayerPawn *pawn)
+{
+	if(!pawn || !pawn->player || !IWad::CheckGameFilter("Corridor7"))
+		return false;
+	AInventory *sphere = pawn->FindInventory(ClassDef::FindClass("C7Invulnerability"));
+	return sphere && sphere->amount > 0;
+}
+
 static void DamageC7ElectricField(APlayerPawn *pawn, AActor *source)
 {
 	if(!pawn || !pawn->player || pawn->player->health <= 0)
+		return;
+	// Immunity is immunity: no damage, and no zap sound or shock palette
+	// either, because neither of those is anything but a reaction to being
+	// hurt. Leaving them in also stamped the shock DAC over the sphere's own
+	// yellow strobe every half second while the player leaned on a wall.
+	if(C7IsInvulnerable(pawn))
 		return;
 	const int playerNumber = pawn->player->GetPlayerNum();
 	// A controlled DOSBox capture of the released game measured sample-13

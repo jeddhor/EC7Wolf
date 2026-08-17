@@ -98,6 +98,13 @@ namespace
 	FString  g_actorPath;
 	FILE    *g_actorFile      = NULL;
 
+	// --capture-give CLASS: hand the player an inventory item once, at the first
+	// tic. A powerup is the only way to reach some render states, and picking one
+	// up off the floor needs a Touch -- which a warp does not produce -- so the
+	// Invulnerability Sphere's strobe cannot be photographed any other way.
+	FString  g_giveClass;
+	bool     g_giveDone       = false;
+
 	bool     g_c7Map          = false;   // --capture-c7map: raise the C7 inset panel
 	bool     g_c7FloorPlan    = false;   // --capture-floorplan: as if the plan were picked up
 	// --capture-exitlevel: complete the level at this tic, taking the same path
@@ -437,6 +444,11 @@ void ParseArgs(int argc, char **argv)
 			g_haveExtraLight = true;
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-give") == 0 && i + 1 < argc)
+		{
+			g_giveClass = argv[++i];
+			g_armed = true;
+		}
 		else if(strcmp(arg, "--capture-c7map") == 0)
 		{
 			g_c7Map = true;
@@ -602,6 +614,19 @@ void PreTic()
 {
 	if(!g_armed || map == NULL)
 		return;
+
+	if(!g_giveClass.IsEmpty() && !g_giveDone && players[ConsolePlayer].mo)
+	{
+		g_giveDone = true;
+		const ClassDef *cls = ClassDef::FindClass(g_giveClass);
+		if(cls == NULL)
+			Printf("Capture: no such class '%s' to give.\n", g_giveClass.GetChars());
+		else
+		{
+			players[ConsolePlayer].mo->GiveInventory(cls, 0, true);
+			Printf("Capture: gave the player %s.\n", g_giveClass.GetChars());
+		}
+	}
 
 	if(g_exitLevelTic >= 0 && !g_exitLevelDone &&
 		(long)gamestate.TimeCount >= g_exitLevelTic)

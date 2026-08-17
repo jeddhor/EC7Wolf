@@ -54,6 +54,10 @@ void    ControlMovement (class APlayerPawn *self);
 // from the pawn's Tick; the movement-time contact test lives in TryMove.
 void    C7TouchLaserBarriers (class APlayerPawn *pawn);
 
+// True while the Invulnerability Sphere is running. Damage paths that do not go
+// through player_t::TakeDamage have to consult this themselves.
+bool    C7IsInvulnerable (class APlayerPawn *pawn);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class AWeapon;

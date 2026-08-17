@@ -85,6 +85,48 @@ re-opening that.
 the ramp's distinguishable levels present, no single level dominating, the
 pattern moving between frames, and not one ramp pixel in normal vision.
 
+### The Invulnerability Sphere
+
+Two things about it were wrong, and they are worth separating because they had
+different causes.
+
+**It was invisible.** The sphere runs for 2100 tics — thirty seconds — and there
+is no counter for it anywhere on the status bar, so the strobe is the only thing
+that tells the player it is still going. There was none. `UpdatePaletteShifts`
+now blends yellow over the frame for eight tics in every sixteen: strong enough
+to read as a strobe, clear on the off beat so half of every second gives back an
+untinted view of the level, and well under the health chamber's alpha because
+this is on screen for half a minute rather than a quarter second.
+
+**It did not protect against everything.** `player_t::TakeDamage` checked it,
+but not every Corridor 7 damage source goes through `TakeDamage`. The energized
+walls (IDs 6/14) subtract from the health counter directly — which is what the
+released executable does, and why the code is written that way — so they went on
+hurting a player who was supposed to be immune. `C7IsInvulnerable` is now shared
+between the two paths, and the energized walls skip their sound and shock
+palette along with the damage: none of the three is anything but a reaction to
+being hurt, and the shock DAC was also stamping over the sphere's own strobe
+twice a second.
+
+`tools/test_corridor7_invulnerability.sh` pins both, using the laser barrier as
+the damage source because it is the one a headless run can stand in. A control
+run without the sphere loses a quarter of the LIFE gauge over the same frames.
+
+### Confirming a new mission
+
+Starting a new mission throws away the one in progress, and the released game
+asks first. The port did not — the C7 main menu wires "New Mission" straight to
+the rank screen, bypassing the episode listener that carries Wolf3D's version of
+this check.
+
+Both prompts are the executable's own wording rather than Wolf3D's, and both are
+strings sitting in it: **"Quit current game (Y/N)?"** (4557:0de6) for starting a
+new mission over a running one, and **"End current game (Y/N)?"** (4557:0dac)
+for Abort Current Mission, which had been showing Wolf3D's much wordier
+`ENDGAMESTR`. Their placement in the data segment is what assigns them — the
+first sits with the rank-selection strings, the second with the save/load and
+F-key cluster.
+
 ### The pause label
 
 Corridor 7 has its own pause picture — VGAGRAPH chunk 72, 64×32, the word

@@ -239,6 +239,13 @@ transparent texel is a shader `discard` and depth testing decides the rest, so
 the image does not depend on draw order. A blended surface type would break that
 assumption, and `MeshDraw` is where it would have to be handled.
 
+> **Superseded.** Both of the items below were finished later; this section is
+> kept as the measurement that motivated them. The raycaster no longer runs
+> under GL at all — `render/r_visibility.cpp` walks portals for the cell
+> visibility set and `R_UpdateViewHeight` supplies `viewz`/`viewshift` — and the
+> view model is a GPU quad (`DrawViewModel`), which removed the weapon bucket
+> and the coverage mask with it. MAP01 went 11.5 → 7.5 ms/frame.
+
 **The retained raycaster (28–33%).** The software wall pass is still run under
 GL for its side effects — it stamps cell visibility for the automap and the
 sprite cull, collects masked-wall hits, and sets `viewz`. Its *pixels*, though,
@@ -279,6 +286,55 @@ towards rebuilding. That removed the upload (0.38 → 0.12 ms) and left the buil
 
 Both are in the plan's optimization list. Neither survives contact with the
 measurements, and doing them anyway would trade real complexity for nothing.
+
+## Retiring the raycaster (after Phase 11)
+
+The two items the optimization pass left standing were finished afterwards.
+
+**Cell visibility** — `spot->visible` for the sprite cull and `AM_Visible` for
+the automap — used to be whatever the DDA's per-column rays walked through.
+`render/r_visibility.cpp` computes it directly instead: a breadth-first flood
+from the camera cell carrying an angular window that each cell edge narrows,
+expanding only through cells sight passes. `R_UpdateViewHeight` is the rest of
+what the wall pass was being run for, and was never about walls.
+
+The two sets differ, necessarily — a DDA marks what a finite ray set touches, a
+traversal marks what the view volume reaches — so the property that is asserted
+is one-sided. An extra revealed automap cell is cosmetic; a *missing* one culls
+an actor that should have been drawn. `SightPasses` is therefore permissive
+wherever it cannot be exact, and `tools/test_gl_visibility.sh` requires
+raycaster-only to be zero on seven maps with doors forced part-open. The portal
+set reveals 20–84% more cells (mean +40%). The software renderer widens its DDA
+result to the same set, because the automap must not depend on which renderer
+drew the frame.
+
+Worth 0.06 ms. The point was never the 0.06 ms — it is that the GL renderer no
+longer calls the software renderer to find out what it can see.
+
+**The view model** was the whole 34%, and not because drawing a sprite is
+expensive. The blit is destination-independent, so the compositor could not tell
+"the weapon painted this texel" from "the background survived"; the answer came
+from drawing the weapon a *second* time over a different clear and comparing the
+view. The cache meant to spare that keys on the simulation tic, which changes
+almost every frame once the renderer runs faster than 70 fps.
+
+`DrawViewModel` draws it as a screen-space quad through the same program as
+everything else, so the Corridor 7 colour cycle and the 208–239 full-bright rule
+apply exactly as they do to a world sprite. `uSurfKind` is the wall path because
+that is what enables those two rules; `uFixedShade` overrides the distance shade
+they would otherwise pick with the row `R_GetPlayerSpriteInfo` derived from the
+level light — the same row the software blit indexes its colormap with. Sampling
+is nearest with a half-pixel UV bias, because nearest reads at the pixel centre
+and the software blit steps whole texels from the pixel's left edge.
+
+Placement is shared rather than reimplemented: `R_GetPlayerSpriteInfo` is the
+front half of `R_DrawPlayerSprite`, and `ForEachViewModelSprite` owns the bob and
+Corridor 7's walk-cycle pose for both renderers. Golden-scene view RMSE moved by
+0.000003, which is the evidence that the quad lands where the blit did.
+
+With the weapon out of the 8-bit layer there is no weapon coverage mask in
+either the live compositor or the offscreen capture, and the only thing left to
+resolve inside the view rectangle is 2D drawn over it.
 
 ## Hardware renderer options
 

@@ -44,6 +44,15 @@ without re-implementing any of the 2D code:
 
 ## Recovering the weapon silhouette (two-background coverage)
 
+> **Superseded.** The weapon is no longer in the 8-bit layer: it is drawn on the
+> GPU as part of the world image (`DrawViewModel`, see
+> [phase11-hardening.md](phase11-hardening.md#retiring-the-raycaster-after-phase-11)),
+> so there is no weapon silhouette left to recover. The two-background test below
+> is still live, but only for 2D that lands *over* the view — Corridor 7's top
+> message and its black drop shadow. The description is kept because that
+> mechanism, and the reason a key test alone cannot work, are unchanged.
+
+
 The overlay's hard part is deciding which view-region texels are "weapon" (keep,
 opaque) and which are "world" (drop, transparent). A single reserved key is
 fragile — a 2D element may legitimately paint that index. Instead the weapon is

@@ -32,6 +32,7 @@
 #include "render/opengl/r_glshader.h"
 #include "render/r_worldbuilder.h"
 #include "render/r_visibility.h"
+#include "r_sprites.h"
 #include "render/r_dynamicwalls.h"
 #include "render/r_interpolation.h"
 #include "wl_def.h"
@@ -82,7 +83,7 @@ namespace GLProf
 	enum Bucket
 	{
 		B_Visibility,	// software raycast kept for cell visibility + viewz
-		B_Weapon,		// view-model draw, twice, plus the coverage mask
+		B_Weapon,		// kept at zero: the view model is a GPU quad in B_Draw
 		B_Static,		// static world mesh construction
 		B_Dynamic,		// doors/pushwalls
 		B_Masked,		// masked walls
@@ -167,6 +168,11 @@ namespace GLProf
 // (viewz from the walk bob, viewshift from pitch). Defined in wl_draw.cpp.
 void R_UpdateViewHeight(void);
 
+// The 8-bit render target the engine's 2D still draws into (HUD, menus, the
+// Corridor 7 top message). The view model no longer goes through it.
+extern byte     *vbuf;
+extern unsigned  vbufPitch;
+
 // Distance-shade inputs owned by the software renderer.
 extern int r_extralight;
 extern fixed viewz;
@@ -177,13 +183,6 @@ extern int viewshift;
 // view basis matches this frame's interpolated camera. Defined in wl_draw.cpp.
 void CalcViewVariables();
 
-// The engine's 2D view-model draw. It writes the player weapon into the 8-bit
-// render target pointed at by the vbuf/vbufPitch globals (index 0 = the sprite's
-// own transparent key). We repoint those globals at a scratch buffer to capture
-// the weapon silhouette without touching the live frame. Defined in wl_draw.cpp.
-extern byte     *vbuf;
-extern unsigned  vbufPitch;
-void DrawPlayerWeapon(void);
 
 namespace
 {
@@ -257,11 +256,17 @@ namespace
 		"layout(location=3) in float aShade;\n"
 		"uniform mat4 uProj;\n"
 		"uniform mat4 uView;\n"
+		"uniform int  uViewModel;\n"   // 1 = aPos.xy is already NDC (first-person weapon)
 		"out vec2 vUV; out vec3 vViewPos;\n"
 		"void main(){\n"
-		"    vec4 vp = uView * vec4(aPos,1.0);\n"
-		"    vViewPos = vp.xyz;\n"
-		"    gl_Position = uProj * vp;\n"
+		"    if(uViewModel == 1){\n"
+		"        vViewPos = vec3(0.0, 0.0, -1.0);\n"
+		"        gl_Position = vec4(aPos.xy, 0.0, 1.0);\n"
+		"    } else {\n"
+		"        vec4 vp = uView * vec4(aPos,1.0);\n"
+		"        vViewPos = vp.xyz;\n"
+		"        gl_Position = uProj * vp;\n"
+		"    }\n"
 		"    vUV = aUV;\n"
 		"}\n";
 
@@ -303,6 +308,7 @@ namespace
 		"uniform int   uSpriteFullbright;\n"// 1 = sprite ignores distance shade
 		"uniform int   uDebug;\n"           // 0 normal, 1 shade-row visualization
 		"uniform int   uFilter;\n"          // 0 nearest, 1 bilinear, 2 supersampled
+		"uniform int   uFixedShade;\n"      // >=0 pins the colormap row (view model)
 		"const float FRACUNIT = 65536.0;\n"
 		"const float MINZ = 8192.0;\n"      // 2048*4
 		"float bayer4(ivec2 p){\n"
@@ -444,6 +450,7 @@ namespace
 		"        float palf = (uShade - visv) / FRACUNIT;\n"
 		"        shadeRow = int(floor(palf));\n"
 		"    }\n"
+		"    if(uFixedShade >= 0) shadeRow = uFixedShade;\n"
 		"    shadeRow = clamp(shadeRow, 0, uNumColormaps - 1);\n"
 		"\n"
 		"    // --- debug visualizations read the centre texel only ---\n"
@@ -715,6 +722,7 @@ namespace
 		GLint uSlideAmount;
 		GLint uSprite;
 		GLint uSpriteFullbright;
+		GLint uViewModel;
 		float floorPlaneH;
 		float ceilPlaneH;
 	};
@@ -1035,6 +1043,7 @@ namespace
 		GLuint c7RampFloorTex;
 		TMap<int, GLuint> ownTexCache;   // used only when ownResources
 		TMap<int, GLuint> ownOpacCache;
+		GLuint vmVao, vmVbo;             // view-model quad (first-person weapon)
 		TMap<int, GLuint> *texCache;     // -> own caches, or a borrowed persistent set
 		TMap<int, GLuint> *opacCache;
 		bool ownResources;
@@ -1051,6 +1060,7 @@ namespace
 		SurfaceUniforms su;
 		GLint uDebug;
 		WorldGL() : prog(0), paletteTex(0), colormapTex(0), c7RampFloorTex(0),
+			vmVao(0), vmVbo(0),
 			texCache(NULL), opacCache(NULL), ownResources(true),
 			staticBorrowed(false), cacheMesh(NULL), cacheGL(NULL),
 			cacheValid(NULL), uDebug(-1) {}
@@ -1279,6 +1289,8 @@ namespace
 		glUniform1i(glGetUniformLocation(w.prog, "uExtraLight"), r_extralight);
 		glUniform1i(glGetUniformLocation(w.prog, "uViewW"), W);
 		glUniform1i(glGetUniformLocation(w.prog, "uDither"), 1);
+		glUniform1i(glGetUniformLocation(w.prog, "uFixedShade"), -1);
+		glUniform1i(glGetUniformLocation(w.prog, "uViewModel"), 0);
 		glUniform1f(glGetUniformLocation(w.prog, "uHorizon"), (float)H * 0.5f);
 		w.su.uIndexTex    = glGetUniformLocation(w.prog, "uIndexTex");
 		w.su.uOpacityTex  = glGetUniformLocation(w.prog, "uOpacityTex");
@@ -1291,6 +1303,7 @@ namespace
 		w.su.uSlideAmount = glGetUniformLocation(w.prog, "uSlideAmount");
 		w.su.uSprite           = glGetUniformLocation(w.prog, "uSprite");
 		w.su.uSpriteFullbright = glGetUniformLocation(w.prog, "uSpriteFullbright");
+		w.su.uViewModel        = glGetUniformLocation(w.prog, "uViewModel");
 		w.su.floorPlaneH  = floorPlaneH;
 		w.su.ceilPlaneH   = ceilPlaneH;
 		w.uDebug = glGetUniformLocation(w.prog, "uDebug");
@@ -1309,6 +1322,144 @@ namespace
 		glUniform1i(glGetUniformLocation(w.prog, "uColormapTex"), 2);
 		glUniform1i(glGetUniformLocation(w.prog, "uC7RampFloor"), 6);
 		return true;
+	}
+
+	// The first-person weapon, as a screen-space quad.
+	//
+	// This used to be the software blit (R_DrawPlayerSprite) painting into the
+	// 8-bit frame, which the compositor then had to distinguish from the
+	// background -- and because that blit is destination-independent, telling
+	// "the weapon drew here" from "the background survived" meant drawing the
+	// weapon a SECOND time over a different clear and comparing a quarter of a
+	// million texels. Two CPU draws plus a full-view compare, and the cache that
+	// was supposed to spare it keys on the simulation tic, which changes almost
+	// every frame once the renderer is faster than 70 fps. It measured 34% of
+	// the frame -- the single largest bucket, larger than the whole world pass.
+	//
+	// Drawn here, none of that exists: it is part of the world image, so there
+	// is nothing to composite and nothing to mask.
+	//
+	// It goes through the same program as everything else, so the Corridor 7
+	// colour cycle and the 208-239 full-bright rule apply exactly as they do to
+	// a world sprite. uSurfKind is the wall path because that is what enables
+	// those two rules; the distance shade they would otherwise pick is
+	// overridden by uFixedShade, which is the row R_GetPlayerSpriteInfo
+	// computed from the level light -- the same row the software blit indexes
+	// its colormap with.
+	void DrawViewModel(WorldGL &w)
+	{
+		ViewModelSprite sprites[player_t::NUM_PSPRITES];
+		const unsigned int count =
+			R_GetViewModelSprites(sprites, player_t::NUM_PSPRITES);
+		if(count == 0 || viewwidth <= 0 || viewheight <= 0)
+			return;
+
+		if(w.vmVao == 0)
+		{
+			glGenVertexArrays(1, &w.vmVao);
+			glGenBuffers(1, &w.vmVbo);
+		}
+		glBindVertexArray(w.vmVao);
+		glBindBuffer(GL_ARRAY_BUFFER, w.vmVbo);
+
+		// In front of everything, and it must not write depth: it is not part of
+		// the world's geometry, it is pasted over it.
+		glDisable(GL_DEPTH_TEST);
+		glDepthMask(GL_FALSE);
+
+		glUniform1i(w.su.uSurfKind, 2);
+		glUniform1i(w.su.uMasked, 0);
+		glUniform1i(w.su.uSprite, 1);
+		glUniform1i(w.su.uSpriteFullbright, 0);
+		glUniform1i(w.su.uHasOpacity, 0);
+		glUniform1i(w.su.uViewModel, 1);
+		// Nearest, whatever the world is using: the software blit steps whole
+		// texels, so filtering here would not match anything.
+		const GLint filterLoc = glGetUniformLocation(w.prog, "uFilter");
+		GLint savedFilter = 0;
+		glGetUniformiv(w.prog, filterLoc, &savedFilter);
+		glUniform1i(filterLoc, 0);
+
+		for(unsigned int i = 0; i < count; ++i)
+		{
+			const ViewModelSprite &s = sprites[i];
+			if(s.tex == NULL || s.xStep <= 0 || s.yStep <= 0)
+				continue;
+
+			const int key = s.tex->GetID().GetIndex();
+			GLuint *cached = w.texCache->CheckKey(key);
+			GLuint idxTex;
+			if(cached)
+				idxTex = *cached;
+			else
+			{
+				idxTex = CreateIndexTextureFor(s.tex);
+				(*w.texCache)[key] = idxTex;
+				(*w.opacCache)[key] = CreateOpacityTextureFor(s.tex);
+			}
+			if(idxTex == 0)
+				continue;
+
+			// View pixels the sprite spans, from the same mapping the blit
+			// steps: view column c samples texel ((c - x) * xStep) >> FRACBITS.
+			const double texelsPerPxX = (double)s.xStep / (double)FRACUNIT;
+			const double texelsPerPxY = (double)s.yStep / (double)FRACUNIT;
+			const double wpx = (double)s.tex->GetWidth()  / texelsPerPxX;
+			const double hpx = (double)s.tex->GetHeight() / texelsPerPxY;
+
+			const double x0 = (double)s.x, x1 = x0 + wpx;
+			const double y0 = (double)s.y, y1 = y0 + hpx;
+
+			// Half a pixel of UV bias. Nearest sampling reads at the pixel
+			// CENTRE, so without this every texel boundary lands half a pixel
+			// left of where the software blit puts it.
+			const double uw = (double)s.tex->GetWidth();
+			const double vh = (double)s.tex->GetHeight();
+			const double u0 = (-0.5 * texelsPerPxX) / uw;
+			const double u1 = u0 + wpx * texelsPerPxX / uw;
+			const double v0 = (-0.5 * texelsPerPxY) / vh;
+			const double v1 = v0 + hpx * texelsPerPxY / vh;
+
+			// View pixels -> NDC over the view rectangle (y is flipped: view row
+			// 0 is the top, NDC +1 is the top).
+			const float nx0 = (float)(x0 / viewwidth  * 2.0 - 1.0);
+			const float nx1 = (float)(x1 / viewwidth  * 2.0 - 1.0);
+			const float ny0 = (float)(1.0 - y0 / viewheight * 2.0);
+			const float ny1 = (float)(1.0 - y1 / viewheight * 2.0);
+
+			const float verts[6][7] =
+			{
+				{ nx0, ny0, 0.0f, (float)u0, (float)v0, 0.0f, 1.0f },
+				{ nx1, ny0, 0.0f, (float)u1, (float)v0, 0.0f, 1.0f },
+				{ nx1, ny1, 0.0f, (float)u1, (float)v1, 0.0f, 1.0f },
+				{ nx0, ny0, 0.0f, (float)u0, (float)v0, 0.0f, 1.0f },
+				{ nx1, ny1, 0.0f, (float)u1, (float)v1, 0.0f, 1.0f },
+				{ nx0, ny1, 0.0f, (float)u0, (float)v1, 0.0f, 1.0f }
+			};
+
+			glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STREAM_DRAW);
+			glEnableVertexAttribArray(0);
+			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7*sizeof(float), (void*)0);
+			glEnableVertexAttribArray(1);
+			glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 7*sizeof(float), (void*)(3*sizeof(float)));
+			glEnableVertexAttribArray(2);
+			glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 7*sizeof(float), (void*)(5*sizeof(float)));
+			glEnableVertexAttribArray(3);
+			glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 7*sizeof(float), (void*)(6*sizeof(float)));
+
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, idxTex);
+			glUniform1i(w.su.uIndexTex, 0);
+			glUniform1i(glGetUniformLocation(w.prog, "uFixedShade"), s.shadeRow);
+
+			glDrawArrays(GL_TRIANGLES, 0, 6);
+		}
+
+		glUniform1i(glGetUniformLocation(w.prog, "uFixedShade"), -1);
+		glUniform1i(w.su.uViewModel, 0);
+		glUniform1i(filterLoc, savedFilter);
+		glDepthMask(GL_TRUE);
+		glEnable(GL_DEPTH_TEST);
 	}
 
 	// Render the world colour pass into the bound FBO's current viewport. Static
@@ -1334,6 +1485,7 @@ namespace
 		RenderMesh(w.maskedMesh, w.maskedGL, w.su);
 		glDisable(GL_POLYGON_OFFSET_FILL);
 		RenderMesh(w.spriteMesh, w.spriteGL, w.su);
+		DrawViewModel(w);
 	}
 
 	// Shade-row debug visualization of the same scene (capture exit-gate check).
@@ -1361,6 +1513,9 @@ namespace
 		DestroyMesh(w.dynGL);
 		DestroyMesh(w.maskedGL);
 		DestroyMesh(w.spriteGL);
+		if(w.vmVbo) glDeleteBuffers(1, &w.vmVbo);
+		if(w.vmVao) glDeleteVertexArrays(1, &w.vmVao);
+		w.vmVbo = w.vmVao = 0;
 		if(!w.ownResources)
 			return;
 		if(w.texCache)
@@ -1488,45 +1643,20 @@ namespace
 				opac[y * FW + x] = 255;	// opaque 2D by default (HUD / menus)
 			}
 
-		// Weapon coverage over two backgrounds in scratch full-frame buffers.
-		TArray<unsigned char> sa((unsigned)(pitch * FH));
-		TArray<unsigned char> sb((unsigned)(pitch * FH));
-		sa.Resize((unsigned)(pitch * FH));
-		sb.Resize((unsigned)(pitch * FH));
-		for(int r = 0; r < vh; ++r)
-		{
-			memset(&sa[(vy + r) * pitch + vx], 0x00, vw);
-			memset(&sb[(vy + r) * pitch + vx], 0xFF, vw);
-		}
-
-		byte *saveVbuf = vbuf;
-		unsigned savePitch = vbufPitch;
-		const unsigned viewOfs = (unsigned)(vy * pitch + vx);
-		vbufPitch = (unsigned)pitch;
-		vbuf = &sa[0] + viewOfs; DrawPlayerWeapon();
-		vbuf = &sb[0] + viewOfs; DrawPlayerWeapon();
-		vbuf = saveVbuf;
-		vbufPitch = savePitch;
-
+		// The weapon is in the world image now (DrawViewModel), not in this
+		// layer, so the only thing left to resolve inside the view rectangle is
+		// 2D that was drawn over it.
 		unsigned int viewOpaque = 0;
 		for(int r = 0; r < vh; ++r)
 			for(int c = 0; c < vw; ++c)
 			{
 				const int fx = vx + c, fy = vy + r;
-				const unsigned char a = sa[fy * pitch + fx];
-				const unsigned char b = sb[fy * pitch + fx];
 				if(ovCover[r * vw + c])	// 2D over the view -- keep what it left
 				{
 					opac[fy * FW + fx] = 255;
 					++viewOpaque;
 				}
-				else if(a == b)	// weapon painted the same index over both -> opaque
-				{
-					idx[fy * FW + fx] = a;
-					opac[fy * FW + fx] = 255;
-					++viewOpaque;
-				}
-				else		// background survived -> transparent, world shows
+				else
 					opac[fy * FW + fx] = 0;
 			}
 		viewOpaqueOut = viewOpaque;
@@ -1898,9 +2028,8 @@ namespace
 		int    worldSamples;
 		bool   haveWorld;              // a world was rendered for this frame
 		int    vx, vy, vw, vh, fw, fh; // view rect / frame size (8-bit space)
-		TArray<unsigned char> weaponCover; // per-view-rect: 1 where the weapon drew
 		int    wcx, wcy, wcw, wch;     // weapon-cover rect (frame coords)
-		bool   haveWeaponCover;        // weaponCover is valid for this frame
+		bool   haveViewRect;           // wcx..wch describe this frame's view
 		TArray<unsigned char> overlayCover; // per-view-rect: 1 where post-world 2D drew
 		bool   haveOverlayCover;       // overlayCover is valid for this frame
 		FString  capPath;              // headless: last presented frame is kept here
@@ -1921,7 +2050,7 @@ namespace
 			msaaFbo(0), msaaColor(0), msaaDepth(0), worldSamples(0),
 			haveWorld(false),
 			vx(0), vy(0), vw(0), vh(0), fw(0), fh(0),
-			wcx(0), wcy(0), wcw(0), wch(0), haveWeaponCover(false),
+			wcx(0), wcy(0), wcw(0), wch(0), haveViewRect(false),
 			haveOverlayCover(false), lastW(0), lastH(0),
 			staticCacheValid(false) {}
 	};
@@ -2284,86 +2413,14 @@ void R_GLLiveRenderScene()
 	for(int y = 0; y < viewheight; ++y)
 		memset(vbuf + y * vbufPitch, key, viewwidth);
 
-	{
-		GLProf::Scope s(GLProf::B_Weapon);
-		DrawPlayerWeapon();
-	}
-
-	// Build a robust weapon coverage mask. The compositor keys the view region
-	// on == key (Remap[0]) to decide which texels reveal the GL world, but the
-	// weapon is a masked, destination-independent blit (r_sprites.cpp:
-	// "if(src != 0) *dest = shade(src)") whose shaded texels can legitimately
-	// equal the key -- those would be misread as transparent and punch holes in
-	// the weapon. Redraw the weapon over a scratch buffer cleared to a different
-	// sentinel: because the blit ignores the destination, a covered texel writes
-	// the same value over both clears while an uncovered texel keeps its
-	// (differing) background. Equal => the weapon drew here, so it is opaque
-	// regardless of colour.
-	//
-	// Rebuilt only when the silhouette can have moved. Coverage is the sprite's
-	// shape, so it depends on which frame is drawn and where -- not on shading
-	// or palette. Every input to that is a function of the simulation tic:
-	// BobWeapon derives its offsets from gamestate.TimeCount, and the Corridor 7
-	// walk-cycle pose advances once per TimeCount too. Frames run several times
-	// per tic, and each one was redrawing the weapon a second time and comparing
-	// a quarter of a million texels to re-derive an identical mask; that was 59%
-	// of the frame once the raycaster stopped dominating it.
-	{
-		// Same bucket as the draw above: this is the weapon's second draw plus
-		// the per-texel comparison, which is the other half of its cost.
-		GLProf::Scope s(GLProf::B_Weapon);
-		const byte alt = (byte)(key ^ 0xFF);
-		const int vw = viewwidth, vh = viewheight;
-
-		struct CoverKey
-		{
-			const void *frame;
-			const void *weapon;
-			int32_t time;
-			fixed sx, sy;
-			int vw, vh, vx, vy;
-		};
-		static CoverKey lastKey = { NULL, NULL, -1, 0, 0, 0, 0, 0, 0 };
-		CoverKey nowKey;
-		nowKey.frame = (const void *)players[ConsolePlayer].psprite[0].frame;
-		nowKey.weapon = (const void *)players[ConsolePlayer].ReadyWeapon;
-		nowKey.time = (int32_t)gamestate.TimeCount;
-		nowKey.sx = players[ConsolePlayer].psprite[0].sx;
-		nowKey.sy = players[ConsolePlayer].psprite[0].sy;
-		nowKey.vw = vw; nowKey.vh = vh;
-		nowKey.vx = viewscreenx; nowKey.vy = viewscreeny;
-
-		// Only the mask work is skipped -- never the real weapon draw above, and
-		// never anything after this block, which still has to unlock the surface
-		// and render the world.
-		const bool reusable = gLive.haveWeaponCover &&
-			memcmp(&lastKey, &nowKey, sizeof(CoverKey)) == 0;
-		if(!reusable)
-		{
-			lastKey = nowKey;
-
-			TArray<unsigned char> scratch((unsigned)(SCREENPITCH * vh));
-			scratch.Resize((unsigned)(SCREENPITCH * vh));
-			for(int y = 0; y < vh; ++y)
-				memset(&scratch[y * SCREENPITCH], alt, vw);
-
-			byte *saveVbuf = vbuf;
-			vbuf = &scratch[0];	// pitch unchanged; scratch[0] is the view origin
-			DrawPlayerWeapon();
-			vbuf = saveVbuf;
-
-			const byte *real = surf + screenofs;
-			gLive.weaponCover.Resize((unsigned)(vw * vh));
-			for(int r = 0; r < vh; ++r)
-				for(int c = 0; c < vw; ++c)
-					gLive.weaponCover[r * vw + c] =
-						(real[r * SCREENPITCH + c] == scratch[r * SCREENPITCH + c])
-							? 1 : 0;
-			gLive.wcx = viewscreenx; gLive.wcy = viewscreeny;
-			gLive.wcw = vw; gLive.wch = vh;
-			gLive.haveWeaponCover = true;
-		}
-	}
+	// The weapon is not drawn here any more -- DrawViewModel puts it on the GPU
+	// as part of the world image, which is also why there is no coverage mask
+	// left to build. What used to sit here was two CPU draws of the sprite and a
+	// full-view comparison to work out which texels it had painted. All that is
+	// still needed from it is the view rectangle the compositor keys against.
+	gLive.wcx = viewscreenx; gLive.wcy = viewscreeny;
+	gLive.wcw = viewwidth;   gLive.wch = viewheight;
+	gLive.haveViewRect = true;
 
 	// Mark the player's own cell visible for the automap (as R_RenderView does).
 	map->GetSpot(players[ConsolePlayer].mo->tilex,
@@ -2402,7 +2459,7 @@ void R_GLLiveDrawViewOverlay(void (*draw)())
 		return;
 
 	const int vx = gLive.wcx, vy = gLive.wcy, vw = gLive.wcw, vh = gLive.wch;
-	if(!gLive.haveWeaponCover || !gLive.haveWorld || vw <= 0 || vh <= 0)
+	if(!gLive.haveViewRect || !gLive.haveWorld || vw <= 0 || vh <= 0)
 	{
 		draw();	// no world behind the 2D this frame: nothing to key against
 		return;
@@ -2530,20 +2587,18 @@ void R_GLLivePresent(const unsigned char *mem, int pitch, int fw, int fh,
 			for(int c = 0; c < gLive.vw; ++c)
 			{
 				const int fx = gLive.vx + c, fy = gLive.vy + r;
-				// The weapon and the post-world 2D overlay are opaque wherever
-				// their coverage masks say they drew, even if that texel's index
-				// equals the key (a shaded weapon column, C7's black text drop
-				// shadow); only then fall back to the key test, so world shows
-				// through unpainted view texels while any other 2D over the view
-				// stays opaque.
+				// 2D drawn over the view is opaque wherever its coverage mask
+				// says it drew, even if that texel's index equals the key (C7's
+				// black text drop shadow); only then fall back to the key test,
+				// so the world shows through unpainted view texels. The weapon
+				// needs no entry here any more -- it is drawn into the world
+				// image itself, so it is never in this 8-bit layer to key.
 				const bool inCover = fx >= gLive.wcx && fx < gLive.wcx + gLive.wcw &&
 					fy >= gLive.wcy && fy < gLive.wcy + gLive.wch;
 				const unsigned ci = inCover
 					? (unsigned)((fy - gLive.wcy) * gLive.wcw + (fx - gLive.wcx)) : 0;
 				bool painted = false;
-				if(inCover && gLive.haveWeaponCover)
-					painted = gLive.weaponCover[ci] != 0;
-				if(inCover && !painted && gLive.haveOverlayCover)
+				if(inCover && gLive.haveOverlayCover)
 					painted = gLive.overlayCover[ci] != 0;
 				if(!painted && mem[fy * pitch + fx] == key)
 					opac[fy * W + fx] = 0;

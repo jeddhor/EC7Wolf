@@ -70,6 +70,27 @@ struct SpriteRenderInfo
 };
 bool R_GetSpriteRenderInfo(AActor *actor, SpriteRenderInfo &info);
 
+// A first-person weapon sprite reduced to a screen-space blit, so the GL
+// renderer can draw it as a quad instead of running the CPU one. The rectangle
+// is unclipped and in view pixels (x may be negative); texel u for view column
+// c is ((c - x) * xStep) >> FRACBITS, which is the mapping R_DrawPlayerSprite
+// steps through.
+struct ViewModelSprite
+{
+	FTexture *tex;
+	int       x, y;			// top-left of the sprite in view pixels
+	fixed     xStep, yStep;	// texels per view pixel
+	int       shadeRow;		// colormap row (0 when the frame is full-bright)
+};
+
+// Fills out[] with this frame's view-model sprites, in draw order. Returns how
+// many. Shares every input with DrawPlayerWeapon -- including Corridor 7's
+// walk-cycle pose, which advances once per tic and so is safe to ask for more
+// than once in a frame.
+unsigned int R_GetViewModelSprites(ViewModelSprite *out, unsigned int max);
+bool R_GetPlayerSpriteInfo(AActor *actor, const Frame *frame, fixed offsetX,
+	fixed offsetY, unsigned int spriteOverride, ViewModelSprite &info);
+
 void ScaleSprite(AActor *actor, int xcenter, const Frame *frame, unsigned height);
 void Scale3DSprite(AActor *actor, const Frame *frame, unsigned height);
 void R_DrawPlayerSprite(AActor *actor, const Frame *frame, fixed offsetX, fixed offsetY,

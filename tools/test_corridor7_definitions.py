@@ -576,7 +576,9 @@ for weapon, movement_frame in {
         )
 if "C750" in weapon_blocks["C7Bayonet"]:
     raise SystemExit("Corridor 7 definition check failed: Taser firing displays movement frame C750")
-require(r'0,\s*1,\s*2,\s*3,\s*4,\s*3,\s*2,\s*1,\s*0,\s*-1,\s*-2,\s*-3,\s*-4,\s*-3,\s*-2,\s*-1.*?if\(readyFrame\).*?xoffset\s*\+=\s*corridor7X\[phase\]', WL_DRAW, "released 16-step Corridor 7 stationary-frame weapon bob")
+# The sway table still gates on a ready frame; C7ApplyWalkPose returns early for
+# anything else rather than nesting the body in an if(readyFrame) block.
+require(r'0,\s*1,\s*2,\s*3,\s*4,\s*3,\s*2,\s*1,\s*0,\s*-1,\s*-2,\s*-3,\s*-4,\s*-3,\s*-2,\s*-1.*?if\(!readyFrame\)\s*\n\s*return;.*?xoffset\s*\+=\s*corridor7X\[phase\]', WL_DRAW, "released 16-step Corridor 7 stationary-frame weapon bob")
 require(r'readyBase\+\(\(phase&4\)\s*\?\s*4\s*:\s*7\).*?spriteOverride\s*=\s*R_GetSprite',
         WL_DRAW, "weapon bob alternates only the moving and stationary pages")
 if "corridor7Poses" in WL_DRAW:

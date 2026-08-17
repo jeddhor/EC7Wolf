@@ -774,13 +774,17 @@ void Scale3DSprite(AActor *actor, const Frame *frame, unsigned height)
 	}
 }
 
-void R_DrawPlayerSprite(AActor *actor, const Frame *frame, fixed offsetX, fixed offsetY,
-	unsigned int spriteOverride)
+// The placement half of R_DrawPlayerSprite: which texture, where on screen, at
+// what texel rate, under which colormap row. Split out so the GL renderer can
+// draw the same sprite as a quad without a second copy of this arithmetic
+// drifting away from the software blit's.
+bool R_GetPlayerSpriteInfo(AActor *actor, const Frame *frame, fixed offsetX,
+	fixed offsetY, unsigned int spriteOverride, ViewModelSprite &info)
 {
 	const unsigned int spriteInf = spriteOverride == SPR_NONE ?
 		frame->spriteInf : spriteOverride;
 	if(spriteInf == SPR_NONE || loadedSprites[spriteInf].numFrames == 0)
-		return;
+		return false;
 
 	const Sprite &spr = spriteFrames[loadedSprites[spriteInf].frames+frame->frame];
 	FTexture *tex;
@@ -789,16 +793,7 @@ void R_DrawPlayerSprite(AActor *actor, const Frame *frame, fixed offsetX, fixed 
 	else
 		tex = TexMan[spr.texture[(CalcRotate(actor)+4)%8]];
 	if(tex == NULL)
-		return;
-
-	const BYTE *colormap;
-	if(frame->fullbright)
-		colormap = NormalLight.Maps;
-	else
-	{
-		const int shade = LIGHT2SHADE(gLevelLight) - (gLevelMaxLightVis/LIGHTVISIBILITY_FACTOR);
-		colormap = &NormalLight.Maps[GETPALOOKUP(0, shade)<<8];
-	}
+		return false;
 
 	const fixed scale = viewheight<<(FRACBITS-1);
 
@@ -806,21 +801,38 @@ void R_DrawPlayerSprite(AActor *actor, const Frame *frame, fixed offsetX, fixed 
 	const fixed leftedge = FixedMul((160<<FRACBITS) - fixed(tex->GetScaledLeftOffsetDouble()*FRACUNIT) + offsetX, pspritexscale) + centeringOffset;
 	fixed upperedge = ((100-32)<<FRACBITS) + fixed(tex->GetScaledTopOffsetDouble()*FRACUNIT) - offsetY - AspectCorrection[r_ratio].tallscreen;
 	if(viewsize == 21 && players[ConsolePlayer].ReadyWeapon)
-	{
 		upperedge -= players[ConsolePlayer].ReadyWeapon->yadjust;
-	}
 	upperedge = scale - FixedMul(upperedge, pspriteyscale);
+
+	info.tex      = tex;
+	info.x        = leftedge>>FRACBITS;
+	info.y        = upperedge>>FRACBITS;
+	info.xStep    = FixedDiv(tex->xScale, pspritexscale);
+	info.yStep    = FixedDiv(tex->yScale, pspriteyscale);
+	info.shadeRow = frame->fullbright ? 0 :
+		GETPALOOKUP(0, LIGHT2SHADE(gLevelLight) - (gLevelMaxLightVis/LIGHTVISIBILITY_FACTOR));
+	return true;
+}
+
+void R_DrawPlayerSprite(AActor *actor, const Frame *frame, fixed offsetX, fixed offsetY,
+	unsigned int spriteOverride)
+{
+	ViewModelSprite info;
+	if(!R_GetPlayerSpriteInfo(actor, frame, offsetX, offsetY, spriteOverride, info))
+		return;
+
+	FTexture *const tex = info.tex;
+	const BYTE *const colormap = &NormalLight.Maps[info.shadeRow<<8];
 
 	// startX and startY indicate where the sprite becomes visible, we only
 	// need to calculate the start since the end will be determined when we hit
 	// the view during drawing.
-	const unsigned int startX = -MIN(leftedge>>FRACBITS, 0);
-	const unsigned int startY = -MIN(upperedge>>FRACBITS, 0);
-	const fixed xStep = FixedDiv(tex->xScale, pspritexscale);
-	const fixed yStep = FixedDiv(tex->yScale, pspriteyscale);
-
-	const int x1 = leftedge>>FRACBITS;
-	const int y1 = upperedge>>FRACBITS;
+	const int x1 = info.x;
+	const int y1 = info.y;
+	const unsigned int startX = -MIN(x1, 0);
+	const unsigned int startY = -MIN(y1, 0);
+	const fixed xStep = info.xStep;
+	const fixed yStep = info.yStep;
 	const fixed xRun = MIN<fixed>(tex->GetWidth()<<FRACBITS, xStep*(viewwidth-x1-startX));
 	const fixed yRun = MIN<fixed>(tex->GetHeight()<<FRACBITS, yStep*(viewheight-y1));
 	const BYTE *src;

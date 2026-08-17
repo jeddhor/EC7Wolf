@@ -1196,7 +1196,12 @@ void DrawScaleds (void)
 ==============
 */
 
-void DrawPlayerWeapon (void)
+// Corridor 7's ready weapons carry a walk cycle: the gun sways side to side and
+// alternates between two poses while the player moves. It advances once per
+// simulation tic and is asked for again by every renderer that needs to place
+// the sprite, so re-entry inside one tic is a no-op by construction.
+static void C7ApplyWalkPose(const Frame *frame, fixed &xoffset,
+	unsigned int &spriteOverride)
 {
 	static const int corridor7Bases[] = { 746, 786, 754, 762, 770, 778, 794, 802 };
 	static const int corridor7X[16] =
@@ -1204,6 +1209,58 @@ void DrawPlayerWeapon (void)
 	static int corridor7Phase[MAXPLAYERS] = { 0 };
 	static int corridor7LastTime[MAXPLAYERS] = { 0 };
 
+	if(!IWad::CheckGameFilter("Corridor7"))
+		return;
+
+	bool readyFrame = false;
+	int readyBase = 0;
+	for(unsigned int weapon = 0;
+		weapon < sizeof(corridor7Bases)/sizeof(corridor7Bases[0]);++weapon)
+	{
+		char readyName[5];
+		mysnprintf(readyName, sizeof(readyName), "C%03d", corridor7Bases[weapon]+7);
+		if(frame->spriteInf == R_GetSprite(readyName))
+		{
+			readyFrame = true;
+			readyBase = corridor7Bases[weapon];
+			break;
+		}
+	}
+	if(!readyFrame)
+		return;
+
+	if(corridor7LastTime[ConsolePlayer] != gamestate.TimeCount)
+	{
+		TicCmd_t &cmd = control[ConsolePlayer];
+		if(cmd.controly == 0)
+			corridor7Phase[ConsolePlayer] = 0;
+		else
+		{
+			const bool running =
+				(!alwaysrun && cmd.buttonstate[bt_run]) ||
+				(alwaysrun && !cmd.buttonstate[bt_run]);
+			corridor7Phase[ConsolePlayer] =
+				(corridor7Phase[ConsolePlayer]+(running ? 2 : 1))&15;
+		}
+		corridor7LastTime[ConsolePlayer] = gamestate.TimeCount;
+	}
+	const int phase = corridor7Phase[ConsolePlayer]&15;
+	// Each eight-page weapon family has four firing pages, one moving pose at
+	// base+4, two unused transition pages, and its stationary pose at base+7.
+	// Alternate only the two actual movement poses; indexing through base+5/6
+	// makes the gun visibly stutter.
+	xoffset += corridor7X[phase]<<FRACBITS;
+	char poseName[5];
+	mysnprintf(poseName, sizeof(poseName), "C%03d", readyBase+((phase&4) ? 4 : 7));
+	spriteOverride = R_GetSprite(poseName);
+}
+
+// Walks this frame's view-model sprites, handing each one's frame and offsets to
+// `emit`. The placement, the pose and the bob all live here so the software blit
+// and the GL quad cannot drift apart.
+template<class Emit>
+static void ForEachViewModelSprite(Emit emit)
+{
 	for(unsigned int i = 0;i < player_t::NUM_PSPRITES;++i)
 	{
 		if(!players[ConsolePlayer].psprite[i].frame)
@@ -1214,57 +1271,53 @@ void DrawPlayerWeapon (void)
 
 		const Frame *frame = players[ConsolePlayer].psprite[i].frame;
 		unsigned int spriteOverride = SPR_NONE;
-		if(IWad::CheckGameFilter("Corridor7"))
-		{
-			bool readyFrame = false;
-			int readyBase = 0;
-			for(unsigned int weapon = 0;
-				weapon < sizeof(corridor7Bases)/sizeof(corridor7Bases[0]);++weapon)
-			{
-				char readyName[5];
-				mysnprintf(readyName, sizeof(readyName), "C%03d",
-					corridor7Bases[weapon]+7);
-				if(frame->spriteInf == R_GetSprite(readyName))
-				{
-					readyFrame = true;
-					readyBase = corridor7Bases[weapon];
-					break;
-				}
-			}
-			if(readyFrame)
-			{
-				if(corridor7LastTime[ConsolePlayer] != gamestate.TimeCount)
-				{
-					TicCmd_t &cmd = control[ConsolePlayer];
-					if(cmd.controly == 0)
-						corridor7Phase[ConsolePlayer] = 0;
-					else
-					{
-						const bool running =
-							(!alwaysrun && cmd.buttonstate[bt_run]) ||
-							(alwaysrun && !cmd.buttonstate[bt_run]);
-						corridor7Phase[ConsolePlayer] =
-							(corridor7Phase[ConsolePlayer]+(running ? 2 : 1))&15;
-					}
-					corridor7LastTime[ConsolePlayer] = gamestate.TimeCount;
-				}
-				const int phase = corridor7Phase[ConsolePlayer]&15;
-				// Each eight-page weapon family has four firing pages, one moving
-				// pose at base+4, two unused transition pages, and its stationary
-				// pose at base+7. Alternate only the two actual movement poses;
-				// indexing through base+5/base+6 makes the gun visibly stutter.
-				xoffset += corridor7X[phase]<<FRACBITS;
-				char poseName[5];
-				mysnprintf(poseName, sizeof(poseName), "C%03d",
-					readyBase+((phase&4) ? 4 : 7));
-				spriteOverride = R_GetSprite(poseName);
-			}
-		}
+		C7ApplyWalkPose(frame, xoffset, spriteOverride);
 
-		R_DrawPlayerSprite(players[ConsolePlayer].ReadyWeapon, frame,
+		emit(frame,
 			players[ConsolePlayer].psprite[i].sx+xoffset,
-			players[ConsolePlayer].psprite[i].sy+yoffset, spriteOverride);
+			players[ConsolePlayer].psprite[i].sy+yoffset,
+			spriteOverride);
 	}
+}
+
+namespace
+{
+	struct EmitDraw
+	{
+		void operator()(const Frame *frame, fixed sx, fixed sy, unsigned int ovr) const
+		{
+			R_DrawPlayerSprite(players[ConsolePlayer].ReadyWeapon, frame, sx, sy, ovr);
+		}
+	};
+
+	struct EmitCollect
+	{
+		ViewModelSprite *out;
+		unsigned int max;
+		unsigned int *count;
+		void operator()(const Frame *frame, fixed sx, fixed sy, unsigned int ovr) const
+		{
+			if(*count >= max)
+				return;
+			if(R_GetPlayerSpriteInfo(players[ConsolePlayer].ReadyWeapon, frame,
+				sx, sy, ovr, out[*count]))
+				++(*count);
+		}
+	};
+}
+
+void DrawPlayerWeapon (void)
+{
+	ForEachViewModelSprite(EmitDraw());
+}
+
+unsigned int R_GetViewModelSprites(ViewModelSprite *out, unsigned int max)
+{
+	unsigned int count = 0;
+	EmitCollect c;
+	c.out = out; c.max = max; c.count = &count;
+	ForEachViewModelSprite(c);
+	return count;
 }
 
 //==========================================================================

@@ -128,6 +128,7 @@ initial_sources(
 	render/r_interpolation.cpp
 	render/r_worldbuilder.cpp
 	render/r_spritebuilder.cpp
+	render/r_visibility.cpp
 	render/r_dynamicwalls.cpp
 	render/software/r_swrenderer.cpp
 	r_sprites.cpp

@@ -14,6 +14,7 @@
 #include "wl_cloudsky.h"
 #include "wl_atmos.h"
 #include "wl_shade.h"
+#include "render/r_visibility.h"
 #include "actor.h"
 #include "id_ca.h"
 #include "gamemap.h"
@@ -1724,6 +1725,21 @@ passhoriz:
 ====================
 */
 
+// Where the eye sits this frame: the pitch shift and the walk bob. Neither has
+// anything to do with casting a ray, and the GL renderer needs both -- so this
+// is lifted out of WallRefresh rather than being reached by running a wall pass
+// whose pixels are then thrown away.
+void R_UpdateViewHeight (void)
+{
+	viewshift = FixedMul(focallengthy, finetangent[(ANGLE_180+players[ConsolePlayer].camera->pitch)>>ANGLETOFINESHIFT]);
+
+	angle_t bobangle = ((gamestate.TimeCount<<13)/(20*TICRATE/35)) & FINEMASK;
+	const fixed playerMovebob = players[ConsolePlayer].mo->GetClass()->Meta.GetMetaFixed(APMETA_MoveBob);
+	fixed curbob = gamestate.victoryflag ? 0 : FixedMul(FixedMul(players[ConsolePlayer].bob, playerMovebob)>>1, finesine[bobangle]);
+
+	viewz = curbob - players[ConsolePlayer].mo->viewheight;
+}
+
 void WallRefresh (void)
 {
 	xpartialdown = viewx&(TILEGLOBAL-1);
@@ -1734,14 +1750,8 @@ void WallRefresh (void)
 	min_wallheight = viewheight;
 	lastside = -1;                  // the first pixel is on a new wall
 	maskedWallHits.Clear();
-	viewshift = FixedMul(focallengthy, finetangent[(ANGLE_180+players[ConsolePlayer].camera->pitch)>>ANGLETOFINESHIFT]);
 
-	
-	angle_t bobangle = ((gamestate.TimeCount<<13)/(20*TICRATE/35)) & FINEMASK;
-	const fixed playerMovebob = players[ConsolePlayer].mo->GetClass()->Meta.GetMetaFixed(APMETA_MoveBob);
-	fixed curbob = gamestate.victoryflag ? 0 : FixedMul(FixedMul(players[ConsolePlayer].bob, playerMovebob)>>1, finesine[bobangle]);
-
-	viewz = curbob - players[ConsolePlayer].mo->viewheight;
+	R_UpdateViewHeight();
 
 	AsmRefresh();
 	ScalePost ();                   // no more optimization on last post
@@ -1806,6 +1816,14 @@ void R_RenderView()
 #endif
 
 	WallRefresh ();
+
+	// The DDA has stamped the cells its rays walked through. Widen that to the
+	// portal traversal's set, which is what the GL renderer uses -- cell
+	// visibility ends up in the automap, and the automap is not allowed to
+	// reveal a different map depending on which renderer drew the frame. The
+	// portal set is a superset (tools/test_gl_visibility.sh), so this only ever
+	// adds to what the raycaster already marked.
+	R_MarkVisibleCells();
 
 	DrawParallax(vbuf, vbufPitch);
 #if 0 // USE_CLOUDSKY

@@ -60,10 +60,12 @@ actor C7Static004
 }
 
 // Map object 28: the strategy guide's "Infrared Invisible Barrier" (three
-// floor-to-ceiling laser rods). Drawn only under the infrared visor with
-// the released game's animated bright dissolve; never blocks movement, but
-// walking through the beams zaps the player 10 points on a cooldown
-// (r_sprites.cpp and wl_agent.cpp). The radius sets the touch zone.
+// floor-to-ceiling laser rods). Drawn only under the infrared visor, where
+// its artwork lights up on its own: C006 is painted entirely in the 232-239
+// DAC ramp, which is black in the base palette and a red sweep under infrared
+// (see r_sprites.cpp). Never blocks movement, but standing in or walking
+// through the beams zaps the player 10 points on a cooldown (wl_agent.cpp).
+// The radius sets the touch zone.
 actor C7Static005
 {
 	radius 32

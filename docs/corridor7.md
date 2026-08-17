@@ -71,10 +71,15 @@ dissolve; that lost the travelling sweep, lost the ring's shape, and could not
 have looked like the original because the original never draws over the sprite.
 
 The remaining special case is visibility: the statics are skipped outside
-infrared (`C7VisorCanSeeActor`). With the artwork understood that is nearly
-redundant — the rods would be black anyway — but it also suppresses the grey
-ceiling and floor mounts at the ends of each rod, and night vision's own table
-for 232-239, so it stays until a DOSBox capture settles what those look like.
+infrared (`C7VisorCanSeeActor`). With the artwork understood that is very nearly
+redundant. Under night vision the whole ramp collapses to a flat (0,40,0) in
+`Corridor7NightVisionPal`, so there is no sweep there to reveal and no reason to
+draw one; in normal vision the beams are black. All the gate still suppresses is
+the small grey mount at each end of a rod (indices 21/25/29/30/32, the only
+non-ramp texels in C006). It stays because invisibility outside infrared is the
+one thing about these traps that was checked against the released game directly,
+over several rounds of play, and a couple of stray grey pixels are not worth
+re-opening that.
 
 `tools/test_corridor7_laserbarrier.sh` pins the result in both renderers: all of
 the ramp's distinguishable levels present, no single level dominating, the

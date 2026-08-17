@@ -35,6 +35,7 @@
 #include "wl_draw.h"
 #include "wl_inter.h"
 #include "wl_iwad.h"
+#include "render/r_visibility.h"
 #include "c7_cdaudio.h"
 #include "c7_upscale.h"
 #include "wl_play.h"
@@ -1435,6 +1436,18 @@ int WL_Main (int argc, char *argv[])
 			{
 				vid_glprofile = true;
 				Printf("Renderer: GL frame profiling enabled (command line).\n");
+				break;
+			}
+		}
+		// Run both cell-visibility traversals each frame and tally the
+		// difference. Costs a full extra raycast per frame, so it is a
+		// measurement mode, not something to leave on.
+		for(int i = 1; i < argc; ++i)
+		{
+			if(strcmp(argv[i], "--vis-diff") == 0)
+			{
+				r_visdiff = true;
+				Printf("Renderer: portal/raycaster visibility comparison enabled.\n");
 				break;
 			}
 		}

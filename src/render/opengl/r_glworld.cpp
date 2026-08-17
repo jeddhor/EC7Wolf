@@ -31,6 +31,7 @@
 #include "render/opengl/r_gldevice.h"
 #include "render/opengl/r_glshader.h"
 #include "render/r_worldbuilder.h"
+#include "render/r_visibility.h"
 #include "render/r_dynamicwalls.h"
 #include "render/r_interpolation.h"
 #include "wl_def.h"
@@ -162,14 +163,9 @@ namespace GLProf
 	}
 }
 
-// Software raycaster wall pass. In the live GL path it is run only for its
-// side-effects -- it stamps each ray-touched cell `visible` (which the GL sprite
-// culling and the automap read) and sets viewz/viewshift for the plane-height
-// uniforms -- while its wall pixels are discarded. Defined in wl_draw.cpp.
-void WallRefresh(void);
-// The same traversal with the per-column texture mapping skipped, since those
-// pixels are overwritten before anything reads them. Same visibility set.
-void WallRefreshVisibilityOnly(void);
+// The camera-height half of what WallRefresh used to compute as a side effect
+// (viewz from the walk bob, viewshift from pitch). Defined in wl_draw.cpp.
+void R_UpdateViewHeight(void);
 
 // Distance-shade inputs owned by the software renderer.
 extern int r_extralight;
@@ -2272,9 +2268,14 @@ void R_GLLiveRenderScene()
 	CalcViewVariables();
 	{
 		GLProf::Scope s(GLProf::B_Visibility);
-		// Visibility, masked-wall hits and viewz; the wall pixels this would
-		// otherwise draw are cleared by the memset immediately below.
-		WallRefreshVisibilityOnly();
+		// Cell visibility for the sprite cull and the automap, and the camera
+		// height the plane uniforms need. Neither comes from the software wall
+		// pass any more: R_MarkVisibleCells walks portals directly and
+		// R_UpdateViewHeight is the part of WallRefresh that was never about
+		// walls at all.
+		R_UpdateViewHeight();
+		R_MarkVisibleCells();
+		R_VisibilityDiffFrame();
 	}
 
 	// Clear the 3D view region to the compositor key so only 2D drawn over it

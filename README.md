@@ -268,6 +268,7 @@ behavior for other games was preserved wherever possible; these are the deltas.
 | [`docs/corridor7.md`](docs/corridor7.md) | The exhaustive feature list, every reconstruction and how it was established, and the honest list of deviations. |
 | [`docs/corridor7-technical-strategy-compendium.pdf`](docs/corridor7-technical-strategy-compendium.pdf) | Evidence-graded research dossier on the original game: mechanics, weapons and actors, map format and object codes, asset containers, executable offsets, and what changed from stock Wolfenstein 3D. Every claim carries an evidence grade, so a confirmed retail behaviour is never mixed up with an inference. It is the reference this port was built against. |
 | [`docs/renderer/`](docs/renderer/) | The renderer redesign, one document per phase — baseline and harness through the OpenGL cutover, hardening and optimization. |
+| [`docs/corridor7-video.md`](docs/corridor7-video.md) | The CD cinematics: what is on the disc, the FLIC format they are in, and how extraction and playback work. |
 | [`docs/ci.md`](docs/ci.md) | The gate suite and what CI can and cannot run. |
 
 ---
@@ -319,7 +320,7 @@ in the list above.
 > and cracked builds can move the embedded offsets — if the game won't load,
 > verify you have the genuine retail CD `CORR7CD.EXE`.
 
-### Two optional extras
+### Three optional extras
 
 Both live beside the data files, and the game says on startup whether it found
 them.
@@ -345,7 +346,17 @@ That writes `c7_assets_upscaled.pk3` beside the data, and *Advanced Graphics →
 Upscaled Assets* switches between the two copies without a restart. The original
 art is still required either way.
 
-Both are described in full in [`docs/corridor7.md`](docs/corridor7.md).
+**The CD cinematics.** Three animations that the DOS installer leaves on the
+disc — the Capstone logo, the opening cinematic and the ending:
+
+```sh
+tools/extract_c7_video.py Corridor7.cue /path/to/CO7/video
+```
+
+The first two play at startup before the title, the third on final victory, and
+any key skips one.
+
+All three are described in full in [`docs/corridor7.md`](docs/corridor7.md).
 
 ---
 
@@ -488,6 +499,8 @@ The `tools/` directory carries the harnesses used to keep the port honest:
 
 | Tool | Purpose |
 | --- | --- |
+| `extract_c7_video.py` | Pull the three CD cinematics off a disc image into `video/`. |
+| `make_cdaudio.py` | Rip the CD soundtrack into `cdaudio/`. |
 | `run_gates.sh` | **Runs the whole suite.** One line per gate, tails whatever failed, non-zero on any failure. This is what CI runs too. |
 | `test_corridor7_definitions.py` | Static checks that C7 mechanics stay wired correctly (e.g. the laser barrier remains non-solid, visor-gated, and 10-damage). |
 | `test_corridor7.sh` | Repeatable development smoke test. |

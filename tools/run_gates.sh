@@ -71,7 +71,7 @@ done
 # gl_selftest is here rather than below because --gltest is handled before the
 # IWAD is opened: it needs no game data, and it is the only thing that proves the
 # shaders actually compile on the runner's driver. A broken shader still links.
-data_free_gates='definitions gl_selftest'
+data_free_gates='definitions gl_selftest corridor7_flic'
 
 data_gates='
 corridor7
@@ -206,6 +206,14 @@ for g in $data_free_gates; do
 				skip_gate "$g" "python3 is missing"
 			else
 				run_gate "$g" "source contract" python3 "$here/test_corridor7_definitions.py"
+			fi ;;
+		corridor7_flic)
+			# Needs a build and nothing else: --flictest decodes before any game
+			# data is opened.
+			if [ ! -x "$build_dir/ec7wolf" ]; then
+				skip_gate "$g" "no ec7wolf in $build_dir"
+			else
+				run_gate "$g" "FLIC decoder" "$here/test_corridor7_flic.sh" "$build_dir"
 			fi ;;
 		gl_selftest)
 			if ! command -v xvfb-run >/dev/null 2>&1; then

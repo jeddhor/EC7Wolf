@@ -8,6 +8,7 @@
 
 #include <math.h>
 #include "c7_automap.h"
+#include "c7_flic.h"
 #include "wl_def.h"
 #include "wl_menu.h"
 #include "render/r_dynamicwalls.h"
@@ -896,6 +897,15 @@ restartgame:
 						bool endSequence = next.IndexOf("EndSequence:") == 0;
 
 						VL_FadeOut(0, 255, RPART(levelInfo->ExitFadeColor), GPART(levelInfo->ExitFadeColor), BPART(levelInfo->ExitFadeColor), levelInfo->ExitFadeDuration);
+
+						// The CD release ends on a cinematic: the object, the
+						// countdown, and the Medal of Honor over Washington. It
+						// plays before the victory page and the score entry,
+						// which is the reward order the page itself implies.
+						// docs/corridor7.md listed the missing ending as a known
+						// deviation for exactly as long as the file stayed on
+						// the disc nobody extracted.
+						C7Flic_Play("SEQFOUR");
 
 						if(dointermission)
 						{

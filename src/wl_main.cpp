@@ -37,6 +37,7 @@
 #include "wl_iwad.h"
 #include "render/r_visibility.h"
 #include "c7_cdaudio.h"
+#include "c7_flic.h"
 #include "c7_upscale.h"
 #include "wl_play.h"
 #include "r_capture.h"
@@ -843,6 +844,16 @@ static void DemoLoop()
 // main game cycle
 //
 
+	// The CD release opens with the Capstone logo and the story cinematic,
+	// before anything the floppy release shows. Once per run, not once per
+	// attract cycle -- they are the opening, not part of the loop -- and
+	// suppressed by --nowait exactly as the advisory page below is.
+	if (!param_nowait)
+	{
+		C7Flic_Play("SEQONE");
+		C7Flic_Play("SEQTHREE");
+	}
+
 	if (!param_nowait && (IWad::GetGame().Flags & IWad::REGISTERED))
 		NonShareware();
 
@@ -1359,6 +1370,14 @@ int WL_Main (int argc, char *argv[])
 
 		Capture::ParseArgs(argc, argv); // deterministic capture/checksum harness
 
+		// Standalone FLIC decode. Runs before any game data is opened and
+		// exits, so it needs neither a Corridor 7 installation nor a window.
+		for(int fi = 1; fi + 1 < argc; ++fi)
+		{
+			if(strcmp(argv[fi], "--flictest") == 0)
+				return C7Flic_SelfTest(argv[fi + 1]);
+		}
+
 #ifdef ECWOLF_RENDERER_OPENGL
 		// Standalone GL device + indexed-palette pipeline self-test. Runs before
 		// the game window is created and exits, so it is headless-safe.
@@ -1479,6 +1498,11 @@ int WL_Main (int argc, char *argv[])
 		// Checks the upscaled asset pack, before the texture manager consumes
 		// it in InitGame() below.
 		C7Upscale::Init();
+
+		// Reports whether the CD cinematics were extracted, on the same footing
+		// as the soundtrack above: both are content that only exists if the
+		// player has been pointed at their disc.
+		C7Flic_Init();
 
 		R_InitRenderer();
 

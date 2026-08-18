@@ -27,6 +27,11 @@ Compiles the tree and runs the gates that need no data:
 * `definitions` — the source-contract check. Not a small thing: it is the gate
   that keeps catching refactors which quietly changed a measured constant, and
   it has done so three times.
+* `corridor7_flic` — `--flictest` decodes a FLIC before any game data is
+  opened, so the CD cinematics' decoder is gated everywhere. The animation it
+  decodes is built by the test, which also computes what every frame must
+  contain, so it is two implementations agreeing on the pixels rather than a
+  decoder compared against its own last output.
 * `gl_selftest` — `--gltest` is handled before the IWAD is opened, so it runs
   with no game at all. It creates a GL 3.3 core context, compiles the shaders,
   and verifies all 256 palette indices resolve to the exact RGB. Worth having

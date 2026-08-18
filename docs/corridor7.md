@@ -47,6 +47,26 @@ run on. Without the directory the game says so on startup and uses the AdLib
 soundtrack. See the notes at the top of `src/c7_cdaudio.cpp` for how the disc
 chose tracks.
 
+### The CD cinematics
+
+The disc also carries three animations the floppy release does not, and the DOS
+installer leaves them on it — so they are in nobody's installed game directory.
+Extract them once:
+
+```sh
+tools/extract_c7_video.py Corridor7.cue /path/to/game-data/video
+```
+
+That writes `SEQONE.CO7` (the Capstone logo), `SEQTHREE.CO7` (the opening
+cinematic) and `SEQFOUR.CO7` (the ending). The first two play at startup before
+the title, the third on final victory; any key skips one. Without the directory
+the game says so on startup and behaves exactly as it did before.
+
+`SEQFOUR.CO7` is why the victory page was listed under known deviations as an
+"evidence-based reconstruction because the installation does not contain the
+external cinematic files": it never left the CD. See
+[corridor7-video.md](corridor7-video.md).
+
 ### The floor objective banner
 
 "Eliminate Aliens To Secure Floor" is drawn as a solid stencil in **(255,255,0)**,

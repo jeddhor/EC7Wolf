@@ -604,10 +604,37 @@ bool C7Flic_Play(const char *name)
 		at += chunkSize;
 	}
 
+	// Leave on a black screen, and get there BEFORE handing the palette back.
+	//
+	// The animation's last image is still in the framebuffer at this point, and
+	// it is 256 indices that mean something only under the animation's own
+	// palette. Restoring the game's palette first showed that image through the
+	// wrong colours for exactly one present -- a single psychedelic flash at the
+	// end of every cinematic. Fading out first drives the screen to black while
+	// the palette still matches its pixels, and the swap afterwards lands on
+	// black, where it cannot be seen.
+	VW_FadeOut();
+	screen->Lock(false);
+	screen->Clear(0, 0, SCREENWIDTH, SCREENHEIGHT, GPalette.BlackIndex, 0);
+	screen->Unlock();
+
 	memcpy(screen->GetPalette(), saved, sizeof(saved));
 	screen->UpdatePalette();
-	if(wasFaded)
-		VW_FadeOut();
+
+	// A caller that handed us a lit screen gets one back. The framebuffer is
+	// black and the palette is theirs again, so this fades up on nothing rather
+	// than on a stale frame.
+	if(!wasFaded)
+		VW_FadeIn();
+
+	// A skip means "move on", so the cue that was mid-sentence stops with the
+	// picture. An animation that ran to its end keeps its tail: the last line of
+	// dialogue is 10.2 s and starts 7.5 s before the last frame, so the released
+	// game lets it finish over whatever comes next, and cutting it would be a
+	// deviation rather than a fix.
+	if(skipped)
+		SD_StopDigitized();
+
 	IN_ClearKeysDown();
 
 	return true;

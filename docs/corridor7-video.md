@@ -196,6 +196,24 @@ t=0, the cinematic's last line at t=48.2, then the title and credit pages, then
 the logo again. So the cinematics belong **inside** the attract cycle, not before
 it, which is where they are now.
 
+Two more traps, both found by playing it rather than by reading it:
+
+**Restore the palette on a black screen, never on a picture.** The animation's
+last image is still in the framebuffer when playback ends, and those 256 indices
+mean something only under the animation's own palette. Handing the game's
+palette back first showed that image in the wrong colours for one present --
+a psychedelic flash at the end of every cinematic. Playback now fades to black
+while the palette still matches its pixels, and swaps on black.
+
+**A cue can outlive its animation.** The last line of dialogue is 10.2 s and
+starts 7.5 s before the final frame, so in the released game it finishes over
+whatever comes next; cutting it at the last frame would be a deviation, not a
+fix. But a *skip* means "move on", so that stops the sound with the picture.
+Separately, the attract loop's route into the control panel never silenced
+digitized audio -- the in-game route always has -- because until now nothing in
+the attract loop made a sound. A line of dialogue followed the player into the
+menu.
+
 One trap worth recording: `PG13()` and the attract loop's faders leave the screen
 blended to black, and anything presented while that is true is invisible. Moving
 the cinematics into the loop put them behind that blend — they ran correctly,

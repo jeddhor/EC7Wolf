@@ -876,6 +876,14 @@ static void DemoLoop()
 		{
 			gotoMenu = false;
 
+			// Silence anything still sounding before the menu opens. The
+			// in-game route into the control panel has always done this
+			// (wl_play.cpp); the attract loop never did, because nothing in it
+			// made a noise. The cinematics do -- a line of dialogue outlasts
+			// the animation that started it -- and it followed the player into
+			// the menu.
+			SD_StopDigitized();
+
 			if (Keyboard[sc_Tab])
 				RecordDemo ();
 			else

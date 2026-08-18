@@ -14,10 +14,20 @@ Keep these files together in one game-data directory:
 - `GFXTILES.CO7`
 - `VGADICT.CO7`, `VGAHEAD.CO7`, `VGAGRAPH.CO7`
 - `AUDIOHED.CO7`, `AUDIOT.CO7`
+- `AUDIOMUS.CO7` — optional, and the only optional one: the game starts without
+  it and falls back to the AdLib effects in `AUDIOT.CO7`, but it holds the 100
+  digitized sounds that are most of what Corridor 7 sounds like.
 
-The recognized CD executable is 250,776 bytes. ECWolf reads its gameplay
-palette at runtime; the palette and other commercial resources are not
-embedded or redistributed.
+Nothing else from a Corridor 7 installation is read — not `GFXINFOV.CO7`, not
+`SETUP.EXE`, `CORR7.BAT`, `CONFIG.DAT`, `CONFIGD.DAT` or `AUTOSAVE.DAT`. The
+required set is the one `LookForGameData` insists on (`wl_iwad.cpp`), verified
+by running the game from a directory holding those files and nothing else.
+
+The recognized CD executable is 250,776 bytes, and it is required rather than
+merely useful: the game's palette is embedded in it and is read out at runtime
+as the `C7PAL` lump, which `iwadinfo.txt` lists in `MustContain` — without the
+executable the data is not recognised as Corridor 7 at all. The palette and
+other commercial resources are not embedded or redistributed.
 
 ### The CD soundtrack
 

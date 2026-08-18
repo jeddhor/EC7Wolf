@@ -261,8 +261,14 @@ behavior for other games was preserved wherever possible; these are the deltas.
 - **The campaign music selector**, including its randomized late/bonus-floor
   behavior, exposing all 34 AdLib chunks directly. *(`wl_inter.cpp`)*
 
-For the full, exhaustively-annotated feature list and the honest list of
-reconstructions, see **[`docs/corridor7.md`](docs/corridor7.md)**.
+## Documentation
+
+| Document | What it is |
+| --- | --- |
+| [`docs/corridor7.md`](docs/corridor7.md) | The exhaustive feature list, every reconstruction and how it was established, and the honest list of deviations. |
+| [`docs/corridor7-technical-strategy-compendium.pdf`](docs/corridor7-technical-strategy-compendium.pdf) | Evidence-graded research dossier on the original game: mechanics, weapons and actors, map format and object codes, asset containers, executable offsets, and what changed from stock Wolfenstein 3D. Every claim carries an evidence grade, so a confirmed retail behaviour is never mixed up with an inference. It is the reference this port was built against. |
+| [`docs/renderer/`](docs/renderer/) | The renderer redesign, one document per phase — baseline and harness through the OpenGL cutover, hardening and optimization. |
+| [`docs/ci.md`](docs/ci.md) | The gate suite and what CI can and cannot run. |
 
 ---
 
@@ -282,15 +288,64 @@ VGAHEAD.CO7     ← VGAGRAPH offset table                                 REQUIR
 VGAGRAPH.CO7    ← screens, fonts, menu & HUD art                        REQUIRED
 AUDIOHED.CO7    ← audio offset table                                    REQUIRED
 AUDIOT.CO7      ← AdLib music & sound container                         REQUIRED
-AUDIOMUS.CO7    ← digital (PCM) sound container                         recommended
+AUDIOMUS.CO7    ← digitized (PCM) sound effects                          optional*
 ```
+
+\* The game starts and plays without `AUDIOMUS.CO7`, falling back to the AdLib
+effects in `AUDIOT.CO7` — but it holds the 100 digitized sounds that make up
+most of what Corridor 7 actually sounds like, so copy it.
+
+That is the whole list. **Everything else in a Corridor 7 installation is
+ignored** — you do not need to copy any of it:
+
+```
+GFXINFOV.CO7    ← unused by the port
+SETUP.EXE       ← the DOS sound/input configurator
+CORR7.BAT       ← the DOS launcher
+CONFIG.DAT      ← DOS settings; the port keeps its own config
+CONFIGD.DAT     ← as above
+AUTOSAVE.DAT    ← DOS save state; not a supported save format
+README.1ST      ← documentation
+README.txt      ← documentation
+*.SAV / saved games from the DOS release
+```
+
+`CORR7CD.EXE` is on the required list because the game's palette is embedded in
+it — the port reads it out at runtime as the `C7PAL` lump, and the IWAD is not
+recognised without it. It is never redistributed, and neither is anything else
+in the list above.
 
 > **The recognized CD executable is exactly 250,776 bytes.** Budget/"Play Now"
 > and cracked builds can move the embedded offsets — if the game won't load,
 > verify you have the genuine retail CD `CORR7CD.EXE`.
 
-Nothing from these files is redistributed by the port; the executable's palette
-and other resources are read at runtime only.
+### Two optional extras
+
+Both live beside the data files, and the game says on startup whether it found
+them.
+
+**The CD soundtrack.** The disc's music is redbook audio and is in none of the
+files above. Rip your own disc into a `cdaudio` subdirectory:
+
+```sh
+tools/make_cdaudio.py Corridor7.cue /path/to/CO7/cdaudio
+```
+
+The game plays tracks 3, 5, 7 and 9 — the four pieces of music. Without the
+directory it uses the AdLib soundtrack.
+
+**Upscaled art.** A neural-network upscale of the game's own graphics, built
+from your own files:
+
+```sh
+tools/make_c7_upscaled_pk3.py --dir /path/to/CO7
+```
+
+That writes `c7_assets_upscaled.pk3` beside the data, and *Advanced Graphics →
+Upscaled Assets* switches between the two copies without a restart. The original
+art is still required either way.
+
+Both are described in full in [`docs/corridor7.md`](docs/corridor7.md).
 
 ---
 
@@ -298,7 +353,8 @@ and other resources are read at runtime only.
 
 This fork uses the standard ECWolf CMake build. Dependencies are the ECWolf set:
 **SDL2, SDL2_mixer, SDL2_net, zlib, libjpeg** (bzip2 is bundled and built
-internally if not found).
+internally if not found), plus **OpenGL** for the hardware renderer and
+optionally **GTK3** for the native file dialog.
 
 ### Linux
 
@@ -306,16 +362,37 @@ internally if not found).
 ```sh
 sudo apt install build-essential cmake ninja-build \
      libsdl2-dev libsdl2-mixer-dev libsdl2-net-dev \
-     zlib1g-dev libjpeg-dev libbz2-dev
+     zlib1g-dev libjpeg-dev libbz2-dev libgtk-3-dev
 ```
 
 **Configure & build:**
 ```sh
 cd ECWolf
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-ninja -C build
+cmake --build build
+cmake --build build     # yes, twice -- see below
 ```
 This produces `build/ec7wolf` and `build/ec7wolf.pk3`.
+
+> 🛠 **Build twice for a correct version string.** `gitinfo.h` is regenerated
+> *after* `gitinfo.cpp` compiles, so a single pass embeds the previous commit's
+> revision. Only the reported version is affected, but every packaging script
+> and the CI workflow build twice for this reason.
+
+**Renderer options.** OpenGL is the default renderer and needs a GL 3.3 core
+context; if one cannot be created the game demotes itself to the software
+raycaster for that run and says so, without rewriting your config. Both are
+built by default and either can be chosen in *Options → Video*, or pinned for
+one run with `--vid-renderer software|opengl`.
+
+| CMake option | Default | Effect |
+| --- | --- | --- |
+| `ECWOLF_RENDERER_OPENGL` | `ON` | Build the hardware renderer |
+| `ECWOLF_RENDERER_SOFTWARE` | `ON` | Build the original raycaster |
+| `ECWOLF_RENDERER_VULKAN` | `OFF` | Not implemented; reserved |
+
+**To run the test suite** you also need `xvfb`, `x11-utils`, `imagemagick` and
+`python3`; see [Testing & validation tools](#testing--validation-tools).
 
 > 🛠 **Build gotcha:** the port's gameplay data (DECORATE actors, translations)
 > lives in **`ec7wolf.pk3`**. Rebuilding just the binary does **not** rebuild the

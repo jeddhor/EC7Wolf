@@ -55,6 +55,7 @@ shoot() { # $1 label  $2.. extra engine arguments
 			--capture-rngseed 1 --capture-warp 17 31 0 \
 			"$@" \
 			--capture-frame 8 --capture-file "$work/$label.png" --capture-maxtics 60 \
+			--capture-checksum "$work/$label.sums" \
 			--config "$work/cfg" --savedir "$work/sv"
 	) >"$work/$label.log" 2>&1
 	if [ ! -s "$work/$label.png" ]; then
@@ -68,16 +69,44 @@ shoot scaled2 --capture-xbrz 2
 shoot scaled4 --capture-xbrz 4
 
 # Presentation only: the same run at every factor must fold to the same world.
-base=$(sed -n 's/.*summary tics=[0-9]* frames=[0-9]* checksum=\([0-9a-f]*\).*/\1/p' "$work/plain.log")
-for label in scaled2 scaled4; do
-	got=$(sed -n 's/.*summary tics=[0-9]* frames=[0-9]* checksum=\([0-9a-f]*\).*/\1/p' "$work/$label.log")
-	if [ "$got" != "$base" ]; then
-		printf 'FAIL: checksum moved with scaling on (%s: %s, off: %s). Image scaling must be render-only.\n' \
-			"$label" "$got" "$base" >&2
-		exit 1
-	fi
-done
-printf 'checksum %s unchanged at every factor\n' "$base"
+#
+# Compared per TIC over every tic the runs have in common, rather than against
+# the end-of-run summary. The run ends at --capture-maxtics or when the capture
+# artifact completes at frame 8, whichever comes first, and which of those wins
+# depends on how fast the frame rendered -- so a slower scaling factor can stop
+# a tic earlier and move the summary with nothing actually wrong. That failed
+# once in a full suite run and passed three times in a row immediately after,
+# which is a timing race, not a defect. Comparing the shared prefix is immune to
+# where each run stopped, and checks every tic instead of one number.
+python3 - "$work" scaled2 scaled4 <<'PYEOF'
+import sys
+work, labels = sys.argv[1], sys.argv[2:]
+
+def sums(path):
+    out = {}
+    for line in open(path):
+        parts = line.split()
+        if len(parts) == 3 and parts[0] == "tic":
+            out[int(parts[1])] = parts[2]
+    return out
+
+base = sums("%s/plain.sums" % work)
+if len(base) < 5:
+    sys.exit("FAIL: the unscaled run recorded only %d tics; nothing to compare" % len(base))
+
+for label in labels:
+    other = sums("%s/%s.sums" % (work, label))
+    shared = sorted(set(base) & set(other))
+    if len(shared) < 5:
+        sys.exit("FAIL: %s shares only %d tics with the unscaled run" % (label, len(shared)))
+    for tic in shared:
+        if base[tic] != other[tic]:
+            sys.exit("FAIL: checksum moved with scaling on at tic %d (%s: %s, off: %s). "
+                     "Image scaling must be render-only." % (tic, label, other[tic], base[tic]))
+    print("  %-8s %d tics identical to the unscaled run" % (label, len(shared)))
+PYEOF
+
+printf 'simulation identical at every factor\n'
 
 python3 - "$work/plain.png" "$work/scaled2-xbrz2.png" 2 "$work/scaled4-xbrz4.png" 4 <<'PY'
 import sys

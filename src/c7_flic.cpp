@@ -17,6 +17,7 @@
 #include "c7_flic.h"
 #include "files.h"
 #include "id_in.h"
+#include "id_sd.h"
 #include "id_vh.h"
 #include "id_vl.h"
 #include "v_video.h"
@@ -55,6 +56,63 @@ namespace
 	const unsigned short PREFIX_MAGIC    = 0xF100;
 
 	FString gVideoDir;
+
+	// --- the sound script ---------------------------------------------------
+	//
+	// The animations carry no audio: FLIC has no such chunk, and none of the
+	// disc's audio tracks is the length of a cinematic. The executable plays
+	// digitized sounds from AUDIOMUS at fixed FRAME NUMBERS instead, out of a
+	// switch that compares the running frame counter -- "CMP AX, 60 / JZ / PUSH
+	// 46 / CALL far" and so on, at file offset 0x026FDB onwards.
+	//
+	// Established twice over, which is the only reason these numbers are here
+	// rather than guessed: read out of that switch, and independently captured
+	// by running the released game under an instrumented DOSBox-X that logs
+	// Sound Blaster DMA payloads, then matching each payload against AUDIOMUS.
+	// The two agree to within 0.17 s across the whole opening.
+	//
+	// The logo's audio is assembled from ordinary in-game effects -- the
+	// apparition shriek, a morph, a door, a teleport -- which is why a player
+	// recognises the first one. Only the four speech samples are unique to the
+	// cinematics, and they are the only digitized sounds in the game that
+	// nothing else ever plays.
+	struct SoundCue
+	{
+		unsigned int frame;
+		const char  *sound;
+	};
+
+	const SoundCue kSeqOne[] =
+	{
+		{   1, "c7/apparition"            },
+		{  36, "c7/monster/morph/class8"  },
+		{  55, "doors/open"               },
+		{  60, "c7/teleport"              },
+		{   0, NULL }
+	};
+
+	const SoundCue kSeqThree[] =
+	{
+		{   1, "c7/cinematic/line1" },
+		{ 120, "c7/cinematic/line2" },
+		{ 340, "c7/cinematic/line3" },
+		{ 500, "c7/cinematic/line4" },
+		{   0, NULL }
+	};
+
+	// SEQFOUR's script is dispatched by a binary search over the frame counter
+	// plus a jump table rather than the flat compare chain the other two use,
+	// and it has not been read out reliably yet. The sounds it reaches are
+	// visible in the same code region (50, 78, 62, 12, 34, 25 and 93 among
+	// them); the frames they belong to are not. Better silent than wrong.
+	const SoundCue *CuesFor(const char *name)
+	{
+		if(stricmp(name, "SEQONE") == 0)
+			return kSeqOne;
+		if(stricmp(name, "SEQTHREE") == 0)
+			return kSeqThree;
+		return NULL;
+	}
 
 	inline unsigned short GetU16(const BYTE *p) { return (unsigned short)(p[0] | (p[1] << 8)); }
 	inline unsigned int   GetU32(const BYTE *p)
@@ -454,7 +512,25 @@ bool C7Flic_Play(const char *name)
 
 	FFlicFrameTexture frame;
 
+	// PG13() and the attract loop's faders leave the screen blended to black,
+	// and everything presented while that is true is invisible -- which is
+	// exactly what happened when these moved into the attract cycle: the
+	// animations ran, correctly, onto a black screen. The screen is already
+	// black here, so fading in costs nothing to look at and leaves the blend
+	// cleared; the matching fade-out at the end hands the caller back the state
+	// it had, because the next thing the loop does is fade the title page in.
+	const bool wasFaded = screenfaded;
+	if(wasFaded)
+	{
+		screen->Lock(false);
+		screen->Clear(0, 0, SCREENWIDTH, SCREENHEIGHT, GPalette.BlackIndex, 0);
+		screen->Unlock();
+		VW_FadeIn();
+	}
+
 	IN_ClearKeysDown();
+
+	const SoundCue *cues = CuesFor(name);
 
 	const BYTE *const base = &flic.data[0];
 	const unsigned int total = flic.data.Size();
@@ -495,6 +571,14 @@ bool C7Flic_Play(const char *name)
 
 			++frameIndex;
 
+			// Frame numbers in the script are 1-based, counting the frames the
+			// animation actually shows.
+			while(cues != NULL && cues->sound != NULL && cues->frame <= frameIndex)
+			{
+				SD_PlaySound(cues->sound);
+				++cues;
+			}
+
 			const unsigned int due = startTime + frameIndex * flic.speedMs;
 			for(;;)
 			{
@@ -522,6 +606,8 @@ bool C7Flic_Play(const char *name)
 
 	memcpy(screen->GetPalette(), saved, sizeof(saved));
 	screen->UpdatePalette();
+	if(wasFaded)
+		VW_FadeOut();
 	IN_ClearKeysDown();
 
 	return true;

@@ -25,6 +25,9 @@ opening cinematic, ending cinematic"*.
 size field matches the file length exactly in all three cases, which is the
 cheapest possible integrity check and is what the extractor uses.
 
+They carry no audio; see [The audio](#the-audio) below for where the sound
+actually comes from.
+
 That format is a gift. It is 8-bit indexed at exactly the resolution every other
 full-screen page in this game already uses, so the frames can be played through
 the same path as the title and credit screens rather than needing a video
@@ -84,9 +87,11 @@ A FLIC decoder and a player, self-contained.
 
 ### 3. Where they play
 
-* **`SEQONE` then `SEQTHREE` at startup**, before the advisory page and the
-  attract loop, and suppressed by `--nowait` exactly as `PG13()` is. Once per
-  run, not once per attract cycle: they are the opening, not part of the loop.
+* **`SEQONE` then `SEQTHREE` in the attract loop**, suppressed by `--nowait`
+  exactly as `PG13()` is. They were placed *before* the loop first, on the
+  assumption that an opening is an opening — the DMA trace then showed the DOS
+  game beginning the whole sequence again at t=87.5, so they belong inside the
+  cycle. Measurement beat the assumption; see [The audio](#the-audio).
 * **`SEQFOUR` on final victory**, on the `EndTitle` path in `GameLoop()`, before
   the victory page and the high-score entry.
 
@@ -110,3 +115,90 @@ the CD soundtrack — and no code path requires it.
   with and without a `video/` directory present.
 * Playback is entirely outside the tic loop, so the determinism checksum must
   not move.
+
+## The audio
+
+The animations have **no audio of their own**. FLIC has no such chunk, and the
+three files contain only `COLOR256`, `BRUN`, `SS2`, `COPY` and a `PSTAMP`
+thumbnail; their prefix chunks hold nothing but the authoring paths
+(`H:\LAB\JOE\C7-INTRO.FLC`, `H:\LAB\CARLOS\FLICS\END.FLC`). No disc track is
+the length of a cinematic either — the audio tracks are 6, 8, 183, 348, 381 and
+636 seconds, against cinematics of 6.4, 43 and 78.
+
+The executable plays **digitized sounds from `AUDIOMUS.CO7` at fixed frame
+numbers**, out of a compare chain at file offset `0x026FDB`:
+
+```
+3D 3C 00     CMP  AX, 60          ; the running frame counter
+74 2A        JZ   +0x2A
+6A 2E        PUSH 46              ; sound index
+9A 08 16 ..  CALL far 1AE4:1608   ; play it
+```
+
+Established two independent ways, which is the only reason the numbers below are
+here rather than guessed:
+
+1. **Read out of that chain**, following each `JZ` to the `PUSH` it selects.
+2. **Measured**, by running the released game under the instrumented DOSBox-X
+   build that logs Sound Blaster DMA payloads, and matching every payload
+   against `AUDIOMUS` with `tools/python/match_corridor7_dma.py` — the same
+   workflow that settled the menu sounds.
+
+The two agree to within 0.17 s across the whole opening. (The DMA timestamps are
+CPU cycles; at the trace's `cycles=20000` that is 20,000,000 per second, and the
+calibration came out at 19,997,349.)
+
+### SEQONE — the Capstone logo
+
+| Frame | Sound | Which |
+| --- | --- | --- |
+| 1 | 46 | `c7/apparition` |
+| 36 | 27 | `c7/monster/morph/class8` |
+| 55 | 10 | `doors/open` |
+| 60 | 1 | `c7/teleport` |
+
+Every one of those is an **ordinary in-game effect**. The logo is scored out of
+the apparition shriek, a monster morph, a door and a teleport — which is why a
+player recognises the first one as "the sound the floating skull makes". That
+observation is what started this investigation, and it turned out to be exactly
+right.
+
+### SEQTHREE — the opening cinematic
+
+| Frame | Sound | Which |
+| --- | --- | --- |
+| 1 | 87 | `c7/cinematic/line1` |
+| 120 | 88 | `c7/cinematic/line2` |
+| 340 | 89 | `c7/cinematic/line3` |
+| 500 | 90 | `c7/cinematic/line4` |
+
+Sounds 87–90 are the astronauts' dialogue: 7.5 s, 12.5 s, 8.2 s and 10.2 s,
+against everything else in the bank being under 3.2 s. They are also the **only
+digitized sounds in the game that nothing else ever plays** — they exist for this
+cinematic and nothing but this cinematic, which is why nothing referenced them
+until now. They are digitized-only in `SNDINFO`: there is no AdLib or
+PC-speaker rendition of speech to fall back to.
+
+### SEQFOUR — not yet
+
+The ending's script is dispatched by a binary search over the frame counter plus
+a `JMP CS:[BX+...]` jump table, rather than the flat compare chain the other two
+use, and it has not been read out reliably. The sounds it reaches are visible in
+the same code region — 50, 78 (ten times), 62, 12, 34, 25 and 93 among them —
+but the frames they belong to are not, and the ending cannot be reached under
+DOSBox without playing the game to the end. It plays silent until that is
+settled. Better silent than wrong.
+
+## They are part of the attract loop
+
+The DMA trace shows the whole sequence beginning again 87.5 seconds in — logo at
+t=0, the cinematic's last line at t=48.2, then the title and credit pages, then
+the logo again. So the cinematics belong **inside** the attract cycle, not before
+it, which is where they are now.
+
+One trap worth recording: `PG13()` and the attract loop's faders leave the screen
+blended to black, and anything presented while that is true is invisible. Moving
+the cinematics into the loop put them behind that blend — they ran correctly,
+onto a black screen. `C7Flic_Play` now clears the fade before playing and
+restores it afterwards, because the next thing the loop does is fade the title
+page in.

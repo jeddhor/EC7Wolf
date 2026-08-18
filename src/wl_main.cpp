@@ -844,16 +844,6 @@ static void DemoLoop()
 // main game cycle
 //
 
-	// The CD release opens with the Capstone logo and the story cinematic,
-	// before anything the floppy release shows. Once per run, not once per
-	// attract cycle -- they are the opening, not part of the loop -- and
-	// suppressed by --nowait exactly as the advisory page below is.
-	if (!param_nowait)
-	{
-		C7Flic_Play("SEQONE");
-		C7Flic_Play("SEQTHREE");
-	}
-
 	if (!param_nowait && (IWad::GetGame().Flags & IWad::REGISTERED))
 		NonShareware();
 
@@ -866,6 +856,18 @@ static void DemoLoop()
 	bool gotoMenu = false;
 	while (1)
 	{
+		// The CD release opens with the Capstone logo and the story cinematic,
+		// and they are part of the attract cycle rather than a one-off opening.
+		// Timed under an instrumented DOSBox-X: the logo's first sound fires at
+		// t=0, the cinematic's last at t=48.2, and the whole sequence begins
+		// again at t=87.5 -- with the title and credit pages in between, which
+		// is where the gap goes. Suppressed by --nowait like the advisory page.
+		if (!param_nowait)
+		{
+			C7Flic_Play("SEQONE");
+			C7Flic_Play("SEQTHREE");
+		}
+
 		while(!param_nowait && ShowIntermission(demoLoop, true))
 		{
 		}

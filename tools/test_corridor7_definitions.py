@@ -739,6 +739,34 @@ for key, text in (("STR_C7NEWGAME", "Quit current game (Y/N)?"),
 		raise SystemExit("Corridor 7 definition check failed: %s must be the "
 			"released executable's own wording, %r" % (key, text))
 
+# The CD cinematics carry no audio of their own -- FLIC has no such chunk, and
+# no disc track is the length of a cinematic. The executable plays digitized
+# sounds at fixed FRAME NUMBERS out of a compare chain at file offset 0x026FDB.
+# These frames were read out of that chain AND independently measured by logging
+# Sound Blaster DMA under an instrumented DOSBox-X and matching each payload
+# against AUDIOMUS; the two agree to within 0.17 s. They are measured constants,
+# so they are pinned here like every other one.
+C7_FLIC = (ROOT / "src/c7_flic.cpp").read_text()
+for frame, sound in ((1, "c7/apparition"), (36, "c7/monster/morph/class8"),
+                     (55, "doors/open"), (60, "c7/teleport")):
+	require(r'kSeqOne\[\].*?\{\s*%d,\s*"%s"' % (frame, sound), C7_FLIC,
+			"the Capstone logo plays %s at frame %d" % (sound, frame))
+for frame, line in ((1, 1), (120, 2), (340, 3), (500, 4)):
+	require(r'kSeqThree\[\].*?\{\s*%d,\s*"c7/cinematic/line%d"' % (frame, line),
+			C7_FLIC, "the opening cinematic plays line %d at frame %d" % (line, frame))
+# ...and the four speech samples have to resolve to something. They are the only
+# digitized sounds nothing else in the game plays, so a typo here would be
+# silent: the cinematic would simply run mute.
+SNDINFO = (ROOT / "wadsrc/static/sndinfo.txt").read_text()
+for i in range(1, 5):
+	if 'c7/cinematic/line%d' % i not in SNDINFO:
+		raise SystemExit("Corridor 7 definition check failed: c7/cinematic/line%d "
+			"is played by the cinematics but is not defined in SNDINFO" % i)
+for lump in ("C7DS0087", "C7DS0088", "C7DS0089", "C7DS0090"):
+	if lump not in SNDINFO:
+		raise SystemExit("Corridor 7 definition check failed: %s is the opening "
+			"cinematic's dialogue and must stay mapped" % lump)
+
 require(r'"Drop Mine".*?"Visor Mode"', WL_PLAY, "configuration-safe Corridor 7 control labels")
 require(r'const fixed distance = 40 \* \(FRACUNIT / 64\);', PLAYERPAWN,
         "proximity-mine drop distance uses Corridor 7 world-unit scaling")

@@ -579,6 +579,16 @@ c7/world/oof2			{ C7DS0070 C7AL0070 C7PC0070 }
 $random misc/do_nothing { c7/world/oof1 c7/world/oof2 }
 c7/world/pushwall		{ C7DS0017 C7AL0017 C7PC0017 }
 c7/apparition			{ C7DS0046 C7AL0046 C7PC0046 }
+
+// The opening cinematic's dialogue. These four are the only digitized sounds in
+// AUDIOMUS the game never plays from anywhere else -- they exist for SEQTHREE
+// and nothing but SEQTHREE, which is why nothing referenced them until the CD
+// animations were added. Digitized only: there is no AdLib or PC-speaker
+// rendition of speech to fall back to.
+c7/cinematic/line1		{ C7DS0087 }
+c7/cinematic/line2		{ C7DS0088 }
+c7/cinematic/line3		{ C7DS0089 }
+c7/cinematic/line4		{ C7DS0090 }
 c7/weapon/bayonet		{ C7DS0049 C7AL0049 C7PC0049 }
 c7/weapon/shotgun		{ C7DS0091 C7AL0091 C7PC0091 }
 c7/weapon/m16			{ C7DS0022 C7AL0022 C7PC0022 }

@@ -58,6 +58,13 @@ for f in $frames; do
 		exit 1
 	fi
 	convert "$work/shot.$f.png" -depth 8 "ppm:$work/shot.$f.ppm"
+	# Record the TIC the capture actually landed on. Frames are not 1:1 with
+	# tics under decoupled pacing, and each of these is an independent process,
+	# so the same --capture-frame can reach a different tic from run to run --
+	# which made a monotonic-by-frame assertion fail on a loaded machine with
+	# nothing wrong. Damage accrues per tic, so the tic is the honest axis.
+	sed -n 's/.*at frame [0-9]* tic \([0-9]*\).*/\1/p' "$work/run.$f.log" \
+		| head -n1 >"$work/tic.$f"
 done
 
 python3 - "$work" $frames <<'PY'
@@ -96,16 +103,23 @@ def life(path):
 
 work = sys.argv[1]
 frames = [int(a) for a in sys.argv[2:]]
-lit = [(f, life("%s/shot.%d.ppm" % (work, f))) for f in frames]
+def tic_of(f):
+	try:
+		return int(open("%s/tic.%d" % (work, f)).read().strip())
+	except Exception:
+		return f
 
-print("  LIFE gauge: " + ", ".join("f%d=%d" % (f, n) for f, n in lit))
+# Ordered by the tic each shot reached, not by the frame it was asked for.
+lit = sorted(((tic_of(f), life("%s/shot.%d.ppm" % (work, f))) for f in frames))
+
+print("  LIFE gauge: " + ", ".join("tic%d=%d" % (f, n) for f, n in lit))
 
 if lit[0][1] == 0:
 	sys.exit("FAIL: the LIFE gauge was not found; the measurement window is wrong")
 
 for (fa, a), (fb, b) in zip(lit, lit[1:]):
 	if b > a:
-		sys.exit("FAIL: health went UP between frame %d and %d (%d -> %d)" % (fa, fb, a, b))
+		sys.exit("FAIL: health went UP between tic %d and %d (%d -> %d)" % (fa, fb, a, b))
 
 drop = lit[0][1] - lit[-1][1]
 if drop < lit[0][1] // 4:

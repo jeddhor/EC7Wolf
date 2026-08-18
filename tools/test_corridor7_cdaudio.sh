@@ -27,6 +27,8 @@
 
 set -eu
 
+. "$(dirname "$0")/xvfb_common.sh"
+
 if [ "$#" -ne 2 ]; then
 	printf 'usage: %s BUILD_DIR DATA_DIR\n' "$0" >&2
 	exit 2
@@ -64,9 +66,7 @@ for f in "$data_dir"/*.CO7 "$data_dir"/CORR7CD.EXE; do
 	[ -e "$f" ] && ln -s "$f" "$work/" || true
 done
 
-Xvfb "$display" -screen 0 640x400x24 >"$work/xvfb.log" 2>&1 &
-xvfb=$!
-sleep 2
+xvfb_start "$display" "$work/xvfb.log" 640x400x24 || exit 1
 
 # $1 = log name, $2 = seconds of music to synthesize into each track.
 # A duration of 0 means "no cdaudio directory at all".

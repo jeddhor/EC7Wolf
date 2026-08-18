@@ -23,6 +23,8 @@
 
 set -eu
 
+. "$(dirname "$0")/xvfb_common.sh"
+
 if [ "$#" -ne 2 ]; then
 	printf 'usage: %s BUILD_DIR DATA_DIR\n' "$0" >&2
 	exit 2
@@ -39,9 +41,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-Xvfb "$display" -screen 0 900x600x24 >"$work/xvfb.log" 2>&1 &
-xvfb=$!
-sleep 2
+xvfb_start "$display" "$work/xvfb.log" 900x600x24 || exit 1
 
 # One scene, captured at 320x200 so the source is the resolution the art was
 # actually drawn at -- which is the case the filter exists for.

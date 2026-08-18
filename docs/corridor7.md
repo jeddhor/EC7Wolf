@@ -71,15 +71,13 @@ dissolve; that lost the travelling sweep, lost the ring's shape, and could not
 have looked like the original because the original never draws over the sprite.
 
 The remaining special case is visibility: the statics are skipped outside
-infrared (`C7VisorCanSeeActor`). With the artwork understood that is very nearly
-redundant. Under night vision the whole ramp collapses to a flat (0,40,0) in
-`Corridor7NightVisionPal`, so there is no sweep there to reveal and no reason to
-draw one; in normal vision the beams are black. All the gate still suppresses is
+infrared (`C7VisorCanSeeActor`), and that is **confirmed against the DOS
+release** — the barrier is visible under infrared and nowhere else. The artwork
+explains most of it on its own: under night vision the whole ramp collapses to a
+flat (0,40,0) in `Corridor7NightVisionPal`, so there is no sweep to reveal, and
+in normal vision the beams are black. The gate covers the remainder, which is
 the small grey mount at each end of a rod (indices 21/25/29/30/32, the only
-non-ramp texels in C006). It stays because invisibility outside infrared is the
-one thing about these traps that was checked against the released game directly,
-over several rounds of play, and a couple of stray grey pixels are not worth
-re-opening that.
+non-ramp texels in C006).
 
 `tools/test_corridor7_laserbarrier.sh` pins the result in both renderers: all of
 the ramp's distinguishable levels present, no single level dominating, the
@@ -254,6 +252,13 @@ For a repeatable development smoke test:
 
 ```sh
 tools/test_corridor7.sh /path/to/ecwolf-build /path/to/CORR7CD
+```
+
+For the whole gate suite in one command — which is also what CI runs, see
+[ci.md](ci.md):
+
+```sh
+tools/run_gates.sh -b /path/to/ecwolf-build -d /path/to/CORR7CD
 ```
 
 For a representative campaign/bonus/archive-map validation:

@@ -121,7 +121,8 @@ static bool C7VisorCanSeeActor(AActor *actor)
 	// the related C011/C012 statics plainly in normal visor mode (the two
 	// white posts flank the MAP01 start gate from the first frame). The only
 	// visor-gated statics are the laser barrier objects 28/84, which the
-	// released game draws exclusively under infrared.
+	// released game draws exclusively under infrared -- confirmed by playing
+	// the DOS release against this build, not inferred.
 	if(Corridor7IsLaserBarrierActor(actor))
 		return infrared;
 	const ClassDef *eniram = ClassDef::FindClass("C7Eniram");

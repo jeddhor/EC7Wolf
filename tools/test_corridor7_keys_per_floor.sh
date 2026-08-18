@@ -20,6 +20,8 @@
 
 set -eu
 
+. "$(dirname "$0")/xvfb_common.sh"
+
 if [ "$#" -ne 2 ]; then
 	printf 'usage: %s BUILD_DIR DATA_DIR\n' "$0" >&2
 	exit 2
@@ -58,9 +60,7 @@ for f in "$data_dir"/*; do
 done
 cp "$build_dir/ec7wolf.pk3" "$run_dir/ec7wolf.pk3"
 
-Xvfb "$display" -screen 0 900x600x24 >"$work/xvfb.log" 2>&1 &
-xvfb=$!
-sleep 2
+xvfb_start "$display" "$work/xvfb.log" 900x600x24 || exit 1
 
 # Runs the game with the equipment cheat held down early, and echoes the last
 # "cards" field the capture harness logged.

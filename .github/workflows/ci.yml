@@ -1,0 +1,124 @@
+name: CI
+
+# What CI can and cannot do here.
+#
+# EC7Wolf is a source port; it needs the commercial Corridor 7 data files to run
+# at all, and those must never be committed. A hosted runner therefore cannot
+# execute the gates that drive the game -- which is most of them. Pretending
+# otherwise would give a green tick that means nothing.
+#
+# So this splits honestly:
+#
+#   build    compiles the tree and runs every gate that needs no game data.
+#            Runs on every push and pull request, on a stock runner.
+#   gates    runs the whole suite. Needs a self-hosted runner on a machine that
+#            owns the data (see docs/ci.md); skipped entirely when no such
+#            runner is registered, rather than failing the build.
+#
+# Both call tools/run_gates.sh, which is also what a developer runs locally, so
+# there is one definition of "green" and not two that drift.
+
+on:
+  push:
+    branches: [main, renderer-redesign]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build + data-free gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # gitinfo.h embeds git describe
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build \
+            libsdl2-dev libsdl2-mixer-dev libsdl2-net-dev \
+            zlib1g-dev libbz2-dev libjpeg-dev libgtk-3-dev \
+            xvfb x11-utils imagemagick libgl1-mesa-dri mesa-utils python3
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DECWOLF_RENDERER_OPENGL=ON \
+            -DECWOLF_RENDERER_SOFTWARE=ON
+
+      - name: Build
+        # Twice on purpose: gitinfo.h is regenerated after gitinfo.cpp compiles,
+        # so a single pass embeds the previous commit's version string.
+        run: |
+          cmake --build build
+          cmake --build build
+
+      - name: Data-free gates
+        env:
+          GATE_LOG_DIR: ${{ github.workspace }}/gate-logs
+        run: tools/run_gates.sh -b build -d /nonexistent
+
+      - name: Upload gate logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-logs-build
+          path: gate-logs/
+          if-no-files-found: ignore
+
+  gates:
+    name: Full gate suite (self-hosted, needs game data)
+    # Opt-in, and it has to be opt-in by a CONDITION rather than by the runner
+    # label alone: a job whose labels match no registered runner does not get
+    # skipped, it queues forever, and the check never reports. So this is gated
+    # on a repository variable, set once when the runner is registered:
+    #
+    #   gh variable set HAVE_CORRIDOR7_RUNNER --body true
+    #
+    # Also skipped for pull requests from forks, which must never be handed a
+    # self-hosted machine.
+    if: >-
+      vars.HAVE_CORRIDOR7_RUNNER == 'true' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, corridor7-data]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DECWOLF_RENDERER_OPENGL=ON \
+            -DECWOLF_RENDERER_SOFTWARE=ON
+
+      - name: Build
+        run: |
+          cmake --build build
+          cmake --build build
+
+      - name: Full gates
+        # CORRIDOR7_DATA is set on the runner, not here, so the path to the
+        # commercial files never enters the repository. --require-data turns a
+        # runner that has lost its data into a failure instead of a green run
+        # that quietly tested nothing.
+        env:
+          GATE_LOG_DIR: ${{ github.workspace }}/gate-logs
+        run: tools/run_gates.sh -b build -d "$CORRIDOR7_DATA" -r "$CORRIDOR7_DATA" --require-data
+
+      - name: Upload gate logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-logs-full
+          path: gate-logs/
+          if-no-files-found: ignore

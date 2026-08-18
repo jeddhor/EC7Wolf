@@ -411,10 +411,21 @@ The `tools/` directory carries the harnesses used to keep the port honest:
 
 | Tool | Purpose |
 | --- | --- |
+| `run_gates.sh` | **Runs the whole suite.** One line per gate, tails whatever failed, non-zero on any failure. This is what CI runs too. |
 | `test_corridor7_definitions.py` | Static checks that C7 mechanics stay wired correctly (e.g. the laser barrier remains non-solid, visor-gated, and 10-damage). |
 | `test_corridor7.sh` | Repeatable development smoke test. |
 | `validate_corridor7_maps.sh` | Load-check campaign / bonus / archive maps. |
 | `test_corridor7_release_startup.sh` | Verify a packaged release boots title → menu → MAP01. |
+
+```sh
+tools/run_gates.sh                 # everything
+tools/run_gates.sh gl_ laser       # substring match: just those gates
+tools/run_gates.sh --list
+```
+
+Most gates drive the real game and so need the commercial data files, which
+means a hosted CI runner cannot execute them. See [docs/ci.md](docs/ci.md) for
+how that is split and how to register a runner that can.
 
 ---
 

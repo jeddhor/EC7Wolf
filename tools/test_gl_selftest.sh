@@ -7,17 +7,27 @@
 # shader into an offscreen buffer, reads it back, and verifies every one of the
 # 256 palette indices resolves to the exact RGB. Exits non-zero on failure.
 #
-# Usage: test_gl_selftest.sh EC7WOLF_BUILD_DIR CORRIDOR7_DATA_DIR [PPM_OUT]
+# The DATA_DIR argument is optional, and this is the one gate where that is true:
+# --gltest is handled before the IWAD is opened and exits without ever loading a
+# game, so it needs no Corridor 7 files. That makes it the only gate a hosted CI
+# runner can execute, and it is worth having there -- a shader that fails to
+# compile still links and still passes every source check.
+#
+# Usage: test_gl_selftest.sh EC7WOLF_BUILD_DIR [CORRIDOR7_DATA_DIR] [PPM_OUT]
 
 set -eu
 
-if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
-	printf 'usage: %s BUILD_DIR DATA_DIR [PPM_OUT]\n' "$0" >&2
+if [ "$#" -lt 1 ] || [ "$#" -gt 3 ]; then
+	printf 'usage: %s BUILD_DIR [DATA_DIR] [PPM_OUT]\n' "$0" >&2
 	exit 2
 fi
 
 build_dir=$(cd "$1" && pwd)
-data_dir=$(cd "$2" && pwd)
+if [ "$#" -ge 2 ] && [ -d "$2" ]; then
+	data_dir=$(cd "$2" && pwd)
+else
+	data_dir=$(pwd)
+fi
 ppm_out=${3:-}
 ec7wolf="$build_dir/ec7wolf"
 

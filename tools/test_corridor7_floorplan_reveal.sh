@@ -19,6 +19,8 @@
 
 set -eu
 
+. "$(dirname "$0")/xvfb_common.sh"
+
 if [ "$#" -ne 2 ]; then
 	printf 'usage: %s BUILD_DIR DATA_DIR\n' "$0" >&2
 	exit 2
@@ -40,9 +42,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-Xvfb "$display" -screen 0 900x600x24 >"$work/xvfb.log" 2>&1 &
-xvfb=$!
-sleep 2
+xvfb_start "$display" "$work/xvfb.log" 900x600x24 || exit 1
 
 shoot() { # $1 label  $2 tile x  $3 tile y  $4.. extra engine arguments
 	label=$1; tx=$2; ty=$3; shift 3

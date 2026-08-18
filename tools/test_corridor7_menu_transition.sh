@@ -25,7 +25,7 @@ fi
 build_dir=$(cd "$1" && pwd)
 data_dir=$(cd "$2" && pwd)
 
-for command in import xdotool xvfb-run python3; do
+for command in import compare xdotool xvfb-run python3; do
 	if ! command -v "$command" >/dev/null 2>&1; then
 		printf 'required command is missing: %s\n' "$command" >&2
 		exit 1
@@ -64,19 +64,40 @@ xvfb-run -a -s "-screen 0 960x600x24" sh -c '
 	# game in progress and are skipped while disabled.
 	xdotool key --clearmodifiers Down; sleep 0.8
 	import -window root "$MF_WORK/s-00.png"
+
 	# Sampled as fast as the grabs allow, with the keypress backgrounded, so the
 	# transition is caught in progress rather than only at its endpoints.
-	xdotool key --clearmodifiers Return &
-	for i in 01 02 03 04 05 06 07 08 09 10 11 12; do
-		import -window root "$MF_WORK/s-$i.png"
+	#
+	# Retried, because the keypress can simply be lost. Under the load of a full
+	# gate run this failed with the column reading identically at the start, the
+	# darkest sample AND two seconds later -- the menu had not switched at all,
+	# so there was no fade to photograph and the test reported "no fade is
+	# happening", which is the one conclusion the evidence did not support.
+	# Confirm the screen actually changed before believing anything about how it
+	# changed.
+	attempt=1
+	while [ "$attempt" -le 3 ]; do
+		xdotool key --clearmodifiers Return &
+		for i in 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18; do
+			import -window root "$MF_WORK/s-$i.png"
+		done
+		sleep 2
+		import -window root "$MF_WORK/s-99.png"
+		if ! compare -metric AE "$MF_WORK/s-00.png" "$MF_WORK/s-99.png" \
+			null: 2>&1 | grep -qx 0; then
+			break
+		fi
+		echo "menu did not respond to Return (attempt $attempt); retrying" \
+			>>"$MF_WORK/run.log"
+		attempt=$((attempt + 1))
+		xdotool key --clearmodifiers Escape; sleep 1
+		xdotool key --clearmodifiers Down; sleep 0.8
 	done
-	sleep 2
-	import -window root "$MF_WORK/s-13.png"
 	kill "$pid" 2>/dev/null || true
 	wait "$pid" 2>/dev/null || true
 '
 
-if [ ! -s "$work/s-13.png" ]; then
+if [ ! -s "$work/s-99.png" ]; then
 	printf 'FAIL: no menu captures; see %s/run.log\n' "$work" >&2
 	exit 1
 fi

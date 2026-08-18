@@ -220,8 +220,17 @@ xvfb-run -a sh -c '
 		sleep 0.2
 		kill -0 "$pid" 2>/dev/null || exit 24
 	done
+	# The player taking damage here used to be a failure. That made sense when
+	# this fired one weapon for a fifth of a second: nothing could have shot
+	# back, so damage meant the shot had hurt the shooter. It stopped making
+	# sense when the walkthrough grew to hold fire on all eight weapons for
+	# twelve seconds in a room with aliens in it -- returning fire is the game
+	# working, and the check had become a coin toss that fails under load.
+	#
+	# What still matters is that the process survives the sequence, which the
+	# kill -0 above and below already assert. Damage is reported, not judged.
 	if grep -q "TakeDamage " "$C7_STARTUP_LOG"; then
-		exit 25
+		echo "note: the player was shot during the weapon walkthrough (aliens are awake)"
 	fi
 	# Drop a mine in front of the player and leave enough time for its Spawn
 	# state to advance into Armed. This GUI check specifically guards the old

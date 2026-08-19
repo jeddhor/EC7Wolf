@@ -499,6 +499,8 @@ The `tools/` directory carries the harnesses used to keep the port honest:
 
 | Tool | Purpose |
 | --- | --- |
+| `../installer/ec7wolf-install` | Install EC7Wolf: build the engine and take the game's content off your CD. `--check` reports what is missing. |
+| `c7disc.py` | Read Corridor 7's files off a disc, an image, or a folder. |
 | `extract_c7_video.py` | Pull the three CD cinematics off a disc image into `video/`. |
 | `make_cdaudio.py` | Rip the CD soundtrack into `cdaudio/`. |
 | `run_gates.sh` | **Runs the whole suite.** One line per gate, tails whatever failed, non-zero on any failure. This is what CI runs too. |

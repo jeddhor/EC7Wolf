@@ -32,6 +32,11 @@ Compiles the tree and runs the gates that need no data:
   decodes is built by the test, which also computes what every frame must
   contain, so it is two implementations agreeing on the pixels rather than a
   decoder compared against its own last output.
+* `installer` — the installer's core is a headless library precisely so it can
+  be gated; the dependency scan, the remedy text and the default destination are
+  all checked with nothing installed. Where a Corridor 7 disc image is present
+  it goes further and performs a complete install, starts the game out of it,
+  and uninstalls it again.
 * `gl_selftest` — `--gltest` is handled before the IWAD is opened, so it runs
   with no game at all. It creates a GL 3.3 core context, compiles the shaders,
   and verifies all 256 palette indices resolve to the exact RGB. Worth having

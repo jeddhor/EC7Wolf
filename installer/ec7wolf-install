@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+"""Install EC7Wolf from the command line.
+
+The same code the graphical installer runs, with a terminal for a face. Useful
+on its own for a headless machine, and it is what the gates drive.
+
+    ec7wolf-install --source Corridor7.cue
+    ec7wolf-install --source /dev/sr0 --dest ~/games/ec7wolf --verbose
+    ec7wolf-install --check          # just say what is missing and stop
+    ec7wolf-install --uninstall ~/.local/share/ec7wolf
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parent
+sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(REPO / "tools"))
+
+from c7disc import DiscError, GameSource                    # noqa: E402
+from ec7install import build, deps, install, plan           # noqa: E402
+from ec7install.progress import (Cancelled, ConsoleReporter,  # noqa: E402
+                                 LogFile)
+
+
+def print_report(title: str, report) -> None:
+    print(f"\n{title}")
+    for requirement in report:
+        if requirement.found:
+            mark, note = "  ok  ", requirement.detail
+        elif requirement.optional:
+            mark, note = " skip ", f"optional -- {requirement.remedy}"
+        else:
+            mark, note = " MISS ", requirement.remedy
+        print(f"  [{mark}] {requirement.label}")
+        if note:
+            print(f"           {note}")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Install EC7Wolf: build the engine and take the game's "
+                    "content off your Corridor 7 CD.")
+    parser.add_argument("--source", type=Path,
+                        help="the CD drive, a .cue, a .iso, or a game folder")
+    parser.add_argument("--dest", type=Path, default=install.default_destination(),
+                        help="where to install (default: %(default)s)")
+    parser.add_argument("--build-dir", type=Path,
+                        help="where to compile, if compiling is needed")
+    parser.add_argument("--jobs", type=int, default=os.cpu_count(),
+                        help="parallel compile jobs")
+    parser.add_argument("--no-music", action="store_true",
+                        help="skip ripping the CD soundtrack")
+    parser.add_argument("--no-video", action="store_true",
+                        help="skip extracting the cinematics")
+    parser.add_argument("--no-menu-shortcut", action="store_true")
+    parser.add_argument("--no-desktop-shortcut", action="store_true")
+    parser.add_argument("--force-build", action="store_true",
+                        help="compile even if a built engine is already present")
+    parser.add_argument("--check", action="store_true",
+                        help="report what is present and missing, then stop")
+    parser.add_argument("--uninstall", type=Path, metavar="DIR",
+                        help="remove an install and its shortcuts")
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="show every line, including the compiler's")
+    parser.add_argument("--log", type=Path, help="where to write the log")
+    args = parser.parse_args()
+
+    console = ConsoleReporter(verbose=args.verbose)
+    log_path = args.log or Path(args.dest).parent / "ec7wolf-install.log"
+    reporter = LogFile(log_path, console)
+
+    try:
+        if args.uninstall:
+            install.uninstall(args.uninstall, reporter)
+            print(f"\nRemoved {args.uninstall}.")
+            return 0
+
+        engine = None if args.force_build else build.find_existing(REPO)
+
+        if args.check or not args.source:
+            print("EC7Wolf installer\n" + "=" * 17)
+            print(f"\nEngine: {engine.source if engine else 'none found -- it will be compiled'}")
+            if engine is None:
+                report = deps.scan_build()
+                print_report("To compile the engine:", report)
+                if not report.satisfied:
+                    print("\nInstall the missing items above, then run this again.")
+            print_report("To read the disc:", deps.scan_rip(not args.no_music))
+            if args.source:
+                try:
+                    with GameSource.open(args.source) as source:
+                        available = source.list()
+                        missing = [n for n in install.REQUIRED_DATA
+                                   if n not in available]
+                        print(f"\nSource: {source.describe()}")
+                        print(f"  {len(available)} files, "
+                              f"{len(source.audio_tracks())} audio tracks")
+                        print("  " + ("has every required game file"
+                                       if not missing
+                                       else "MISSING: " + ", ".join(missing)))
+                except DiscError as error:
+                    print(f"\nSource: {error}")
+            else:
+                print("\nRe-run with --source pointing at your CD or a BIN/CUE "
+                      "image to install.")
+            return 0
+
+        if engine is None:
+            report = deps.scan_build()
+            if not report.satisfied:
+                print_report("Cannot compile the engine yet:", report)
+                print("\nInstall the missing items above, then run this again.")
+                return 1
+
+        with GameSource.open(args.source) as source:
+            job = plan.InstallPlan(
+                REPO, source, args.dest,
+                with_music=not args.no_music, with_video=not args.no_video,
+                menu_shortcut=not args.no_menu_shortcut,
+                desktop_shortcut=not args.no_desktop_shortcut,
+                build_dir=args.build_dir, engine=engine, jobs=args.jobs)
+
+            problem = job.check_space()
+            if problem:
+                print(f"\nNot enough room: {problem}")
+                return 1
+
+            print(f"\nInstalling to {args.dest}")
+            print(f"  engine   {engine.source if engine else 'will be compiled'}")
+            print(f"  source   {source.describe()}")
+            print(f"  music    {'yes' if not args.no_music else 'no'}")
+            print(f"  video    {'yes' if not args.no_video else 'no'}")
+
+            destination = job.run(reporter)
+
+        print(f"\n\nDone. EC7Wolf is installed in {destination}")
+        manifest = install.read_manifest(destination) or {}
+        print(f"Start it with {manifest.get('launcher', destination)}")
+        return 0
+
+    except Cancelled:
+        print("\n\nCancelled; nothing was installed.")
+        return 130
+    except (DiscError, plan.PlanError, build.BuildError, install.InstallError) as error:
+        print(f"\n\nInstall failed: {error}")
+        print(f"The full log is at {log_path}")
+        return 1
+    finally:
+        reporter.close()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

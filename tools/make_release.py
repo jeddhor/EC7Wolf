@@ -183,21 +183,41 @@ def check_dependencies(executable: Path, folder: Path) -> None:
     archive looked fine, and the first person to run it got a stack of dialogs.
     Nothing had ever asked the binary what it needed.
     """
-    needed = imported_dlls(executable)
-    if not needed:
+    if not imported_dlls(executable):
         return
     present = {item.name.lower() for item in folder.iterdir()}
-    missing = [name for name in needed
-               if name.lower() not in SYSTEM_DLLS
-               and not name.lower().startswith("api-ms-win-")
-               and not name.lower().startswith("ext-ms-win-")
-               and name.lower() not in present]
-    if not missing:
-        print(f"dependencies:   all {len(needed)} imports resolve here or in Windows")
+
+    def unmet(binary: Path) -> list[str]:
+        return [name for name in imported_dlls(binary)
+                if name.lower() not in SYSTEM_DLLS
+                and not name.lower().startswith("api-ms-win-")
+                and not name.lower().startswith("ext-ms-win-")
+                and name.lower() not in present]
+
+    # The DLLs being shipped are checked too. A dependency of a dependency
+    # fails exactly as loudly as one of the executable's own -- libepoxy-0.dll
+    # is built by whichever compiler meson found, which need not be the one
+    # that built the engine -- and checking only the executable would let that
+    # through.
+    problems: dict[str, list[str]] = {}
+    checked = 0
+    for binary in [executable] + sorted(folder.glob("*.dll")):
+        missing = unmet(binary)
+        checked += len(imported_dlls(binary))
+        if missing:
+            problems[binary.name] = missing
+
+    if not problems:
+        print(f"dependencies:   all {checked} imports across "
+              f"{1 + len(list(folder.glob('*.dll')))} binaries resolve here "
+              "or in Windows")
         return
+
+    lines = [f"  {name} needs: " + ", ".join(sorted(set(missing)))
+             for name, missing in sorted(problems.items())]
     raise SystemExit(
-        f"\n{executable.name} needs DLLs that are not in {folder} and are not "
-        "part of Windows:\n  " + "\n  ".join(sorted(set(missing))) +
+        f"\nSomething in {folder} needs DLLs that are not there and are not "
+        "part of Windows:\n" + "\n".join(lines) +
         "\n\nIt would fail to start on any machine that does not happen to "
         "have them. Either ship them beside it or build against something "
         "else.")

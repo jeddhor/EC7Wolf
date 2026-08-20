@@ -104,7 +104,103 @@ def build_engine(into: Path, jobs: int | None,
 
     if not allow_software:
         check_opengl(into / engine.executable.name)
+    check_dependencies(into / engine.executable.name, into)
     return into
+
+
+# DLLs Windows itself provides. Everything else has to be in the folder.
+SYSTEM_DLLS = {
+    "kernel32.dll", "user32.dll", "gdi32.dll", "advapi32.dll", "shell32.dll",
+    "ole32.dll", "oleaut32.dll", "comctl32.dll", "comdlg32.dll", "winmm.dll",
+    "ws2_32.dll", "wsock32.dll", "imm32.dll", "version.dll", "setupapi.dll",
+    "shlwapi.dll", "opengl32.dll", "dwmapi.dll", "uxtheme.dll", "msvcrt.dll",
+    "rpcrt4.dll", "crypt32.dll", "bcrypt.dll", "iphlpapi.dll", "dbghelp.dll",
+    "psapi.dll", "userenv.dll", "secur32.dll", "hid.dll", "cfgmgr32.dll",
+    "msimg32.dll", "gdiplus.dll", "wintrust.dll", "ntdll.dll",
+}
+
+
+def imported_dlls(executable: Path) -> list[str]:
+    """The DLLs a PE binary imports, read out of its import table.
+
+    Parsed rather than grepped: the file is full of strings that look like DLL
+    names and are not imports, and the question here is specifically what the
+    loader will go looking for.
+    """
+    import struct
+    blob = executable.read_bytes()
+    if blob[:2] != b"MZ":
+        return []                     # not a PE; nothing to check
+    pe = struct.unpack_from("<I", blob, 0x3C)[0]
+    if blob[pe:pe + 4] != b"PE\0\0":
+        return []
+    sections = struct.unpack_from("<H", blob, pe + 6)[0]
+    optional_size = struct.unpack_from("<H", blob, pe + 20)[0]
+    optional = pe + 24
+    magic = struct.unpack_from("<H", blob, optional)[0]
+    directories = optional + (112 if magic == 0x20B else 96)
+    import_rva, _size = struct.unpack_from("<II", blob, directories + 8)
+    if not import_rva:
+        return []
+
+    table = []
+    section_start = optional + optional_size
+    for index in range(sections):
+        entry = section_start + index * 40
+        virtual = struct.unpack_from("<I", blob, entry + 12)[0]
+        raw_size = struct.unpack_from("<I", blob, entry + 16)[0]
+        raw_ptr = struct.unpack_from("<I", blob, entry + 20)[0]
+        table.append((virtual, raw_size, raw_ptr))
+
+    def offset(rva: int) -> int | None:
+        for virtual, raw_size, raw_ptr in table:
+            if virtual <= rva < virtual + raw_size:
+                return raw_ptr + (rva - virtual)
+        return None
+
+    names, cursor = [], offset(import_rva)
+    if cursor is None:
+        return []
+    while True:
+        descriptor = blob[cursor:cursor + 20]
+        if len(descriptor) < 20 or descriptor == b"\0" * 20:
+            break
+        name_rva = struct.unpack_from("<I", descriptor, 12)[0]
+        at = offset(name_rva)
+        if at is not None:
+            end = blob.index(b"\0", at)
+            names.append(blob[at:end].decode("ascii", "replace"))
+        cursor += 20
+    return names
+
+
+def check_dependencies(executable: Path, folder: Path) -> None:
+    """Every DLL the binary needs must be here, or be part of Windows.
+
+    beta118 and beta119 shipped a Windows build that wanted
+    libgcc_s_seh-1.dll and libstdc++-6.dll -- the MinGW runtime, which is not
+    part of Windows and was not in the archive. The binary looked fine, the
+    archive looked fine, and the first person to run it got a stack of dialogs.
+    Nothing had ever asked the binary what it needed.
+    """
+    needed = imported_dlls(executable)
+    if not needed:
+        return
+    present = {item.name.lower() for item in folder.iterdir()}
+    missing = [name for name in needed
+               if name.lower() not in SYSTEM_DLLS
+               and not name.lower().startswith("api-ms-win-")
+               and not name.lower().startswith("ext-ms-win-")
+               and name.lower() not in present]
+    if not missing:
+        print(f"dependencies:   all {len(needed)} imports resolve here or in Windows")
+        return
+    raise SystemExit(
+        f"\n{executable.name} needs DLLs that are not in {folder} and are not "
+        "part of Windows:\n  " + "\n  ".join(sorted(set(missing))) +
+        "\n\nIt would fail to start on any machine that does not happen to "
+        "have them. Either ship them beside it or build against something "
+        "else.")
 
 
 def check_opengl(executable: Path) -> None:

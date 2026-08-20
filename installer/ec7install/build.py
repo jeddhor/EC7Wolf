@@ -153,107 +153,92 @@ def _cmake_generators(cmake: str) -> list[str]:
 def _generator(cmake: str | None = None) -> list[str]:
     """Name the generator; never leave CMake to guess and then argue with it.
 
-    Ninja wherever it exists: it is what the project builds with and the
-    fastest of them. Otherwise, on Windows, the Visual Studio generator that
-    matches the Visual Studio actually installed -- found by year, because that
-    is how CMake names them.
+    Off Windows this is simply Ninja where it exists. On Windows the order
+    matters, and getting it wrong is not obvious:
 
-    The alternative, letting CMake choose its own default, is what produced the
-    bug this replaces: on a machine with Visual Studio 2026 and CMake 3.31 --
-    whose newest Visual Studio generator is 2022, matching 17.x and not 18.x --
-    CMake quietly fell back to NMake Makefiles, and then rejected the -A x64
-    that had been added on the assumption it was building a solution.
+      1. cl.exe already on the PATH -- a Developer Command Prompt. Ninja, and
+         it will use MSVC because that is what is there.
+      2. A Visual Studio generator matching the Visual Studio installed. It
+         locates its own toolchain, so it needs no environment set up.
+      3. Nothing else here; build() borrows Visual Studio's environment and
+         comes back.
+
+    What this must NOT do is reach for Ninja merely because ninja is on the
+    PATH. A GitHub windows-latest runner has Ninja *and* MinGW at
+    C:/mingw64,
+    so "-G Ninja" with no toolchain named let CMake find gcc and build the
+    release with MinGW -- linked against MSVC import libraries, warning about a
+    missing _wmain entry symbol, and needing libgcc_s_seh-1.dll and
+    libstdc++-6.dll that were never shipped. It ran on nobody's machine.
     """
-    if shutil.which("ninja") or shutil.which("ninja-build"):
-        return ["-G", "Ninja"]
-    if not is_windows() or cmake is None:
+    windows = is_windows()
+    if not windows:
+        if shutil.which("ninja") or shutil.which("ninja-build"):
+            return ["-G", "Ninja"]
         return []
 
-    from .deps import visual_studio_version
-    version = visual_studio_version()
-    if version is not None:
-        for name in _cmake_generators(cmake):
-            if name.startswith(f"Visual Studio {version} "):
-                # -A x64: a Visual Studio generator builds 32-bit by default
-                # even on a 64-bit machine.
-                return ["-G", name, "-A", "x64"]
+    if shutil.which("cl") and (shutil.which("ninja") or shutil.which("ninja-build")):
+        return ["-G", "Ninja"]
 
-    # No usable solution generator. Inside a Developer Command Prompt the
-    # compiler is on the PATH and NMake will do; outside one, nothing here can
-    # build, and build() says so before running anything.
+    if cmake is not None:
+        from .deps import visual_studio_version
+        version = visual_studio_version()
+        if version is not None:
+            for name in _cmake_generators(cmake):
+                if name.startswith(f"Visual Studio {version} "):
+                    # -A x64: a Visual Studio generator builds 32-bit by
+                    # default even on a 64-bit machine.
+                    return ["-G", name, "-A", "x64"]
+
     if shutil.which("cl"):
         return ["-G", "NMake Makefiles"]
+
+    from .deps import visual_studio_path
+    if visual_studio_path():
+        # build() will set the environment up and choose again with cl.exe on
+        # the PATH; saying Ninja now would pick MinGW instead.
+        return []
+
+    # No Visual Studio anywhere. Whatever compiler is here will have to do --
+    # MinGW, most likely -- and its runtime libraries are collected below so
+    # the result can actually be run.
+    if shutil.which("ninja") or shutil.which("ninja-build"):
+        return ["-G", "Ninja"]
     return []
 
 
-def developer_environment() -> dict | None:
-    """The environment a Developer Command Prompt would have set up.
+def _mingw_runtime(build_dir: Path) -> list[Path]:
+    """The GCC runtime DLLs, when the build used GCC.
 
-    Visual Studio's compiler is deliberately not on the ordinary PATH; the
-    Developer Command Prompt exists to put it there, and VsDevCmd.bat is what
-    it runs. Asking that script for its environment and using it for the build
-    is what lets the installer compile on a machine where CMake is older than
-    Visual Studio -- the alternative being to tell the user to go and find the
-    right Start menu entry themselves, which is not what an installer is for.
+    A MinGW-built binary needs these beside it and they are not part of
+    Windows, so an install without them opens a dialog about
+    libgcc_s_seh-1.dll instead of a game. MSVC builds need nothing here: their
+    runtime is the Universal CRT, which Windows has.
 
-    The trick is the standard one: run the batch file and then `set`, and read
-    back what it changed.
+    Which compiler was used is read out of CMakeCache.txt rather than guessed,
+    because by this point the build is over and the cache is the record of it.
     """
-    from .deps import visual_studio_path
-    installation = visual_studio_path()
-    if not installation:
-        return None
-    batch = Path(installation) / "Common7" / "Tools" / "VsDevCmd.bat"
-    if not batch.is_file():
-        return None
-
-    # Through a batch file rather than `cmd /c "call ... && set"`. cmd strips
-    # the outer quotes from a command line that begins with one, which turns
-    # the quoted path to VsDevCmd.bat into something it then reports as "not
-    # recognized as an internal or external command". Writing the two lines to
-    # a file sidesteps the whole of cmd's quoting rules.
-    scratch = Path(tempfile.mkdtemp(prefix="ec7wolf-vsenv-"))
-    script = scratch / "capture.bat"
-    script.write_bytes(
-        ("@echo off\r\n"
-         f'call "{batch}" -arch=amd64 -host_arch=amd64 >nul\r\n'
-         "set\r\n").encode("utf-8"))
+    cache = build_dir / "CMakeCache.txt"
+    compiler = None
     try:
-        result = subprocess.run(["cmd", "/c", str(script)], capture_output=True,
-                                text=True, timeout=300, errors="replace")
-    except (OSError, subprocess.SubprocessError):
-        return None
-    finally:
-        shutil.rmtree(scratch, ignore_errors=True)
-    if result.returncode != 0:
-        return None
+        for line in cache.read_text(errors="replace").splitlines():
+            if line.startswith("CMAKE_CXX_COMPILER:"):
+                compiler = Path(line.split("=", 1)[-1].strip())
+                break
+    except OSError:
+        return []
+    if compiler is None or not compiler.parent.is_dir():
+        return []
+    if "gcc" not in compiler.name.lower() and "++" not in compiler.name.lower():
+        return []
+    if shutil.which("cl") and "mingw" not in str(compiler).lower():
+        return []
 
-    environment = {}
-    for line in result.stdout.splitlines():
-        if "=" in line:
-            key, value = line.split("=", 1)
-            environment[key] = value
-    # PATH is the whole point; anything without it did not work.
-    return environment if any(k.upper() == "PATH" for k in environment) else None
-
-
-def _which_in(environment: dict, *names: str) -> str | None:
-    """shutil.which, but against a PATH we were handed rather than our own."""
-    path = next((v for k, v in environment.items() if k.upper() == "PATH"), "")
-    extensions = [e.lower() for e in
-                  environment.get("PATHEXT", ".EXE").split(os.pathsep) if e]
-    wanted = {f"{n.lower()}{e}" for n in names for e in extensions}
-    for directory in path.split(os.pathsep):
-        if not directory:
-            continue
-        try:
-            entries = os.listdir(directory)
-        except OSError:
-            continue
-        for entry in entries:
-            if entry.lower() in wanted:
-                return os.path.join(directory, entry)
-    return None
+    wanted = ("libgcc_s_seh-1.dll", "libgcc_s_dw2-1.dll", "libstdc++-6.dll",
+              "libwinpthread-1.dll")
+    found = [compiler.parent / name for name in wanted
+             if (compiler.parent / name).is_file()]
+    return found
 
 
 def _windows_build_problem(cmake: str) -> str | None:
@@ -504,6 +489,7 @@ def build(repo_root: Path, build_dir: Path, reporter: Reporter,
     extra = []
     if is_windows():
         extra = sorted(executable.parent.glob("*.dll"))
+        extra += _mingw_runtime(build_dir)
         have = {dll.name.lower() for dll in extra}
         extra += [dll for dll in sdl.runtime_libraries(sdl_directories)
                   if dll.name.lower() not in have]

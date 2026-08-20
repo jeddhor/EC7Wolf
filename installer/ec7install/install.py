@@ -41,6 +41,11 @@ OPTIONAL_DATA = ("AUDIOMUS.CO7",)
 
 CINEMATICS = ("SEQONE.CO7", "SEQTHREE.CO7", "SEQFOUR.CO7")
 
+# What belongs to the player rather than to the installer, and therefore
+# survives a reinstall. The launcher puts both of these inside the install
+# folder deliberately, which is what makes them vulnerable to replacing it.
+PLAYER_FILES = ("saves", "ec7wolf.cfg")
+
 # The executable carries the palette the game reads at runtime, so its identity
 # matters: budget and cracked builds move the embedded offsets.
 CD_EXECUTABLE_SIZE = 250776
@@ -122,8 +127,50 @@ class Staging:
     def files(self) -> list[str]:
         return sorted(set(self._files))
 
+    def carry_over(self, reporter: Reporter) -> list[str]:
+        """Bring the player's own files forward from an install being replaced.
+
+        Everything else in the folder belongs to the installer and is about to
+        be written fresh; these belong to whoever has been playing. They are
+        copied into the staging tree *before* anything is moved or deleted, so
+        a failure here costs nothing -- the old install is still standing.
+
+        Without this the reinstall path silently destroyed saved games while
+        the wizard was telling the user, in as many words, that it would keep
+        them.
+        """
+        if not self.destination.is_dir():
+            return []
+
+        carried = []
+        for relative in PLAYER_FILES:
+            source = self.destination / relative
+            target = self.path / relative
+            if not source.exists() or target.exists():
+                continue
+            try:
+                if source.is_dir():
+                    shutil.copytree(source, target)
+                    count = sum(1 for f in source.rglob("*") if f.is_file())
+                    reporter.detail(f"keeping {relative} ({count} file(s))"
+                                    if count != 1 else f"keeping {relative} (1 file)")
+                else:
+                    shutil.copy2(source, target)
+                    reporter.detail(f"keeping {relative}")
+                carried.append(relative)
+            except OSError as error:
+                # Refuse to continue: the next step deletes the original, and
+                # quietly losing someone's saved games is worse than stopping.
+                raise InstallError(
+                    f"could not preserve {relative} from the existing install: "
+                    f"{error}. Nothing has been changed; copy that folder "
+                    "somewhere safe and try again.")
+        return carried
+
     def commit(self, reporter: Reporter) -> Path:
         """Move the staging tree into place, replacing any previous install."""
+        self.carry_over(reporter)
+
         previous = None
         if self.destination.exists():
             previous = self.destination.with_name(
@@ -136,7 +183,10 @@ class Staging:
             if previous is not None:
                 previous.rename(self.destination)
             raise InstallError(
-                f"could not move the staged install into {self.destination}: {error}")
+                f"could not move the finished install into {self.destination}: "
+                f"{error}. Anything that was already there has been put back. "
+                "This is usually a permissions problem, or the destination "
+                "being on a different filesystem that is now full.")
         if previous is not None:
             shutil.rmtree(previous, ignore_errors=True)
         return self.destination
@@ -334,7 +384,10 @@ def uninstall(destination: Path, reporter: Reporter) -> None:
     destination = Path(destination)
     manifest = read_manifest(destination)
     if manifest is None:
-        raise InstallError(f"{destination} does not look like an EC7Wolf install")
+        raise InstallError(
+            f"{destination} does not look like an EC7Wolf install: it has no "
+            f"{MANIFEST_NAME}. Point this at the folder the installer created, "
+            "so that nothing else gets deleted by mistake.")
 
     for shortcut in manifest.get("shortcuts", []):
         target = Path(shortcut)
@@ -343,7 +396,9 @@ def uninstall(destination: Path, reporter: Reporter) -> None:
             try:
                 target.unlink()
             except OSError as error:
-                reporter.warn(f"could not remove {target}: {error}")
+                reporter.warn(f"could not remove {target}: {error}. "
+                              "Everything else was removed; delete that one "
+                              "by hand.")
 
     if is_windows():
         from . import windows

@@ -50,6 +50,9 @@ def main() -> int:
                         help="the CD drive, a .cue, a .iso, or a game folder")
     parser.add_argument("--dest", type=Path, default=install.default_destination(),
                         help="where to install (default: %(default)s)")
+    parser.add_argument("--engine", type=Path, metavar="DIR",
+                        help="use the ec7wolf binary in this folder instead of "
+                             "building one (for a downloaded release)")
     parser.add_argument("--build-dir", type=Path,
                         help="where to compile, if compiling is needed")
     parser.add_argument("--jobs", type=int, default=os.cpu_count(),
@@ -81,7 +84,8 @@ def main() -> int:
             print(f"\nRemoved {args.uninstall}.")
             return 0
 
-        engine = None if args.force_build else build.find_existing(REPO)
+        engine = None if args.force_build else build.find_existing(
+            REPO, extra=[args.engine] if args.engine else [])
 
         if args.check or not args.source:
             print("EC7Wolf installer\n" + "=" * 17)

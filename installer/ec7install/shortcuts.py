@@ -9,14 +9,13 @@ uninstaller can take it away again.
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 from pathlib import Path
 
 from . import windows
 from .identity import (APP_COMMENT, APP_ID, APP_NAME, ENGINE_BINARY,
-                       WM_CLASS, is_windows)
+                       is_windows)
 from .progress import Reporter
 
 
@@ -255,5 +254,6 @@ def _create_windows(destination: Path, launcher: Path, reporter: Reporter,
             created.append(target)
             reporter.detail(f"shortcut -> {target}")
         except Exception as error:                        # noqa: BLE001
-            reporter.warn(f"could not create {target.name}: {error}")
+            reporter.warn(f"could not create {target.name}: {error}. The "
+                          "game is installed; only the shortcut is missing.")
     return created

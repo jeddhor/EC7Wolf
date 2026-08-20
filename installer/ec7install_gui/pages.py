@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFrame,
 from c7disc import GameSource
 from ec7install import build, deps, install
 from ec7install.progress import LogFile
-from ec7install.plan import InstallPlan
+from ec7install.plan import InstallPlan, RemovalPlan
 
 from .worker import Bridge, GuiReporter, InstallThread, Task
 
@@ -44,6 +44,9 @@ class State:
         # the folder holding a frozen setup.exe, most of all.
         self.extra_engine_paths: list[Path] = []
         self.force_build = False
+        # Set when the installer has no source tree beside it and the user has
+        # agreed it should download one.
+        self.fetch_source = False
         self.build_report: deps.Report | None = None
         self.rip_report: deps.Report | None = None
         self.destination = install.default_destination()
@@ -53,6 +56,11 @@ class State:
         self.desktop_shortcut = True
         self.jobs = os.cpu_count() or 2
         self.log_path: Path | None = None
+        # "install" or "remove". There is deliberately no separate upgrade or
+        # repair: this installer always writes everything, so those would be
+        # the same action under three names.
+        self.mode = "install"
+        self.existing: dict | None = None
         self.outcome = ""
         self.message = ""
         self.installed: Path | None = None
@@ -165,6 +173,97 @@ class WelcomePage(QWizardPage):
             "Nothing is written outside the folder you pick, and the installer "
             "never needs administrator rights."))
         layout.addStretch(1)
+
+    def initializePage(self) -> None:
+        # Looked up once, here, so the page after this one knows whether it has
+        # anything to say.
+        self.state.existing = install.read_manifest(self.state.destination)
+
+    def nextId(self) -> int:
+        wizard = self.wizard()
+        if self.state.existing:
+            return wizard.ids["mode"]
+        return wizard.ids["license"]
+
+
+# ---------------------------------------------------------------------------
+# Already installed?
+# ---------------------------------------------------------------------------
+
+class ModePage(QWizardPage):
+    """Shown only when there is already an EC7Wolf where one would go.
+
+    Skipped entirely otherwise -- a page that says "you have not installed this
+    yet" is a page nobody needs to read.
+    """
+
+    NAME = "mode"
+
+    def __init__(self, state: State):
+        super().__init__()
+        self.state = state
+        self.setTitle("EC7Wolf is already installed")
+        self.setSubTitle("Choose what to do with the copy that is already here.")
+
+        layout = QVBoxLayout(self)
+        self.details = Html()
+        self.details.setMaximumHeight(120)
+        layout.addWidget(self.details)
+        layout.addSpacing(8)
+
+        self.reinstall = QRadioButton("Reinstall it")
+        self.remove = QRadioButton("Remove it")
+        reinstall_note = body(
+            "Writes everything again from your disc. Your saved games and "
+            "settings are kept.")
+        remove_note = body(
+            "Deletes the installed game, its shortcuts and its entry in the "
+            "list of installed programs. <b>Saved games in the install folder "
+            "go with it.</b>")
+        for note in (reinstall_note, remove_note):
+            note.setContentsMargins(22, 0, 0, 8)
+
+        layout.addWidget(self.reinstall)
+        layout.addWidget(reinstall_note)
+        layout.addWidget(self.remove)
+        layout.addWidget(remove_note)
+        layout.addStretch(1)
+
+        self.reinstall.setChecked(True)
+        for radio in (self.reinstall, self.remove):
+            radio.toggled.connect(self._changed)
+
+    def initializePage(self) -> None:
+        manifest = self.state.existing or {}
+        colour = self.details.colours()
+        rows = [f"<p><b>{self.state.destination}</b></p>"]
+        installed = manifest.get("installed")
+        source = manifest.get("source")
+        extra = []
+        if installed:
+            extra.append(f"installed {installed.replace('T', ' at ')}")
+        if source:
+            extra.append(f"from {source}")
+        saves = self.state.destination / "saves"
+        if saves.is_dir():
+            count = sum(1 for f in saves.rglob("*") if f.is_file())
+            if count:
+                extra.append(f"<b>{plural(count, 'saved game file')}</b>")
+        if extra:
+            rows.append(f"<p style='color:{colour['dim']};'>"
+                        + "<br>".join(extra) + "</p>")
+        self.details.show_html("".join(rows))
+        self._changed()
+
+    def _changed(self, *_) -> None:
+        self.state.mode = "remove" if self.remove.isChecked() else "install"
+
+    def nextId(self) -> int:
+        wizard = self.wizard()
+        if self.remove.isChecked():
+            # Nothing to ask: no disc, no engine, no options.
+            return wizard.ids["summary"]
+        return wizard.ids["license"]
 
 
 # ---------------------------------------------------------------------------
@@ -447,6 +546,12 @@ class EnginePage(QWizardPage):
         self.report = Html()
         layout.addWidget(self.report, 1)
 
+        self.fetchSource = QCheckBox(
+            "Download the EC7Wolf source and build it")
+        self.fetchSource.setVisible(False)
+        self.fetchSource.toggled.connect(self._fetch_toggled)
+        layout.addWidget(self.fetchSource)
+
         row = QHBoxLayout()
         self.forceBuild = QCheckBox("Compile a fresh copy even if one is found")
         self.forceBuild.toggled.connect(self._force_toggled)
@@ -463,6 +568,11 @@ class EnginePage(QWizardPage):
     def _force_toggled(self, checked: bool) -> None:
         self.state.force_build = checked
         self.survey()
+
+    def _fetch_toggled(self, checked: bool) -> None:
+        self.state.fetch_source = checked
+        self.ready = checked
+        self.completeChanged.emit()
 
     def survey(self) -> None:
         self.ready = False
@@ -487,6 +597,10 @@ class EnginePage(QWizardPage):
 
         self.state.engine = result["engine"]
         self.forceBuild.setEnabled(result["buildable"])
+        needs_source = result["engine"] is None and not result["buildable"]
+        self.fetchSource.setVisible(needs_source)
+        if needs_source and not self.fetchSource.isChecked():
+            self.fetchSource.setChecked(True)
         self.state.build_report = result["build"]
         self.state.rip_report = result["rip"]
 
@@ -502,17 +616,18 @@ class EnginePage(QWizardPage):
                 "Tick the box below to build a fresh one anyway.</p>")
             self.ready = True
         elif not result["buildable"]:
-            # Nothing built, and no source to build from. Only one of those is
-            # the user's to fix, so say which.
+            # No engine, and no source beside the installer -- which is the
+            # normal state of the installer-only download. It can fetch the
+            # source itself, so this is a choice rather than a dead end.
             parts.append(
-                f"<p style='color:{colour['bad']};'><b>No engine was found, "
-                "and this installer does not carry the source to build "
-                "one.</b></p>"
-                "<p>Put <tt>ec7wolf.exe</tt> and <tt>ec7wolf.pk3</tt> in the "
-                "same folder as this installer and press <i>Check again</i>, "
-                "or run the installer from a checkout of the EC7Wolf source, "
-                "which it can compile for you.</p>")
-            self.ready = False
+                f"<p style='color:{colour['warn']};'><b>No engine was found "
+                "here.</b></p>"
+                "<p>This installer does not carry the engine's source, but it "
+                "can download it and build it for you &#8212; that is what the "
+                "box below does. The alternative is to put <tt>ec7wolf</tt> "
+                "and <tt>ec7wolf.pk3</tt> beside this installer, or start it "
+                "from a source checkout, and press <i>Check again</i>.</p>")
+            self.ready = self.fetchSource.isChecked()
         else:
             report = result["build"]
             if report.satisfied:
@@ -755,6 +870,34 @@ class SummaryPage(QWizardPage):
         colour = self.summary.colours()
         rows = []
 
+        if state.mode == "remove":
+            self.setTitle("Ready to remove")
+            self.setSubTitle("Nothing has been deleted yet. This is what "
+                             "will go.")
+            self.setButtonText(QWizard.CommitButton, "Remove")
+            manifest = state.existing or {}
+            items = [str(state.destination)] + [
+                str(p) for p in manifest.get("shortcuts", [])]
+            saves = state.destination / "saves"
+            warning = ""
+            if saves.is_dir():
+                count = sum(1 for f in saves.rglob("*") if f.is_file())
+                if count:
+                    warning = (f"<p style='color:{colour['warn']};'>"
+                               f"This includes {plural(count, 'saved game file')}"
+                               f" in {saves}. Copy them somewhere else first if "
+                               "you want to keep them.</p>")
+            self.summary.show_html(
+                "<p>These will be deleted:</p><ul><li>"
+                + "</li><li>".join(items) + "</li></ul>" + warning
+                + f"<p style='color:{colour['dim']};'>Log: {state.log_path}</p>")
+            return
+
+        self.setTitle("Ready to install")
+        self.setSubTitle("Nothing has been written yet. This is what will "
+                         "happen.")
+        self.setButtonText(QWizard.CommitButton, "Install")
+
         def row(name: str, value: str) -> None:
             rows.append(
                 f"<tr><td style='color:{colour['dim']}; padding-right:14px;' "
@@ -766,7 +909,12 @@ class SummaryPage(QWizardPage):
         else:
             row("Engine", f"compiled here, with {state.jobs} parallel jobs "
                           "(this is the slow part)")
-        row("Install into", str(state.destination))
+        if state.existing:
+            row("Install into", f"{state.destination}<br>"
+                                "<i>replacing the copy already there; your "
+                                "saved games and settings are kept</i>")
+        else:
+            row("Install into", str(state.destination))
         row("Soundtrack", "ripped from the CD" if state.with_music else "not installed")
         row("Cinematics", "extracted from the CD" if state.with_video else "not installed")
         shortcuts = [name for name, on in
@@ -828,10 +976,15 @@ class ProgressPage(QWizardPage):
     def initializePage(self) -> None:
         import threading
         state = self.state
-        self.setSubTitle(
-            "Compiling the engine takes a few minutes; the rest is quick."
-            if state.engine is None else
-            "Taking the game's content off the disc.")
+        if state.mode == "remove":
+            self.setTitle("Removing")
+            self.setSubTitle("This only takes a moment.")
+        else:
+            self.setTitle("Installing")
+            self.setSubTitle(
+                "Compiling the engine takes a few minutes; the rest is quick."
+                if state.engine is None else
+                "Taking the game's content off the disc.")
 
         self.bridge = Bridge()
         self.bridge.stepped.connect(self._stepped)
@@ -844,13 +997,16 @@ class ProgressPage(QWizardPage):
             state.log_path = state.destination.parent / "ec7wolf-install.log"
         self.log = LogFile(state.log_path, GuiReporter(self.bridge, self.cancel))
 
-        plan = InstallPlan(
-            repo_root=state.repo_root, source=state.source,
-            destination=state.destination,
-            with_music=state.with_music, with_video=state.with_video,
-            menu_shortcut=state.menu_shortcut,
-            desktop_shortcut=state.desktop_shortcut,
-            engine=state.engine, jobs=state.jobs)
+        if state.mode == "remove":
+            plan = RemovalPlan(state.destination)
+        else:
+            plan = InstallPlan(
+                repo_root=state.repo_root, source=state.source,
+                destination=state.destination,
+                with_music=state.with_music, with_video=state.with_video,
+                menu_shortcut=state.menu_shortcut,
+                desktop_shortcut=state.desktop_shortcut,
+                engine=state.engine, jobs=state.jobs)
 
         self.thread = InstallThread(plan, self.log, self)
         self.thread.ended.connect(self._ended)
@@ -934,7 +1090,17 @@ class FinishPage(QWizardPage):
         colour = self.text.colours()
         parts = []
 
-        if state.outcome == "ok":
+        if state.outcome == "ok" and state.mode == "remove":
+            self.setSubTitle("EC7Wolf has been removed.")
+            parts.append(
+                f"<p style='color:{colour['ok']};'>&#10003; <b>EC7Wolf was "
+                "removed.</b></p>"
+                "<p>The game, its shortcuts and its entry in the list of "
+                "installed programs are all gone. Nothing else on the system "
+                "was touched.</p>")
+            self.launch.setVisible(False)
+            self.openFolder.setVisible(False)
+        elif state.outcome == "ok":
             self.setSubTitle("EC7Wolf is installed.")
             parts.append(
                 f"<p style='color:{colour['ok']};'>&#10003; <b>Installed to "

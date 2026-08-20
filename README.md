@@ -23,6 +23,19 @@
 
 ---
 
+## What it looks like
+
+| | |
+| --- | --- |
+| ![The main menu](docs/images/menu-main.png) | ![In the first floor](docs/images/gameplay.png) |
+| **The menu**, rebuilt as a splash-art shell with TrueType text, over the original's own artwork. | **The game**, drawn by the OpenGL renderer: the floor objective banner, the original HUD, the original palette. |
+
+<sub>Regenerate these with `tools/capture_screenshots.sh BUILD_DIR DATA_DIR` —
+they are produced from a pinned map, seed and frame, so they can be refreshed
+rather than left to go stale.</sub>
+
+---
+
 ## Why does this exist?
 
 Corridor 7 has spent thirty years as one of the great *almost-ported* DOS
@@ -360,29 +373,241 @@ All three are described in full in [`docs/corridor7.md`](docs/corridor7.md).
 
 ---
 
-## Building & running
+## Installing and running
 
-This fork uses the standard ECWolf CMake build. Dependencies are the ECWolf set:
-**SDL2, SDL2_mixer, SDL2_net, zlib, libjpeg** (bzip2 is bundled and built
-internally if not found), plus **OpenGL** for the hardware renderer and
-optionally **GTK3** for the native file dialog.
+There are six ways to end up with a working game. They differ only in how much
+you do by hand and how much the installer does for you — **all of them need
+your own copy of Corridor 7**, which nothing here provides.
 
-### Linux
+| If you want… | Use |
+| --- | --- |
+| the shortest path, on Windows | **[1 · The graphical installer](#1--the-graphical-installer)** (`EC7Wolf-Setup.exe`) |
+| the shortest path, on Linux | **[2 · Precompiled binaries](#2--precompiled-binaries)**, or route 1 if you would rather click |
+| a scripted or unattended install | **[3 · The installer from a terminal](#3--the-installer-from-a-terminal)** |
+| everything built from source, automatically | **[4 · The installer, compiling for you](#4--the-installer-compiling-for-you)** |
+| to compile it yourself, by hand | **[5 · Building by hand](#5--building-by-hand)** |
+| a binary that runs on any Linux, old or new | **[6 · The portable Docker build](#6--the-portable-docker-build)** |
 
-**Install dependencies** (Debian/Ubuntu shown; adjust for your distro):
+Every route ends at the same place: a folder holding `ec7wolf`, `ec7wolf.pk3`,
+your game data, and a launcher that keeps configuration and saved games beside
+them.
+
+---
+
+### 1 · The graphical installer
+
+The installer builds or collects the engine, takes the game's data, soundtrack
+and cinematics off your CD, and puts the lot in one folder. It never needs
+administrator rights and writes nothing outside the folder you choose.
+
+#### On Windows
+
+1. Download **`EC7Wolf-Setup.exe`** from the
+   [releases page](https://github.com/jeddhor/EC7Wolf/releases). It is one file
+   with Python and Qt inside it; nothing needs installing first.
+2. Run it. Windows SmartScreen will warn about an unsigned executable — *More
+   info* → *Run anyway*, or check the SHA-256 against the release notes first.
+3. Work through the pages below.
+
+#### On Linux
+
+The installer is a Python program and needs **PySide6**:
+
+```sh
+sudo apt install python3-pyside6.qtwidgets     # Debian, Ubuntu, KDE neon
+sudo dnf install python3-pyside6               # Fedora
+sudo pacman -S pyside6                         # Arch
+pip install PySide6                            # anywhere else
+```
+
+Then, from a source checkout or the installer-only download:
+
+```sh
+installer/ec7wolf-setup
+```
+
+If PySide6 is missing it says so and points you at the terminal installer,
+which needs nothing but Python.
+
+#### What the pages ask
+
+<table>
+<tr><td width="50%"><img src="docs/images/installer-welcome.png" alt="Welcome page"></td>
+<td><b>Welcome.</b> States plainly that you need your own copy of the game, and
+that the CD-ROM release is the one to use — it is the only one carrying the
+soundtrack and the cinematics.</td></tr>
+
+<tr><td><img src="docs/images/installer-source.png" alt="Source page"></td>
+<td><b>Your copy of Corridor 7.</b> A CD in a drive, a BIN/CUE or ISO image (what
+GOG and Steam ship), or a folder of files you already extracted. It reads
+whatever you point it at and reports what it found: all eight required files, how
+many audio tracks, how many cinematics. <b>Next stays disabled until the source
+can actually furnish an install</b>, and it names any file that is missing.</td></tr>
+
+<tr><td><img src="docs/images/installer-engine.png" alt="Engine page"></td>
+<td><b>The engine.</b> If you already built one it says so and uses it. If not,
+it checks for what compiling needs and lists anything missing <i>with the command
+to install it on your system</i>. On Windows it goes further — see route 4. Tick
+<i>Show details</i> on the next page to watch the compile.</td></tr>
+
+<tr><td><img src="docs/images/installer-destination.png" alt="Destination page"></td>
+<td><b>Where to install.</b> Defaults to <code>~/.local/share/ec7wolf</code>
+(Linux), <code>%LOCALAPPDATA%\EC7Wolf</code> (Windows) or
+<code>~/Applications/EC7Wolf</code> (macOS). Shows the space needed against the
+space free, warns if something is already installed there, and refuses a folder
+you cannot write to.</td></tr>
+
+<tr><td><img src="docs/images/installer-options.png" alt="Options page"></td>
+<td><b>Options.</b> Whether to rip the CD soundtrack and extract the cinematics —
+each is offered only if your source actually has it — and whether to add a menu
+entry and a desktop icon.</td></tr>
+
+<tr><td><img src="docs/images/installer-summary.png" alt="Summary page"></td>
+<td><b>Ready to install.</b> Everything that is about to happen, on one page.
+<b>Nothing has been written yet.</b> The button says <i>Install</i>, and there is
+no way back afterwards — which is why this page exists.</td></tr>
+</table>
+
+While it runs you get a progress bar, the current step, and a *Show details*
+pane carrying every line, including the compiler's. **Cancel** stops it and
+undoes what it wrote — including part way through the soundtrack rip, which
+stops within a second rather than at the end of a ten-minute track.
+
+#### If you already have an install
+
+Point the installer at the same folder and it offers two things: **reinstall**
+(writes everything again, keeping your saved games and settings) or **remove**.
+There is deliberately no separate "upgrade" or "repair" — this installer always
+writes everything, so those would be the same action under three names.
+
+---
+
+### 2 · Precompiled binaries
+
+From the [releases page](https://github.com/jeddhor/EC7Wolf/releases):
+
+| Artifact | For |
+| --- | --- |
+| `EC7Wolf-<version>-windows-x64.zip` | Windows 10/11, 64-bit |
+| `EC7Wolf-<version>-linux-x64.tar.gz` | Linux, x86-64 |
+| `EC7Wolf-<version>-linux-arm64.tar.gz` | Linux, aarch64 (Raspberry Pi 4/5, Ampere, Asahi) |
+| `EC7Wolf-<version>-<platform>-full.zip`/`.tar.gz` | the same, plus the installer |
+| `EC7Wolf-<version>-installer.zip` | the installer alone — see route 4 |
+| `EC7Wolf-<version>-source.tar.gz` | the complete source |
+
+These carry the engine and nothing of the game. Unpack, then either run the
+installer from the `-full` archive to bring in your data, or place your eight
+`.CO7` files beside the binary yourself:
+
+```sh
+tar xf EC7Wolf-1.0-beta114-linux-x64.tar.gz
+cd EC7Wolf-1.0-beta114-linux-x64
+cp /path/to/your/CO7/*.CO7 /path/to/your/CO7/CORR7CD.EXE .
+./run-ec7wolf.sh
+```
+
+On Windows, unzip, copy the same files in beside `ec7wolf.exe`, and run
+`EC7Wolf.cmd`. The SDL and libepoxy DLLs are already in the archive.
+
+> **Linux binaries and glibc.** The release binaries are built on the CI
+> runner's distribution. If yours is older you may see a `GLIBC_2.xx not found`
+> error — use route 6, which builds against Ubuntu 20.04 and runs essentially
+> anywhere.
+
+---
+
+### 3 · The installer from a terminal
+
+`installer/ec7wolf-install` does everything the graphical one does, needs
+nothing but Python 3.9+, and is what the automated tests drive.
+
+```sh
+# What is present and what is missing, changing nothing:
+installer/ec7wolf-install --check
+
+# A complete install:
+installer/ec7wolf-install --source /path/to/Corridor7.cue
+
+# Everything spelled out:
+installer/ec7wolf-install \
+    --source /dev/sr0 \
+    --dest ~/games/ec7wolf \
+    --engine ~/Downloads/EC7Wolf-1.0-beta114-linux-x64 \
+    --jobs 8 \
+    --verbose
+```
+
+| Option | Effect |
+| --- | --- |
+| `--source PATH` | the CD drive (`/dev/sr0`, `D:\`), a `.cue`, an `.iso`, or a folder |
+| `--dest DIR` | where to install |
+| `--engine DIR` | use a prebuilt engine from that folder instead of compiling |
+| `--check` | report readiness and stop |
+| `--force-build` | compile even though a built engine was found |
+| `--build-dir DIR`, `--jobs N` | where and how hard to compile |
+| `--no-music`, `--no-video` | skip the soundtrack or the cinematics |
+| `--no-menu-shortcut`, `--no-desktop-shortcut` | skip the shortcuts |
+| `--uninstall DIR` | remove an install and everything it registered |
+| `--verbose`, `--log FILE` | every line on screen; the log is always written |
+
+**Unattended**, for deployment — no window, answers on the command line, result
+in the exit code:
+
+```sh
+installer/ec7wolf-setup --unattended --source /path/to/Corridor7.cue \
+                        --dest /opt/ec7wolf --no-shortcuts
+echo $?      # 0 installed · 1 bad arguments · 2 unusable source · 3 failed
+```
+
+On Windows, `EC7Wolf-Setup.exe /S` means the same thing.
+
+---
+
+### 4 · The installer, compiling for you
+
+Download **`EC7Wolf-<version>-installer.zip`** — a few hundred kilobytes — and
+run it. With no engine beside it and no source tree around it, it offers to
+**download the source and build it**, and then obtains every build dependency
+it can:
+
+| Dependency | What the installer does |
+| --- | --- |
+| **The engine's source** | downloads the release's source archive |
+| **SDL2, SDL2_mixer, SDL2_net** | uses the system's; on Windows fetches upstream's official VC packages; anywhere else builds them from source |
+| **libepoxy** (the OpenGL loader) | uses the system's; builds it from source with meson if there is none |
+| **The compiler** | Windows: finds Visual Studio itself and borrows its build environment, so no "Developer PowerShell" is needed. Elsewhere: your system compiler |
+| **FFmpeg** | needed only to encode the CD soundtrack; without it the game uses the AdLib music |
+
+Meson, when it is needed, goes into a virtual environment inside the
+installer's own cache — nothing is added to your Python. Everything downloaded
+or built lives in `.ec7wolf-cache` beside the install, and deleting that folder
+undoes all of it.
+
+What it cannot supply is a C++ compiler and CMake. If those are missing it
+names them and gives the exact command for your system.
+
+---
+
+### 5 · Building by hand
+
+The standard ECWolf CMake build. Dependencies: **SDL2, SDL2_mixer, SDL2_net,
+zlib, libjpeg** (bzip2 is bundled and built internally if not found),
+**libepoxy** and **OpenGL** for the hardware renderer, and optionally **GTK3**
+for the native file dialog.
+
+#### Linux
+
 ```sh
 sudo apt install build-essential cmake ninja-build \
      libsdl2-dev libsdl2-mixer-dev libsdl2-net-dev \
-     zlib1g-dev libjpeg-dev libbz2-dev libgtk-3-dev
-```
+     zlib1g-dev libjpeg-dev libbz2-dev libepoxy-dev libgtk-3-dev
 
-**Configure & build:**
-```sh
 cd ECWolf
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 cmake --build build     # yes, twice -- see below
 ```
+
 This produces `build/ec7wolf` and `build/ec7wolf.pk3`.
 
 > 🛠 **Build twice for a correct version string.** `gitinfo.h` is regenerated
@@ -390,67 +615,66 @@ This produces `build/ec7wolf` and `build/ec7wolf.pk3`.
 > revision. Only the reported version is affected, but every packaging script
 > and the CI workflow build twice for this reason.
 
-**Renderer options.** OpenGL is the default renderer and needs a GL 3.3 core
-context; if one cannot be created the game demotes itself to the software
-raycaster for that run and says so, without rewriting your config. Both are
-built by default and either can be chosen in *Options → Video*, or pinned for
-one run with `--vid-renderer software|opengl`.
+> 🛠 **The pk3 is not the binary.** The port's gameplay data (DECORATE actors,
+> translations) lives in **`ec7wolf.pk3`**. Rebuilding just the binary does not
+> rebuild it — after editing anything under `wadsrc/`, build the `pk3` target
+> (`ninja -C build pk3`) or your data changes silently do nothing.
 
-| CMake option | Default | Effect |
-| --- | --- | --- |
-| `ECWOLF_RENDERER_OPENGL` | `ON` | Build the hardware renderer |
-| `ECWOLF_RENDERER_SOFTWARE` | `ON` | Build the original raycaster |
-| `ECWOLF_RENDERER_VULKAN` | `OFF` | Not implemented; reserved |
+> 🛠 **No libepoxy, no OpenGL.** Without it CMake prints a warning, drops the GL
+> backend and builds a software-only game. It is a warning, not an error, so it
+> is easy to miss — check for `ECWOLF_RENDERER_OPENGL` in the configure output
+> if the renderer is not what you expected.
 
-**To run the test suite** you also need `xvfb`, `x11-utils`, `imagemagick` and
-`python3`; see [Testing & validation tools](#testing--validation-tools).
+#### Windows
 
-> 🛠 **Build gotcha:** the port's gameplay data (DECORATE actors, translations)
-> lives in **`ec7wolf.pk3`**. Rebuilding just the binary does **not** rebuild the
-> pk3 — after editing anything under `wadsrc/`, build the `pk3` target
-> (`ninja -C build pk3` / `ninja -C build ec7wolf pk3`) or your data changes
-> silently do nothing.
-
-**Run** (point `--data` at the `CO7` folder you assembled):
-```sh
-./build/ec7wolf --data /path/to/CO7 --nowait
-```
-Or start straight into the first floor for testing:
-```sh
-./build/ec7wolf --data /path/to/CO7 --nowait --tedlevel MAP01 --skill 2
-```
-
-### Windows
-
-1. Install **[CMake](https://cmake.org/)**, **[Ninja](https://ninja-build.org/)**,
-   and either **Visual Studio** (Desktop C++ workload) or **MSYS2/MinGW-w64**.
-2. Obtain the **SDL2**, **SDL2_mixer**, and **SDL2_net** development libraries
-   (VC or MinGW variants to match your toolchain). zlib and libjpeg as well; a
-   package manager such as **vcpkg** makes this painless:
+1. Install **[CMake](https://cmake.org/)** and **Visual Studio** with the
+   *Desktop development with C++* workload (or MSYS2/MinGW-w64).
+2. Obtain **SDL2**, **SDL2_mixer**, **SDL2_net**, zlib and libjpeg. `vcpkg`
+   makes this painless:
    ```bat
    vcpkg install sdl2 sdl2-mixer sdl2-net zlib libjpeg-turbo bzip2
    ```
-3. Configure & build (from a *Developer* prompt, adjusting the toolchain path if
-   using vcpkg):
+   Or take upstream's *VC development* zips and pass `-DSDL2_DIR=…\cmake` and
+   friends, which is what the installer does.
+3. Build **from a Developer PowerShell**, so `cl.exe` and Ninja are on the PATH:
    ```bat
    cd ECWolf
    cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release ^
          -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake
    cmake --build build
+   cmake --build build
    ```
-   (Or open the folder in Visual Studio, which reads the CMake project directly.)
-4. Place `ec7wolf.exe`, `ec7wolf.pk3`, and the required **SDL2 `.dll`s** together,
-   then run:
-   ```bat
-   ec7wolf.exe --data C:\path\to\CO7 --nowait
-   ```
+4. Put `ec7wolf.exe`, `ec7wolf.pk3` and the SDL and libepoxy **DLLs** together
+   with your game data, then run it.
 
-### Portable, drop-anywhere build (`docker.sh`)
+> ⚠️ **If CMake is older than your Visual Studio** it will not have a generator
+> for it — CMake 3.31 knows nothing of Visual Studio 2026 — and will quietly
+> fall back to NMake Makefiles and then fail. Either update CMake, or build from
+> a Developer PowerShell where Ninja and `cl.exe` are already on the PATH. (The
+> installer detects this case and handles it; a hand build does not.)
+
+#### Renderer options
+
+OpenGL is the default and needs a GL 3.3 core context; if one cannot be created
+the game demotes itself to the software raycaster for that run and says so,
+without rewriting your config. Both are built by default and either can be
+chosen in *Options → Video*, or pinned for one run with
+`--vid-renderer software|opengl`.
+
+| CMake option | Default | Effect |
+| --- | --- | --- |
+| `ECWOLF_RENDERER_OPENGL` | `ON` | Build the hardware renderer (needs libepoxy) |
+| `ECWOLF_RENDERER_SOFTWARE` | `ON` | Build the original raycaster |
+| `ECWOLF_RENDERER_VULKAN` | `OFF` | Not implemented; reserved |
+
+---
+
+### 6 · The portable Docker build
 
 A locally-built binary links against your distro's glibc, so a build from a very
-recent distribution won't start on an older one (or on rolling distros with a
-different libc build). To get a binary that runs on essentially any modern
-desktop Linux, build it inside the bundled **Ubuntu 20.04** container:
+recent distribution will not start on an older one. To get a binary that runs on
+essentially any modern desktop Linux, build it inside the bundled **Ubuntu
+20.04** container:
 
 ```sh
 ./docker.sh
@@ -460,11 +684,7 @@ This produces a `release/` folder containing `ec7wolf` and `ec7wolf.pk3`, built
 against an older glibc with the C++ runtime statically linked, and verifies the
 result before finishing. See the top of [`docker.sh`](docker.sh) for details.
 
-### One-command playable release
-
-To bundle a build together with a copy of your legally-owned game data into a
-single self-contained folder (feed it the `release/` folder from `docker.sh`, or
-any build directory):
+To bundle that with your legally-owned data into one self-contained folder:
 
 ```sh
 tools/package_corridor7_release.sh ./release \
@@ -472,11 +692,68 @@ tools/package_corridor7_release.sh ./release \
 /path/to/output/release-package/run-corridor7.sh
 ```
 
-The generated `run-corridor7.sh` launches the game and keeps its config and
-saves inside the release folder.
-
 > 🚫 **Never commit or redistribute a release folder** — it contains the
 > commercial Corridor 7 data.
+
+---
+
+### Running it
+
+Any install made by the installer contains a launcher that keeps configuration
+and saved games beside the game rather than in your home directory:
+
+```sh
+~/.local/share/ec7wolf/run-ec7wolf.sh          # Linux
+%LOCALAPPDATA%\EC7Wolf\EC7Wolf.cmd             # Windows
+```
+
+Running the binary directly works too, as long as you say where the data is:
+
+```sh
+./ec7wolf --data /path/to/CO7 --nowait
+./ec7wolf --data /path/to/CO7 --nowait --tedlevel MAP01 --skill 2   # straight in
+```
+
+`--data` takes the **file extension** of the game data (`CO7`), not a directory
+— the engine looks in the current directory and the usual search paths. The
+launcher runs `--data CO7` from inside the install folder for exactly this
+reason.
+
+| Where things go | Installed by the installer | Run by hand |
+| --- | --- | --- |
+| Configuration | `<install>/ec7wolf.cfg` | your usual config directory |
+| Saved games | `<install>/saves/` | your usual save directory |
+| Downloads and build caches | `.ec7wolf-cache` beside the install | — |
+| The install log | `ec7wolf-install.log` beside the install | — |
+
+### Uninstalling
+
+Every install carries its own uninstaller, so removing it needs nothing else:
+
+```sh
+~/.local/share/ec7wolf/uninstall.sh            # Linux; --yes to skip the question
+%LOCALAPPDATA%\EC7Wolf\Uninstall.cmd           # Windows
+```
+
+It lists what it will remove, warns you if saved games are inside, and takes the
+menu entry, the desktop icon and (on Windows) the Add/Remove Programs entry with
+it. On Windows it also appears in *Settings → Apps* like any other program.
+`installer/ec7wolf-install --uninstall DIR` does the same from a terminal.
+
+### When it goes wrong
+
+| Symptom | Cause |
+| --- | --- |
+| *"This source is missing MAPTEMP.CO7…"* | you pointed it at the wrong folder or a non-game disc; the CD-ROM release is what it wants |
+| The soundtrack is silent, the game is not | no FFmpeg when you installed, so the CD music was skipped; install FFmpeg and reinstall |
+| No cinematics | your source is a folder rather than the disc — the FLIC files exist only on the CD |
+| *"missing SDL2.dll"* on Windows | the DLLs did not travel with the binary; use an installer-made folder or copy them alongside |
+| `GLIBC_2.xx not found` on Linux | the binary was built on a newer distribution than yours; use route 6 |
+| The game looks blurry or too smooth | the upscaled asset pack and xBRZ filtering are on; *Options → Video* |
+| It says it is using the software renderer | no GL 3.3 context, or the build had no libepoxy |
+
+Every install writes `ec7wolf-install.log` beside the install folder, whatever
+happens. It has the full detail, including the compiler's own messages.
 
 ### Handy controls (matching the original)
 
@@ -499,7 +776,7 @@ The `tools/` directory carries the harnesses used to keep the port honest:
 
 | Tool | Purpose |
 | --- | --- |
-| `../installer/ec7wolf-setup` | The graphical installer. Needs PySide6; everything it does, `ec7wolf-install` also does from a terminal. |
+| `../installer/ec7wolf-setup` | The graphical installer. Needs PySide6; everything it does, `ec7wolf-install` also does from a terminal. `--unattended --source … --dest …` installs with no window; `--remove DIR` takes one away. |
 | `../installer/windows/build_setup.py` | Freeze the graphical installer into a single `EC7Wolf-Setup.exe`. Needs a Windows Python (Wine will do). |
 | `../installer/ec7wolf-install` | Install EC7Wolf: build the engine and take the game's content off your CD. `--check` reports what is missing. |
 | `uninstall.sh` | Written into each install: removes it, its menu entry and its icons. `--yes` to skip the question. |

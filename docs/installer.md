@@ -296,7 +296,57 @@ Two bugs it caught:
   the quiet path would have sat waiting for a keypress nobody was there to
   give. It honours `--yes` and `/S` now.
 
-### Phase 5 — hardening
+### Phase 5 — hardening — **done**
 
-Unattended mode, upgrade/repair/remove, resumability, the full gate set, and a
-pass over every error message to make sure each one says what to do next.
+**It was deleting saved games.** `Staging.commit` renamed the existing install
+aside and then `shutil.rmtree`'d it — saves and settings with it — while the
+destination page told the user, in as many words, that saved games would be
+kept. Nothing had caught it because nothing had ever installed twice. The
+launcher deliberately keeps config and saves *inside* the install folder, which
+is exactly what put them in the path of replacing it.
+
+`Staging.carry_over` now copies `saves/` and `ec7wolf.cfg` into the staging
+tree *before* anything is moved or deleted, so a failure at that point costs
+nothing: the old install is still standing. If the copy fails it refuses to go
+on, because quietly losing someone's saved games is worse than stopping.
+
+**Reinstall or remove, and deliberately not a third thing.** A wizard that
+finds an install where one would go now says so and offers two actions.
+Conventional installers offer Upgrade, Repair and Modify as well — here all
+three would do the same work, because this installer always writes everything,
+and three buttons with one behaviour is theatre. The page is skipped entirely
+when there is nothing installed, and choosing *Remove* goes straight to the
+summary: no disc to pick, no engine to find, no options to set. `RemovalPlan`
+wears the same `run(reporter) -> Path` shape as `InstallPlan`, so the worker
+thread, the progress bar, Cancel and the finish page all work on it unchanged.
+
+**Unattended.** `ec7wolf-setup --unattended --source … --dest …`, and
+`--remove DIR`, with no window at all; `/S` is accepted as the alias Windows
+deployment tools reach for first. Results come back as exit codes (1 the
+arguments do not describe an install, 2 the source is unusable, 3 the install
+failed) because a frozen Windows executable is windowed and has no console to
+print to. The log is written whatever happens.
+
+**Resuming.** The compile already resumed — CMake's build tree outlives a
+failure — so the gap was the soundtrack, the longest step after it. Tracks are
+now encoded into a cache under a `.part` name and renamed only once FFmpeg has
+finished, so a file that exists is a file that is complete and a later run
+copies it rather than spending another minute on it. The cache is deleted after
+a *successful* install: it exists to make the next attempt cheaper, not to
+leave 40 MB of ogg files in someone's home directory forever. Writing to a
+`.part` name also turned up a bug of its own — FFmpeg picks its muxer from the
+file extension, so the container is now named explicitly with `-f ogg`.
+
+**Every message that a user can read** was reviewed against one question: does
+it say what to do next? Ten did not. "CMake is not installed" now carries the
+command for this distribution; "could not create shortcuts" now says the game
+is installed and where to start it; the uninstaller's refusal now names the
+manifest it looked for and why it would rather stop than delete the wrong
+folder.
+
+**Gate:** `tools/test_installer_lifecycle.sh`. Everything before it covered
+installing onto a clean machine; this covers the rest of the life — installing
+again over the top and checking the saves byte for byte, a reinstall that fails
+part way and must not take them with it, an interrupted rip resumed, removal,
+removal refused on a directory the installer did not create, and the unattended
+front end driven as a deployment tool would drive it.

@@ -130,6 +130,34 @@ jobs:
           path: gate-logs/
           if-no-files-found: ignore
 
+  no-opengl:
+    name: Build without the OpenGL backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build \
+            libsdl2-dev libsdl2-mixer-dev libsdl2-net-dev zlib1g-dev \
+            libjpeg-dev libbz2-dev
+
+      # The GL backend is only compiled when libepoxy is found, so every call
+      # into it has to be guarded -- and on a developer machine, where epoxy is
+      # always present, an unguarded one costs nothing and is invisible. One
+      # such call reached a Windows machine and failed the link after building
+      # all 231 objects. This is the configuration that catches the next one.
+      - name: Configure and build with the OpenGL backend off
+        run: |
+          cmake -S . -B build-nogl -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DECWOLF_RENDERER_OPENGL=OFF \
+            -DECWOLF_RENDERER_SOFTWARE=ON
+          cmake --build build-nogl --parallel
+
   setup-exe:
     name: Windows setup executable
     runs-on: windows-latest

@@ -44,7 +44,9 @@
 #include "wl_iwad.h"
 #include "zstring.h"
 
+#ifdef ECWOLF_RENDERER_OPENGL
 #include "render/opengl/r_glworld.h"
+#endif
 
 namespace
 {
@@ -288,7 +290,15 @@ void SetEnabled(bool enabled)
 
 	// Everything downstream that holds pixels rather than texture ids is now
 	// looking at art that is no longer installed.
+	//
+	// Guarded because ECWOLF_RENDERER_OPENGL is defined only when the GL
+	// backend was actually compiled, which needs libepoxy -- present on every
+	// Linux machine this is developed on and absent on a stock Windows one.
+	// Without the guard the Windows link fails on this one symbol, after
+	// building all 231 objects.
+#ifdef ECWOLF_RENDERER_OPENGL
 	R_GLLiveInvalidateTextures();
+#endif
 	Menu::forgetCachedArt();
 
 	if(gSwaps.Size() > 0)

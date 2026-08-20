@@ -71,7 +71,7 @@ done
 # gl_selftest is here rather than below because --gltest is handled before the
 # IWAD is opened: it needs no game data, and it is the only thing that proves the
 # shaders actually compile on the runner's driver. A broken shader still links.
-data_free_gates='definitions gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows'
+data_free_gates='definitions gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
 
 data_gates='
 corridor7
@@ -241,6 +241,15 @@ for g in $data_free_gates; do
 				skip_gate "$g" "wine is missing"
 			else
 				run_gate "$g" "windows install" "$here/test_installer_windows.sh"
+			fi ;;
+		installer_lifecycle)
+			# Installing twice, removing, resuming, and the unattended
+			# front end. Needs a built engine and the disc; skips itself
+			# without them.
+			if [ ! -x "$build_dir/ec7wolf" ]; then
+				skip_gate "$g" "no ec7wolf in $build_dir"
+			else
+				run_gate "$g" "install lifecycle" "$here/test_installer_lifecycle.sh"
 			fi ;;
 		corridor7_flic)
 			# Needs a build and nothing else: --flictest decodes before any game

@@ -1,0 +1,165 @@
+name: Release
+
+# Cutting a release.
+#
+# Triggered by pushing a tag, so the tag is the record of what was released and
+# the version the engine reports matches it -- src/versiondefs.cmake counts
+# commits since the original plan's last milestone, and git describe finds the
+# tag, so a build from this workflow says exactly which release it is.
+#
+# Every binary here is produced by tools/make_release.py, which builds through
+# the installer's own build module rather than a separate CMake invocation
+# written for CI. That is the point: the released binaries come from the same
+# code that builds one on a user's machine, so the two cannot drift, and every
+# release exercises the SDL2 and libepoxy fetching that a person would
+# otherwise be the first to try.
+#
+# No game data is in any artifact. The player brings their Corridor 7 CD.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (must already exist)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  engine:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            runner: ubuntu-latest
+          - name: Linux arm64
+            runner: ubuntu-24.04-arm
+          - name: Windows x64
+            runner: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the version counts commits; a shallow clone cannot
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install what the build needs (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build \
+            libsdl2-dev libsdl2-mixer-dev libsdl2-net-dev zlib1g-dev \
+            libjpeg-dev libbz2-dev libepoxy-dev
+
+      # Nothing to install on Windows: the installer's own build module fetches
+      # SDL2 and builds libepoxy, and finds Visual Studio by itself.
+      - name: Build and stage the engine
+        run: python tools/make_release.py engine --into staging/engine
+
+      - name: Package
+        run: python tools/make_release.py package --engine staging/engine --out dist --kinds binaries,full
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine-${{ matrix.runner }}
+          path: dist/*
+          if-no-files-found: error
+
+  setup-exe:
+    name: Windows setup executable
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyinstaller PySide6
+      - run: python installer/windows/build_setup.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: setup-exe
+          path: dist/EC7Wolf-Setup.exe
+          if-no-files-found: error
+
+  portable:
+    name: Installer and source packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python tools/make_release.py package --out dist --kinds installer,source
+      - uses: actions/upload-artifact@v4
+        with:
+          name: portable
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish the release
+    needs: [engine, setup-exe, portable]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Gather what was built
+        run: |
+          mkdir -p dist
+          find artifacts -type f -exec cp {} dist/ \;
+          ls -la dist
+
+      # A last check that no game data slipped into an artifact. The engine and
+      # the installer are free software; MAPTEMP.CO7 and its siblings are not
+      # ours to hand out, and an accident here would be a licensing problem
+      # rather than a bug.
+      - name: Refuse to publish anything carrying game data
+        run: |
+          found=$(find dist -type f \( -iname '*.CO7' -o -iname 'CORR7*' \) -print)
+          if [ -n "$found" ]; then
+            echo "Corridor 7 game data found in the release artifacts:"
+            echo "$found"
+            exit 1
+          fi
+          for archive in dist/*.zip; do
+            [ -e "$archive" ] || continue
+            if unzip -l "$archive" | grep -iE '\.CO7|CORR7CD' ; then
+              echo "game data inside $archive"; exit 1
+            fi
+          done
+          for archive in dist/*.tar.gz; do
+            [ -e "$archive" ] || continue
+            if tar -tzf "$archive" | grep -iE '\.CO7|CORR7CD' ; then
+              echo "game data inside $archive"; exit 1
+            fi
+          done
+          echo "clean: no game data in any artifact"
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          gh release create "$tag" dist/* \
+            --title "EC7Wolf $tag" \
+            --notes-file .github/release-notes.md \
+            --verify-tag || \
+          gh release upload "$tag" dist/* --clobber

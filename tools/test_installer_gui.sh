@@ -146,7 +146,7 @@ wizard = InstallerWizard(repo)
 wizard.show()
 pump()
 
-expected = ["welcome", "license", "source", "engine", "destination",
+expected = ["welcome", "mode", "license", "source", "engine", "destination",
             "options", "summary", "progress", "finish"]
 check(list(wizard.ids) == expected, "the pages are in the right order")
 

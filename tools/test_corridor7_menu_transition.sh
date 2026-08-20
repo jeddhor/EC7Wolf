@@ -82,8 +82,17 @@ xvfb-run -a -s "-screen 0 960x600x24" sh -c '
 	xdotool key --clearmodifiers Down; sleep 0.8
 	import -window root "$MF_WORK/s-00.png"
 
-	# Sampled as fast as the grabs allow, with the keypress backgrounded, so the
-	# transition is caught in progress rather than only at its endpoints.
+	# Recorded with ffmpeg rather than sampled with repeated `import` calls.
+	#
+	# The fade is eleven steps of one tic -- about 157ms. Eighteen `import`
+	# runs each spawn a process, and under the load of a full gate run they
+	# spread out far enough that the entire fade can land between two of them:
+	# the test then sees the menu before and after, reports "no fade is
+	# happening", and sends the reader looking for a rendering regression that
+	# is not there. It failed that way twice.
+	#
+	# One x11grab process at 60fps has no per-frame startup cost, so the
+	# sampling rate does not depend on how busy the machine is.
 	#
 	# Retried, because the keypress can simply be lost. Under the load of a full
 	# gate run this failed with the column reading identically at the start, the
@@ -95,11 +104,16 @@ xvfb-run -a -s "-screen 0 960x600x24" sh -c '
 	attempt=1
 	switched=0
 	while [ "$attempt" -le 3 ]; do
-		xdotool key --clearmodifiers Return &
-		for i in 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18; do
-			import -window root "$MF_WORK/s-$i.png"
-		done
-		sleep 2
+		rm -f "$MF_WORK"/f-*.png
+		ffmpeg -loglevel error -y -f x11grab -video_size 960x600 \
+			-framerate 60 -i "$DISPLAY" -t 2 -vsync 0 \
+			"$MF_WORK/f-%03d.png" >/dev/null 2>&1 &
+		recorder=$!
+		# A moment for the recorder to be running before anything moves.
+		sleep 0.4
+		xdotool key --clearmodifiers Return
+		wait "$recorder" 2>/dev/null || true
+		sleep 1
 		import -window root "$MF_WORK/s-99.png"
 		if ! compare -metric AE "$MF_WORK/s-00.png" "$MF_WORK/s-99.png" \
 			null: 2>&1 | grep -qx 0; then
@@ -142,7 +156,11 @@ import glob, sys
 from PIL import Image
 
 work = sys.argv[1]
-shots = sorted(glob.glob("%s/s-*.png" % work))
+# Only the recorded frames. s-00 and s-99 exist to prove the menu changed at
+# all, and they come from `import`; mixing them into this comparison meant the
+# "art must not move" check was partly measuring the difference between two
+# screenshot tools -- 0.071 levels of it -- rather than the art.
+shots = sorted(glob.glob("%s/f-*.png" % work))
 
 def regions(path):
     im = Image.open(path).convert("L")

@@ -193,7 +193,10 @@ def register_uninstall(destination: Path, uninstaller: Path, version: str,
             reporter.detail(f"registered in Add/Remove Programs ({UNINSTALL_KEY})")
             return True
         except OSError as error:
-            reporter.warn(f"could not register in Add/Remove Programs: {error}")
+            reporter.warn(
+                f"could not register in Add/Remove Programs: {error}. The game "
+                "is installed and works; it just will not be listed there, so "
+                "remove it with Uninstall.cmd in the install folder.")
             return False
 
     # No winreg means this is not really Windows -- the gate, under Wine. reg.exe
@@ -206,8 +209,11 @@ def register_uninstall(destination: Path, uninstaller: Path, version: str,
         result = _run([reg, "add", "HKCU\\" + UNINSTALL_KEY, "/v", name,
                        "/t", kind, "/d", str(value), "/f"])
         if result.returncode != 0:
-            reporter.warn(f"could not write {name} to the registry: "
-                          f"{(result.stderr or result.stdout).strip()}")
+            reporter.warn(
+                f"could not write {name} to the registry: "
+                f"{(result.stderr or result.stdout).strip()}. The game is "
+                "installed; it will not appear in Add/Remove Programs, so "
+                "remove it with Uninstall.cmd in the install folder.")
             return False
     reporter.detail(f"registered in Add/Remove Programs ({UNINSTALL_KEY})")
     return True

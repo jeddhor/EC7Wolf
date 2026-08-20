@@ -33,8 +33,16 @@ def can_rip(source) -> bool:
 
 
 def rip(source, destination: Path, reporter: Reporter,
-        only_music: bool = False) -> list[Path]:
-    """Write trackNN.ogg into destination for every audio track on the disc."""
+        only_music: bool = False, cache: Path | None = None) -> list[Path]:
+    """Write trackNN.ogg into destination for every audio track on the disc.
+
+    With a cache directory, encoding survives a failed run: each track is
+    written there under a .part name and renamed only once FFmpeg has finished,
+    so a file that exists is a file that is complete, and a second attempt
+    copies it instead of spending another minute encoding it. Ripping is the
+    longest step after the compile, and the compile already resumes because
+    CMake's build tree outlives a failure.
+    """
     tracks = source.audio_tracks()
     image = source.audio_image
     if not tracks or image is None:
@@ -44,17 +52,37 @@ def rip(source, destination: Path, reporter: Reporter,
 
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
-        raise AudioError("FFmpeg is needed to encode the soundtrack")
+        from .deps import remedy
+        raise AudioError(
+            "FFmpeg is needed to encode the CD soundtrack, and is not "
+            f"installed. {remedy('ffmpeg')}. The game plays without it; it "
+            "just falls back to the AdLib music.")
 
     destination.mkdir(parents=True, exist_ok=True)
+    if cache is not None:
+        cache.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
     wanted = [t for t in tracks if not only_music or t.number in MUSIC_TRACKS]
 
     with image.open("rb") as handle:
         for index, track in enumerate(wanted):
             reporter.check_cancelled()
-            out = destination / f"track{track.number:02d}.ogg"
+            name = f"track{track.number:02d}.ogg"
+            out = destination / name
+
+            kept = cache / name if cache is not None else None
+            if kept is not None and kept.is_file() and kept.stat().st_size > 0:
+                reporter.detail(f"track {track.number:02d}: already encoded")
+                shutil.copy2(kept, out)
+                written.append(out)
+                reporter.progress((index + 1) / len(wanted))
+                continue
+
             reporter.detail(f"track {track.number:02d}: {track.seconds:.1f}s")
+            # Encode to a name nothing will mistake for a finished file, and
+            # rename only on success -- otherwise a run killed part way through
+            # leaves a truncated track that the next run happily believes.
+            encoding = (cache / (name + ".part")) if cache is not None else out
 
             handle.seek(track.first_sector * RAW_SECTOR)
             remaining = track.sectors * RAW_SECTOR
@@ -62,7 +90,11 @@ def rip(source, destination: Path, reporter: Reporter,
             process = subprocess.Popen(
                 [ffmpeg, "-hide_banner", "-loglevel", "error",
                  "-f", "s16le", "-ar", "44100", "-ac", "2", "-i", "pipe:0",
-                 "-c:a", "libvorbis", "-q:a", "5", "-y", str(out)],
+                 # -f ogg because the container is named, not guessed: the
+                 # file being written is trackNN.ogg.part while it encodes, and
+                 # FFmpeg picks the muxer from the extension unless told.
+                 "-c:a", "libvorbis", "-q:a", "5", "-f", "ogg",
+                 "-y", str(encoding)],
                 stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE)
             try:
@@ -85,13 +117,20 @@ def rip(source, destination: Path, reporter: Reporter,
                 pass
             except Cancelled:
                 process.kill()
+                if encoding is not out and encoding.exists():
+                    encoding.unlink()
                 raise
 
             _, errors = process.communicate()
             if process.returncode != 0:
+                if encoding is not out and encoding.exists():
+                    encoding.unlink()
                 raise AudioError(
                     f"FFmpeg could not encode track {track.number}: "
                     f"{(errors or b'').decode('utf-8', 'replace').strip()}")
+            if encoding is not out:
+                encoding.replace(kept)
+                shutil.copy2(kept, out)
             written.append(out)
             reporter.progress((index + 1) / len(wanted))
 

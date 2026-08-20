@@ -9,10 +9,10 @@ own idea and they would drift.
 from __future__ import annotations
 
 import shutil
-import sys
 from pathlib import Path
 
 from . import audio, build, install, shortcuts, verify, windows
+from . import source as source_code
 from .progress import Cancelled, Reporter
 
 # Rough share of the wall clock each step takes, so one bar can move smoothly
@@ -33,6 +33,29 @@ class PlanError(Exception):
     pass
 
 
+class RemovalPlan:
+    """Uninstalling, wearing the same shape as InstallPlan.
+
+    The progress page runs whatever it is given and reports what comes back, so
+    giving removal the same run(reporter) -> Path signature means the thread,
+    the progress bar, the cancel button and the finish page all work on it
+    unchanged.
+    """
+
+    def __init__(self, destination: Path):
+        self.destination = Path(destination)
+
+    def steps(self) -> list[str]:
+        return ["remove"]
+
+    def run(self, reporter: Reporter) -> Path:
+        reporter.step("Removing EC7Wolf", str(self.destination))
+        reporter.progress(0.0)
+        install.uninstall(self.destination, reporter)
+        reporter.progress(1.0)
+        return self.destination
+
+
 class InstallPlan:
     def __init__(self, repo_root: Path, source, destination: Path,
                  with_music: bool = True, with_video: bool = True,
@@ -48,6 +71,12 @@ class InstallPlan:
         self.desktop_shortcut = desktop_shortcut
         self.build_dir = Path(build_dir) if build_dir else \
             self.destination.parent / ".ec7wolf-build"
+        # Encoded music, kept only while it is worth keeping: a failed or
+        # cancelled run leaves it behind so the next attempt does not spend
+        # another minute on tracks it has already encoded, and a successful one
+        # takes it away again rather than leaving 40 MB of it in someone's home
+        # directory forever.
+        self.cache_dir = self.destination.parent / ".ec7wolf-cache"
         self.engine = engine
         self.jobs = jobs
 
@@ -115,7 +144,13 @@ class InstallPlan:
         try:
             engine = self.engine
             if engine is None:
-                engine = build.build(self.repo_root, self.build_dir,
+                tree = self.repo_root
+                if not (tree / "CMakeLists.txt").is_file():
+                    # The installer arrived on its own. Fetch what it needs to
+                    # build, into the same cache everything else uses.
+                    tree = source_code.ensure(
+                        self.cache_dir / "source", scoped("engine"))
+                engine = build.build(tree, self.build_dir,
                                      scoped("engine"), self.jobs)
                 done += WEIGHTS["engine"]
             reporter.progress(done / total)
@@ -163,7 +198,8 @@ class InstallPlan:
                         "be ripped; the game will use the AdLib soundtrack")
                 else:
                     for path in audio.rip(self.source, staging.path / "cdaudio",
-                                          scoped("music")):
+                                          scoped("music"),
+                                          cache=self.cache_dir / "cdaudio"):
                         staging.note(f"cdaudio/{path.name}")
                 done += WEIGHTS["music"]
                 reporter.progress(done / total)
@@ -172,6 +208,10 @@ class InstallPlan:
             reporter.step("Assembling the install", str(self.destination))
             staging.copy(engine.executable, engine.executable.name)
             staging.copy(engine.pk3, engine.pk3.name)
+            for extra in getattr(engine, "extra_files", []):
+                if Path(extra).is_file():
+                    reporter.detail(Path(extra).name)
+                    staging.copy(Path(extra), Path(extra).name)
             if not install.is_windows():
                 (staging.path / engine.executable.name).chmod(0o755)
             launcher_name = install.write_launcher(staging.path).name
@@ -199,7 +239,9 @@ class InstallPlan:
                     destination, launcher, self.repo_root, reporter,
                     menu=self.menu_shortcut, desktop=self.desktop_shortcut)
             except Exception as error:
-                reporter.warn(f"could not create shortcuts: {error}")
+                reporter.warn(
+                    f"could not create shortcuts: {error}. The game is "
+                    f"installed and works -- start it with {launcher}.")
         done += WEIGHTS["shortcuts"]
         reporter.progress(done / total)
 
@@ -217,6 +259,9 @@ class InstallPlan:
             "music": self.with_music,
             "video": self.with_video,
         })
+
+        # The install is made; the working files have done their job.
+        shutil.rmtree(self.cache_dir, ignore_errors=True)
 
         reporter.step("Checking the install")
         problems = verify.verify(destination, expect_music=self.with_music,

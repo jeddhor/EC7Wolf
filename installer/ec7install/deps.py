@@ -105,6 +105,7 @@ _PACKAGES = {
                  "libjpeg8-devel"),
     "bzip2":    ("libbz2-dev", "bzip2-devel", "bzip2", "libbz2-devel"),
     "gtk3":     ("libgtk-3-dev", "gtk3-devel", "gtk3", "gtk3-devel"),
+    "epoxy":    ("libepoxy-dev", "libepoxy-devel", "libepoxy", "libepoxy-devel"),
     "ffmpeg":   ("ffmpeg", "ffmpeg", "ffmpeg", "ffmpeg"),
 }
 
@@ -160,9 +161,46 @@ def remedy(key: str) -> str:
 # Probes
 # ---------------------------------------------------------------------------
 
+def _which_windows(names) -> str | None:
+    """Find programs shutil.which cannot see.
+
+    Windows installs a lot of things as App Execution Aliases -- zero-length
+    reparse points in WinGet's Links directory and the Microsoft Store's
+    WindowsApps -- and for those os.path.exists() answers False while
+    os.access(X_OK) answers True. shutil.which checks the former, so it reports
+    nothing there, and the installer would tell someone to install the FFmpeg
+    they installed last week with winget. Observed on Windows 11, not guessed.
+
+    So: read the directory instead of asking about the path.
+    """
+    extensions = [e.lower() for e in
+                  os.environ.get("PATHEXT", ".EXE").split(os.pathsep) if e]
+    wanted = {f"{name.lower()}{extension}"
+              for name in names for extension in extensions}
+
+    for directory in os.environ.get("PATH", "").split(os.pathsep):
+        if not directory:
+            continue
+        try:
+            entries = os.listdir(directory)
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.lower() in wanted:
+                candidate = os.path.join(directory, entry)
+                if os.access(candidate, os.X_OK):
+                    return candidate
+    return None
+
+
 def _which(*names: str) -> str | None:
     for name in names:
         found = shutil.which(name)
+        if found:
+            return found
+
+    if host_platform() == "windows":
+        found = _which_windows(names)
         if found:
             return found
     return None
@@ -202,6 +240,31 @@ def _library(key: str, label: str, pkg_name: str, header: str) -> Requirement:
                        remedy="" if found else remedy(key))
 
 
+def _vswhere_property(name: str, requires_vc: bool = False) -> str | None:
+    """Ask vswhere one thing about the newest Visual Studio."""
+    for variable in ("ProgramFiles(x86)", "ProgramFiles"):
+        base = os.environ.get(variable)
+        if not base:
+            continue
+        vswhere = Path(base) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
+        if not vswhere.is_file():
+            continue
+        command = [str(vswhere), "-latest", "-products", "*"]
+        if requires_vc:
+            command += ["-requires",
+                        "Microsoft.VisualStudio.Component.VC.Tools.x86.x64"]
+        command += ["-property", name]
+        try:
+            found = subprocess.run(command, capture_output=True, text=True,
+                                   timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        lines = found.stdout.strip().splitlines()
+        if found.returncode == 0 and lines:
+            return lines[0].strip()
+    return None
+
+
 def visual_studio() -> str | None:
     """The newest Visual Studio with the C++ tools, via vswhere.
 
@@ -211,26 +274,28 @@ def visual_studio() -> str | None:
     than saying nothing. vswhere.exe is Microsoft's answer to this and lives at
     a fixed path on every machine with any VS 2017 or later.
     """
-    for variable in ("ProgramFiles(x86)", "ProgramFiles"):
-        base = os.environ.get(variable)
-        if not base:
-            continue
-        vswhere = Path(base) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
-        if not vswhere.is_file():
-            continue
-        try:
-            found = subprocess.run(
-                [str(vswhere), "-latest", "-products", "*", "-requires",
-                 "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
-                 "-property", "displayName"],
-                capture_output=True, text=True, timeout=30)
-        except (OSError, subprocess.SubprocessError):
-            continue
-        name = found.stdout.strip().splitlines()
-        if found.returncode == 0 and name:
-            return name[0].strip()
-    return None
+    return _vswhere_property("displayName", requires_vc=True)
 
+def visual_studio_path() -> str | None:
+    """Where the newest Visual Studio is installed."""
+    return _vswhere_property("installationPath")
+
+
+def visual_studio_version() -> int | None:
+    """The major version of the newest Visual Studio, e.g. 18 for VS 2026.
+
+    The major version, not the year, because that is the part CMake's
+    generator names are keyed on -- "Visual Studio 17 2022" is version 17 --
+    and matching on it needs no table of which year goes with which number,
+    which would have to be guessed for every release still to come.
+    """
+    text = _vswhere_property("installationVersion")
+    if not text:
+        return None
+    try:
+        return int(text.split(".")[0])
+    except ValueError:
+        return None
 
 def _windows_compiler() -> Requirement:
     """MSVC or MinGW -- either will build it, so either satisfies this."""
@@ -275,24 +340,46 @@ def scan_build() -> Report:
     # a machine with only Make is not blocked -- it is just slower.
     ninja = _which("ninja", "ninja-build")
     make = _which("make", "nmake", "mingw32-make")
+    # On Windows, Visual Studio *is* the build system: CMake generates a
+    # solution and MSBuild builds it, so neither Ninja nor Make is needed.
+    # Without this, a machine with Visual Studio 2026 and nothing else was told
+    # it was missing two build tools it has no use for, and refused to go on.
+    studio = visual_studio() if host_platform() == "windows" else None
     requirements.append(Requirement(
         "ninja", "Ninja (recommended build tool)", ninja is not None,
         detail=_version(ninja, "--version") if ninja else "",
         remedy="" if ninja else remedy("ninja"),
-        optional=make is not None))
-    if not ninja and not make:
+        optional=make is not None or studio is not None))
+    if not ninja and not make and studio is None:
         requirements.append(Requirement(
             "make", "Make", False, remedy=remedy("compiler")))
 
     if host_platform() == "linux":
-        requirements.append(_library("sdl2", "SDL2", "sdl2", "SDL2/SDL.h"))
-        requirements.append(_library("sdl2_mixer", "SDL2_mixer", "SDL2_mixer",
-                                     "SDL2/SDL_mixer.h"))
-        requirements.append(_library("sdl2_net", "SDL2_net", "SDL2_net",
-                                     "SDL2/SDL_net.h"))
+        # Advisory rather than blocking: the installer builds these from source
+        # when they are absent. Installing the distribution's packages is still
+        # much the better answer -- minutes faster, and better integrated --
+        # so the remedy stays on the page.
+        for requirement in (
+                _library("sdl2", "SDL2", "sdl2", "SDL2/SDL.h"),
+                _library("sdl2_mixer", "SDL2_mixer", "SDL2_mixer",
+                         "SDL2/SDL_mixer.h"),
+                _library("sdl2_net", "SDL2_net", "SDL2_net",
+                         "SDL2/SDL_net.h")):
+            if not requirement.found:
+                requirement.optional = True
+                requirement.remedy += "  --  or let the installer build it"
+            requirements.append(requirement)
         requirements.append(_library("zlib", "zlib", "zlib", "zlib.h"))
         requirements.append(_library("jpeg", "libjpeg", "libjpeg", "jpeglib.h"))
         requirements.append(_library("bzip2", "bzip2", "bzip2", "bzlib.h"))
+        epoxy = _pkg_config("epoxy") or _have_header("epoxy/gl.h")
+        requirements.append(Requirement(
+            "epoxy", "libepoxy (for the OpenGL renderer)", epoxy,
+            detail="" if not epoxy else "found",
+            remedy="" if epoxy else (remedy("epoxy") +
+                                     "  --  or let the installer build it"),
+            optional=True))
+
         gtk = _pkg_config("gtk+-3.0")
         requirements.append(Requirement(
             "gtk3", "GTK3 (optional: native file dialogs)", gtk,
@@ -300,11 +387,19 @@ def scan_build() -> Report:
     elif host_platform() == "windows":
         # There is no pkg-config to ask, and finding vcpkg's tree is guesswork;
         # CMake is the authority, so this is advisory rather than a probe.
-        vcpkg = os.environ.get("VCPKG_ROOT") or _which("vcpkg")
         requirements.append(Requirement(
-            "sdl2", "SDL2 development libraries", vcpkg is not None,
-            detail="vcpkg found" if vcpkg else "",
-            remedy="" if vcpkg else remedy("sdl2")))
+            "sdl2", "SDL2 development libraries", True,
+            detail="obtained by the installer if they are not already here",
+            remedy="",
+            # Advisory, not a probe: there is no pkg-config to ask and vcpkg is
+            # only one of the ways to have SDL2 on Windows. Blocking the build
+            # on a guess is worse than letting CMake -- which actually knows --
+            # say so, and its message reaches the log either way.
+            optional=True))
+        requirements.append(Requirement(
+            "epoxy", "libepoxy (for the OpenGL renderer)", True,
+            detail="built from source by the installer if it is not already here",
+            remedy="", optional=True))
 
     return Report(requirements)
 
@@ -321,7 +416,11 @@ def scan_rip(need_music: bool = True) -> Report:
     ffmpeg = _which("ffmpeg")
     requirements.append(Requirement(
         "ffmpeg", "FFmpeg (for the CD soundtrack)", ffmpeg is not None,
-        detail=_version(ffmpeg, "-version").split(" Copyright")[0] if ffmpeg else "",
+        # The path when the version cannot be read: an App Execution Alias
+        # runs but does not always answer -version, and a requirement that says
+        # "found" with nothing beside it reads like a bug.
+        detail=(_version(ffmpeg, "-version").split(" Copyright")[0] or ffmpeg)
+               if ffmpeg else "",
         remedy="" if ffmpeg else remedy("ffmpeg"),
         optional=not need_music))
     return Report(requirements)

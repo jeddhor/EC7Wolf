@@ -20,9 +20,10 @@ from ec7install import identity, install
 from . import pages
 from .worker import run_detached
 
-PAGE_CLASSES = (pages.WelcomePage, pages.LicensePage, pages.SourcePage,
-                pages.EnginePage, pages.DestinationPage, pages.OptionsPage,
-                pages.SummaryPage, pages.ProgressPage, pages.FinishPage)
+PAGE_CLASSES = (pages.WelcomePage, pages.ModePage, pages.LicensePage,
+                pages.SourcePage, pages.EnginePage, pages.DestinationPage,
+                pages.OptionsPage, pages.SummaryPage, pages.ProgressPage,
+                pages.FinishPage)
 
 
 def find_icon(repo_root: Path) -> Path | None:
@@ -118,6 +119,70 @@ class InstallerWizard(QWizard):
         super().accept()
 
 
+def unattended(repo_root: Path, arguments) -> int:
+    """Install or remove without asking anything, reporting by exit code.
+
+    The same core the wizard drives, with the command line for answers. This is
+    what a deployment tool gets, and on Windows it is the only sensible way to
+    drive a frozen setup.exe -- it has no console to print to and no one to
+    answer a dialog.
+
+        1  the arguments do not describe an install that could be done
+        2  the source is not usable
+        3  the install itself failed
+    """
+    from c7disc import GameSource
+    from ec7install import build, plan
+    from ec7install.progress import ConsoleReporter, LogFile
+
+    destination = arguments.dest or install.default_destination()
+    log_path = Path(destination).parent / "ec7wolf-install.log"
+    reporter = LogFile(log_path, ConsoleReporter(verbose=True))
+
+    try:
+        if arguments.remove:
+            work = plan.RemovalPlan(arguments.remove)
+            work.run(reporter)
+            return 0
+
+        if arguments.source is None:
+            reporter.warn("--unattended needs --source: the CD, a disc image, "
+                          "or a folder holding the game's files")
+            return 1
+
+        try:
+            source = GameSource.open(arguments.source)
+        except Exception as error:                    # noqa: BLE001
+            reporter.warn(f"{arguments.source} could not be read: {error}")
+            return 2
+
+        extra = [arguments.engine] if arguments.engine else []
+        if identity.is_frozen():
+            extra.append(Path(sys.executable).resolve().parent)
+        engine = build.find_existing(repo_root, extra=extra)
+        if engine is None and identity.is_frozen():
+            reporter.warn(
+                "no built engine was found beside this installer, and a frozen "
+                "installer has no source to compile. Put ec7wolf next to it, "
+                "or run the installer from a source checkout.")
+            return 1
+
+        work = plan.InstallPlan(
+            repo_root=repo_root, source=source, destination=Path(destination),
+            with_music=not arguments.no_music,
+            with_video=not arguments.no_video,
+            menu_shortcut=not arguments.no_shortcuts,
+            desktop_shortcut=not arguments.no_shortcuts,
+            engine=engine)
+        work.run(reporter)
+        return 0
+    except Exception as error:                        # noqa: BLE001
+        reporter.warn(str(error))
+        return 3
+    finally:
+        reporter.close()
+
+
 def selftest(repo_root: Path) -> int:
     """Construct the whole wizard offscreen and report by exit code.
 
@@ -133,8 +198,8 @@ def selftest(repo_root: Path) -> int:
 
     QApplication([])
     wizard = InstallerWizard(repo_root)
-    expected = ["welcome", "license", "source", "engine", "destination",
-                "options", "summary", "progress", "finish"]
+    expected = ["welcome", "mode", "license", "source", "engine",
+                "destination", "options", "summary", "progress", "finish"]
     if list(wizard.ids) != expected:
         return 1
     licence = wizard.page_named("license")
@@ -155,9 +220,25 @@ def main(argv: list[str] | None = None) -> int:
                         help="pre-fill the CD, image or folder to install from")
     parser.add_argument("--dest", type=Path, help="pre-fill the install folder")
     parser.add_argument("--repo", type=Path, help="the EC7Wolf source tree")
+    parser.add_argument("--engine", type=Path, metavar="DIR",
+                        help="a folder holding a prebuilt ec7wolf and its pk3, "
+                             "used instead of building one")
     parser.add_argument("--selftest", action="store_true",
                         help="build the wizard without showing it and exit; "
                              "used to check a frozen build actually works")
+    parser.add_argument("--unattended", "--silent", action="store_true",
+                        help="install with no window and no questions, using "
+                             "the answers given on the command line")
+    parser.add_argument("--remove", type=Path, metavar="DIR",
+                        help="remove an installed copy, with no window")
+    parser.add_argument("--no-music", action="store_true")
+    parser.add_argument("--no-video", action="store_true")
+    parser.add_argument("--no-shortcuts", action="store_true")
+
+    # /S is what a Windows installer is expected to answer to, and a deployment
+    # tool driving EC7Wolf-Setup.exe will try it before anything else.
+    argv = list(sys.argv[1:] if argv is None else argv)
+    argv = ["--unattended" if a in ("/S", "/s") else a for a in argv]
     arguments = parser.parse_args(argv)
 
     if arguments.repo:
@@ -176,6 +257,12 @@ def main(argv: list[str] | None = None) -> int:
         # and the self-test needs to make its own offscreen.
         return selftest(repo_root)
 
+    if arguments.unattended or arguments.remove:
+        # No window at all. A windowed executable has no console either, so the
+        # exit code is the whole of the answer -- and the log file, which is
+        # written whatever happens, is where the detail is.
+        return unattended(repo_root, arguments)
+
     application = QApplication(sys.argv)
     application.setApplicationName("EC7Wolf Setup")
     application.setApplicationDisplayName("EC7Wolf Setup")
@@ -183,6 +270,8 @@ def main(argv: list[str] | None = None) -> int:
     application.setDesktopFileName("ec7wolf-setup")
 
     wizard = InstallerWizard(repo_root, arguments.source, arguments.dest)
+    if arguments.engine:
+        wizard.state.extra_engine_paths.append(arguments.engine)
     if identity.is_frozen():
         wizard.state.extra_engine_paths.append(Path(sys.executable).resolve().parent)
     icon = find_icon(repo_root)

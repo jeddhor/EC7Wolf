@@ -359,3 +359,84 @@ def CueSource(cue_path: Path) -> ImageSource:
     return ImageSource(binary, first, extent(first),
                        raw=track["mode"].endswith("/2352"),
                        audio=audio, audio_image=binary)
+
+
+# ---------------------------------------------------------------------------
+# Finding a disc without being told where it is
+# ---------------------------------------------------------------------------
+
+class Drive:
+    """An optical drive, and whatever is in it."""
+
+    def __init__(self, path: str, label: str, has_disc: bool):
+        self.path = path
+        self.label = label
+        self.has_disc = has_disc
+
+    def __repr__(self) -> str:
+        return f"<Drive {self.path} {'loaded' if self.has_disc else 'empty'}>"
+
+
+def optical_drives() -> list[Drive]:
+    """Optical drives on this machine, so the user can be offered a list.
+
+    Readability is the test, not the presence of a device node: an empty drive
+    exists but cannot be read, and offering it as a choice only produces a
+    confusing error two pages later.
+    """
+    import platform
+
+    drives: list[Drive] = []
+
+    if platform.system() == "Windows":
+        try:
+            import ctypes
+            DRIVE_CDROM = 5
+            bits = ctypes.windll.kernel32.GetLogicalDrives()
+            for index in range(26):
+                if not bits & (1 << index):
+                    continue
+                root = f"{chr(ord('A') + index)}:\\"
+                if ctypes.windll.kernel32.GetDriveTypeW(root) != DRIVE_CDROM:
+                    continue
+                name_buffer = ctypes.create_unicode_buffer(261)
+                ctypes.windll.kernel32.GetVolumeInformationW(
+                    root, name_buffer, 261, None, None, None, None, 0)
+                label = name_buffer.value or "CD drive"
+                drives.append(Drive(root, f"{root}  {label}",
+                                    bool(name_buffer.value)))
+        except Exception:
+            pass
+        return drives
+
+    # A mounted disc is the easy case, and the one that needs no permissions.
+    seen: set[str] = set()
+    try:
+        for line in Path("/proc/mounts").read_text().splitlines():
+            parts = line.split()
+            if len(parts) >= 3 and parts[2] in ("iso9660", "udf"):
+                mount = parts[1].replace("\\040", " ")
+                if mount not in seen:
+                    seen.add(mount)
+                    drives.append(Drive(mount, f"{mount}  (mounted disc)", True))
+    except OSError:
+        pass
+
+    # Then the raw devices, which can be read directly when permissions allow.
+    for pattern in ("/dev/sr*", "/dev/cdrom*", "/dev/dvd*"):
+        for device in sorted(Path("/dev").glob(pattern.split("/")[-1])):
+            path = str(device)
+            if path in seen:
+                continue
+            seen.add(path)
+            readable = False
+            try:
+                with device.open("rb") as handle:
+                    handle.seek(16 * DATA_SECTOR)
+                    readable = handle.read(6)[1:6] == b"CD001"
+            except OSError:
+                readable = False
+            drives.append(Drive(path, f"{path}  " +
+                                ("(disc inserted)" if readable else "(empty or unreadable)"),
+                                readable))
+    return drives

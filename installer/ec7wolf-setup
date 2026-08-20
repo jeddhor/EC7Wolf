@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+"""EC7Wolf's graphical installer.
+
+    ec7wolf-setup
+    ec7wolf-setup --source /path/to/Corridor7.cue
+
+Needs PySide6. If it is not installed, ec7wolf-install does the same job from a
+terminal with nothing but Python.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parent
+sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(REPO / "tools"))
+
+try:
+    import PySide6                                        # noqa: F401
+except ImportError:
+    sys.stderr.write(
+        "The graphical installer needs PySide6, which is not installed.\n\n"
+        "  Debian, Ubuntu, KDE neon:  sudo apt install python3-pyside6.qtwidgets\n"
+        "  Fedora:                    sudo dnf install python3-pyside6\n"
+        "  Arch:                      sudo pacman -S pyside6\n"
+        "  anywhere:                  pip install PySide6\n\n"
+        "Or install from the terminal instead, which needs nothing extra:\n"
+        f"  {HERE / 'ec7wolf-install'} --source /path/to/Corridor7.cue\n")
+    raise SystemExit(2)
+
+from ec7install_gui.wizard import main                    # noqa: E402
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -74,14 +74,16 @@ in CI, and what the GUI adds on top is layout.
 
 ## Phases
 
-### Phase 1 — the core, and a CLI that can already do the job
+### Phase 1 — the core, and a CLI that can already do the job — **done**
 
 `installer/ec7install/`, no Qt anywhere:
 
-* `sources.py` — a game-data source: a CD device, an ISO, a BIN/CUE, or a
+* `tools/c7disc.py` — a game-data source: a CD device, an ISO, a BIN/CUE, or a
   folder. Promotes the ISO9660 walker in `tools/extract_c7_video.py` into
   something that can list and extract *any* file, since it already does the hard
-  part.
+  part. It lives in `tools/` rather than inside the package because
+  `extract_c7_video.py` uses it too, and one reader with one set of bugs is
+  worth more than two.
 * `deps.py` — dependency scan for building and for ripping, per platform, each
   missing item carrying a human remedy (the distro package, the download page).
 * `build.py` — configure and build, streaming output line by line to a callback,
@@ -97,11 +99,59 @@ Exit gate: a headless end-to-end install from a disc image into a temp
 directory, verified, gated, and runnable without game data present (the gate
 skips what it cannot do, as the suite already does).
 
-### Phase 2 — the Qt shell
+### Phase 2 — the Qt shell — **done**
 
-Pages: welcome, licence, ownership notice, source selection, engine (found /
-will build / missing dependencies), destination, shortcuts, summary, progress
-with a detail pane, finish. Cancellation, error presentation, the log button.
+`installer/ec7install_gui/`, and `installer/ec7wolf-setup` to start it. A
+QWizard, because an installer *is* a wizard and Qt already knows how one behaves
+— a commit page whose button reads *Install*, no way back once it is writing,
+Next disabled until the page has an answer it can act on.
+
+* `worker.py` — the thread boundary, and the only place the two threads meet.
+  `Bridge` owns the signals, `GuiReporter` is a plain `Reporter` that emits
+  them, `InstallThread` runs one plan and reports every outcome — including the
+  exceptions — through a single signal.
+* `pages.py` — `State` plus the nine pages. Pages read and write that one
+  object rather than QWizard's field registry, so the summary and the plan are
+  built from exactly the thing the pages set.
+* `wizard.py` — assembly, the icon, and `reject()`: Cancel, Escape and the
+  window's close button all arrive there, and an install in flight is handed to
+  the worker instead of closing the window out from under it.
+
+The reporter is deliberately not a QObject. Mixing Qt's metaclass into the
+`Reporter` hierarchy buys nothing and can only cause trouble, so the Qt half
+lives in a separate object it holds.
+
+Progress is throttled at the reporter: a compile reports progress per file, and
+forwarding every one of those posts thousands of events that all resolve to the
+same pixel. Detail lines are not throttled — they are the point of the pane —
+but the pane keeps only the last 4000, because a full build is tens of thousands
+of lines and keeping them all costs more memory than the build.
+
+**Gate:** `tools/test_installer_gui.sh`, in the data-free set. It drives the
+real wizard on Qt's offscreen platform — no display needed, and nothing thrown
+onto a developer's screen mid-run. It checks the thread crossing (100 detail
+lines arrive in order, progress never goes backwards and is throttled), page
+order, and each page's validation; then it runs two *actual* installs through
+the window, one to completion and one cancelled part way, because the worker,
+the progress display and the Cancel button cannot be judged from a static page.
+
+Two bugs it caught, both of which would have shipped:
+
+* `OptionsPage.initializePage` set the music checkbox first, which emitted
+  `toggled`, which wrote the whole state back from the video checkbox that had
+  not been set yet — so the next line read the False it had just caused and
+  silently unticked the cinematics. Fixed by reading every wanted value out of
+  the state before touching a widget.
+* `audio.rip` polled for cancellation only *between* tracks. Cancel is what
+  makes that reachable, and the longest track on the disc is ten minutes, so the
+  window could have sat on "Cancelling…" for that long. It now polls inside the
+  streaming loop, and the gate holds it to stopping within 30 seconds of being
+  asked. Measured: 0.3.
+
+Advancing pages in the gate clicks the button rather than calling
+`QWizard.next()`, which is a slot and moves whether or not the page says it is
+complete. Only the button respects `isComplete()`, so only the button proves the
+guard is real.
 
 ### Phase 3 — KDE integration
 

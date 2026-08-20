@@ -71,7 +71,7 @@ done
 # gl_selftest is here rather than below because --gltest is handled before the
 # IWAD is opened: it needs no game data, and it is the only thing that proves the
 # shaders actually compile on the runner's driver. A broken shader still links.
-data_free_gates='definitions gl_selftest corridor7_flic installer'
+data_free_gates='definitions gl_selftest corridor7_flic installer installer_gui'
 
 data_gates='
 corridor7
@@ -214,6 +214,15 @@ for g in $data_free_gates; do
 				skip_gate "$g" "no ec7wolf in $build_dir"
 			else
 				run_gate "$g" "installer" "$here/test_installer.sh" "$build_dir"
+			fi ;;
+		installer_gui)
+			# Drives the real wizard on Qt's offscreen platform. Needs no
+			# display and no game data; the half that installs finds the
+			# disc itself, or stops after the pages that need none.
+			if ! python3 -c "import PySide6.QtWidgets" >/dev/null 2>&1; then
+				skip_gate "$g" "PySide6 is missing"
+			else
+				run_gate "$g" "installer window" "$here/test_installer_gui.sh"
 			fi ;;
 		corridor7_flic)
 			# Needs a build and nothing else: --flictest decodes before any game

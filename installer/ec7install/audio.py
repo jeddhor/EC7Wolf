@@ -71,6 +71,10 @@ def rip(source, destination: Path, reporter: Reporter,
                 # ten minutes, which is about 108 MB of raw audio, and there is
                 # no reason for any of it to be resident at once.
                 while remaining > 0:
+                    # Polled here, not just between tracks: the longest track
+                    # is ten minutes, and a Cancel button that does nothing
+                    # until the current track finishes is not a Cancel button.
+                    reporter.check_cancelled()
                     chunk = handle.read(min(1 << 20, remaining))
                     if not chunk:
                         break

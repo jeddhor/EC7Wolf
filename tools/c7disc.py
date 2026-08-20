@@ -216,6 +216,24 @@ class GameSource:
             raise DiscError(f"{path} does not exist")
         if path.suffix.lower() == ".cue":
             return CueSource(path)
+
+        # A .bin is the obvious file to reach for -- it is the big one -- but on
+        # its own it is just sectors: nothing in it says where the data track
+        # ends and the audio begins, or even how large a sector is. The .cue
+        # beside it says all of that, so use it.
+        if path.suffix.lower() in (".bin", ".img"):
+            for candidate in (path.with_suffix(".cue"), path.with_suffix(".CUE")):
+                if candidate.is_file():
+                    return CueSource(candidate)
+            for candidate in sorted(path.parent.glob("*.[cC][uU][eE]")):
+                if candidate.stem.lower() == path.stem.lower():
+                    return CueSource(candidate)
+            raise DiscError(
+                f"{path.name} is a raw disc image, and on its own it does not "
+                "say how its tracks are laid out -- that is what the .cue file "
+                "beside it is for. No .cue was found next to it; choose the "
+                ".cue rather than the .bin.")
+
         return ImageSource(path)
 
 

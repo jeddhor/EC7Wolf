@@ -324,6 +324,7 @@ def probe_source(path: Path) -> dict:
         tracks = []
     return {
         "source": source,
+        "kind": getattr(source, "kind", "image"),
         "describe": source.describe(),
         "missing": [n for n in install.REQUIRED_DATA if n not in names],
         "optional": [n for n in install.OPTIONAL_DATA if n in names],
@@ -415,7 +416,9 @@ class SourcePage(QWizardPage):
     def _browse_image(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self, "Choose a disc image", str(Path.home()),
-            "Disc images (*.cue *.CUE *.iso *.ISO *.bin *.BIN);;All files (*)")
+            "Disc images (*.cue *.CUE *.iso *.ISO);;"
+            "Disc images, including raw tracks (*.cue *.CUE *.iso *.ISO "
+            "*.bin *.BIN *.img *.IMG);;All files (*)")
         if path:
             self.imageEdit.setText(path)
             self.imageRadio.setChecked(True)
@@ -478,16 +481,34 @@ class SourcePage(QWizardPage):
             lines.append(f"<p style='color:{colour['ok']};'>&#10003; All "
                          f"{len(install.REQUIRED_DATA)} game files are here.</p>")
             extras = []
-            extras.append(
-                plural(result["tracks"], "audio track") + " for the soundtrack"
-                if result["tracks"] else
-                "<span style='color:%s'>no audio tracks &#8211; the CD "
-                "soundtrack cannot be ripped from this source</span>" % colour["warn"])
-            extras.append(
-                f"{len(result['cinematics'])} of {len(install.CINEMATICS)} cinematics"
-                if result["cinematics"] else
-                "<span style='color:%s'>no cinematics &#8211; they exist only "
-                "on the CD</span>" % colour["warn"])
+            if result["tracks"]:
+                extras.append(plural(result["tracks"], "audio track")
+                              + " for the soundtrack")
+            else:
+                # Say why, in terms of the thing they actually chose. An ISO is
+                # the case worth naming: it is a perfectly good image of the
+                # data track and simply cannot contain CD audio, which is not
+                # obvious and is not the user's mistake.
+                why = ("an ISO image holds the data track only, so there is no "
+                       "CD audio in it"
+                       if result["kind"] == "image" else
+                       "a folder holds the game's files, not the disc's audio "
+                       "tracks")
+                extras.append(
+                    "<span style='color:%s'>No soundtrack: %s. The music needs "
+                    "the CD itself, or a BIN/CUE image of it. Everything else "
+                    "installs; the game falls back to its AdLib "
+                    "music.</span>" % (colour["warn"], why))
+
+            if result["cinematics"]:
+                extras.append(f"{len(result['cinematics'])} of "
+                              f"{len(install.CINEMATICS)} cinematics")
+            else:
+                extras.append(
+                    "<span style='color:%s'>No cinematics: SEQONE, SEQTHREE and "
+                    "SEQFOUR are not in this source. They are files on the "
+                    "disc, so a copy made without them will not have "
+                    "them.</span>" % colour["warn"])
             if result["optional"]:
                 extras.append(", ".join(result["optional"]) + " (digitised speech)")
             lines.append("<ul><li>" + "</li><li>".join(extras) + "</li></ul>")

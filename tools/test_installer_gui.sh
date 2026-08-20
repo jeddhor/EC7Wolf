@@ -42,7 +42,7 @@ trap 'rm -rf "$work"' EXIT INT TERM
 QT_QPA_PLATFORM=offscreen \
 QT_LOGGING_RULES='*.debug=false;qt.qpa.*=false' \
 python3 - "$repo" "$work" "$disc" <<'PY'
-import sys, threading, time
+import shutil, subprocess, sys, threading, time
 from pathlib import Path
 
 repo, work, disc = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
@@ -210,9 +210,66 @@ source_page.imageEdit.setText(disc)
 source_page.rescan()
 wait_for(lambda: source_page.isComplete(), 120, "the disc to be probed")
 check(source_page.isComplete(), "the real disc is accepted")
+
+# The .bin is the big file, so it is the one people reach for. On its own it is
+# just sectors -- nothing in it says where the data track ends -- and it used to
+# be offered by the file dialog and then fail. It should find its own cue.
+raw = Path(disc).with_suffix(".bin")
+if raw.is_file():
+    source_page.imageEdit.setText(str(raw))
+    source_page.rescan()
+    wait_for(lambda: source_page.isComplete(), 120, "the .bin to be probed")
+    check(source_page.isComplete(), "choosing the .bin works, via its .cue")
+    check(wizard.state.probe and wizard.state.probe["tracks"] > 0,
+          "and still finds the audio tracks the cue describes")
+
+    # A .bin with no cue beside it cannot be read, and should say so in terms of
+    # what to do instead.
+    lonely = work / "lonely" / raw.name
+    lonely.parent.mkdir(parents=True, exist_ok=True)
+    lonely.write_bytes(b"\0" * 4096)
+    source_page.imageEdit.setText(str(lonely))
+    source_page.rescan()
+    wait_for(lambda: source_page.task is not None and source_page.task.isFinished(),
+             30, "the lone .bin to be probed")
+    for _ in range(40):
+        pump()
+    check(not source_page.isComplete(), "a .bin with no .cue is refused")
+    check("cue" in source_page.result.toPlainText().lower(),
+          "and the message names the .cue as the thing to choose")
+
+    source_page.imageEdit.setText(disc)
+    source_page.rescan()
+    wait_for(lambda: source_page.isComplete(), 120, "the disc again")
 check(wizard.state.source is not None, "the source is handed to the state")
 check(wizard.state.probe["tracks"] > 0, "its audio tracks were found")
 check(len(wizard.state.probe["cinematics"]) == 3, "its three cinematics were found")
+
+if shutil.which("genisoimage") or shutil.which("mkisofs"):
+    print("\nan ISO has no CD audio, and should say so")
+    iso_root = work / "isosrc"
+    iso_root.mkdir(parents=True, exist_ok=True)
+    for name in ("MAPTEMP.CO7", "GFXTILES.CO7", "VGADICT.CO7", "VGAHEAD.CO7",
+                 "VGAGRAPH.CO7", "AUDIOHED.CO7", "AUDIOT.CO7", "CORR7CD.EXE"):
+        (iso_root / name).write_bytes(wizard.state.source.read(name))
+    iso = work / "made.iso"
+    maker = shutil.which("genisoimage") or shutil.which("mkisofs")
+    subprocess.run([maker, "-quiet", "-o", str(iso), "-J", "-r", str(iso_root)],
+                   capture_output=True)
+    if iso.is_file():
+        source_page.imageEdit.setText(str(iso))
+        source_page.rescan()
+        wait_for(lambda: source_page.isComplete(), 120, "the ISO to be probed")
+        shown = source_page.result.toPlainText()
+        check(source_page.isComplete(), "an ISO of the data track is accepted")
+        check("No soundtrack" in shown,
+              "and it says there is no soundtrack in it")
+        check("ISO" in shown and "data track" in shown,
+              "explaining that an ISO holds the data track only")
+        check("AdLib" in shown, "and that the game still works without it")
+        source_page.imageEdit.setText(disc)
+        source_page.rescan()
+        wait_for(lambda: source_page.isComplete(), 120, "the disc again")
 
 print("\nthe engine")
 advance("engine")

@@ -339,6 +339,10 @@ def _stream(command: list[str], cwd: Path, reporter: Reporter,
 def build(repo_root: Path, build_dir: Path, reporter: Reporter,
           jobs: int | None = None) -> Engine:
     """Configure and build the engine into build_dir."""
+    # Resolved here so every path derived from them below is absolute: the
+    # dependency caches hang off build_dir, and meson will not take a relative
+    # prefix.
+    repo_root, build_dir = Path(repo_root).resolve(), Path(build_dir).resolve()
     build_dir.mkdir(parents=True, exist_ok=True)
 
     cmake = shutil.which("cmake")

@@ -73,7 +73,8 @@ def platform_tag() -> str:
 # Building
 # ---------------------------------------------------------------------------
 
-def build_engine(into: Path, jobs: int | None) -> Path:
+def build_engine(into: Path, jobs: int | None,
+                 allow_software: bool = False) -> Path:
     from ec7install import build, install
     from ec7install.progress import ConsoleReporter
 
@@ -100,7 +101,39 @@ def build_engine(into: Path, jobs: int | None) -> Path:
     print(f"\nstaged {into}:")
     for item in sorted(into.iterdir()):
         print(f"  {item.name}  {item.stat().st_size // 1024} KB")
+
+    if not allow_software:
+        check_opengl(into / engine.executable.name)
     return into
+
+
+def check_opengl(executable: Path) -> None:
+    """Refuse to release an engine built without its OpenGL backend.
+
+    build() treats a missing libepoxy as a warning and carries on with the
+    software renderer, which is right on someone's own machine -- a slower game
+    beats no game. It is wrong for a release: the binary looks identical, says
+    nothing, and quietly lacks the renderer this engine is about. beta116 and
+    beta118 shipped that way, because meson had refused a relative --prefix and
+    the warning scrolled past in a four-minute log.
+
+    glCreateShader is epoxy's own symbol, and it is in the binary only if the
+    GL sources were compiled and linked.
+    """
+    try:
+        blob = executable.read_bytes()
+    except OSError as error:
+        raise SystemExit(f"cannot read {executable}: {error}")
+
+    if b"glCreateShader" in blob:
+        print("\nOpenGL backend: present")
+        return
+    raise SystemExit(
+        f"\n{executable.name} was built WITHOUT the OpenGL backend.\n\n"
+        "libepoxy is missing or failed to build -- look for 'Building "
+        "libepoxy' in the log above. A release binary that renders in software "
+        "is not one to publish, so this is a failure rather than a warning.\n"
+        "Pass --allow-software to make one deliberately.")
 
 
 # ---------------------------------------------------------------------------
@@ -321,6 +354,8 @@ def main() -> int:
     build_parser = sub.add_parser("engine", help="build and stage the engine")
     build_parser.add_argument("--into", type=Path, required=True)
     build_parser.add_argument("--jobs", type=int, default=os.cpu_count())
+    build_parser.add_argument("--allow-software", action="store_true",
+                              help="permit a build with no OpenGL backend")
 
     package_parser = sub.add_parser("package", help="make the release archives")
     package_parser.add_argument("--engine", type=Path)
@@ -332,7 +367,8 @@ def main() -> int:
 
     arguments = parser.parse_args()
     if arguments.command == "engine":
-        build_engine(arguments.into, arguments.jobs)
+        build_engine(arguments.into.resolve(), arguments.jobs,
+                     arguments.allow_software)
     else:
         package(arguments.engine, arguments.out,
                 [k.strip() for k in arguments.kinds.split(",") if k.strip()],

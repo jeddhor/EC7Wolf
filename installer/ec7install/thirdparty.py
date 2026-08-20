@@ -114,6 +114,8 @@ def cmake_build(source: Path, build: Path, prefix: Path, reporter: Reporter,
                 environment: dict | None = None,
                 jobs: int | None = None) -> Path:
     """Configure, build and install a CMake project into a prefix."""
+    source, build, prefix = (Path(source).resolve(), Path(build).resolve(),
+                             Path(prefix).resolve())
     cmake = shutil.which("cmake")
     if cmake is None:
         raise BuildFailed("CMake is needed to build this and is not installed")
@@ -170,6 +172,11 @@ def meson_build(source: Path, build: Path, prefix: Path, cache: Path,
                 environment: dict | None = None,
                 ninja: str | None = None) -> Path:
     """Configure, build and install a meson project into a prefix."""
+    # Absolute, because meson refuses a relative --prefix outright -- and a
+    # relative one is what arrives whenever the caller was handed a relative
+    # path, which is how a release build once produced a software-only game.
+    source, build = Path(source).resolve(), Path(build).resolve()
+    prefix, cache = Path(prefix).resolve(), Path(cache).resolve()
     meson = meson_tool(cache, reporter)
     shutil.rmtree(build, ignore_errors=True)
 

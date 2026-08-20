@@ -64,31 +64,30 @@ jobs:
       - name: Build and stage the engine
         run: python tools/make_release.py engine --into staging/engine
 
+      # Built here rather than in a job of its own, because this is where it is
+      # needed: the Windows -full archive has to contain a runnable installer,
+      # and a folder of .py files whose entry point has no extension is not one.
+      - name: Build the frozen installer (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          pip install pyinstaller PySide6
+          python installer/windows/build_setup.py
+
       - name: Package
-        run: python tools/make_release.py package --engine staging/engine --out dist --kinds binaries,full
+        shell: bash
+        run: |
+          extra=""
+          if [ -f dist/EC7Wolf-Setup.exe ]; then
+            extra="--setup-exe dist/EC7Wolf-Setup.exe"
+          fi
+          python tools/make_release.py package --engine staging/engine \
+            --out packages --kinds binaries,full $extra
+          cp dist/EC7Wolf-Setup.exe packages/ 2>/dev/null || true
 
       - uses: actions/upload-artifact@v7
         with:
           name: engine-${{ matrix.runner }}
-          path: dist/*
-          if-no-files-found: error
-
-  setup-exe:
-    name: Windows setup executable
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
-      - run: pip install pyinstaller PySide6
-      - run: python installer/windows/build_setup.py
-      - uses: actions/upload-artifact@v7
-        with:
-          name: setup-exe
-          path: dist/EC7Wolf-Setup.exe
+          path: packages/*
           if-no-files-found: error
 
   portable:
@@ -110,7 +109,7 @@ jobs:
 
   publish:
     name: Publish the release
-    needs: [engine, setup-exe, portable]
+    needs: [engine, portable]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -164,15 +163,28 @@ jobs:
 
           ### Which file do I want?
 
-          | File | For |
-          | --- | --- |
-          | `EC7Wolf-Setup.exe` | **Windows, the easy way.** One file; it builds or collects everything else and takes your game data off the CD. |
-          | `*-windows-x64.zip` | Windows, engine only. Put your `.CO7` files beside it and run `EC7Wolf.cmd`. |
-          | `*-linux-x64.tar.gz` | Linux on x86-64, engine only. |
-          | `*-linux-arm64.tar.gz` | Linux on aarch64 — Raspberry Pi 4/5, Ampere, Asahi. |
-          | `*-full.zip` / `*-full.tar.gz` | The engine **and** the installer, for that platform. |
-          | `*-installer.zip` | The installer alone. It downloads the source and builds everything itself. |
-          | `*-source.tar.gz` | The complete source. |
+          **On Windows, take `EC7Wolf-Setup.exe`.** One self-contained file:
+          it needs nothing installed, and it takes the game's data, soundtrack
+          and cinematics off your CD for you.
+
+          **On Linux, take `…-linux-x64-full.tar.gz`** (or `-arm64-` on a
+          Raspberry Pi or other aarch64 machine). It has the engine and the
+          installer together.
+
+          Everything else, if you want it:
+
+          | File | What is inside | What to run |
+          | --- | --- | --- |
+          | `EC7Wolf-Setup.exe` | the whole installer, frozen into one file | itself |
+          | `*-windows-x64-full.zip` | the engine, its DLLs, **and `EC7Wolf-Setup.exe`** | `EC7Wolf-Setup.exe` |
+          | `*-windows-x64.zip` | the engine and its DLLs, nothing else | `EC7Wolf.cmd`, once your `.CO7` files are beside it |
+          | `*-linux-x64-full.tar.gz`<br>`*-linux-arm64-full.tar.gz` | the engine and the installer | `./installer/ec7wolf-setup` |
+          | `*-linux-x64.tar.gz`<br>`*-linux-arm64.tar.gz` | the engine, nothing else | `./run-ec7wolf.sh`, once your `.CO7` files are beside it |
+          | `*-installer.zip` | the installer as Python, no engine — it downloads the source and builds it | `installer/ec7wolf-setup` (needs Python and PySide6) |
+          | `*-source.tar.gz` | the complete source | see the README |
+
+          Every archive has an `INSTALL.txt` at the top saying the same thing
+          for that particular download.
 
           See the [README](https://github.com/jeddhor/EC7Wolf#installing-and-running)
           for all six ways to install this, in detail.

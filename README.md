@@ -486,14 +486,18 @@ writes everything, so those would be the same action under three names.
 
 From the [releases page](https://github.com/jeddhor/EC7Wolf/releases):
 
-| Artifact | For |
-| --- | --- |
-| `EC7Wolf-<version>-windows-x64.zip` | Windows 10/11, 64-bit |
-| `EC7Wolf-<version>-linux-x64.tar.gz` | Linux, x86-64 |
-| `EC7Wolf-<version>-linux-arm64.tar.gz` | Linux, aarch64 (Raspberry Pi 4/5, Ampere, Asahi) |
-| `EC7Wolf-<version>-<platform>-full.zip`/`.tar.gz` | the same, plus the installer |
-| `EC7Wolf-<version>-installer.zip` | the installer alone — see route 4 |
-| `EC7Wolf-<version>-source.tar.gz` | the complete source |
+| Artifact | What is inside | What to run |
+| --- | --- | --- |
+| `EC7Wolf-Setup.exe` | the whole installer, frozen into one file | itself — **this is the Windows download** |
+| `…-windows-x64-full.zip` | the engine, its DLLs, and `EC7Wolf-Setup.exe` | `EC7Wolf-Setup.exe` |
+| `…-windows-x64.zip` | the engine and its DLLs | `EC7Wolf.cmd` |
+| `…-linux-x64-full.tar.gz`<br>`…-linux-arm64-full.tar.gz` | the engine and the installer | `./installer/ec7wolf-setup` |
+| `…-linux-x64.tar.gz`<br>`…-linux-arm64.tar.gz` | the engine | `./run-ec7wolf.sh` |
+| `…-installer.zip` | the installer as Python, no engine — see route 4 | `installer/ec7wolf-setup` |
+| `…-source.tar.gz` | the complete source | see route 5 |
+
+Every archive carries an `INSTALL.txt` at the top saying what it holds and what
+to run.
 
 These carry the engine and nothing of the game. Unpack, then either run the
 installer from the `-full` archive to bring in your data, or place your eight

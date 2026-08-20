@@ -107,6 +107,107 @@ def build_engine(into: Path, jobs: int | None) -> Path:
 # Packaging
 # ---------------------------------------------------------------------------
 
+INSTALL_TEXT = {
+    "binaries": """\
+EC7Wolf {version} -- {platform}
+
+This folder holds the game engine. It does NOT hold Corridor 7 itself; you need
+your own copy of the game.
+
+  1. Copy these files from your Corridor 7 CD or installation into this folder:
+
+       CORR7CD.EXE   MAPTEMP.CO7   GFXTILES.CO7  VGADICT.CO7
+       VGAHEAD.CO7   VGAGRAPH.CO7  AUDIOHED.CO7  AUDIOT.CO7
+       AUDIOMUS.CO7  (optional, but it holds most of the game's sounds)
+
+  2. Run {launcher}
+
+That is all. The CD soundtrack and the cinematics are not set up this way -- if
+you want those, use the installer instead: see the -full download, or
+EC7Wolf-Setup.exe on Windows.
+
+Full instructions: https://github.com/jeddhor/EC7Wolf#installing-and-running
+""",
+    "full": """\
+EC7Wolf {version} -- {platform}, with the installer
+
+Two ways to use this folder.
+
+THE EASY WAY -- run the installer, and let it do everything:
+
+    {installer_line}
+
+  It takes the game's data, the CD soundtrack and the cinematics off your
+  Corridor 7 CD (or a BIN/CUE image of it), puts them together with the engine
+  in a folder you choose, and adds a menu entry. It never needs administrator
+  rights.
+
+BY HAND -- if you would rather not:
+
+  Copy these files from your Corridor 7 CD into this folder, then run
+  {launcher}:
+
+       CORR7CD.EXE   MAPTEMP.CO7   GFXTILES.CO7  VGADICT.CO7
+       VGAHEAD.CO7   VGAGRAPH.CO7  AUDIOHED.CO7  AUDIOT.CO7
+
+  Doing it this way gets you the game but not the CD music or the cinematics.
+
+You need your own copy of Corridor 7: Alien Invasion. Nothing here contains it.
+
+Full instructions: https://github.com/jeddhor/EC7Wolf#installing-and-running
+""",
+    "installer": """\
+EC7Wolf {version} -- the installer, on its own
+
+This is the installer and nothing else: no engine, no game. Run it and it will
+download the engine's source, build it, and take the game's data, soundtrack
+and cinematics off your Corridor 7 CD.
+
+  ON WINDOWS: you probably want EC7Wolf-Setup.exe from the same release page
+  instead. It is one self-contained file and needs nothing installed. This zip
+  is the Python version, and needs Python and PySide6 set up first.
+
+  ON LINUX AND MACOS:
+
+      python3 -m pip install --user PySide6      # once
+      ./installer/ec7wolf-setup                  # the window
+      ./installer/ec7wolf-install --help         # or the terminal version,
+                                                 # which needs no PySide6
+
+You need your own copy of Corridor 7: Alien Invasion. Nothing here contains it.
+
+Full instructions: https://github.com/jeddhor/EC7Wolf#installing-and-running
+""",
+}
+
+
+def _install_text(kind: str, tag: str, release: str) -> str:
+    windows = tag.startswith("windows")
+    return INSTALL_TEXT[kind].format(
+        version=release,
+        platform={"windows": "Windows", "linux": "Linux", "macos": "macOS"}.get(
+            tag.split("-")[0], tag),
+        launcher="EC7Wolf.cmd" if windows else "./run-ec7wolf.sh",
+        installer_line=("EC7Wolf-Setup.exe" if windows
+                        else "./installer/ec7wolf-setup     (or ec7wolf-install "
+                             "for a terminal)"),
+    )
+
+
+def _add_text(archive, name: str, text: str) -> None:
+    """Write a generated file straight into the archive."""
+    data = text.replace("\n", "\r\n").encode() if isinstance(archive, zipfile.ZipFile) \
+        else text.encode()
+    if isinstance(archive, zipfile.ZipFile):
+        archive.writestr(name, data)
+    else:
+        import io
+        info = tarfile.TarInfo(name)
+        info.size = len(data)
+        info.mode = 0o644
+        archive.addfile(info, io.BytesIO(data))
+
+
 def _add_tree(archive, root: Path, base: str, skip_git: bool = True) -> None:
     for path in sorted(root.rglob("*")):
         if skip_git and any(part in (".git", "__pycache__") for part in path.parts):
@@ -144,7 +245,8 @@ def installer_files() -> list[tuple[Path, str]]:
     return files
 
 
-def package(engine_dir: Path | None, out: Path, kinds: list[str]) -> list[Path]:
+def package(engine_dir: Path | None, out: Path, kinds: list[str],
+            setup_exe: Path | None = None) -> list[Path]:
     tag = platform_tag()
     release = version()
     windows = tag.startswith("windows")
@@ -155,6 +257,8 @@ def package(engine_dir: Path | None, out: Path, kinds: list[str]) -> list[Path]:
         path, archive = _make(out, name, windows)
         with archive:
             _add_tree(archive, engine_dir, name)
+            _add_text(archive, f"{name}/INSTALL.txt",
+                      _install_text("binaries", tag, release))
         made.append(path)
 
     if "full" in kinds and engine_dir:
@@ -163,21 +267,35 @@ def package(engine_dir: Path | None, out: Path, kinds: list[str]) -> list[Path]:
         path, archive = _make(out, name, windows)
         with archive:
             _add_tree(archive, engine_dir, name)
-            for source, arcname in installer_files():
-                target = f"{name}/{arcname}"
-                if windows:
-                    archive.write(source, target)
-                else:
-                    archive.add(source, target)
+            # On Windows the installer that belongs here is the frozen one --
+            # a folder of .py files with no extension on the entry point is not
+            # something anybody can run, which is the whole reason the exe is
+            # built. Elsewhere the Python installer is the runnable thing.
+            if windows and setup_exe and Path(setup_exe).is_file():
+                archive.write(setup_exe, f"{name}/EC7Wolf-Setup.exe")
+            else:
+                for source, arcname in installer_files():
+                    target = f"{name}/{arcname}"
+                    if windows:
+                        archive.write(source, target)
+                    else:
+                        archive.add(source, target)
+            _add_text(archive, f"{name}/INSTALL.txt",
+                      _install_text("full", tag, release))
         made.append(path)
 
     if "installer" in kinds:
-        # Platform-neutral: this one compiles and fetches everything itself.
+        # Platform-neutral, and deliberately still Python: this is the small
+        # download that fetches and builds everything, and putting a 22 MB
+        # Windows executable in it would make it neither small nor neutral.
+        # Windows users are pointed at EC7Wolf-Setup.exe instead.
         name = f"EC7Wolf-{release}-installer"
         path, archive = _make(out, name, True)
         with archive:
             for source, arcname in installer_files():
                 archive.write(source, f"{name}/{arcname}")
+            _add_text(archive, f"{name}/INSTALL.txt",
+                      _install_text("installer", tag, release))
         made.append(path)
 
     if "source" in kinds:
@@ -208,13 +326,17 @@ def main() -> int:
     package_parser.add_argument("--engine", type=Path)
     package_parser.add_argument("--out", type=Path, default=REPO / "dist")
     package_parser.add_argument("--kinds", default="binaries,full,installer,source")
+    package_parser.add_argument("--setup-exe", type=Path,
+                                help="the frozen EC7Wolf-Setup.exe, to put in "
+                                     "the Windows -full archive")
 
     arguments = parser.parse_args()
     if arguments.command == "engine":
         build_engine(arguments.into, arguments.jobs)
     else:
         package(arguments.engine, arguments.out,
-                [k.strip() for k in arguments.kinds.split(",") if k.strip()])
+                [k.strip() for k in arguments.kinds.split(",") if k.strip()],
+                arguments.setup_exe)
     return 0
 
 

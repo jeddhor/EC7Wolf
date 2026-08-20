@@ -222,8 +222,8 @@ for g in $data_free_gates; do
 			if ! command -v python3 >/dev/null 2>&1; then
 				skip_gate "$g" "python3 is missing"
 			else
-				run_gate "$g" "undefined names" python3 "$here/check_names.py" \
-					"$repo/installer" "$here/c7disc.py" "$here/make_release.py"
+				run_gate "$g" "undefined names" \
+					"$here/check_undefined.sh" "$root"
 			fi ;;
 		installer_gui)
 			# Drives the real wizard on Qt's offscreen platform. Needs no

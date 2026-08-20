@@ -14,6 +14,13 @@ name: CI
 #   gates    runs the whole suite. Needs a self-hosted runner on a machine that
 #            owns the data (see docs/ci.md); skipped entirely when no such
 #            runner is registered, rather than failing the build.
+#   setup-exe
+#            builds the frozen Windows installer on a real Windows runner and
+#            starts it. This is the one thing the Linux gates cannot check:
+#            tools/test_installer_windows.sh runs the installer's Windows logic
+#            under Wine, but Qt6Core.dll imports icuuc.dll, which Windows 10
+#            ships in System32 and Wine does not implement -- so the wizard
+#            itself will not load there. A Windows runner is the answer.
 #
 # Both call tools/run_gates.sh, which is also what a developer runs locally, so
 # there is one definition of "green" and not two that drift.
@@ -122,3 +129,40 @@ jobs:
           name: gate-logs-full
           path: gate-logs/
           if-no-files-found: ignore
+
+  setup-exe:
+    name: Windows setup executable
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install the freezing tools
+        run: pip install pyinstaller PySide6
+
+      - name: Check the installer imports on Windows
+        # Before freezing anything: an import error here is a plain mistake,
+        # and finding it in a 22 MB bundle instead is needless work.
+        run: |
+          python -c "import sys; sys.path[:0] = ['installer', 'tools']; import ec7install, ec7install_gui.wizard, c7disc; print('imports ok')"
+
+      - name: Report what a Windows machine offers
+        # Not an assertion -- runners have their own idea of what is installed.
+        # It is here because a wrong answer from the dependency scan is
+        # invisible until someone reads it, and this puts it in the log.
+        run: |
+          python -c "import sys; sys.path.insert(0, 'installer'); from ec7install import deps; [print(f'{r.key:12} found={r.found} {r.detail or r.remedy}') for r in deps.scan_build()]"
+
+      - name: Build EC7Wolf-Setup.exe
+        # build_setup.py starts the result and checks it knows its own
+        # arguments, which is where a missing bundled import shows up.
+        run: python installer/windows/build_setup.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EC7Wolf-Setup
+          path: dist/EC7Wolf-Setup.exe
+          if-no-files-found: error

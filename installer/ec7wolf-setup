@@ -26,7 +26,10 @@ except ImportError:
         "  Debian, Ubuntu, KDE neon:  sudo apt install python3-pyside6.qtwidgets\n"
         "  Fedora:                    sudo dnf install python3-pyside6\n"
         "  Arch:                      sudo pacman -S pyside6\n"
-        "  anywhere:                  pip install PySide6\n\n"
+        "  Windows, macOS, anywhere:  pip install PySide6\n\n"
+        "On Windows the usual answer is not to need any of this: build\n"
+        "EC7Wolf-Setup.exe with installer/windows/build_setup.py, which\n"
+        "packs Python and Qt into the installer itself.\n\n"
         "Or install from the terminal instead, which needs nothing extra:\n"
         f"  {HERE / 'ec7wolf-install'} --source /path/to/Corridor7.cue\n")
     raise SystemExit(2)

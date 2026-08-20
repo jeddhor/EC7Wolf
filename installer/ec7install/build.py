@@ -14,9 +14,12 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from .identity import exe_name, is_windows
 from .progress import Cancelled, Reporter
 
-EXE_NAME = "ec7wolf.exe" if platform.system() == "Windows" else "ec7wolf"
+# Resolved per call rather than at import: the gate forces the Windows
+# branch through identity.host_platform(), and a constant fixed at import
+# time would have been decided before it could.
 PK3_NAME = "ec7wolf.pk3"
 
 
@@ -35,6 +38,24 @@ class Engine:
     def __repr__(self) -> str:
         return f"<Engine {self.executable} ({self.source})>"
 
+    def version(self) -> str:
+        """The version string baked into the binary, for Add/Remove Programs.
+
+        Read out of the executable rather than asked for: the engine has no
+        --version flag, and the string it prints on startup is the same one
+        that is sitting in its data section.
+        """
+        import re
+        try:
+            blob = self.executable.read_bytes()
+        except OSError:
+            return ""
+        described = re.search(rb"\d+\.\d+[a-z0-9.]*-\d+-g[0-9a-f]{6,}", blob)
+        if described:
+            return described.group().decode("ascii", "replace")
+        plain = re.search(rb"\d+\.\d+\.\d+pre", blob)
+        return plain.group().decode("ascii", "replace") if plain else ""
+
 
 def find_existing(repo_root: Path, extra: list[Path] | None = None) -> Engine | None:
     """An already-built engine, if there is one.
@@ -52,13 +73,20 @@ def find_existing(repo_root: Path, extra: list[Path] | None = None) -> Engine | 
         repo_root / "build",
         repo_root / "release",
     ]
+    # A Visual Studio generator is multi-config and puts its output in a
+    # per-configuration subdirectory, so the same build tree that holds
+    # ec7wolf on Linux holds Release\ec7wolf.exe on Windows.
+    if is_windows():
+        candidates += [directory / config
+                       for directory in list(candidates)
+                       for config in ("Release", "RelWithDebInfo")]
 
     for directory in candidates:
-        executable = directory / EXE_NAME
+        executable = directory / exe_name()
         pk3 = directory / PK3_NAME
         if not (executable.is_file() and pk3.is_file()):
             continue
-        if not os.access(executable, os.X_OK) and platform.system() != "Windows":
+        if not os.access(executable, os.X_OK) and not is_windows():
             continue
         if pk3.stat().st_mtime < executable.stat().st_mtime - 1:
             continue
@@ -67,9 +95,30 @@ def find_existing(repo_root: Path, extra: list[Path] | None = None) -> Engine | 
 
 
 def _generator() -> list[str]:
+    """Which CMake generator to ask for, if any.
+
+    Ninja everywhere it exists, because it is what the project builds with and
+    it is the fastest of the three. On Windows without Ninja, let CMake pick:
+    it finds the newest Visual Studio itself, and naming a version here would
+    mean guessing which one is installed and being wrong every few years.
+    """
     if shutil.which("ninja") or shutil.which("ninja-build"):
         return ["-G", "Ninja"]
     return []
+
+
+def _configure_extras() -> list[str]:
+    """Arguments CMake needs on Windows and nowhere else.
+
+    A Visual Studio generator defaults to a 32-bit build even on a 64-bit
+    machine, and Release has to be named at build time rather than configure
+    time -- neither is true of Ninja or Make, which is why this is separate.
+    """
+    if not is_windows():
+        return []
+    if shutil.which("ninja") or shutil.which("ninja-build"):
+        return []
+    return ["-A", "x64"]
 
 
 def _stream(command: list[str], cwd: Path, reporter: Reporter,
@@ -113,7 +162,7 @@ def build(repo_root: Path, build_dir: Path, reporter: Reporter,
 
     reporter.step("Configuring the engine", str(build_dir))
     configure = [cmake, "-S", str(repo_root), "-B", str(build_dir),
-                 *_generator(),
+                 *_generator(), *_configure_extras(),
                  "-DCMAKE_BUILD_TYPE=Release",
                  "-DECWOLF_RENDERER_OPENGL=ON",
                  "-DECWOLF_RENDERER_SOFTWARE=ON"]
@@ -129,6 +178,10 @@ def build(repo_root: Path, build_dir: Path, reporter: Reporter,
     for pass_number in range(1, total_passes + 1):
         reporter.step(f"Compiling the engine (pass {pass_number} of {total_passes})")
         command = [cmake, "--build", str(build_dir)]
+        if is_windows() and not (shutil.which("ninja") or shutil.which("ninja-build")):
+            # A Visual Studio generator is multi-config: CMAKE_BUILD_TYPE means
+            # nothing to it, and without this it quietly builds Debug.
+            command += ["--config", "Release"]
         if jobs:
             command += ["--parallel", str(jobs)]
 
@@ -152,13 +205,22 @@ def build(repo_root: Path, build_dir: Path, reporter: Reporter,
                 "The engine failed to compile. The compiler's own message is "
                 "in the log above and in the installer log file.")
 
-    executable = build_dir / EXE_NAME
-    pk3 = build_dir / PK3_NAME
+    executable, pk3 = build_dir / exe_name(), build_dir / PK3_NAME
     if not executable.is_file():
-        raise BuildError(f"the build finished but produced no {EXE_NAME}")
+        # Same multi-config story as in find_existing: with a Visual Studio
+        # generator the binary is one directory further down, and the pk3 may
+        # be in either place depending on how the target was declared.
+        for config in ("Release", "RelWithDebInfo"):
+            if (build_dir / config / exe_name()).is_file():
+                executable = build_dir / config / exe_name()
+                if (build_dir / config / PK3_NAME).is_file():
+                    pk3 = build_dir / config / PK3_NAME
+                break
+    if not executable.is_file():
+        raise BuildError(f"the build finished but produced no {exe_name()}")
     if not pk3.is_file():
         raise BuildError(
-            f"the build produced {EXE_NAME} but no {PK3_NAME}. The game data "
+            f"the build produced {exe_name()} but no {PK3_NAME}. The game data "
             "lives in the pk3; without it the engine cannot start.")
     reporter.progress(1.0)
     return Engine(executable, pk3, f"compiled in {build_dir}")

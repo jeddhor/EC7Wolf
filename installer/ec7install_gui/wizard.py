@@ -15,7 +15,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import QApplication, QMessageBox, QWizard
 
-from ec7install import install
+from ec7install import identity, install
 
 from . import pages
 from .worker import run_detached
@@ -118,6 +118,34 @@ class InstallerWizard(QWizard):
         super().accept()
 
 
+def selftest(repo_root: Path) -> int:
+    """Construct the whole wizard offscreen and report by exit code.
+
+    This is what a frozen build is checked with. Exit codes are the only thing
+    a windowed executable can report reliably -- it has no console to print to,
+    so anything written to stdout may go nowhere -- and constructing every page
+    is a far better test than --help: it loads Qt, builds the widgets and reads
+    the bundled licence, which is where a bundle missing a file or a Qt plugin
+    actually fails.
+    """
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    QApplication([])
+    wizard = InstallerWizard(repo_root)
+    expected = ["welcome", "license", "source", "engine", "destination",
+                "options", "summary", "progress", "finish"]
+    if list(wizard.ids) != expected:
+        return 1
+    licence = wizard.page_named("license")
+    licence.initializePage()
+    if len(licence.text.toPlainText()) < 1000:
+        return 2              # the licence did not travel with the bundle
+    if wizard.windowIcon().isNull():
+        return 3              # nor did the icon
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
@@ -127,9 +155,26 @@ def main(argv: list[str] | None = None) -> int:
                         help="pre-fill the CD, image or folder to install from")
     parser.add_argument("--dest", type=Path, help="pre-fill the install folder")
     parser.add_argument("--repo", type=Path, help="the EC7Wolf source tree")
+    parser.add_argument("--selftest", action="store_true",
+                        help="build the wizard without showing it and exit; "
+                             "used to check a frozen build actually works")
     arguments = parser.parse_args(argv)
 
-    repo_root = arguments.repo or Path(__file__).resolve().parent.parent.parent
+    if arguments.repo:
+        repo_root = arguments.repo
+    elif identity.is_frozen():
+        # Frozen: the bundled licence and icons are in the unpacked directory,
+        # and the engine -- which cannot be compiled without a source tree --
+        # is looked for beside the setup executable, where whoever assembled
+        # the download would have put it.
+        repo_root = identity.bundled_root()
+    else:
+        repo_root = Path(__file__).resolve().parent.parent.parent
+
+    if arguments.selftest:
+        # Before the QApplication below: Qt permits exactly one per process,
+        # and the self-test needs to make its own offscreen.
+        return selftest(repo_root)
 
     application = QApplication(sys.argv)
     application.setApplicationName("EC7Wolf Setup")
@@ -138,6 +183,8 @@ def main(argv: list[str] | None = None) -> int:
     application.setDesktopFileName("ec7wolf-setup")
 
     wizard = InstallerWizard(repo_root, arguments.source, arguments.dest)
+    if identity.is_frozen():
+        wizard.state.extra_engine_paths.append(Path(sys.executable).resolve().parent)
     icon = find_icon(repo_root)
     if icon is not None:
         application.setWindowIcon(QIcon(str(icon)))

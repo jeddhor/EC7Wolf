@@ -6,3 +6,7 @@ android-libs/launcher/src/com/beloko/idtech/R.java
 /release/
 /.idea/
 __pycache__/
+
+# PyInstaller output from installer/windows/build_setup.py
+/dist/
+/dist-win/

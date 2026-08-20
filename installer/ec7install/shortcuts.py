@@ -10,13 +10,13 @@ uninstaller can take it away again.
 from __future__ import annotations
 
 import os
-import platform
 import shutil
 import subprocess
 from pathlib import Path
 
+from . import windows
 from .identity import (APP_COMMENT, APP_ID, APP_NAME, ENGINE_BINARY,
-                       WM_CLASS)
+                       WM_CLASS, is_windows)
 from .progress import Reporter
 
 
@@ -167,7 +167,7 @@ def create(destination: Path, launcher: Path, repo_root: Path,
            reporter: Reporter, menu: bool = True,
            desktop: bool = True) -> list[Path]:
     """Create the requested shortcuts, returning what was written."""
-    if platform.system() == "Windows":
+    if is_windows():
         return _create_windows(destination, launcher, reporter, menu, desktop)
     return _create_linux(destination, launcher, repo_root, reporter, menu, desktop)
 
@@ -236,29 +236,24 @@ def _desktop_directory() -> Path | None:
 
 def _create_windows(destination: Path, launcher: Path, reporter: Reporter,
                     menu: bool, desktop: bool) -> list[Path]:
-    """Windows shortcuts. Fleshed out with the rest of the Windows work."""
+    """Start menu and desktop .lnk files, made by the shell itself."""
     created: list[Path] = []
-    icon = destination / "ec7wolf.exe"
+    icon = destination / windows.exe_for_icon()
+
     targets: list[Path] = []
     if menu:
-        programs = Path(os.environ.get("APPDATA", Path.home())) / \
-            "Microsoft" / "Windows" / "Start Menu" / "Programs"
-        targets.append(programs / f"{APP_NAME}.lnk")
+        targets.append(windows.start_menu_directory() / f"{APP_NAME}.lnk")
     if desktop:
-        targets.append(Path.home() / "Desktop" / f"{APP_NAME}.lnk")
+        targets.append(windows.desktop_directory() / f"{APP_NAME}.lnk")
 
     for target in targets:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        script = (
-            "$s = (New-Object -COM WScript.Shell).CreateShortcut('%s');"
-            "$s.TargetPath='%s';$s.WorkingDirectory='%s';"
-            "$s.IconLocation='%s';$s.Description='%s';$s.Save()"
-            % (target, launcher, destination, icon, APP_COMMENT))
         try:
-            subprocess.run(["powershell", "-NoProfile", "-Command", script],
-                           capture_output=True, timeout=60, check=True)
+            windows.create_shortcut(
+                target, launcher, working_directory=destination,
+                icon=icon if icon.exists() else None,
+                description=APP_COMMENT)
             created.append(target)
             reporter.detail(f"shortcut -> {target}")
-        except Exception as error:
-            reporter.warn(f"could not create {target}: {error}")
+        except Exception as error:                        # noqa: BLE001
+            reporter.warn(f"could not create {target.name}: {error}")
     return created

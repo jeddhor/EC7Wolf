@@ -19,6 +19,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from .identity import host_platform
+
 
 class Requirement:
     def __init__(self, key: str, label: str, found: bool,
@@ -126,25 +128,30 @@ def linux_remedy(key: str) -> str:
 
 
 _WINDOWS_REMEDY = {
-    "cmake": "Install CMake from https://cmake.org/download/ "
-             "(tick \"Add CMake to the system PATH\")",
-    "compiler": "Install Visual Studio Build Tools from "
-                "https://visualstudio.microsoft.com/downloads/ "
-                "and select \"Desktop development with C++\"",
-    "ninja": "Ninja ships with Visual Studio Build Tools, or download it from "
-             "https://github.com/ninja-build/ninja/releases",
+    "cmake": "winget install Kitware.CMake  --  or "
+             "https://cmake.org/download/ (tick \"Add CMake to the system "
+             "PATH\")",
+    "compiler": "winget install Microsoft.VisualStudio.2022.BuildTools "
+                "--override \"--add Microsoft.VisualStudio.Workload.VCTools "
+                "--includeRecommended --quiet\"  --  or install Visual Studio "
+                "from https://visualstudio.microsoft.com/downloads/ with the "
+                "\"Desktop development with C++\" workload",
+    "ninja": "winget install Ninja-build.Ninja  --  or it ships inside "
+             "Visual Studio's C++ workload, which puts it on the PATH of a "
+             "Developer Command Prompt",
     "sdl2": "Install the SDL2 development libraries with vcpkg "
             "(vcpkg install sdl2 sdl2-mixer sdl2-net zlib libjpeg-turbo bzip2) "
             "or download them from https://libsdl.org/",
-    "ffmpeg": "Install FFmpeg from https://ffmpeg.org/download.html "
-              "and add it to your PATH",
+    "ffmpeg": "winget install Gyan.FFmpeg  --  or "
+              "https://ffmpeg.org/download.html, adding it to your PATH",
 }
 
 
 def remedy(key: str) -> str:
-    if platform.system() == "Windows":
+    host = host_platform()
+    if host == "windows":
         return _WINDOWS_REMEDY.get(key, f"install {key}")
-    if platform.system() == "Darwin":
+    if host == "macos":
         return f"brew install {key}"
     return linux_remedy(key)
 
@@ -195,6 +202,56 @@ def _library(key: str, label: str, pkg_name: str, header: str) -> Requirement:
                        remedy="" if found else remedy(key))
 
 
+def visual_studio() -> str | None:
+    """The newest Visual Studio with the C++ tools, via vswhere.
+
+    cl.exe is not on the PATH outside a Developer Command Prompt, so looking
+    for it finds nothing on a machine with a perfectly good Visual Studio --
+    and telling that user to install the compiler they already have is worse
+    than saying nothing. vswhere.exe is Microsoft's answer to this and lives at
+    a fixed path on every machine with any VS 2017 or later.
+    """
+    for variable in ("ProgramFiles(x86)", "ProgramFiles"):
+        base = os.environ.get(variable)
+        if not base:
+            continue
+        vswhere = Path(base) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
+        if not vswhere.is_file():
+            continue
+        try:
+            found = subprocess.run(
+                [str(vswhere), "-latest", "-products", "*", "-requires",
+                 "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+                 "-property", "displayName"],
+                capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        name = found.stdout.strip().splitlines()
+        if found.returncode == 0 and name:
+            return name[0].strip()
+    return None
+
+
+def _windows_compiler() -> Requirement:
+    """MSVC or MinGW -- either will build it, so either satisfies this."""
+    studio = visual_studio()
+    if studio:
+        return Requirement("compiler", "C++ compiler", True, detail=studio)
+
+    cl = _which("cl")
+    if cl:
+        return Requirement("compiler", "C++ compiler", True,
+                           detail="MSVC (cl.exe on the PATH)")
+
+    mingw = _which("g++", "clang++")
+    if mingw:
+        return Requirement("compiler", "C++ compiler", True,
+                           detail=f"MinGW ({Path(mingw).name})")
+
+    return Requirement("compiler", "C++ compiler", False,
+                       remedy=remedy("compiler"))
+
+
 def scan_build() -> Report:
     """What compiling the engine needs."""
     requirements: list[Requirement] = []
@@ -205,14 +262,14 @@ def scan_build() -> Report:
         detail=_version(cmake, "--version") if cmake else "",
         remedy="" if cmake else remedy("cmake")))
 
-    if platform.system() == "Windows":
-        compiler = _which("cl", "g++", "clang++")
+    if host_platform() == "windows":
+        requirements.append(_windows_compiler())
     else:
         compiler = _which("c++", "g++", "clang++")
-    requirements.append(Requirement(
-        "compiler", "C++ compiler", compiler is not None,
-        detail=Path(compiler).name if compiler else "",
-        remedy="" if compiler else remedy("compiler")))
+        requirements.append(Requirement(
+            "compiler", "C++ compiler", compiler is not None,
+            detail=Path(compiler).name if compiler else "",
+            remedy="" if compiler else remedy("compiler")))
 
     # A generator: Ninja is what the project builds with, but Make will do, so
     # a machine with only Make is not blocked -- it is just slower.
@@ -227,7 +284,7 @@ def scan_build() -> Report:
         requirements.append(Requirement(
             "make", "Make", False, remedy=remedy("compiler")))
 
-    if platform.system() == "Linux":
+    if host_platform() == "linux":
         requirements.append(_library("sdl2", "SDL2", "sdl2", "SDL2/SDL.h"))
         requirements.append(_library("sdl2_mixer", "SDL2_mixer", "SDL2_mixer",
                                      "SDL2/SDL_mixer.h"))
@@ -240,7 +297,7 @@ def scan_build() -> Report:
         requirements.append(Requirement(
             "gtk3", "GTK3 (optional: native file dialogs)", gtk,
             remedy="" if gtk else remedy("gtk3"), optional=True))
-    elif platform.system() == "Windows":
+    elif host_platform() == "windows":
         # There is no pkg-config to ask, and finding vcpkg's tree is guesswork;
         # CMake is the authority, so this is advisory rather than a probe.
         vcpkg = os.environ.get("VCPKG_ROOT") or _which("vcpkg")

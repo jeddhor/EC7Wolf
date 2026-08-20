@@ -88,7 +88,11 @@ def wait_for(predicate, timeout=90.0, what="condition"):
     failures.append(f"timeout: {what}")
     return False
 
-app = QApplication([])
+# The self-test below makes its own QApplication and Qt permits exactly one,
+# so it runs first and this one is taken afterwards.
+from ec7install_gui.wizard import selftest as _selftest
+_selftest_result = _selftest(repo)
+app = QApplication.instance() or QApplication([])
 
 # --- the reporter's thread crossing --------------------------------------
 #
@@ -133,6 +137,10 @@ cancel.set()
 check(reporter.cancelled() is True, "setting the event cancels the reporter")
 
 # --- the wizard ----------------------------------------------------------
+print("\nthe self-test a frozen build is checked with")
+check(_selftest_result == 0,
+      f"it passes against the real source tree (exit {_selftest_result})")
+
 print("\npage order")
 wizard = InstallerWizard(repo)
 wizard.show()

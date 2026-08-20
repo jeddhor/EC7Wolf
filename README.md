@@ -500,6 +500,7 @@ The `tools/` directory carries the harnesses used to keep the port honest:
 | Tool | Purpose |
 | --- | --- |
 | `../installer/ec7wolf-setup` | The graphical installer. Needs PySide6; everything it does, `ec7wolf-install` also does from a terminal. |
+| `../installer/windows/build_setup.py` | Freeze the graphical installer into a single `EC7Wolf-Setup.exe`. Needs a Windows Python (Wine will do). |
 | `../installer/ec7wolf-install` | Install EC7Wolf: build the engine and take the game's content off your CD. `--check` reports what is missing. |
 | `uninstall.sh` | Written into each install: removes it, its menu entry and its icons. `--yes` to skip the question. |
 | `c7disc.py` | Read Corridor 7's files off a disc, an image, or a folder. |

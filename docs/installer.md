@@ -210,10 +210,91 @@ install is present, it starts the engine under Xvfb and reads `WM_CLASS` back
 with `xprop`, because the string in the desktop file is only right if the
 running game agrees with it, and nothing but a running game can say.
 
-### Phase 4 — Windows
+### Phase 4 — Windows — **done**
 
-MSVC and MinGW detection, SDL2 acquisition guidance, `.lnk` shortcuts, Add/Remove
-Programs registration, and the frozen `EC7Wolf-Setup.exe`.
+The Windows path used to be the one part of the installer that was only
+reasoned about. It is now run, in full, by a gate — under Wine.
+
+**How the Windows code gets exercised on Linux.** Every platform decision goes
+through `identity.host_platform()`, which `EC7WOLF_INSTALL_PLATFORM` can force.
+The gate forces `windows` and the code takes every Windows branch for real: it
+writes `EC7Wolf.cmd`, asks a scripting host for `.lnk` files, writes the
+Add/Remove Programs values. The Windows programs it shells out to — `cscript`,
+`reg` — are answered by Wine. One adapter is needed and is honest: `cscript`
+will not accept a POSIX path for the script file to run, and on Windows that
+argument is a Windows path already, because Python's paths are. The shim
+translates it with `winepath`. Nothing else is faked — the `.lnk` files are
+written by Wine's own `IShellLink` and read back by parsing the shell-link
+format, and the registry is Wine's real registry.
+
+**A .lnk is not written by hand.** It is a binary structure whose target is
+normally a serialised walk of the shell namespace, and a hand-rolled one works
+on the machine it was written on and fails quietly elsewhere. Windows has an
+implementation; this asks it. The request goes through `cscript` rather than
+PowerShell: both drive `WScript.Shell`, but cscript has shipped since Windows
+2000, starts far faster, and is not subject to PowerShell's execution policy —
+which is `Restricted` by default on client Windows and is an ordinary reason
+for a working script to refuse to run. PowerShell stays as the fallback for the
+locked-down case where WSH itself is off. (Wine has no PowerShell at all, which
+is how the fallback ordering got tested.)
+
+**Compiler detection was wrong before it was tested.** The scan looked for
+`cl.exe` on the `PATH` — where it never is, outside a Developer Command Prompt.
+A machine with a perfectly good Visual Studio would have been told to install
+the compiler it already had. It now asks `vswhere.exe`, which Microsoft puts at
+a fixed path on every machine with VS 2017 or later, and accepts MinGW too.
+The remedies lead with `winget` one-liners.
+
+**Multi-config generators.** A Visual Studio generator ignores
+`CMAKE_BUILD_TYPE`, defaults to a 32-bit build, and puts its output in
+`Release\` rather than the build root. All three are now handled; with Ninja
+present, none of them apply and nothing changes.
+
+**Add/Remove Programs** under `HKEY_CURRENT_USER`, not `HKEY_LOCAL_MACHINE`:
+this installs into one user's profile and never elevates, and a machine-wide
+entry would both claim otherwise and be unremovable by the same unprivileged
+uninstaller that has to remove it. `winreg` where it exists, `reg.exe`
+otherwise — which is what lets Wine exercise it.
+
+**The frozen `EC7Wolf-Setup.exe`.** `installer/windows/ec7wolf-setup.spec` and
+`build_setup.py`. One file, because a setup program that arrives as a folder of
+DLLs is not one anyone keeps hold of. A frozen installer carries the wizard but
+not the engine's source, so it looks for `ec7wolf.exe` beside itself and, when
+there is nothing to compile and nothing to run, says exactly that instead of
+sending the user off to install CMake for no reason.
+
+**What Wine can and cannot do.** It runs the installer's Windows logic
+completely, and that is where the value is. It cannot run the *wizard*:
+`Qt6Core.dll` imports `icuuc.dll`, which Windows 10 and 11 provide in System32
+and which Wine does not implement, so PySide6 will not load in a Wine prefix at
+all — frozen or not. That was worth pinning down rather than guessing, because
+the symptom (`ImportError: DLL load failed while importing QtCore`) looks
+exactly like a bad PyInstaller spec. `build_setup.py` recognises it and says so.
+The frozen executable is therefore checked on a real `windows-latest` runner in
+CI, which builds it and runs `EC7Wolf-Setup.exe --selftest`: the self-test
+constructs every page offscreen and reports by exit code, because a windowed
+executable has no console and anything it prints may go nowhere.
+
+**Gate:** `tools/test_installer_windows.sh`, in the data-free set, skipped
+where Wine is absent. It checks where Windows puts things, runs the generated
+`EC7Wolf.cmd` under `cmd` and confirms the arguments reach the engine, creates
+both shortcuts and parses them back, reads the registry values through Windows
+itself, then runs `Uninstall.cmd --yes` and confirms the shortcuts, the
+registry entry and the folder are all gone. The Wine prefix is cached under
+`~/.cache/ec7wolf-gate-wine`, because building one costs 9 seconds and 1.2 GB
+and neither belongs in every run.
+
+Two bugs it caught:
+
+* `EC7Wolf.cmd` and `Uninstall.cmd` were written with `write_text`, which opens
+  in text mode — on Windows, the only place those files are ever used, every
+  `\n` becomes `\r\n`, so the `\r\n` pairs already in the string would have
+  been written as `\r\r\n`. It looked correct on Linux, where nothing is
+  translated. They are written with `write_bytes` now.
+* The registry advertised a `QuietUninstallString` of `"Uninstall.cmd" --yes`,
+  and `Uninstall.cmd` ignored its arguments entirely — so anything that used
+  the quiet path would have sat waiting for a keypress nobody was there to
+  give. It honours `--yes` and `/S` now.
 
 ### Phase 5 — hardening
 

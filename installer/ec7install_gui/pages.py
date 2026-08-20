@@ -40,6 +40,9 @@ class State:
         self.source_path: Path | None = None
         self.probe: dict | None = None
         self.engine: build.Engine | None = None
+        # Places to look for a built engine besides the usual build trees --
+        # the folder holding a frozen setup.exe, most of all.
+        self.extra_engine_paths: list[Path] = []
         self.force_build = False
         self.build_report: deps.Report | None = None
         self.rip_report: deps.Report | None = None
@@ -407,11 +410,23 @@ class SourcePage(QWizardPage):
 # The engine: already built, or built here
 # ---------------------------------------------------------------------------
 
-def survey_engine(repo_root: Path, force: bool, need_music: bool) -> dict:
+def can_build_here(repo_root: Path) -> bool:
+    """Whether there is a source tree to compile at all.
+
+    A frozen installer carries the wizard, not the engine's source, so on
+    Windows this is normally False -- and saying "install CMake" to someone
+    with nothing to compile would send them off to do useless work.
+    """
+    return (repo_root / "CMakeLists.txt").is_file()
+
+
+def survey_engine(repo_root: Path, force: bool, need_music: bool,
+                  extra: list[Path] | None = None) -> dict:
     """Look for a built engine, and for the tools to build one if there isn't."""
-    engine = None if force else build.find_existing(repo_root)
+    engine = None if force else build.find_existing(repo_root, extra=list(extra or []))
     return {
         "engine": engine,
+        "buildable": can_build_here(repo_root),
         "build": deps.scan_build() if engine is None else None,
         "rip": deps.scan_rip(need_music=need_music),
     }
@@ -456,7 +471,8 @@ class EnginePage(QWizardPage):
         self.report.show_html("<p>Looking&#8230;</p>")
         repo, force = self.state.repo_root, self.forceBuild.isChecked()
         music = self.state.with_music
-        self.task = Task(lambda: survey_engine(repo, force, music), self)
+        extra = list(self.state.extra_engine_paths)
+        self.task = Task(lambda: survey_engine(repo, force, music, extra), self)
         self.task.ended.connect(self._surveyed)
         self.task.start()
 
@@ -470,6 +486,7 @@ class EnginePage(QWizardPage):
             return
 
         self.state.engine = result["engine"]
+        self.forceBuild.setEnabled(result["buildable"])
         self.state.build_report = result["build"]
         self.state.rip_report = result["rip"]
 
@@ -484,6 +501,18 @@ class EnginePage(QWizardPage):
                 "<p>It will be used as it is, so there is nothing to compile. "
                 "Tick the box below to build a fresh one anyway.</p>")
             self.ready = True
+        elif not result["buildable"]:
+            # Nothing built, and no source to build from. Only one of those is
+            # the user's to fix, so say which.
+            parts.append(
+                f"<p style='color:{colour['bad']};'><b>No engine was found, "
+                "and this installer does not carry the source to build "
+                "one.</b></p>"
+                "<p>Put <tt>ec7wolf.exe</tt> and <tt>ec7wolf.pk3</tt> in the "
+                "same folder as this installer and press <i>Check again</i>, "
+                "or run the installer from a checkout of the EC7Wolf source, "
+                "which it can compile for you.</p>")
+            self.ready = False
         else:
             report = result["build"]
             if report.satisfied:

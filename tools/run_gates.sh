@@ -71,7 +71,7 @@ done
 # gl_selftest is here rather than below because --gltest is handled before the
 # IWAD is opened: it needs no game data, and it is the only thing that proves the
 # shaders actually compile on the runner's driver. A broken shader still links.
-data_free_gates='definitions gl_selftest corridor7_flic installer installer_gui installer_kde'
+data_free_gates='definitions gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows'
 
 data_gates='
 corridor7
@@ -232,6 +232,15 @@ for g in $data_free_gates; do
 				skip_gate "$g" "python3 is missing"
 			else
 				run_gate "$g" "desktop integration" "$here/test_installer_kde.sh" "$release_dir"
+			fi ;;
+		installer_windows)
+			# Runs the installer's Windows path for real, under Wine: the
+			# .cmd launcher, .lnk shortcuts made by Wine's own IShellLink,
+			# and the Add/Remove Programs keys. Skips where wine is absent.
+			if ! command -v wine >/dev/null 2>&1; then
+				skip_gate "$g" "wine is missing"
+			else
+				run_gate "$g" "windows install" "$here/test_installer_windows.sh"
 			fi ;;
 		corridor7_flic)
 			# Needs a build and nothing else: --flictest decodes before any game

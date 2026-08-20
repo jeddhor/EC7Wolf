@@ -12,7 +12,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import audio, build, install, shortcuts, verify
+from . import audio, build, install, shortcuts, verify, windows
 from .progress import Cancelled, Reporter
 
 # Rough share of the wall clock each step takes, so one bar can move smoothly
@@ -172,7 +172,7 @@ class InstallPlan:
             reporter.step("Assembling the install", str(self.destination))
             staging.copy(engine.executable, engine.executable.name)
             staging.copy(engine.pk3, engine.pk3.name)
-            if not sys.platform.startswith("win"):
+            if not install.is_windows():
                 (staging.path / engine.executable.name).chmod(0o755)
             launcher_name = install.write_launcher(staging.path).name
             staging.note(launcher_name)
@@ -205,6 +205,8 @@ class InstallPlan:
 
         uninstaller = install.write_uninstaller(destination, created)
         reporter.detail(f"uninstaller -> {uninstaller}")
+        windows.register_uninstall(destination, uninstaller,
+                                   engine.version(), reporter)
 
         install.write_manifest(destination, {
             "engine": engine.source,

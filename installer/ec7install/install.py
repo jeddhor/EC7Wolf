@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import json
 import os
-import platform
 import shutil
 import subprocess
 import time
 from pathlib import Path
 
-from .identity import APP_NAME, WM_CLASS
+from .identity import (APP_NAME, UNINSTALL_KEY, WM_CLASS, host_platform,
+                       is_windows)
 from .progress import Reporter
 
 # The eight files the engine will not start without, established from
@@ -54,10 +54,10 @@ class InstallError(Exception):
 
 def default_destination() -> Path:
     """Under the user's own home, so the installer never needs to elevate."""
-    if platform.system() == "Windows":
+    if is_windows():
         base = os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local")
         return Path(base) / "EC7Wolf"
-    if platform.system() == "Darwin":
+    if host_platform() == "macos":
         return Path.home() / "Applications" / "EC7Wolf"
     # Deliberately NOT XDG_DATA_HOME. That variable is right for user data, but
     # this is an application install, and a sandboxed launcher sets it to its
@@ -176,15 +176,19 @@ def write_launcher(destination: Path) -> Path:
     file. Self-contained is the behaviour tools/package_corridor7_release.sh
     already gives its releases.
     """
-    if platform.system() == "Windows":
+    if is_windows():
         path = destination / "EC7Wolf.cmd"
-        path.write_text(
+        # write_bytes, not write_text: text mode translates \n to os.linesep,
+        # so on Windows -- the only place this file is ever used -- these \r\n
+        # pairs would each become \r\r\n. cmd tolerates a lot, but there is no
+        # reason to write a file wrong and hope.
+        path.write_bytes(_crlf(
             "@echo off\r\n"
             "setlocal\r\n"
             "cd /d \"%~dp0\"\r\n"
             "if not exist \"%~dp0saves\" mkdir \"%~dp0saves\"\r\n"
             "\"%~dp0ec7wolf.exe\" --data CO7 --config \"%~dp0ec7wolf.cfg\" "
-            "--savedir \"%~dp0saves\" %*\r\n")
+            "--savedir \"%~dp0saves\" %*\r\n"))
         return path
 
     path = destination / "run-ec7wolf.sh"
@@ -210,6 +214,11 @@ def write_launcher(destination: Path) -> Path:
     return path
 
 
+def _crlf(text: str) -> bytes:
+    """A cmd script's exact bytes, CRLF endings and all."""
+    return text.encode("utf-8")
+
+
 def shell_quote(text: str) -> str:
     """POSIX single-quoting, for paths baked into the generated uninstaller."""
     return "'" + text.replace("'", "'\\''") + "'"
@@ -225,20 +234,46 @@ def write_uninstaller(destination: Path, shortcuts: list[Path]) -> Path:
     shell script that has to parse JSON to decide what to delete is a shell
     script waiting to delete the wrong thing.
     """
-    if platform.system() == "Windows":
+    if is_windows():
         path = destination / "Uninstall.cmd"
         removals = "".join(
             f'if exist "{p}" del /q "{p}"\r\n' for p in shortcuts)
-        path.write_text(
+        path.write_bytes(_crlf(
             "@echo off\r\n"
             "setlocal\r\n"
-            f"echo This removes {APP_NAME} from \"%~dp0\".\r\n"
+            f"rem Remove this {APP_NAME} install, the shortcuts it created and\r\n"
+            "rem its Add/Remove Programs entry. Pass --yes to skip the question,\r\n"
+            "rem which is what QuietUninstallString in the registry does.\r\n"
+            "\r\n"
+            "echo This removes:\r\n"
+            "echo   %~dp0\r\n"
+            + "".join(f"echo   {p}\r\n" for p in shortcuts) +
+            "\r\n"
+            "if exist \"%~dp0saves\" (\r\n"
+            "  echo.\r\n"
+            "  echo Saved games are inside this folder, in %~dp0saves.\r\n"
+            "  echo Copy them somewhere else first if you want to keep them.\r\n"
+            ")\r\n"
+            "\r\n"
+            "if /i \"%~1\"==\"--yes\" goto remove\r\n"
+            "if /i \"%~1\"==\"/S\" goto remove\r\n"
+            "echo.\r\n"
             "set /p answer=Remove it? [y/N] \r\n"
-            "if /i not \"%answer%\"==\"y\" (echo Nothing was removed. & exit /b 1)\r\n"
+            "if /i not \"%answer%\"==\"y\" (\r\n"
+            "  echo Nothing was removed.\r\n"
+            "  exit /b 1\r\n"
+            ")\r\n"
+            "\r\n"
+            ":remove\r\n"
             + removals +
+            f"reg delete \"HKCU\\{UNINSTALL_KEY}\" /f >nul 2>&1\r\n"
+            "\r\n"
+            "rem Delete the folder from outside it: cmd holds its own script\r\n"
+            "rem file open, so a plain rmdir of %~dp0 leaves the script behind.\r\n"
+            "set target=%~dp0\r\n"
             "cd /d \"%~dp0..\"\r\n"
-            "rmdir /s /q \"%~dp0\"\r\n"
-            "echo Removed.\r\n")
+            "start \"\" /min cmd /c \"timeout /t 1 >nul & rmdir /s /q \"%target%\"\"\r\n"
+            f"echo {APP_NAME} was removed.\r\n"))
         return path
 
     removals = "".join(f'rm -f {shell_quote(str(p))}\n' for p in shortcuts)
@@ -310,10 +345,15 @@ def uninstall(destination: Path, reporter: Reporter) -> None:
             except OSError as error:
                 reporter.warn(f"could not remove {target}: {error}")
 
+    if is_windows():
+        from . import windows
+        windows.unregister_uninstall()
+        reporter.detail("removed the Add/Remove Programs entry")
+
     reporter.detail(f"removing {destination}")
     shutil.rmtree(destination, ignore_errors=True)
 
-    if platform.system() == "Linux" and shutil.which("update-desktop-database"):
+    if host_platform() == "linux" and shutil.which("update-desktop-database"):
         applications = Path.home() / ".local" / "share" / "applications"
         subprocess.run(["update-desktop-database", str(applications)],
                        capture_output=True)

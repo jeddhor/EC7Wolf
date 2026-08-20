@@ -153,13 +153,50 @@ jobs:
           done
           echo "clean: no game data in any artifact"
 
+      - name: Write the release notes
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          cat > notes.md <<'PREAMBLE'
+          **You need your own copy of Corridor 7: Alien Invasion.** Nothing in
+          this release contains the game's data. The CD-ROM release — the disc,
+          or the BIN/CUE image sold by GOG and Steam — is the one to use: it is
+          the only one carrying the soundtrack and the cinematics.
+
+          ### Which file do I want?
+
+          | File | For |
+          | --- | --- |
+          | `EC7Wolf-Setup.exe` | **Windows, the easy way.** One file; it builds or collects everything else and takes your game data off the CD. |
+          | `*-windows-x64.zip` | Windows, engine only. Put your `.CO7` files beside it and run `EC7Wolf.cmd`. |
+          | `*-linux-x64.tar.gz` | Linux on x86-64, engine only. |
+          | `*-linux-arm64.tar.gz` | Linux on aarch64 — Raspberry Pi 4/5, Ampere, Asahi. |
+          | `*-full.zip` / `*-full.tar.gz` | The engine **and** the installer, for that platform. |
+          | `*-installer.zip` | The installer alone. It downloads the source and builds everything itself. |
+          | `*-source.tar.gz` | The complete source. |
+
+          See the [README](https://github.com/jeddhor/EC7Wolf#installing-and-running)
+          for all six ways to install this, in detail.
+          PREAMBLE
+          sed -i 's/^          //' notes.md
+          echo "" >> notes.md
+          echo "### Changes" >> notes.md
+          echo "" >> notes.md
+          previous=$(git describe --tags --abbrev=0 "$tag^" 2>/dev/null || true)
+          if [ -n "$previous" ]; then
+            git log --no-merges --format='- %s' "$previous..$tag" >> notes.md
+          else
+            git log --no-merges --format='- %s' -20 "$tag" >> notes.md
+          fi
+          cat notes.md
+
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${{ github.event.inputs.tag || github.ref_name }}"
-          gh release create "$tag" dist/* \
-            --title "EC7Wolf $tag" \
-            --notes-file .github/release-notes.md \
-            --verify-tag || \
-          gh release upload "$tag" dist/* --clobber
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/* --clobber
+          else
+            gh release create "$tag" dist/* \
+              --title "EC7Wolf $tag" --notes-file notes.md --verify-tag
+          fi

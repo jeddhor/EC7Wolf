@@ -29,6 +29,7 @@ from pathlib import Path
 
 from .identity import (APP_COMMENT, APP_NAME, PUBLISHER, UNINSTALL_KEY,
                        is_windows)
+from . import proc
 from .progress import Reporter
 
 
@@ -43,7 +44,7 @@ def _vbs_string(text: str) -> str:
 
 def _run(command: list[str], timeout: int = 120) -> subprocess.CompletedProcess:
     return subprocess.run(command, capture_output=True, text=True,
-                          timeout=timeout, errors="replace")
+                          timeout=timeout, errors="replace", **proc.quiet())
 
 
 def create_shortcut(path: Path, target: Path, arguments: str = "",
@@ -238,6 +239,72 @@ def unregister_uninstall() -> bool:
         return False
     _run([reg, "delete", "HKCU\\" + UNINSTALL_KEY, "/f"])
     return True
+
+
+# DLLs Windows itself provides. Everything else has to be in the folder.
+SYSTEM_DLLS = {
+    "kernel32.dll", "user32.dll", "gdi32.dll", "advapi32.dll", "shell32.dll",
+    "ole32.dll", "oleaut32.dll", "comctl32.dll", "comdlg32.dll", "winmm.dll",
+    "ws2_32.dll", "wsock32.dll", "imm32.dll", "version.dll", "setupapi.dll",
+    "shlwapi.dll", "opengl32.dll", "dwmapi.dll", "uxtheme.dll", "msvcrt.dll",
+    "rpcrt4.dll", "crypt32.dll", "bcrypt.dll", "iphlpapi.dll", "dbghelp.dll",
+    "psapi.dll", "userenv.dll", "secur32.dll", "hid.dll", "cfgmgr32.dll",
+    "msimg32.dll", "gdiplus.dll", "wintrust.dll", "ntdll.dll",
+}
+
+
+def imported_dlls(executable: Path) -> list[str]:
+    """The DLLs a PE binary imports, read out of its import table.
+
+    Parsed rather than grepped: the file is full of strings that look like DLL
+    names and are not imports, and the question here is specifically what the
+    loader will go looking for.
+    """
+    import struct
+    blob = executable.read_bytes()
+    if blob[:2] != b"MZ":
+        return []                     # not a PE; nothing to check
+    pe = struct.unpack_from("<I", blob, 0x3C)[0]
+    if blob[pe:pe + 4] != b"PE\0\0":
+        return []
+    sections = struct.unpack_from("<H", blob, pe + 6)[0]
+    optional_size = struct.unpack_from("<H", blob, pe + 20)[0]
+    optional = pe + 24
+    magic = struct.unpack_from("<H", blob, optional)[0]
+    directories = optional + (112 if magic == 0x20B else 96)
+    import_rva, _size = struct.unpack_from("<II", blob, directories + 8)
+    if not import_rva:
+        return []
+
+    table = []
+    section_start = optional + optional_size
+    for index in range(sections):
+        entry = section_start + index * 40
+        virtual = struct.unpack_from("<I", blob, entry + 12)[0]
+        raw_size = struct.unpack_from("<I", blob, entry + 16)[0]
+        raw_ptr = struct.unpack_from("<I", blob, entry + 20)[0]
+        table.append((virtual, raw_size, raw_ptr))
+
+    def offset(rva: int) -> int | None:
+        for virtual, raw_size, raw_ptr in table:
+            if virtual <= rva < virtual + raw_size:
+                return raw_ptr + (rva - virtual)
+        return None
+
+    names, cursor = [], offset(import_rva)
+    if cursor is None:
+        return []
+    while True:
+        descriptor = blob[cursor:cursor + 20]
+        if len(descriptor) < 20 or descriptor == b"\0" * 20:
+            break
+        name_rva = struct.unpack_from("<I", descriptor, 12)[0]
+        at = offset(name_rva)
+        if at is not None:
+            end = blob.index(b"\0", at)
+            names.append(blob[at:end].decode("ascii", "replace"))
+        cursor += 20
+    return names
 
 
 def start_menu_directory() -> Path:

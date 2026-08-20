@@ -71,7 +71,7 @@ done
 # gl_selftest is here rather than below because --gltest is handled before the
 # IWAD is opened: it needs no game data, and it is the only thing that proves the
 # shaders actually compile on the runner's driver. A broken shader still links.
-data_free_gates='definitions gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
+data_free_gates='definitions names gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
 
 data_gates='
 corridor7
@@ -214,6 +214,16 @@ for g in $data_free_gates; do
 				skip_gate "$g" "no ec7wolf in $build_dir"
 			else
 				run_gate "$g" "installer" "$here/test_installer.sh" "$build_dir"
+			fi ;;
+		names)
+			# Names used but never defined. Python does not notice until
+			# the line runs, and in an installer plenty of lines run only
+			# on one platform.
+			if ! command -v python3 >/dev/null 2>&1; then
+				skip_gate "$g" "python3 is missing"
+			else
+				run_gate "$g" "undefined names" python3 "$here/check_names.py" \
+					"$repo/installer" "$here/c7disc.py" "$here/make_release.py"
 			fi ;;
 		installer_gui)
 			# Drives the real wizard on Qt's offscreen platform. Needs no

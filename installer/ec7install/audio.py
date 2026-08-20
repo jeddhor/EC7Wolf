@@ -18,6 +18,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from . import proc
 from .progress import Cancelled, Reporter
 
 RAW_SECTOR = 2352
@@ -96,7 +97,7 @@ def rip(source, destination: Path, reporter: Reporter,
                  "-c:a", "libvorbis", "-q:a", "5", "-f", "ogg",
                  "-y", str(encoding)],
                 stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE)
+                stderr=subprocess.PIPE, **proc.quiet())
             try:
                 assert process.stdin is not None
                 # Streamed in chunks rather than read whole: the longest track is

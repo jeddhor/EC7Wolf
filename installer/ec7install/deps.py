@@ -19,6 +19,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from . import proc
 from .identity import host_platform
 
 
@@ -209,7 +210,7 @@ def _which(*names: str) -> str | None:
 def _version(executable: str, *args: str) -> str:
     try:
         out = subprocess.run([executable, *args], capture_output=True, text=True,
-                             timeout=15)
+                             timeout=15, **proc.quiet())
         return (out.stdout or out.stderr).strip().splitlines()[0]
     except Exception:
         return ""
@@ -256,7 +257,7 @@ def _vswhere_property(name: str, requires_vc: bool = False) -> str | None:
         command += ["-property", name]
         try:
             found = subprocess.run(command, capture_output=True, text=True,
-                                   timeout=30)
+                                   timeout=30, **proc.quiet())
         except (OSError, subprocess.SubprocessError):
             continue
         lines = found.stdout.strip().splitlines()

@@ -118,6 +118,18 @@ int main(int argc, char **argv)
 C
 	"$mingw" -o "$work/engine/ec7wolf.exe" "$work/engine/stub.c" 2>/dev/null || mingw=""
 fi
+# A stub that imports a DLL of its own, so the "is every library here?" check
+# has something real to find. The engine stub imports nothing but system DLLs,
+# which is correct and therefore proves nothing.
+if [ -n "$mingw" ]; then
+	printf 'int helper(void) { return 1; }\n' > "$work/engine/helper.c"
+	printf 'int helper(void);\nint main(void) { return helper(); }\n' \
+		> "$work/engine/needy.c"
+	( cd "$work/engine" && \
+	  "$mingw" -shared -o helper.dll helper.c -Wl,--out-implib,libhelper.a && \
+	  "$mingw" -o needy.exe needy.c -L. -lhelper ) 2>/dev/null || true
+fi
+
 if [ -z "$mingw" ] || [ ! -f "$work/engine/ec7wolf.exe" ]; then
 	printf 'note: no MinGW cross-compiler; the launcher will not be run\n'
 	printf 'placeholder' > "$work/engine/ec7wolf.exe"
@@ -239,6 +251,51 @@ if mingw:
           "passing the arguments the engine needs through to it")
 else:
     print("  ..     skipped running it: no MinGW cross-compiler")
+
+print("\nan engine found in a folder brings its DLLs with it")
+# What an unpacked release archive looks like: the engine, its pk3, and the
+# libraries it loads at run time. Taking only the first two produced an install
+# that could not start, which is how a user found this.
+release = work / "unpacked-release"
+release.mkdir(exist_ok=True)
+for name in ("ec7wolf.exe", "ec7wolf.pk3"):
+    (release / name).write_bytes((work / "engine" / name).read_bytes())
+for name in ("SDL2.dll", "SDL2_mixer.dll", "SDL2_net.dll", "libepoxy-0.dll"):
+    (release / name).write_bytes(b"pretend library")
+
+found = build.find_existing(work / "nowhere", extra=[release])
+check(found is not None, "the engine in the folder is found")
+if found is not None:
+    carried = sorted(Path(p).name for p in found.extra_files)
+    check(carried == ["SDL2.dll", "SDL2_mixer.dll", "SDL2_net.dll",
+                      "libepoxy-0.dll"],
+          f"and carries every DLL beside it ({carried})")
+
+print("\nan install missing a DLL is reported, not shipped")
+from ec7install import verify
+needy = work / "engine" / "needy.exe"
+helper = work / "engine" / "helper.dll"
+if needy.is_file() and helper.is_file():
+    bare = work / "bare-install"
+    bare.mkdir(exist_ok=True)
+    (bare / "needy.exe").write_bytes(needy.read_bytes())
+    check(verify._missing_libraries(bare) == ["helper.dll"],
+          "a binary whose DLL is not beside it is flagged by name")
+
+    (bare / "helper.dll").write_bytes(helper.read_bytes())
+    check(verify._missing_libraries(bare) == [],
+          "and is not flagged once the DLL is there")
+
+    # The engine stub imports only system DLLs, so it must NOT be flagged --
+    # a check that cannot tell those apart would fail every install.
+    system_only = work / "system-only"
+    system_only.mkdir(exist_ok=True)
+    (system_only / "ec7wolf.exe").write_bytes(
+        (work / "engine" / "ec7wolf.exe").read_bytes())
+    check(verify._missing_libraries(system_only) == [],
+          "a binary needing only Windows' own DLLs is left alone")
+else:
+    print("  ..     skipped: no MinGW to build a binary that imports a DLL")
 
 print("\nthe shortcuts, made by Wine's own IShellLink")
 created = shortcuts.create(target, launcher, repo, Reporter(),

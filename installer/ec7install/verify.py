@@ -50,6 +50,32 @@ def _check_flic(path: Path) -> str | None:
     return None
 
 
+def _missing_libraries(destination: Path) -> list[str]:
+    """DLLs the installed game needs that are not beside it.
+
+    The same question the release build asks, asked again after installing --
+    because an engine can arrive from somewhere the release build never saw. An
+    install made from an unpacked release archive once took the .exe and the
+    .pk3 and left SDL2_mixer.dll behind, and the first sign of it was a stack of
+    dialogs when the game was started.
+    """
+    from .identity import is_windows
+    if not is_windows():
+        return []
+    from .windows import SYSTEM_DLLS, imported_dlls
+
+    present = {item.name.lower() for item in destination.iterdir()}
+    missing: set[str] = set()
+    for binary in list(destination.glob("*.exe")) + list(destination.glob("*.dll")):
+        for name in imported_dlls(binary):
+            lowered = name.lower()
+            if (lowered not in SYSTEM_DLLS
+                    and not lowered.startswith(("api-ms-win-", "ext-ms-win-"))
+                    and lowered not in present):
+                missing.add(name)
+    return sorted(missing)
+
+
 def verify(destination: Path, expect_music: bool = False,
            expect_video: bool = False) -> list[Problem]:
     destination = Path(destination)
@@ -118,5 +144,11 @@ def verify(destination: Path, expect_music: bool = False,
             elif target.stat().st_size < 4096:
                 problems.append(Problem(f"cdaudio/{target.name}",
                                         "is too small to be a music track"))
+
+    for name in _missing_libraries(destination):
+        problems.append(Problem(
+            name, f"{name} is needed but is not in the install folder. The "
+            "game will not start without it; it should have been copied in "
+            "beside the engine.", fatal=True))
 
     return problems

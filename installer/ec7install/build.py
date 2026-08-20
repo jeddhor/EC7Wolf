@@ -16,6 +16,7 @@ from pathlib import Path
 
 from . import epoxy, sdl
 from .identity import exe_name, is_windows
+from . import proc
 from .progress import Cancelled, Reporter
 
 # Resolved per call rather than at import: the gate forces the Windows
@@ -95,7 +96,14 @@ def find_existing(repo_root: Path, extra: list[Path] | None = None) -> Engine | 
             continue
         if pk3.stat().st_mtime < executable.stat().st_mtime - 1:
             continue
-        return Engine(executable, pk3, f"already built in {directory}")
+        # Whatever else is in that folder comes too. A downloaded release, or
+        # an unpacked -full archive, has SDL2.dll and libepoxy-0.dll sitting
+        # beside the executable, and an install that took only the .exe and the
+        # .pk3 produced a game that could not start -- which is exactly what
+        # happened to the first person to install from a release zip.
+        extra = sorted(directory.glob("*.dll")) if is_windows() else []
+        return Engine(executable, pk3, f"already built in {directory}",
+                      extra_files=extra)
     return None
 
 
@@ -103,7 +111,7 @@ def _cmake_version(cmake: str) -> tuple:
     """The version of this CMake, as a tuple, or () if it will not say."""
     try:
         text = subprocess.run([cmake, "--version"], capture_output=True,
-                              text=True, timeout=60).stdout
+                              text=True, timeout=60, **proc.quiet()).stdout
     except (OSError, subprocess.SubprocessError):
         return ()
     for word in text.split():
@@ -136,7 +144,7 @@ def _cmake_generators(cmake: str) -> list[str]:
     """The generator names this CMake actually offers."""
     try:
         listing = subprocess.run([cmake, "--help"], capture_output=True,
-                                 text=True, timeout=60).stdout
+                                 text=True, timeout=60, **proc.quiet()).stdout
     except (OSError, subprocess.SubprocessError):
         return []
     names = []
@@ -241,6 +249,76 @@ def _mingw_runtime(build_dir: Path) -> list[Path]:
     return found
 
 
+def developer_environment() -> dict | None:
+    """The environment a Developer Command Prompt would have set up.
+
+    Visual Studio's compiler is deliberately not on the ordinary PATH; the
+    Developer Command Prompt exists to put it there, and VsDevCmd.bat is what
+    it runs. Asking that script for its environment and using it for the build
+    is what lets the installer compile on a machine where CMake is older than
+    Visual Studio -- the alternative being to tell the user to go and find the
+    right Start menu entry themselves, which is not what an installer is for.
+
+    The trick is the standard one: run the batch file and then `set`, and read
+    back what it changed.
+    """
+    from .deps import visual_studio_path
+    installation = visual_studio_path()
+    if not installation:
+        return None
+    batch = Path(installation) / "Common7" / "Tools" / "VsDevCmd.bat"
+    if not batch.is_file():
+        return None
+
+    # Through a batch file rather than `cmd /c "call ... && set"`. cmd strips
+    # the outer quotes from a command line that begins with one, which turns
+    # the quoted path to VsDevCmd.bat into something it then reports as "not
+    # recognized as an internal or external command". Writing the two lines to
+    # a file sidesteps the whole of cmd's quoting rules.
+    scratch = Path(tempfile.mkdtemp(prefix="ec7wolf-vsenv-"))
+    script = scratch / "capture.bat"
+    script.write_bytes(
+        ("@echo off\r\n"
+         f'call "{batch}" -arch=amd64 -host_arch=amd64 >nul\r\n'
+         "set\r\n").encode("utf-8"))
+    try:
+        result = subprocess.run(["cmd", "/c", str(script)], capture_output=True,
+                                text=True, timeout=300, errors="replace")
+    except (OSError, subprocess.SubprocessError):
+        return None
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    if result.returncode != 0:
+        return None
+
+    environment = {}
+    for line in result.stdout.splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            environment[key] = value
+    # PATH is the whole point; anything without it did not work.
+    return environment if any(k.upper() == "PATH" for k in environment) else None
+
+
+def _which_in(environment: dict, *names: str) -> str | None:
+    """shutil.which, but against a PATH we were handed rather than our own."""
+    path = next((v for k, v in environment.items() if k.upper() == "PATH"), "")
+    extensions = [e.lower() for e in
+                  environment.get("PATHEXT", ".EXE").split(os.pathsep) if e]
+    wanted = {f"{n.lower()}{e}" for n in names for e in extensions}
+    for directory in path.split(os.pathsep):
+        if not directory:
+            continue
+        try:
+            entries = os.listdir(directory)
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.lower() in wanted:
+                return os.path.join(directory, entry)
+    return None
+
+
 def _windows_build_problem(cmake: str) -> str | None:
     """Why this Windows machine cannot build yet, if it cannot.
 
@@ -300,7 +378,8 @@ def _stream(command: list[str], cwd: Path, reporter: Reporter,
     process = subprocess.Popen(
         [str(c) for c in command], cwd=str(cwd),
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, bufsize=1, errors="replace", env=environment)
+        text=True, bufsize=1, errors="replace", env=environment,
+        **proc.quiet())
     try:
         assert process.stdout is not None
         for line in process.stdout:

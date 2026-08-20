@@ -23,6 +23,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+from . import proc
 from .progress import Reporter
 
 
@@ -101,7 +102,7 @@ def _run(command: list[str], reporter: Reporter, what: str,
     try:
         result = subprocess.run(command, capture_output=True, text=True,
                                 timeout=timeout, env=environment,
-                                errors="replace")
+                                errors="replace", **proc.quiet())
     except (OSError, subprocess.SubprocessError) as error:
         raise BuildFailed(f"{what} could not be run: {error}")
     if result.returncode != 0:
@@ -153,11 +154,11 @@ def meson_tool(cache: Path, reporter: Reporter) -> list[str]:
         try:
             subprocess.run([sys.executable, "-m", "venv", str(venv)],
                            check=True, capture_output=True, text=True,
-                           timeout=600)
+                           timeout=600, **proc.quiet())
             subprocess.run([str(python), "-m", "pip", "install",
                             "--disable-pip-version-check", "--quiet", "meson"],
                            check=True, capture_output=True, text=True,
-                           timeout=1800)
+                           timeout=1800, **proc.quiet())
         except (OSError, subprocess.SubprocessError) as error:
             detail = getattr(error, "stderr", "") or str(error)
             raise BuildFailed("could not install meson, which this dependency "

@@ -99,6 +99,39 @@ def find_existing(repo_root: Path, extra: list[Path] | None = None) -> Engine | 
     return None
 
 
+def _cmake_version(cmake: str) -> tuple:
+    """The version of this CMake, as a tuple, or () if it will not say."""
+    try:
+        text = subprocess.run([cmake, "--version"], capture_output=True,
+                              text=True, timeout=60).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ()
+    for word in text.split():
+        if word[:1].isdigit() and "." in word:
+            try:
+                return tuple(int(part) for part in word.split(".")[:3])
+            except ValueError:
+                return ()
+    return ()
+
+
+def _policy_arguments(cmake: str, using_fetched_sdl: bool) -> list[str]:
+    """Let CMake 4 read the config files upstream's SDL packages ship.
+
+    sdl2_mixer-config.cmake and sdl2_net-config.cmake declare a
+    cmake_minimum_required below 3.5. CMake 3.x calls that deprecated and
+    carries on; CMake 4 removed the compatibility and makes it a hard error, so
+    the same SDL packages that build fine on a developer's machine fail on a CI
+    runner with a newer CMake. This is CMake's own escape hatch for exactly
+    that, and it is applied only when we are the ones who supplied those files.
+    """
+    if not using_fetched_sdl:
+        return []
+    if _cmake_version(cmake) < (4, 0):
+        return []
+    return ["-DCMAKE_POLICY_VERSION_MINIMUM=3.5"]
+
+
 def _cmake_generators(cmake: str) -> list[str]:
     """The generator names this CMake actually offers."""
     try:
@@ -391,7 +424,8 @@ def build(repo_root: Path, build_dir: Path, reporter: Reporter,
                  "-DCMAKE_BUILD_TYPE=Release",
                  "-DECWOLF_RENDERER_OPENGL=ON",
                  "-DECWOLF_RENDERER_SOFTWARE=ON",
-                 *sdl_arguments, *epoxy_arguments]
+                 *sdl_arguments, *epoxy_arguments,
+                 *_policy_arguments(cmake, bool(sdl_arguments))]
     said: list[str] = []
     if _stream(configure, repo_root, reporter, kept_lines=said,
                environment=environment) != 0:

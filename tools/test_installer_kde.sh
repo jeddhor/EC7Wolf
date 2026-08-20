@@ -33,7 +33,7 @@ mkdir -p "$work/home"
 
 HOME="$work/home" XDG_DATA_HOME="$work/home/.local/share" \
 python3 - "$repo" "$work" <<'PY' || exit 1
-import shlex, subprocess, sys
+import shlex, shutil, subprocess, sys
 from pathlib import Path
 
 repo, work = Path(sys.argv[1]), Path(sys.argv[2])
@@ -110,11 +110,19 @@ for name, action in actions.items():
     target = Path(argv[0] if argv[0] != "xdg-open" else argv[1])
     check(target.exists(), f"{name} points at something that exists")
 
-validate = subprocess.run(["desktop-file-validate", str(entry)],
-                          capture_output=True, text=True)
-check(validate.returncode == 0,
-      "desktop-file-validate is happy" +
-      (f": {validate.stdout}{validate.stderr}" if validate.returncode else ""))
+# desktop-file-validate lives in desktop-file-utils, which is not on every
+# machine -- a bare CI runner has no desktop packages at all. Its absence is
+# worth saying out loud, because this is the check that would catch a malformed
+# entry, but it is not a reason to fail: crashing with a traceback told the
+# reader nothing about what was wrong.
+if shutil.which("desktop-file-validate") is None:
+    print("  ..     desktop-file-validate is not installed; entry not validated")
+else:
+    validate = subprocess.run(["desktop-file-validate", str(entry)],
+                              capture_output=True, text=True)
+    check(validate.returncode == 0,
+          "desktop-file-validate is happy" +
+          (f": {validate.stdout}{validate.stderr}" if validate.returncode else ""))
 
 print("\nthe icons")
 icons = [p for p in created if p.suffix in (".svg", ".png")]

@@ -40,7 +40,7 @@ jobs:
     name: Build + data-free gates
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # gitinfo.h embeds git describe
 
@@ -50,8 +50,9 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake ninja-build \
             libsdl2-dev libsdl2-mixer-dev libsdl2-net-dev \
-            zlib1g-dev libbz2-dev libjpeg-dev libgtk-3-dev \
-            xvfb x11-utils imagemagick libgl1-mesa-dri mesa-utils python3
+            zlib1g-dev libbz2-dev libjpeg-dev libgtk-3-dev libepoxy-dev \
+            xvfb x11-utils imagemagick libgl1-mesa-dri mesa-utils python3 \
+            desktop-file-utils ffmpeg
 
       - name: Configure
         run: |
@@ -74,7 +75,7 @@ jobs:
 
       - name: Upload gate logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gate-logs-build
           path: gate-logs/
@@ -97,7 +98,7 @@ jobs:
        github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: [self-hosted, corridor7-data]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -124,7 +125,7 @@ jobs:
 
       - name: Upload gate logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gate-logs-full
           path: gate-logs/
@@ -134,7 +135,7 @@ jobs:
     name: Build without the OpenGL backend
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -162,9 +163,9 @@ jobs:
     name: Windows setup executable
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -189,7 +190,7 @@ jobs:
         # arguments, which is where a missing bundled import shows up.
         run: python installer/windows/build_setup.py
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: EC7Wolf-Setup
           path: dist/EC7Wolf-Setup.exe

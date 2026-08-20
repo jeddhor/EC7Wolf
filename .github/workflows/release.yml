@@ -43,11 +43,11 @@ jobs:
           - name: Windows x64
             runner: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # the version counts commits; a shallow clone cannot
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -67,7 +67,7 @@ jobs:
       - name: Package
         run: python tools/make_release.py package --engine staging/engine --out dist --kinds binaries,full
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: engine-${{ matrix.runner }}
           path: dist/*
@@ -77,15 +77,15 @@ jobs:
     name: Windows setup executable
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - run: pip install pyinstaller PySide6
       - run: python installer/windows/build_setup.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: setup-exe
           path: dist/EC7Wolf-Setup.exe
@@ -95,14 +95,14 @@ jobs:
     name: Installer and source packages
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - run: python tools/make_release.py package --out dist --kinds installer,source
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: portable
           path: dist/*
@@ -113,11 +113,11 @@ jobs:
     needs: [engine, setup-exe, portable]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 

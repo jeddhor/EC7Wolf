@@ -203,11 +203,15 @@ class InstallPlan:
         done += WEIGHTS["shortcuts"]
         reporter.progress(done / total)
 
+        uninstaller = install.write_uninstaller(destination, created)
+        reporter.detail(f"uninstaller -> {uninstaller}")
+
         install.write_manifest(destination, {
             "engine": engine.source,
             "source": self.source.describe(),
             "launcher": str(launcher),
             "shortcuts": [str(p) for p in created],
+            "uninstaller": str(uninstaller),
             "music": self.with_music,
             "video": self.with_video,
         })

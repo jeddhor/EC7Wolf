@@ -15,41 +15,152 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from .identity import (APP_COMMENT, APP_ID, APP_NAME, ENGINE_BINARY,
+                       WM_CLASS)
 from .progress import Reporter
 
-APP_ID = "org.ec7wolf.EC7Wolf"
-APP_NAME = "EC7Wolf"
-APP_COMMENT = "Corridor 7: Alien Invasion source port"
 
 
-def _desktop_entry(exec_path: Path, icon: str) -> str:
-    return (
-        "[Desktop Entry]\n"
-        "Type=Application\n"
-        f"Name={APP_NAME}\n"
-        f"Comment={APP_COMMENT}\n"
-        f"Exec={exec_path}\n"
-        f"Icon={icon}\n"
-        "Terminal=false\n"
-        "Categories=Game;ActionGame;\n"
-        "Keywords=Corridor 7;Wolfenstein;FPS;\n"
-        f"StartupWMClass={APP_NAME}\n"
-    )
+def _quote(path) -> str:
+    """Quote a path for an Exec= line, per the desktop entry spec.
+
+    Not decoration: the default install path has no spaces, but a user who
+    installs into "~/My Games/EC7Wolf" gets an entry that silently launches
+    nothing at all, because the desktop reads Exec as a command line and splits
+    it on whitespace.
+    """
+    text = str(path)
+    for character in ("\\", '"', "$", "`"):
+        text = text.replace(character, "\\" + character)
+    return '"' + text.replace("%", "%%") + '"'
+
+
+def _template(repo_root: Path) -> dict:
+    """The project's own engine.desktop.in, read rather than reinvented.
+
+    It carries the name, comment and categories the ECWolf packaging already
+    uses; duplicating them here would mean an installed EC7Wolf and a packaged
+    one drifting apart for no reason. Everything it cannot know -- where this
+    particular install went -- is filled in by the caller.
+    """
+    fields = {"Version": "1.0", "Type": "Application", "Name": APP_NAME,
+              "Comment": APP_COMMENT, "Categories": "Game"}
+    path = repo_root / "src" / "posix" / "engine.desktop.in"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return fields
+
+    substitutions = {"@PRODUCT_NAME@": APP_NAME,
+                     "@PRODUCT_IDENTIFIER@": APP_ID,
+                     "@ENGINE_BINARY_NAME@": ENGINE_BINARY}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith(("[", "#")) or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        for placeholder, replacement in substitutions.items():
+            value = value.replace(placeholder, replacement)
+        fields[key.strip()] = value.strip()
+    return fields
+
+
+def _desktop_entry(exec_path: Path, icon: str, destination: Path,
+                   repo_root: Path) -> str:
+    fields = _template(repo_root)
+
+    categories = fields.get("Categories", "Game")
+    if not categories.endswith(";"):
+        # The spec makes the trailing semicolon part of the list syntax, and
+        # desktop-file-validate says so; the template predates that check.
+        categories += ";"
+    if "ActionGame" not in categories:
+        categories += "ActionGame;"
+
+    fields.update({
+        "Exec": _quote(exec_path),
+        "Icon": icon,
+        "Categories": categories,
+        "Terminal": "false",
+        "StartupNotify": "true",
+        # Measured, not guessed: this is what the window really announces once
+        # the launcher has set SDL's WM class, and it is what a Plasma or GNOME
+        # task manager matches to pair the window with this entry. Getting it
+        # wrong costs the taskbar icon and the grouping, silently.
+        "StartupWMClass": APP_ID,
+        "Keywords": "Corridor 7;Alien Invasion;Wolfenstein;FPS;shooter;",
+        "Actions": "Fullscreen;Folder;",
+    })
+
+    order = ["Version", "Type", "Name", "Comment", "Exec", "Icon", "Terminal",
+             "Categories", "Keywords", "StartupNotify", "StartupWMClass",
+             "Actions"]
+    lines = ["[Desktop Entry]"]
+    lines += [f"{key}={fields[key]}" for key in order if key in fields]
+    lines += [f"{key}={value}" for key, value in sorted(fields.items())
+              if key not in order]
+
+    # Right-click actions on the launcher, which Plasma and GNOME both show.
+    lines += ["", "[Desktop Action Fullscreen]",
+              "Name=Play fullscreen",
+              f"Exec={_quote(exec_path)} --fullscreen",
+              "", "[Desktop Action Folder]",
+              "Name=Open the install folder",
+              f"Exec=xdg-open {_quote(destination)}"]
+    return "\n".join(lines) + "\n"
+
+
+# The raster sizes the project already ships, for the panels and task managers
+# that would rather not rasterise an SVG themselves. Named by hicolor's
+# directory, so the mapping is the whole of the knowledge needed.
+RASTER_ICONS = {
+    "16x16": "icon_16x16.png",
+    "32x32": "icon_32x32.png",
+    "128x128": "icon_128x128.png",
+    "256x256": "icon_256x256.png",
+    "512x512": "icon_512x512.png",
+}
 
 
 def install_icon(repo_root: Path, reporter: Reporter) -> tuple[str, list[Path]]:
-    """Put the icon where the desktop can find it. -> (icon name, files)."""
-    source = repo_root / "src" / "posix" / "icon.svg"
-    if not source.is_file():
+    """Put the icon where the desktop can find it. -> (icon name, files).
+
+    Into the user's own hicolor theme, under the application id, which is the
+    name the desktop entry then asks for. Nothing here needs root, and nothing
+    here is shared with a packaged EC7Wolf installed system-wide.
+    """
+    icons = Path.home() / ".local" / "share" / "icons" / "hicolor"
+    written: list[Path] = []
+
+    scalable = repo_root / "src" / "posix" / "icon.svg"
+    if scalable.is_file():
+        target_dir = icons / "scalable" / "apps"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / f"{APP_ID}.svg"
+        shutil.copy2(scalable, target)
+        written.append(target)
+        reporter.detail(f"icon -> {target}")
+
+    iconset = repo_root / "src" / "macosx" / "icon.iconset"
+    for size, name in RASTER_ICONS.items():
+        source = iconset / name
+        if not source.is_file():
+            continue
+        target_dir = icons / size / "apps"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / f"{APP_ID}.png"
+        shutil.copy2(source, target)
+        written.append(target)
+
+    if not written:
         return (APP_NAME.lower(), [])
 
-    target_dir = (Path.home() / ".local" / "share" / "icons" / "hicolor"
-                  / "scalable" / "apps")
-    target_dir.mkdir(parents=True, exist_ok=True)
-    target = target_dir / f"{APP_ID}.svg"
-    shutil.copy2(source, target)
-    reporter.detail(f"icon -> {target}")
-    return (APP_ID, [target])
+    # GTK panels read a cache; KDE reads the directory. Refreshing it is
+    # harmless where it is not needed and invisible where it is.
+    if shutil.which("gtk-update-icon-cache"):
+        subprocess.run(["gtk-update-icon-cache", "-q", "-t", "-f", str(icons)],
+                       capture_output=True)
+    return (APP_ID, written)
 
 
 def create(destination: Path, launcher: Path, repo_root: Path,
@@ -67,7 +178,7 @@ def _create_linux(destination: Path, launcher: Path, repo_root: Path,
     icon_name, icon_files = install_icon(repo_root, reporter)
     created += icon_files
 
-    entry = _desktop_entry(launcher, icon_name)
+    entry = _desktop_entry(launcher, icon_name, destination, repo_root)
 
     if menu:
         applications = Path.home() / ".local" / "share" / "applications"

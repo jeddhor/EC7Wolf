@@ -17,6 +17,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from .identity import APP_NAME, WM_CLASS
 from .progress import Reporter
 
 # The eight files the engine will not start without, established from
@@ -192,9 +193,103 @@ def write_launcher(destination: Path) -> Path:
         "# Launch EC7Wolf with its configuration and saves kept beside it.\n"
         "here=$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\n"
         "mkdir -p \"$here/saves\"\n"
+        "\n"
+        "# Tell SDL what to call the window. Without this the class comes from\n"
+        "# argv[0] and reads \"ec7wolf\", which matches neither the desktop\n"
+        "# file's name nor the AppStream id -- and a task manager that cannot\n"
+        "# match the window to the entry falls back to a generic icon and\n"
+        "# refuses to group the two. Measured with xprop, not assumed.\n"
+        f"SDL_VIDEO_X11_WMCLASS={WM_CLASS}\n"
+        f"SDL_VIDEO_WAYLAND_WMCLASS={WM_CLASS}\n"
+        "export SDL_VIDEO_X11_WMCLASS SDL_VIDEO_WAYLAND_WMCLASS\n"
+        "\n"
         "cd \"$here\"\n"
         "exec \"$here/ec7wolf\" --data CO7 --config \"$here/ec7wolf.cfg\" "
         "--savedir \"$here/saves\" \"$@\"\n")
+    path.chmod(0o755)
+    return path
+
+
+def shell_quote(text: str) -> str:
+    """POSIX single-quoting, for paths baked into the generated uninstaller."""
+    return "'" + text.replace("'", "'\\''") + "'"
+
+
+def write_uninstaller(destination: Path, shortcuts: list[Path]) -> Path:
+    """A remover that lives inside the install and needs nothing else.
+
+    The CLI can already uninstall, but only from a checkout of the source tree,
+    and someone who installed a game a year ago has no reason to still have one.
+    The list of shortcuts is baked in at install time rather than parsed back
+    out of the manifest, because the plan knows exactly what it created and a
+    shell script that has to parse JSON to decide what to delete is a shell
+    script waiting to delete the wrong thing.
+    """
+    if platform.system() == "Windows":
+        path = destination / "Uninstall.cmd"
+        removals = "".join(
+            f'if exist "{p}" del /q "{p}"\r\n' for p in shortcuts)
+        path.write_text(
+            "@echo off\r\n"
+            "setlocal\r\n"
+            f"echo This removes {APP_NAME} from \"%~dp0\".\r\n"
+            "set /p answer=Remove it? [y/N] \r\n"
+            "if /i not \"%answer%\"==\"y\" (echo Nothing was removed. & exit /b 1)\r\n"
+            + removals +
+            "cd /d \"%~dp0..\"\r\n"
+            "rmdir /s /q \"%~dp0\"\r\n"
+            "echo Removed.\r\n")
+        return path
+
+    removals = "".join(f'rm -f {shell_quote(str(p))}\n' for p in shortcuts)
+    path = destination / "uninstall.sh"
+    path.write_text(
+        "#!/bin/sh\n"
+        f"# Remove this {APP_NAME} install, and the shortcuts it created.\n"
+        "#\n"
+        "# Written by the installer, with the shortcut list already filled in.\n"
+        "# Pass --yes to skip the question.\n"
+        "set -eu\n"
+        "\n"
+        "here=$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\n"
+        "\n"
+        "printf 'This removes:\\n'\n"
+        "printf '  %s\\n' \"$here\"\n"
+        + "".join(f"printf '  %s\\n' {shell_quote(str(p))}\n"
+                  for p in shortcuts) +
+        "\n"
+        "# Saved games live inside the install, so say so before taking it away.\n"
+        "if [ -d \"$here/saves\" ]; then\n"
+        "\tsaves=$(find \"$here/saves\" -type f 2>/dev/null | wc -l)\n"
+        "\tif [ \"$saves\" -gt 0 ]; then\n"
+        "\t\tif [ \"$saves\" -eq 1 ]; then word=file; else word=files; fi\n"
+        "\t\tprintf '\\nThis includes %s saved game %s in %s.\\n' "
+        "\"$saves\" \"$word\" \"$here/saves\"\n"
+        "\t\tprintf 'Copy them somewhere else first if you want to keep them.\\n'\n"
+        "\tfi\n"
+        "fi\n"
+        "\n"
+        "if [ \"${1:-}\" != \"--yes\" ]; then\n"
+        "\tprintf '\\nRemove it? [y/N] '\n"
+        "\tread -r answer\n"
+        "\tcase $answer in\n"
+        "\t\ty|Y|yes|YES) ;;\n"
+        "\t\t*) printf 'Nothing was removed.\\n'; exit 1 ;;\n"
+        "\tesac\n"
+        "fi\n"
+        "\n"
+        + removals +
+        "\n"
+        "if command -v update-desktop-database >/dev/null 2>&1; then\n"
+        "\tupdate-desktop-database \"$HOME/.local/share/applications\" "
+        "2>/dev/null || true\n"
+        "fi\n"
+        "\n"
+        "# Leave the directory before removing it, or the shell is standing in a\n"
+        "# folder that no longer exists.\n"
+        "cd \"$here/..\"\n"
+        "rm -rf \"$here\"\n"
+        f"printf '{APP_NAME} was removed.\\n'\n")
     path.chmod(0o755)
     return path
 

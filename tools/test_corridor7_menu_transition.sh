@@ -56,6 +56,23 @@ xvfb-run -a -s "-screen 0 960x600x24" sh -c '
 		>"$MF_WORK/run.log" 2>&1 &
 	pid=$!
 	sleep 10
+
+	# Take the input focus explicitly. Xvfb runs with no window manager, so
+	# nothing assigns focus and X leaves it as PointerRoot -- keys then go to
+	# whatever the pointer happens to be over, which races with the window being
+	# mapped. That is how a keypress goes missing, and a missing keypress here
+	# was twice reported as a rendering regression.
+	window=$(xdotool search --pid "$pid" --onlyvisible 2>/dev/null | sed -n 1p)
+	if [ -z "$window" ]; then
+		window=$(xdotool search --onlyvisible --name "EC7Wolf" 2>/dev/null | sed -n 1p)
+	fi
+	if [ -n "$window" ]; then
+		xdotool windowfocus --sync "$window" 2>/dev/null || true
+		xdotool mousemove --window "$window" 20 20 2>/dev/null || true
+	else
+		echo "no game window found to focus" >>"$MF_WORK/run.log"
+	fi
+
 	# Past the title pages into the menu. Two presses: the first only interrupts
 	# whichever page is showing.
 	xdotool key --clearmodifiers Escape; sleep 1
@@ -76,6 +93,7 @@ xvfb-run -a -s "-screen 0 960x600x24" sh -c '
 	# Confirm the screen actually changed before believing anything about how it
 	# changed.
 	attempt=1
+	switched=0
 	while [ "$attempt" -le 3 ]; do
 		xdotool key --clearmodifiers Return &
 		for i in 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18; do
@@ -85,20 +103,37 @@ xvfb-run -a -s "-screen 0 960x600x24" sh -c '
 		import -window root "$MF_WORK/s-99.png"
 		if ! compare -metric AE "$MF_WORK/s-00.png" "$MF_WORK/s-99.png" \
 			null: 2>&1 | grep -qx 0; then
+			switched=1
 			break
 		fi
 		echo "menu did not respond to Return (attempt $attempt); retrying" \
 			>>"$MF_WORK/run.log"
 		attempt=$((attempt + 1))
+		[ -n "$window" ] && xdotool windowfocus --sync "$window" 2>/dev/null || true
 		xdotool key --clearmodifiers Escape; sleep 1
 		xdotool key --clearmodifiers Down; sleep 0.8
 	done
+	echo "$switched" >"$MF_WORK/switched"
 	kill "$pid" 2>/dev/null || true
 	wait "$pid" 2>/dev/null || true
 '
 
 if [ ! -s "$work/s-99.png" ]; then
 	printf 'FAIL: no menu captures; see %s/run.log\n' "$work" >&2
+	exit 1
+fi
+
+# If the menu never switched there is no transition to photograph, and every
+# statement the analysis below would make about the fade is unfounded. Say what
+# actually happened instead. This gate failed twice with "no fade is happening",
+# which sent the reader looking for a rendering regression that was never there;
+# the retry above was added for the same reason but still fell through to the
+# analysis when all three attempts were lost.
+if [ ! -s "$work/switched" ] || [ "$(cat "$work/switched")" = "0" ]; then
+	printf 'FAIL: the menu never responded to Return after 3 attempts, so no\n' >&2
+	printf '      transition was captured. That is an input failure in this\n' >&2
+	printf '      test, not a rendering result. Last of the game log:\n' >&2
+	tail -20 "$work/run.log" 2>/dev/null | sed 's/^/      /' >&2
 	exit 1
 fi
 

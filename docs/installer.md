@@ -153,11 +153,62 @@ Advancing pages in the gate clicks the button rather than calling
 complete. Only the button respects `isComplete()`, so only the button proves the
 guard is real.
 
-### Phase 3 — KDE integration
+### Phase 3 — KDE integration — **done**
 
-`.desktop` entry from the existing `src/posix/engine.desktop.in`, the existing
-`src/posix/icon.svg`, menu and desktop icons, the uninstaller, and a launcher
-that keeps config and saves with the install.
+The parts of an install that live *outside* its own folder, which are the parts
+that fail quietly.
+
+**One identity, in `identity.py`.** `org.ec7wolf.EC7Wolf` — the project's own
+AppStream id, whose `<launchable>` in
+`docs/org.ec7wolf.EC7Wolf.metainfo.xml` already names
+`org.ec7wolf.EC7Wolf.desktop`. The desktop file's name, the icon's name, the
+window's class and that metadata are one fact, and they are now written down
+once. When two of them disagree the symptom is silent, which is exactly why
+they were worth centralising.
+
+**The window class was wrong, and measuring is the only way to know.** The
+entry said `StartupWMClass=EC7Wolf`. Run under Xvfb and read back with `xprop`,
+the engine actually announces:
+
+    WM_CLASS(STRING) = "ec7wolf", "ec7wolf"
+
+SDL takes the class from `argv[0]` unless told otherwise, so it matched neither
+the old string nor the desktop file. A task manager that cannot pair a window
+with its entry falls back to a grey cog and refuses to group the two — at no
+cost on install day. The launcher now exports `SDL_VIDEO_X11_WMCLASS` and
+`SDL_VIDEO_WAYLAND_WMCLASS` (the Wayland one matters on Plasma 6, where the app
+id is matched against the desktop file's name), and the measurement is a gate.
+
+**The entry is derived from `src/posix/engine.desktop.in`**, as the module's
+docstring always claimed but the code did not do — name, comment and categories
+come from the file the ECWolf packaging uses, so an installed EC7Wolf and a
+packaged one cannot drift. Two things are corrected on the way through:
+`Categories=Game` gains the trailing semicolon the spec requires, and `Exec` is
+quoted. That last one is not decoration — the default path has no spaces, but
+installing into `~/My Games/EC7Wolf` would otherwise produce an entry that
+launches nothing at all, because the desktop reads `Exec` as a command line and
+splits on whitespace. The gate installs into a path with a space for exactly
+this reason.
+
+Also: right-click actions (*Play fullscreen*, *Open the install folder*), both
+using flags checked against `--help` rather than invented; and the icon
+installed to the user's own hicolor theme as the scalable SVG plus the five
+raster sizes the project already ships.
+
+**An uninstaller that lives in the install.** The CLI could already uninstall,
+but only from a checkout of the source tree, and someone who installed a game a
+year ago has no reason to still have one. `uninstall.sh` sits in the install
+folder with the shortcut list baked in — the plan knows exactly what it
+created, and a shell script that has to parse JSON to decide what to delete is
+a script waiting to delete the wrong thing. It names everything it will remove,
+warns when saved games are inside it, and does nothing without a yes or
+`--yes`.
+
+**Gate:** `tools/test_installer_kde.sh`, in the data-free set. 38 checks over
+the launcher, the entry, the icons and the uninstaller; then, when a playable
+install is present, it starts the engine under Xvfb and reads `WM_CLASS` back
+with `xprop`, because the string in the desktop file is only right if the
+running game agrees with it, and nothing but a running game can say.
 
 ### Phase 4 — Windows
 

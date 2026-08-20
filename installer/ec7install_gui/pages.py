@@ -915,6 +915,10 @@ class FinishPage(QWizardPage):
                          "folder. Configuration and saved games stay inside "
                          "the install, so nothing else on the system is "
                          "touched.</p>")
+            parts.append(
+                f"<p style='color:{colour['dim']};'>To remove it later, run "
+                f"<tt>uninstall.sh</tt> in that folder; it takes the menu "
+                "entry and the icons with it.</p>")
             self.launch.setVisible(True)
             self.launch.setChecked(True)
             self.openFolder.setVisible(True)

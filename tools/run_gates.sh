@@ -71,7 +71,7 @@ done
 # gl_selftest is here rather than below because --gltest is handled before the
 # IWAD is opened: it needs no game data, and it is the only thing that proves the
 # shaders actually compile on the runner's driver. A broken shader still links.
-data_free_gates='definitions gl_selftest corridor7_flic installer installer_gui'
+data_free_gates='definitions gl_selftest corridor7_flic installer installer_gui installer_kde'
 
 data_gates='
 corridor7
@@ -223,6 +223,15 @@ for g in $data_free_gates; do
 				skip_gate "$g" "PySide6 is missing"
 			else
 				run_gate "$g" "installer window" "$here/test_installer_gui.sh"
+			fi ;;
+		installer_kde)
+			# The desktop entry, icons, launcher and uninstaller need
+			# nothing but python3. The window-class measurement at the end
+			# needs a playable install, and says so when there is not one.
+			if ! command -v python3 >/dev/null 2>&1; then
+				skip_gate "$g" "python3 is missing"
+			else
+				run_gate "$g" "desktop integration" "$here/test_installer_kde.sh" "$release_dir"
 			fi ;;
 		corridor7_flic)
 			# Needs a build and nothing else: --flictest decodes before any game

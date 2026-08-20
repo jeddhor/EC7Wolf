@@ -194,9 +194,26 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${{ github.event.inputs.tag || github.ref_name }}"
+
+          # A beta is a pre-release, and saying otherwise would put it forward
+          # as the version to download. GitHub decides that from this flag, not
+          # from what the tag is called, so the tag has to be read here.
+          prerelease=""
+          case "$tag" in
+            *alpha*|*beta*|*-rc*|*-pre*) prerelease="--prerelease" ;;
+          esac
+
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" dist/* --clobber
+            # An existing release may predate this rule, or have been made by
+            # hand; make it agree with the tag either way.
+            if [ -n "$prerelease" ]; then
+              gh release edit "$tag" --prerelease
+            else
+              gh release edit "$tag" --prerelease=false
+            fi
           else
             gh release create "$tag" dist/* \
-              --title "EC7Wolf $tag" --notes-file notes.md --verify-tag
+              --title "EC7Wolf $tag" --notes-file notes.md --verify-tag \
+              $prerelease
           fi

@@ -89,6 +89,7 @@ corridor7_menu_transition
 corridor7_pages
 corridor7_topmessage
 corridor7_upscale
+corridor7_controls
 gl_world
 gl_frame
 gl_live
@@ -99,8 +100,7 @@ gl_hardening
 gl_modeswitch
 glxbrz_parity
 xbrz_scaling
-renderscale
-'
+renderscale'
 
 # Needs the packaged release rather than a build dir, so it is called
 # differently and only when that directory looks packaged.

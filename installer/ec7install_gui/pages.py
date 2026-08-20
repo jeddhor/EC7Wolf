@@ -52,6 +52,7 @@ class State:
         self.destination = install.default_destination()
         self.with_music = True
         self.with_video = True
+        self.classic_controls = False
         self.menu_shortcut = True
         self.desktop_shortcut = True
         self.jobs = os.cpu_count() or 2
@@ -811,6 +812,24 @@ class OptionsPage(QWizardPage):
         layout.addWidget(self.contentNote)
 
         layout.addSpacing(12)
+        layout.addWidget(QLabel("<b>Controls</b>"))
+        # Said plainly and before the fact, because the surprise is silent:
+        # someone who played this in 1994 presses the up arrow, nothing moves,
+        # and concludes the port is broken rather than that the defaults
+        # changed underneath them in the intervening thirty years.
+        layout.addWidget(body(
+            "EC7Wolf starts with <b>modern controls</b>: <b>W A S D</b> to "
+            "move and <b>E</b> to open doors and use machinery, with the "
+            "arrow keys turning, Ctrl to fire and Shift to run."))
+        self.classic = QCheckBox(
+            "Use the original's controls instead — arrows to move, Space to use")
+        layout.addWidget(self.classic)
+        self.controlsNote = body("")
+        self.controlsNote.setContentsMargins(22, 0, 0, 0)
+        layout.addWidget(self.controlsNote)
+        self.classic.toggled.connect(self._changed)
+
+        layout.addSpacing(12)
         layout.addWidget(QLabel("<b>Shortcuts</b>"))
         self.menu = QCheckBox("Add EC7Wolf to the applications menu")
         self.desktop = QCheckBox("Put an icon on the desktop")
@@ -831,10 +850,11 @@ class OptionsPage(QWizardPage):
         # state read half way through this would see values it just clobbered.
         wanted = (has_music and self.state.with_music,
                   has_video and self.state.with_video,
+                  self.state.classic_controls,
                   self.state.menu_shortcut, self.state.desktop_shortcut)
 
-        for box, value in zip((self.music, self.video, self.menu, self.desktop),
-                              wanted):
+        for box, value in zip((self.music, self.video, self.classic,
+                               self.menu, self.desktop), wanted):
             box.blockSignals(True)
             box.setChecked(value)
             box.blockSignals(False)
@@ -857,6 +877,10 @@ class OptionsPage(QWizardPage):
         self._changed()
 
     def _changed(self, *_) -> None:
+        self.state.classic_controls = self.classic.isChecked()
+        self.controlsNote.setText(
+            "<span style='color:gray;'>Either way, every key can be changed in "
+            "<i>Options &#8594; Controls</i> once the game is running.</span>")
         self.state.with_music = self.music.isChecked() and self.music.isEnabled()
         self.state.with_video = self.video.isChecked() and self.video.isEnabled()
         self.state.menu_shortcut = self.menu.isChecked()
@@ -941,6 +965,9 @@ class SummaryPage(QWizardPage):
         shortcuts = [name for name, on in
                      (("applications menu", state.menu_shortcut),
                       ("desktop", state.desktop_shortcut)) if on]
+        row("Controls", "the original's &#8212; arrows to move, Space to use"
+                        if state.classic_controls else
+                        "modern &#8212; W A S D to move, E to use")
         row("Shortcuts", ", ".join(shortcuts) if shortcuts else "none")
         row("Log", str(state.log_path) if state.log_path else "&#8211;")
 
@@ -1131,6 +1158,14 @@ class FinishPage(QWizardPage):
                          "folder. Configuration and saved games stay inside "
                          "the install, so nothing else on the system is "
                          "touched.</p>")
+            parts.append(
+                "<p><b>Controls:</b> " +
+                ("the original's &#8212; arrow keys move, <b>Space</b> opens "
+                 "doors and uses machinery."
+                 if state.classic_controls else
+                 "<b>W A S D</b> to move and <b>E</b> to open doors and use "
+                 "machinery. The arrow keys turn.") +
+                " Change any of them in <i>Options &#8594; Controls</i>.</p>")
             parts.append(
                 f"<p style='color:{colour['dim']};'>To remove it later, run "
                 f"<tt>uninstall.sh</tt> in that folder; it takes the menu "

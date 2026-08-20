@@ -14,6 +14,7 @@ import subprocess
 from pathlib import Path
 
 from . import windows
+from . import proc
 from .identity import (APP_COMMENT, APP_ID, APP_NAME, ENGINE_BINARY,
                        is_windows)
 from .progress import Reporter
@@ -158,7 +159,7 @@ def install_icon(repo_root: Path, reporter: Reporter) -> tuple[str, list[Path]]:
     # harmless where it is not needed and invisible where it is.
     if shutil.which("gtk-update-icon-cache"):
         subprocess.run(["gtk-update-icon-cache", "-q", "-t", "-f", str(icons)],
-                       capture_output=True)
+                       capture_output=True, **proc.quiet())
     return (APP_ID, written)
 
 
@@ -189,7 +190,7 @@ def _create_linux(destination: Path, launcher: Path, repo_root: Path,
         reporter.detail(f"menu entry -> {path}")
         if shutil.which("update-desktop-database"):
             subprocess.run(["update-desktop-database", str(applications)],
-                           capture_output=True)
+                           capture_output=True, **proc.quiet())
 
     if desktop:
         desktop_dir = _desktop_directory()
@@ -204,7 +205,7 @@ def _create_linux(destination: Path, launcher: Path, repo_root: Path,
                 if shutil.which("gio"):
                     subprocess.run(
                         ["gio", "set", str(path), "metadata::trusted", "true"],
-                        capture_output=True, timeout=10)
+                        capture_output=True, timeout=10, **proc.quiet())
             except Exception:
                 pass
             created.append(path)
@@ -220,7 +221,8 @@ def _desktop_directory() -> Path | None:
     if shutil.which("xdg-user-dir"):
         try:
             out = subprocess.run(["xdg-user-dir", "DESKTOP"],
-                                 capture_output=True, text=True, timeout=10)
+                                 capture_output=True, text=True, timeout=10,
+                                 **proc.quiet())
             candidate = Path(out.stdout.strip())
             # xdg-user-dir answers with $HOME when it has no Desktop configured,
             # and scattering a .desktop file into the home directory is not what

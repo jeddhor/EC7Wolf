@@ -221,7 +221,8 @@ def _pkg_config(name: str) -> bool:
     if not pkg:
         return False
     try:
-        return subprocess.run([pkg, "--exists", name], timeout=15).returncode == 0
+        return subprocess.run([pkg, "--exists", name], timeout=15,
+                              **proc.quiet()).returncode == 0
     except Exception:
         return False
 

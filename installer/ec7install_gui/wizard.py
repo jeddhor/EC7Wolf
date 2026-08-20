@@ -173,6 +173,7 @@ def unattended(repo_root: Path, arguments) -> int:
             with_video=not arguments.no_video,
             menu_shortcut=not arguments.no_shortcuts,
             desktop_shortcut=not arguments.no_shortcuts,
+            classic_controls=arguments.classic_controls,
             engine=engine)
         work.run(reporter)
         return 0
@@ -234,6 +235,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-music", action="store_true")
     parser.add_argument("--no-video", action="store_true")
     parser.add_argument("--no-shortcuts", action="store_true")
+    parser.add_argument("--classic-controls", action="store_true",
+                        help="set up the original's controls rather than the "
+                             "modern default")
 
     # /S is what a Windows installer is expected to answer to, and a deployment
     # tool driving EC7Wolf-Setup.exe will try it before anything else.

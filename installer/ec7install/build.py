@@ -283,7 +283,8 @@ def developer_environment() -> dict | None:
          "set\r\n").encode("utf-8"))
     try:
         result = subprocess.run(["cmd", "/c", str(script)], capture_output=True,
-                                text=True, timeout=300, errors="replace")
+                                text=True, timeout=300, errors="replace",
+                                **proc.quiet())
     except (OSError, subprocess.SubprocessError):
         return None
     finally:

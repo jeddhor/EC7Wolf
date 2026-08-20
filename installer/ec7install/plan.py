@@ -11,7 +11,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from . import audio, build, install, shortcuts, verify, windows
+from . import audio, build, controls, install, shortcuts, verify, windows
 from . import source as source_code
 from .progress import Cancelled, Reporter
 
@@ -60,6 +60,7 @@ class InstallPlan:
     def __init__(self, repo_root: Path, source, destination: Path,
                  with_music: bool = True, with_video: bool = True,
                  menu_shortcut: bool = True, desktop_shortcut: bool = True,
+                 classic_controls: bool = False,
                  build_dir: Path | None = None, engine: build.Engine | None = None,
                  jobs: int | None = None):
         self.repo_root = Path(repo_root)
@@ -69,6 +70,7 @@ class InstallPlan:
         self.with_video = with_video
         self.menu_shortcut = menu_shortcut
         self.desktop_shortcut = desktop_shortcut
+        self.classic_controls = classic_controls
         self.build_dir = Path(build_dir) if build_dir else \
             self.destination.parent / ".ec7wolf-build"
         # Encoded music, kept only while it is worth keeping: a failed or
@@ -216,6 +218,17 @@ class InstallPlan:
                 (staging.path / engine.executable.name).chmod(0o755)
             launcher_name = install.write_launcher(staging.path).name
             staging.note(launcher_name)
+
+            # Written into the staging tree rather than the finished install,
+            # so that Staging.carry_over -- which brings an existing config
+            # forward on a reinstall -- leaves it alone. Someone who has just
+            # asked for the original's controls means it more than their old
+            # file does.
+            if self.classic_controls:
+                controls.write_config(staging.path, controls.CLASSIC)
+                staging.note(controls.CONFIG_NAME)
+                reporter.detail("controls: the original's scheme "
+                                "(arrows, Space to use)")
             done += WEIGHTS["assemble"]
             reporter.progress(done / total)
 

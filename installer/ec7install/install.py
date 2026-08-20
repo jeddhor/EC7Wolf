@@ -16,6 +16,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from . import proc
 from .identity import (APP_NAME, UNINSTALL_KEY, WM_CLASS, host_platform,
                        is_windows)
 from .progress import Reporter
@@ -411,4 +412,4 @@ def uninstall(destination: Path, reporter: Reporter) -> None:
     if host_platform() == "linux" and shutil.which("update-desktop-database"):
         applications = Path.home() / ".local" / "share" / "applications"
         subprocess.run(["update-desktop-database", str(applications)],
-                       capture_output=True)
+                       capture_output=True, **proc.quiet())

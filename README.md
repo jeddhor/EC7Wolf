@@ -21,6 +21,16 @@
 > target of this fork and are not guaranteed to behave correctly.** If you want
 > a general-purpose Wolf3D port, use [upstream ECWolf](https://maniacsvault.net/ecwolf/).
 
+> ### 🎮 The controls are modern by default
+>
+> **W A S D** to move · **E** to open doors and use machinery · arrow keys turn
+> · **Ctrl** fires · **Shift** runs
+>
+> This is *not* what Corridor 7 shipped with in 1994. If you want the original
+> scheme — **arrow keys to move, Space to open** — the installer offers it as a
+> tick-box, or change any key in *Options → Controls*. See
+> [Controls](#controls) below.
+
 ---
 
 ## What it looks like
@@ -459,8 +469,10 @@ you cannot write to.</td></tr>
 
 <tr><td><img src="docs/images/installer-options.png" alt="Options page"></td>
 <td><b>Options.</b> Whether to rip the CD soundtrack and extract the cinematics —
-each is offered only if your source actually has it — and whether to add a menu
-entry and a desktop icon.</td></tr>
+each is offered only if your source actually has it — whether to add a menu
+entry and a desktop icon, and <b>which control scheme to set up</b>. It states
+plainly that the defaults are modern (W A S D, E to use) and offers the
+original's arrows-and-Space scheme as a tick-box.</td></tr>
 
 <tr><td><img src="docs/images/installer-summary.png" alt="Summary page"></td>
 <td><b>Ready to install.</b> Everything that is about to happen, on one page.
@@ -759,17 +771,36 @@ it. On Windows it also appears in *Settings → Apps* like any other program.
 Every install writes `ec7wolf-install.log` beside the install folder, whatever
 happens. It has the full detail, including the compiler's own messages.
 
-### Handy controls (matching the original)
+### Controls
+
+**The defaults are modern, not the original's.** This catches people out, so it
+is worth saying twice: out of the box you move with **W A S D** and open things
+with **E**. Corridor 7 in 1994 moved with the **arrow keys** and opened things
+with **Space**.
+
+| Action | Modern (default) | The original's |
+| --- | --- | --- |
+| Move forward / back | **W** / **S** | **Up** / **Down** arrow |
+| Turn left / right | Left / Right arrow | Left / Right arrow |
+| Sidestep | **A** / **D** | hold **Alt** and turn (A / D also work) |
+| **Open, use, push** | **E** | **Space** |
+| Fire | Ctrl, or the mouse | Ctrl |
+| Run | Shift | Shift |
+
+**To get the original's scheme:** tick *Use the original's controls* on the
+installer's Options page, or run `ec7wolf-install --classic-controls`. Either
+writes a configuration with those bindings before you first start the game.
+Nothing is locked in — every key can be rebound in *Options → Controls*.
+
+Everything else is the same either way:
 
 | Input | Action |
 | --- | --- |
-| Arrows / WASD + mouse | Move & turn |
-| Ctrl / mouse | Fire |
-| Space | Open / use doors, computers, dispensers, chambers, pushwalls |
 | 1–8 | Select weapon |
 | M | Plant proximity mine |
 | **Enter** | **Cycle visor: Normal → Night Vision → Infrared** |
-| Tab | Toggle proximity map |
+| Tab | Corridor 7's inset proximity map |
+| F1 | Full-screen automap |
 | Esc | Main menu |
 
 ---

@@ -2,11 +2,15 @@
 #include "resource.h"
 #include "../version.h"
 
-#if _MSC_VER > 1400
+// icon.ico unconditionally. This used to be guarded by _MSC_VER > 1400, which
+// looks reasonable and never worked: _MSC_VER is defined by the compiler, not
+// by rc.exe, so the resource compiler read it as 0, took the other branch, and
+// every Windows build since has embedded the Windows 9x icon -- 48 pixels at
+// most, which Explorer then upscales for every view larger than a list.
+//
+// The 9x file stays in the tree for anyone who wants it, but nothing that
+// needs OpenGL 3.3 is running on Windows 98.
 IDI_ICON1	ICON	DISCARDABLE	"icon.ico"
-#else
-IDI_ICON1	ICON	DISCARDABLE "icon9x.ico"
-#endif
 
 1 VERSIONINFO
 BEGIN

@@ -105,7 +105,33 @@ def build_engine(into: Path, jobs: int | None,
     if not allow_software:
         check_opengl(into / engine.executable.name)
     check_dependencies(into / engine.executable.name, into)
+    check_icon(into / engine.executable.name)
     return into
+
+
+def check_icon(executable: Path) -> None:
+    """The executable must carry an icon big enough to be worth having.
+
+    Windows shows a 256-pixel icon in several places and upscales whatever it
+    is given. windows.rc guarded the good icon behind _MSC_VER, which rc.exe
+    does not define, so for a long time every build embedded the Windows 9x
+    file and nobody noticed -- an upscaled 48-pixel icon looks like a slightly
+    soft icon, not like a bug.
+    """
+    from ec7install.windows import icon_sizes
+
+    sizes = icon_sizes(executable)
+    if not sizes:
+        print("icon:           none in the executable (not fatal)")
+        return
+    largest = max(sizes)
+    if largest >= 128:
+        print(f"icon:           {len(sizes)} sizes, up to {largest}px")
+        return
+    raise SystemExit(
+        f"\n{executable.name} carries icons only up to {largest}px "
+        f"({sorted(sizes)}). Windows wants 256 and will upscale anything "
+        "smaller. Check which .ico src/win32/windows.rc actually compiled.")
 
 
 def check_dependencies(executable: Path, folder: Path) -> None:

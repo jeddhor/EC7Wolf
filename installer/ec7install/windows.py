@@ -307,6 +307,79 @@ def imported_dlls(executable: Path) -> list[str]:
     return names
 
 
+def icon_sizes(executable: Path) -> list[int]:
+    """The pixel sizes of the icons inside a PE binary.
+
+    Read out of the resource directory: RT_ICON entries are either a
+    BITMAPINFOHEADER, whose height is doubled because it counts the mask, or a
+    PNG, which says its own size in the IHDR.
+    """
+    import struct
+    try:
+        blob = Path(executable).read_bytes()
+    except OSError:
+        return []
+    if blob[:2] != b"MZ":
+        return []
+    pe = struct.unpack_from("<I", blob, 0x3C)[0]
+    if blob[pe:pe + 4] != b"PE\0\0":
+        return []
+    sections = struct.unpack_from("<H", blob, pe + 6)[0]
+    optional = pe + 24
+    magic = struct.unpack_from("<H", blob, optional)[0]
+    directories = optional + (112 if magic == 0x20B else 96)
+    resource_rva = struct.unpack_from("<I", blob, directories + 16)[0]
+    if not resource_rva:
+        return []
+
+    table = []
+    start = optional + struct.unpack_from("<H", blob, pe + 20)[0]
+    for index in range(sections):
+        entry = start + index * 40
+        table.append((struct.unpack_from("<I", blob, entry + 12)[0],
+                      struct.unpack_from("<I", blob, entry + 16)[0],
+                      struct.unpack_from("<I", blob, entry + 20)[0]))
+
+    def offset(rva: int):
+        for virtual, size, raw in table:
+            if virtual <= rva < virtual + size:
+                return raw + (rva - virtual)
+        return None
+
+    def entries(at: int):
+        named, identified = struct.unpack_from("<HH", blob, at + 12)
+        for index in range(named + identified):
+            yield struct.unpack_from("<II", blob, at + 16 + index * 8)
+
+    base = offset(resource_rva)
+    if base is None:
+        return []
+
+    sizes: list[int] = []
+    for rid, sub in entries(base):
+        if (rid & 0x7FFFFFFF) != 3 or not (sub & 0x80000000):     # RT_ICON
+            continue
+        for _name, name_sub in entries(base + (sub & 0x7FFFFFFF)):
+            if not (name_sub & 0x80000000):
+                continue
+            for _lang, data in entries(base + (name_sub & 0x7FFFFFFF)):
+                if data & 0x80000000:
+                    continue
+                at = base + data
+                data_rva, _size = struct.unpack_from("<II", blob, at)
+                where = offset(data_rva)
+                if where is None:
+                    continue
+                chunk = blob[where:where + 32]
+                if chunk[:8] == b"\x89PNG\r\n\x1a\n":
+                    sizes.append(struct.unpack_from(">I", chunk, 16)[0])
+                elif len(chunk) >= 8:
+                    width = struct.unpack_from("<i", chunk, 4)[0]
+                    if 0 < width <= 1024:
+                        sizes.append(width)
+    return sorted(set(sizes))
+
+
 def start_menu_directory() -> Path:
     appdata = os.environ.get("APPDATA")
     base = Path(appdata) if appdata else Path.home() / "AppData" / "Roaming"

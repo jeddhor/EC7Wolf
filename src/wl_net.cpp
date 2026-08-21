@@ -56,7 +56,10 @@
 #include <climits>
 
 #define NET_DEFAULT_PORT 5029
-#define MAXEXTRATICS 4
+// Deep enough to hold a whole delay window of commands per player, plus room
+// for them to arrive out of order. Four was enough when nothing was ever sent
+// early; with input delay, every command is.
+#define MAXEXTRATICS 64
 
 // TODO: Handle transfer of arbiter status as client quit
 #define Arbiter 0
@@ -269,6 +272,8 @@ NetInit InitVars = {
 	GM_Cooperative,
 	NET_DEFAULT_PORT,
 	1,
+	NULL,
+	0,
 };
 
 struct NetClient
@@ -903,8 +908,14 @@ void EndGame()
 	DoEndGame();
 }
 
+static void ResetTicDelay();
+
 void NewGame(int &difficulty, FString &map, FName (&playerClassNames)[MAXPLAYERS])
 {
+	// A new game starts the tic count again, so anything still buffered from
+	// the last one is stamped for tics that will come round a second time.
+	ResetTicDelay();
+
 	if(InitVars.numPlayers > 1)
 	{
 		WindowX = WindowY = 0;
@@ -935,6 +946,197 @@ void NewGame(int &difficulty, FString &map, FName (&playerClassNames)[MAXPLAYERS
 	}
 }
 
+// Input delay: the whole of what makes this playable over the internet.
+//
+// ExchangePacket sends the command for the tic about to run and then blocks
+// until every player has answered, so the game advances no faster than one
+// network round trip. Measured on a link with an 80ms round trip that is 8.6
+// tics a second against a TICRATE of 70.
+//
+// Here each command is instead stamped for a tic some way ahead and sent at
+// once, and the tic about to run is simulated from commands that were sent
+// that many tics ago. The round trip then has the whole window to complete in,
+// and in the ordinary case every command has already arrived and nothing waits
+// at all. The cost is that a player's own input takes the window to appear --
+// eight tics is 114ms -- which is the trade every lockstep game of this era
+// made.
+//
+// The local player's own command is delayed too, and must be: acting on it
+// immediately while everyone else sees it a window later is precisely a
+// desync. It goes through the same buffer as everybody else's.
+// A sequence of our own, advanced once per exchange, rather than
+// gamestate.TimeCount. TimeCount is a clock: it does not necessarily advance
+// by exactly one between two exchanges, so a command stamped with it can be
+// stepped straight over and then waited for for ever. Both sides advance this
+// once per tic, so their sequences line up by construction.
+static uint32_t TicSeq = 0;
+
+// Every command we have sent, kept by sequence and never cleared.
+//
+// Resending from our own pending ring is not enough: an entry there is cleared
+// as we consume it, so the moment we have moved past a command we can no
+// longer send it again -- and the packet a peer lost is exactly one we have
+// already used ourselves. Both sides then wait for each other for ever, which
+// is what 2% packet loss did.
+static TicCmdPacket SentHistory[MAXEXTRATICS];
+
+static void StoreTicCmd(int client, const TicCmdPacket &packet)
+{
+	// Drop a duplicate rather than filling the ring with copies: a resend
+	// arrives as the same sequence we already hold.
+	for(unsigned int i = 0;i < MAXEXTRATICS;++i)
+	{
+		if(Client[client].extratics[i].TimeCount == packet.TimeCount)
+			return;
+	}
+	Client[client].extratics[Client[client].extrapos] = packet;
+	Client[client].extrapos = (Client[client].extrapos+1)%MAXEXTRATICS;
+}
+
+static bool GatherTicCmds(TicCmdPacket (&packets)[MAXPLAYERS], bool (&have)[MAXPLAYERS])
+{
+	unsigned int found = 0;
+	for(unsigned int c = 0;c < InitVars.numPlayers;++c)
+	{
+		if(have[c])
+		{
+			++found;
+			continue;
+		}
+		for(unsigned int i = 0;i < MAXEXTRATICS;++i)
+		{
+			TicCmdPacket &buffered = Client[c].extratics[i];
+			if(buffered.TimeCount == TicSeq + 1)
+			{
+				packets[c] = buffered;
+				buffered.TimeCount = 0;
+				have[c] = true;
+				++found;
+				break;
+			}
+		}
+	}
+	return found == InitVars.numPlayers;
+}
+
+static void SendTicCmd(TicCmdPacket &packet)
+{
+	TicCmdPacket wire = packet;
+	wire.type = TicCmdPacket::Type;
+	wire.ByteSwap();
+
+	UDPpacket outPacket = { -1, (Uint8*)&wire, sizeof(wire), sizeof(wire), 0 };
+	for(unsigned int i = 0;i < InitVars.numPlayers;++i)
+	{
+		if(i == ConsolePlayer)
+			continue;
+		outPacket.address = Client[i].address;
+		SDLNet_UDP_Send(Socket, -1, &outPacket);
+	}
+}
+
+// The tic that the first stamped command belongs to. Every tic before it has
+// no commands anywhere -- they were never sent, because at the first tic the
+// window is still ahead of us -- so waiting for them is waiting for ever. Both
+// machines enter the level on the same tic, so both work out the same value.
+static void ResetTicDelay()
+{
+	TicSeq = 0;
+	memset(SentHistory, 0, sizeof(SentHistory));
+	for(unsigned int c = 0;c < MAXPLAYERS;++c)
+	{
+		for(unsigned int i = 0;i < MAXEXTRATICS;++i)
+			Client[c].extratics[i].TimeCount = 0;
+		Client[c].extrapos = 0;
+	}
+}
+
+static void ExchangeDelayedTicCmds(TicCmdPacket (&packets)[MAXPLAYERS])
+{
+	bool have[MAXPLAYERS] = { false };
+
+	// Ours, stamped for a tic in the future and put in our own buffer exactly
+	// as a remote player's would be.
+	// Sequences are stored one-based so that zero can mean "empty slot", which
+	// is how the ring marks a command as consumed.
+	TicCmdPacket &mine = packets[ConsolePlayer];
+	mine.type = TicCmdPacket::Type;
+	mine.TimeCount = TicSeq + InitVars.ticDelay + 1;
+	StoreTicCmd(ConsolePlayer, mine);
+	SentHistory[mine.TimeCount % MAXEXTRATICS] = mine;
+	SendTicCmd(mine);
+
+	// Before the window has filled there is nothing to wait for: nobody has a
+	// command for this tic and nobody ever will. Everyone stands still for the
+	// first few hundredths of a second, identically on every machine.
+	if(TicSeq < InitVars.ticDelay)
+	{
+		for(unsigned int c = 0;c < InitVars.numPlayers;++c)
+			memset(&packets[c], 0, sizeof(packets[c]));
+		++TicSeq;
+		return;
+	}
+
+	// Everything that has arrived since last tic. In the ordinary case this
+	// already holds every command for the tic about to run.
+	unsigned int resend = 0;
+	bool waiting = false;
+	for(;;)
+	{
+		while(SDLNet_UDP_Recv(Socket, Packet))
+		{
+			if(CheckPacketType<TicCmdPacket>(Packet))
+			{
+				int client = FindClient(Packet->address);
+				if(client < 0)
+					continue;
+
+				TicCmdPacket &data = *reinterpret_cast<TicCmdPacket *>(Packet->data);
+				if(data.TimeCount > TicSeq)
+					StoreTicCmd(client, data);
+			}
+			else if(!CheckPacketType<AckPacket>(Packet))
+				HandleCommandPackets();
+		}
+
+		if(GatherTicCmds(packets, have))
+			break;
+
+		// Something is missing, so a packet was lost. Resend our whole window:
+		// the commands still in our own buffer are exactly the ones a peer may
+		// not have, and sending them again costs a few hundred bytes.
+		if(resend == 0)
+		{
+			// Everything we have sent that a peer could still be waiting
+			// for, whether or not we have consumed it ourselves.
+			for(unsigned int i = 0;i < MAXEXTRATICS;++i)
+			{
+				TicCmdPacket &past = SentHistory[i];
+				if(past.TimeCount != 0 &&
+					past.TimeCount + MAXEXTRATICS > TicSeq)
+					SendTicCmd(past);
+			}
+			resend = 100;
+		}
+		--resend;
+
+		IN_ProcessEvents();
+		if(!waiting)
+			waiting = true;
+		else
+		{
+			if(ingame)
+				CheckKeys();
+			SDL_Delay(1);
+		}
+
+		if(playstate != ex_stillplaying)
+			break;
+	}
+
+	++TicSeq;
+}
+
 void PollControls()
 {
 	TicCmdPacket ticcmdPackets[MAXPLAYERS];
@@ -949,16 +1151,26 @@ void PollControls()
 	memcpy(ticcmdData.buttonstate, control[ConsolePlayer].buttonstate, sizeof(control[ConsolePlayer].buttonstate));
 	memcpy(ticcmdData.buttonheld, control[ConsolePlayer].buttonheld, sizeof(control[ConsolePlayer].buttonheld));
 
-	ExchangePacket(ticcmdPackets);
-	// Undo the byte swapping of our own packet that ExchangePacket does
-	ticcmdData.ByteSwap();
+	if(InitVars.ticDelay == 0)
+	{
+		// Unchanged: exchange the tic about to run and wait for everyone.
+		ExchangePacket(ticcmdPackets);
+		// Undo the byte swapping of our own packet that ExchangePacket does
+		ticcmdData.ByteSwap();
+	}
+	else
+		ExchangeDelayedTicCmds(ticcmdPackets);
 
 	if(playstate != ex_stillplaying)
 		return;
 
 	for(unsigned int client = 0;client < InitVars.numPlayers;++client)
 	{
-		if(client == ConsolePlayer)
+		// With input delay our own command comes out of the buffer like
+		// everyone else's, a window after it was pressed. Skipping ourselves
+		// here would run the local player's input immediately and every other
+		// machine's a window later, which is a desync by construction.
+		if(client == ConsolePlayer && InitVars.ticDelay == 0)
 			continue;
 
 		TicCmdPacket &data = ticcmdPackets[client];

@@ -65,6 +65,14 @@ struct NetInit
 	uint16_t port;
 	byte numPlayers;
 	const char* joinAddress;
+
+	// How many tics ahead each player's commands are sent, so that a round
+	// trip has that many tics to complete in rather than one. Zero is the
+	// original behaviour: exchange the current tic and block until everyone
+	// answers, which is free on a LAN and unusable over the internet -- at
+	// 70 tics a second it needs a reply every 14.3ms. See
+	// docs/multiplayer.md.
+	byte ticDelay;
 };
 
 extern NetInit InitVars;

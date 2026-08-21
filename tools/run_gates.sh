@@ -90,6 +90,8 @@ corridor7_pages
 corridor7_topmessage
 corridor7_upscale
 corridor7_controls
+multiplayer_loopback
+multiplayer_latency
 gl_world
 gl_frame
 gl_live

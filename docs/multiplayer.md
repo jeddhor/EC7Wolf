@@ -81,7 +81,7 @@ relationship to input, and would be a different project.
 Each milestone ends with something demonstrable and a gate that keeps it
 working. No milestone depends on hardware nobody has.
 
-### M0 — Prove the ground
+### M0 — Prove the ground — **done**
 
 Two instances on loopback, driven headlessly, playing the same arena.
 
@@ -94,7 +94,19 @@ Two instances on loopback, driven headlessly, playing the same arena.
 *Exit:* `test_multiplayer_loopback.sh` runs two engines, plays, and both report
 the same checksum. Any desync fails the gate with the tic it happened on.
 
-### M1 — Survive the internet
+**Done.** The netcode worked on the first honest attempt: 300 tics, both sides
+identical every tic. Two things had to be right to get there, and both are now
+written into the gate so nobody rediscovers them:
+
+* **Both sides need `--tedlevel`.** It routes through `NewGame`, which calls
+  `Net::NewGame`, which exchanges the map and takes the arbiter's. A client
+  without it lands in the menu instead, and the host then blocks for ever
+  waiting for tic commands from a player who is reading a menu.
+* **The two instances need different local ports.** Host and client both bind
+  `InitVars.port`, so on one machine they collide, and `--join host:port`
+  carries the destination because `--port` is only the local bind.
+
+### M1 — Survive the internet — **done**
 
 Input delay, and the handling that a lossy link demands.
 
@@ -107,9 +119,45 @@ Input delay, and the handling that a lossy link demands.
 * Version and data handshake at join: two players with different builds or
   different game data must be told so, not desync fifty tics later.
 
-*Exit:* the loopback gate again, under **simulated latency and loss** — `tc
-netem` on the loopback interface, 80 ms round trip and 2% loss — still in sync
-and still running at full tic rate.
+*Exit:* the loopback gate again, under **simulated latency and loss** — 80 ms
+round trip and 2% loss — still in sync and still running at full tic rate.
+
+**Done**, and measured rather than asserted:
+
+| link | tic rate, no delay | with 8 tics of delay |
+| --- | --- | --- |
+| loopback | 22.4 | 22.1 |
+| 80 ms round trip | **8.6** | **21.4** |
+| 150 ms round trip | — | 20.8 |
+
+TICRATE is 70; the ceiling of about 22 is what this headless test environment
+manages either way, which is the point — **latency stopped costing anything.**
+At 80 ms the old path ran at 8.6 tics a second, which is 1/RTT, exactly as a
+per-tic round trip predicts.
+
+Simulated with `tools/netdelay.py`, a userspace UDP relay, rather than `tc
+netem`: netem needs root and a gate should not.
+
+Three things went wrong on the way, all worth keeping:
+
+* **Stamping commands with `gamestate.TimeCount` does not work.** It is a
+  clock, not a counter of exchanges, and does not necessarily advance by one
+  between two of them — so a command stamped with it gets stepped over and then
+  waited for for ever. The exchange carries a sequence of its own now.
+* **The first few tics have no commands at all** and never will, because at the
+  first tic the whole window is still ahead. Waiting for them hangs at exactly
+  `delay` tics, which is a distinctive enough symptom to recognise again.
+* **Resending from the pending ring cannot recover a lost packet.** Entries
+  there are cleared as they are consumed, and the command a peer lost is
+  precisely one we have already used. Two players then wait for each other for
+  ever. There is a separate history of everything sent, which is what gets
+  resent.
+
+**Known limitation, for later.** At 5% loss the *handshake* fails — the host
+does not get out of `Net::NewGame`, which still uses the original synchronous
+exchange. The delayed tic path is fine there; it is the one-off startup
+negotiation that is fragile, and it belongs with the rest of the reliability
+work in M7.
 
 ### M2 — The way in
 

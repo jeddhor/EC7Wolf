@@ -1178,6 +1178,19 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 			if(++i < argc)
 				Net::InitVars.port = atoi(argv[i]);
 		}
+		else IFARG("--net-delay")
+		{
+			// Tics of input delay; see docs/multiplayer.md. The setup menu
+			// will set this once it exists, and it is here now so the gates
+			// can measure it.
+			if(++i < argc)
+			{
+				int delay = atoi(argv[i]);
+				if(delay < 0) delay = 0;
+				if(delay > 32) delay = 32;
+				Net::InitVars.ticDelay = (byte)delay;
+			}
+		}
 		else IFARG("--host")
 		{
 			if(++i < argc)
@@ -1264,6 +1277,7 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 			" --audiobuffer <size>   Sets the size of the audio buffer (-> sound latency)\n"
 			"                        (given in bytes, default: 2048 / (44100 / samplerate))\n"
 			" --host <number>        Sets up a network game with the given number of players.\n"
+			" --net-delay <tics>     Input delay for network play (0-32)\n"
 			" --join <address>       Joins a network game coordinated by the given host.\n"
 			" --port <number>        Port number to use for network communications.\n"
 			" --battle               Player vs. player battle\n"

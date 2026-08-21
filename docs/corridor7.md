@@ -450,9 +450,12 @@ reconstructions where the executable did not yield an unambiguous value.
 Masked screens preserve collision and sight behavior while transparent columns
 are composited with walls and actors at their actual depth. Plane-1 masked-wall
 configuration markers 86..88 are preserved distinctly, but their exact DOS
-state differences remain unresolved. The final victory page remains an
-evidence-based ECWolf reconstruction because the installation does not contain
-the external cinematic files referenced by the executable. Plane 2 contains
+state differences remain unresolved. The final victory page is still the port's
+own rendering rather than a reproduction of the original's layout; the ending
+cinematic that precedes it is no longer missing, and the reason once given here
+-- that the installation does not contain the external cinematic files -- has
+not been true since SEQFOUR.CO7 was taken off the CD. See "The CD cinematics"
+above. Plane 2 contains
 editor grouping values
 on two released maps and has no observed runtime effect. Original demos,
 network protocol, multiplayer rules, and other executable editions are

@@ -843,8 +843,9 @@ reimplementation.** Enemy health, weapon costs, music routing, map dispatch, and
 campaign rules are reproduced from evidence; several movement, attack,
 pain-chance, damage, and frame-timing constants remain **evidence-based
 reconstructions** where the retail executable did not yield an unambiguous value.
-The final victory sequence is a reconstruction because the installation does not
-contain the external cinematic files the executable references. Multiplayer, the
+The victory *page* after the ending is the port's own rendering rather than a
+reproduction of the original's — but the **ending cinematic itself now plays**,
+from `SEQFOUR.CO7` on the CD, which this once listed as missing. Multiplayer, the
 network protocol, original demos, and non-CD executable editions are **not**
 supported — this port targets the **250,776-byte CD/Steam executable family**.
 

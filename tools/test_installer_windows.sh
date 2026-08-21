@@ -252,6 +252,37 @@ if mingw:
 else:
     print("  ..     skipped running it: no MinGW cross-compiler")
 
+print("\nthe frozen installer does not mistake itself for Python")
+# Inside a PyInstaller bundle sys.executable is EC7Wolf-Setup.exe, and running
+# that with "-m venv" starts the installer again rather than making a virtual
+# environment -- which is what a user hit, seeing the installer's own argument
+# parser complain about "-m venv". Nothing here can run the frozen exe, so the
+# marks PyInstaller sets are what get tested.
+from ec7install import thirdparty
+
+was_frozen = getattr(sys, "frozen", False)
+sys.frozen = True
+sys._MEIPASS = str(work)
+try:
+    interpreter = thirdparty.python_interpreter()
+    check(Path(interpreter[0]).name.lower() not in
+          ("ec7wolf-setup.exe", "ec7wolf-setup"),
+          f"it looks for a real interpreter, not itself ({interpreter[0]})")
+    proved = subprocess.run(interpreter + ["-c", "print(6*7)"],
+                            capture_output=True, text=True, timeout=60)
+    check(proved.stdout.strip() == "42",
+          "and what it found actually runs Python")
+except thirdparty.BuildFailed as error:
+    # No Python to find is a legitimate outcome; what matters is that it says
+    # so usefully rather than producing a nonsense command line.
+    check("Python" in str(error) and "full.zip" in str(error),
+          "with no Python at all, it says so and offers a way round it")
+finally:
+    if not was_frozen:
+        del sys.frozen
+    sys._MEIPASS = None
+    delattr(sys, "_MEIPASS")
+
 print("\nan engine found in a folder brings its DLLs with it")
 # What an unpacked release archive looks like: the engine, its pk3, and the
 # libraries it loads at run time. Taking only the first two produced an install

@@ -136,6 +136,56 @@ def cmake_build(source: Path, build: Path, prefix: Path, reporter: Reporter,
     return prefix
 
 
+def python_interpreter() -> list[str]:
+    """A real Python, for the tools that are Python programs.
+
+    sys.executable is the obvious answer and is wrong inside a frozen
+    installer, where it is EC7Wolf-Setup.exe. Running that with "-m venv" does
+    not make a virtual environment; it starts the installer again, which then
+    complains about arguments it has never heard of. That is exactly what a
+    user saw.
+
+    So when frozen, go and find one. On Windows the py launcher is the best
+    answer because it is a real program; python.exe on the PATH is often the
+    Microsoft Store's execution alias, which is not an interpreter and opens a
+    shop when run -- hence skipping anything under WindowsApps, and hence
+    proving each candidate by asking it its version rather than trusting it.
+    """
+    if not (getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")):
+        return [sys.executable]
+
+    candidates: list[list[str]] = []
+    launcher = shutil.which("py")
+    if launcher:
+        candidates.append([launcher, "-3"])
+    for name in ("python3", "python"):
+        found = shutil.which(name)
+        if found and "windowsapps" not in found.lower():
+            candidates.append([found])
+
+    for candidate in candidates:
+        try:
+            proved = subprocess.run(
+                candidate + ["-c", "import sys; print(sys.version_info[0])"],
+                capture_output=True, text=True, timeout=60, **proc.quiet())
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if proved.returncode == 0 and proved.stdout.strip() == "3":
+            return candidate
+
+    raise BuildFailed(
+        "no Python interpreter was found, and one is needed to build libepoxy "
+        "-- meson, which builds it, is a Python program.\n\n"
+        "Two ways past this:\n"
+        "  * Install Python, then run this installer again:\n"
+        "        winget install Python.Python.3.12\n"
+        "    or from https://www.python.org/downloads/\n"
+        "  * Or download EC7Wolf-<version>-windows-x64-full.zip instead, which\n"
+        "    has the engine already built and compiles nothing.\n\n"
+        "Without it the game still installs and plays, using the software "
+        "renderer.")
+
+
 def meson_tool(cache: Path, reporter: Reporter) -> list[str]:
     """A meson to build with, in a virtual environment of our own.
 
@@ -151,8 +201,9 @@ def meson_tool(cache: Path, reporter: Reporter) -> list[str]:
     if not meson.exists():
         reporter.detail("setting up a build environment for meson")
         python = binaries / ("python.exe" if windows else "python")
+        interpreter = python_interpreter()
         try:
-            subprocess.run([sys.executable, "-m", "venv", str(venv)],
+            subprocess.run(interpreter + ["-m", "venv", str(venv)],
                            check=True, capture_output=True, text=True,
                            timeout=600, **proc.quiet())
             subprocess.run([str(python), "-m", "pip", "install",

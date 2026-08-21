@@ -159,7 +159,7 @@ exchange. The delayed tic path is fine there; it is the one-off startup
 negotiation that is fragile, and it belongs with the rest of the reliability
 work in M7.
 
-### M2 — The way in
+### M2 — The way in — **done**
 
 The menu, which is what makes the feature exist for a player.
 
@@ -176,6 +176,45 @@ The menu, which is what makes the feature exist for a player.
 *Exit:* a gate drives the menu headlessly — down to Multiplayer, into the
 screen, type an address, back out — and asserts the entered address reaches
 `Net::InitVars`. Screenshots for the README.
+
+**Done**, and the gate asserts something better than the plan asked for. Rather
+than checking that the typed text reached `Net::InitVars`, it stands a real
+host on the other end and requires the client to *arrive*: 90 tics each, every
+one of them agreeing. The address is not the point; connecting is.
+
+![The rank ladder with the network section](images/menu-multiplayer-entry.png)
+![The multiplayer setup screen](images/menu-multiplayer-setup.png)
+
+The separator needed nothing new: `LabelMenuItem` already draws in this shell
+as small dim capitals over a hairline, which is exactly the break the ask
+described.
+
+The text field was the part expected to be work, and it was. Two things:
+
+* **The shell renders a row's value through `getValueText()`**, which
+  `TextInputMenuItem` never implemented -- the stock menu draws its own field
+  inside `draw()`. So the port sat there with no value showing at all.
+* **`US_LineInput` draws where the stock menu would be**, in the bitmap font,
+  which here is a blue strip across the bottom of the screen while the row
+  being edited sits untouched further up. `C7Menu_LineInput` replaces it when
+  the shell is active, and it does no layout of its own: it puts the text being
+  typed into the item as its value and asks the shell to draw the menu, so the
+  value column places it, in the right font, on the right row, exactly as it
+  does for everything else.
+
+Two things found by building it that were not menu problems at all:
+
+* **A client must not bind the host's port.** `InitVars.port` is the socket a
+  player opens, not the one they talk to -- the destination is in the address
+  -- and binding the host's port stops two players sharing a machine or sitting
+  behind one router. Clients take an ephemeral port now.
+* **Input delay has to be agreed, not chosen.** Both sides were setting their
+  own: the host from `--net-delay`, the client from the *Connection* row. Two
+  different windows mean the two disagree about which tic a command belongs to,
+  their warm-ups differ, and their sequences never line up -- in the gate that
+  showed as 6 tics on one side and 13 on the other. It travels in the
+  `StartPacket` now, with the game mode and the seed, because it is a property
+  of the game rather than a preference.
 
 ### M3 — Arenas
 

@@ -55,7 +55,6 @@
 #include <cassert>
 #include <climits>
 
-#define NET_DEFAULT_PORT 5029
 // Deep enough to hold a whole delay window of commands per player, plus room
 // for them to arrive out of order. Four was enough when nothing was ever sent
 // early; with input delay, every command is.
@@ -126,6 +125,12 @@ struct StartPacket
 	BYTE playerNumber;
 	BYTE numPlayers;
 	BYTE gameMode;
+	// The host's, and everyone's. Input delay sets how far ahead commands are
+	// stamped, so two players using different windows disagree about which tic
+	// a command belongs to -- their warm-ups differ and their sequences never
+	// line up. It is a property of the game, not of a preference, so it comes
+	// down the wire with the rest of it.
+	BYTE ticDelay;
 	DWORD rngseed;
 	struct Client
 	{
@@ -712,6 +717,7 @@ static void StartHost(InitStatusCallback callback)
 	startData->type = StartPacket::Type;
 	startData->numPlayers = InitVars.numPlayers;
 	startData->gameMode = InitVars.gameMode;
+	startData->ticDelay = InitVars.ticDelay;
 	startData->rngseed = rngseed;
 	for(unsigned int i = 1;i < InitVars.numPlayers;++i)
 	{
@@ -806,6 +812,9 @@ static void StartJoin(InitStatusCallback callback)
 				ConsolePlayer = data->playerNumber;
 				InitVars.numPlayers = data->numPlayers;
 				InitVars.gameMode = static_cast<GameMode>(data->gameMode);
+				// The host's window, not whatever this machine chose: see
+				// StartPacket.
+				InitVars.ticDelay = data->ticDelay;
 				rngseed = data->rngseed;
 
 				Client[0].address = Packet->address;

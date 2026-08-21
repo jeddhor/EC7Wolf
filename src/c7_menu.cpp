@@ -13,6 +13,8 @@
 #include "c7_menu.h"
 
 #include "wl_def.h"
+#include "id_in.h"
+#include "id_us.h"
 #include "wl_iwad.h"
 #include "m_classes.h"
 #include "id_vh.h"
@@ -362,4 +364,76 @@ bool C7Menu_Draw(const Menu *menu)
 		"ENTER  Select      ESC  Back", kDimR, kDimG, kDimB);
 
 	return true;
+}
+
+
+// Editing a text field inside this shell.
+//
+// TextInputMenuItem::activate draws its own editor with US_LineInput, at the
+// stock menu's coordinates and in the bitmap font. Those coordinates mean
+// nothing here -- the row it belongs to is somewhere else entirely and in a
+// different typeface -- so the field appeared as a blue strip across the
+// bottom of the screen while the row it was editing sat untouched further up.
+//
+// Rather than work out where the row is and draw a second editor there, this
+// puts the text being typed into the item as its value and asks the shell to
+// draw the menu. The value column already right-aligns it in the right place,
+// in the right font, on the right row, because that is what it does for every
+// other item.
+bool C7Menu_LineInput(const Menu *menu, MenuItem *item, FString &text,
+	unsigned int maxLength, void (*setValue)(MenuItem *, const FString &))
+{
+	const FString original = text;
+	FString edited = text;
+	bool done = false, accepted = false;
+	unsigned int blink = 0;
+
+	LastASCII = key_None;
+	LastScan = sc_None;
+
+	while(!done)
+	{
+		IN_ProcessEvents();
+
+		const ScanCode scan = LastScan;
+		const char typed = LastASCII;
+		LastScan = sc_None;
+		LastASCII = key_None;
+
+		switch(scan)
+		{
+			case sc_Return:
+				accepted = done = true;
+				break;
+			case sc_Escape:
+				done = true;
+				break;
+			case sc_BackSpace:
+				if(edited.Len() > 0)
+					edited.Truncate(edited.Len() - 1);
+				break;
+			default:
+				// Anything printable. An address is ASCII, and refusing the
+				// rest here is cheaper than validating it later.
+				if(typed >= ' ' && typed < 127 && edited.Len() < maxLength)
+					edited += typed;
+				break;
+		}
+
+		// A caret that blinks, so it is obvious the field is being edited and
+		// not merely selected.
+		FString shown = edited;
+		if(((++blink >> 4) & 1) == 0)
+			shown += "_";
+		setValue(item, shown);
+
+		C7Menu_Draw(menu);
+		VW_UpdateScreen();
+		SDL_Delay(10);
+	}
+
+	setValue(item, accepted ? edited : original);
+	if(accepted)
+		text = edited;
+	return accepted;
 }

@@ -358,10 +358,27 @@ TextInputMenuItem::TextInputMenuItem(const FString &text, unsigned int max, MENU
 	setValue(text);
 }
 
+// Passed to the Corridor 7 editor so it can write the text being typed into
+// this item; c7_menu.cpp cannot see TextInputMenuItem itself.
+static void SetTextInputValue(MenuItem *item, const FString &text)
+{
+	static_cast<TextInputMenuItem *>(item)->setValue(text);
+}
+
 void TextInputMenuItem::activate()
 {
 	if(preeditListener == NULL || preeditListener(menu->getCurrentPosition()))
 	{
+		if(C7Menu_Active())
+		{
+			FString edited = clearFirst ? FString() : FString(getValue());
+			if(C7Menu_LineInput(menu, this, edited, max, SetTextInputValue))
+				MenuItem::activate();
+			else
+				SD_PlaySound("menu/escape");
+			return;
+		}
+
 		PrintY = menu->getHeight(menu->getCurrentPosition()) + menu->getY() + 1 + (5-SmallFont->GetHeight()/2);
 		char* buffer = new char[max+1];
 		bool accept = US_LineInput(SmallFont,

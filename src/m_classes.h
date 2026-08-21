@@ -176,6 +176,7 @@ class MultipleChoiceMenuItem : public MenuItem
 		 * that another menu item can turn off on the player's behalf.
 		 */
 		void	setCurrentOption(int option);
+		int		getCurrentOption() const { return curOption; }
 };
 
 class TextInputMenuItem : public MenuItem
@@ -197,6 +198,9 @@ class TextInputMenuItem : public MenuItem
 		void		draw();
 		const char	*getValue() const { return value; }
 		void		setValue(const FString &text) { value = text; }
+		// The stock menu draws the field itself in draw(); skins that lay out
+		// their own rows ask for the value instead, and got nothing.
+		FString		getValueText() const { return value; }
 };
 
 class ControlMenuItem : public MenuItem

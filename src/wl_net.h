@@ -41,6 +41,10 @@
 #include "wl_def.h"
 #include "zstring.h"
 
+// The port the original's successors have used and the one the setup screen
+// offers. Here rather than in the implementation because the menu needs it too.
+#define NET_DEFAULT_PORT 5029
+
 namespace Net {
 
 typedef bool (*InitStatusCallback)(FString);

@@ -38,6 +38,15 @@ bool C7Menu_Draw(const Menu *menu);
 // faded: there the whole picture has to come back, not just the column.
 bool C7Menu_FadeColumn(const Menu *menu, bool out);
 
+// Edits a text field in this shell, drawing it on the row it belongs to rather
+// than at the stock menu's coordinates. `setValue` writes the in-progress text
+// into the item so that the shell's own value column renders it -- passed in
+// because m_classes.h is not visible from here.
+//
+// Returns true if the edit was accepted, false if it was abandoned.
+bool C7Menu_LineInput(const Menu *menu, class MenuItem *item, class FString &text,
+	unsigned int maxLength, void (*setValue)(class MenuItem *, const class FString &));
+
 // Drops the cached backdrop. Called on resolution and palette changes, since
 // the backdrop is composited for a specific screen size.
 void C7Menu_Invalidate();

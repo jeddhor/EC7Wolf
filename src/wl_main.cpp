@@ -1211,6 +1211,18 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 		{
 			Net::InitVars.gameMode = Net::GM_Battle;
 		}
+		else IFARG("--teams")
+		{
+			Net::InitVars.gameMode = Net::GM_TeamBattle;
+		}
+		else IFARG("--fraglimit")
+		{
+			if(i + 1 < argc)
+			{
+				const int limit = atoi(argv[++i]);
+				Net::InitVars.fragLimit = (byte)(limit < 0 ? 0 : (limit > 255 ? 255 : limit));
+			}
+		}
 		else IFARG("--debugnet")
 		{
 			DebugNetwork = true;
@@ -1224,6 +1236,13 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 		// value token where present) so they are not misread as data files.
 		else IFARG("--capture-rngseed") { ++i; }
 		else IFARG("--capture-checksum") { ++i; }
+		else IFARG("--capture-duel")
+		{
+			i += 2;
+			if(i + 1 < argc && argv[i+1][0] >= '0' && argv[i+1][0] <= '9') ++i;
+		}
+		else IFARG("--capture-ammo") { }
+		else IFARG("--capture-fire") { if(i + 1 < argc && argv[i+1][0] != (char)45) ++i; }
 		else IFARG("--capture-players") { ++i; }
 		else IFARG("--capture-actors") { ++i; }
 		else IFARG("--capture-frame") { ++i; }

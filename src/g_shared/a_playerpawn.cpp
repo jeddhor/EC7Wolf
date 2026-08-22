@@ -203,7 +203,7 @@ void APlayerPawn::GiveDeathmatchInventory()
 
 void APlayerPawn::GiveStartingInventory()
 {
-	if(Net::InitVars.gameMode == Net::GM_Battle)
+	if(Net::Deathmatch())
 		GiveDeathmatchInventory();
 
 	if(!GetStartInventory())

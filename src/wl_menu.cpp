@@ -79,6 +79,9 @@ static MenuItem *mpStartItem = NULL;
 // at eight.
 static const int mpDelayTics[] = { 0, 6, 10, 16 };
 static MultipleChoiceMenuItem *mpArenaItem = NULL;
+static MultipleChoiceMenuItem *mpFragsItem = NULL;
+// Kept in the same order as the fraglimits option list.
+static const int mpFragLimits[] = { 0, 10, 20, 30, 50 };
 // Eight arenas, and not the contiguous run the compendium describes: the maps
 // it puts at 58 and 59 are empty boxes, and the eighth real arena is at 60.
 // See the note above the network levels in mapinfo/corridor7.txt.
@@ -406,6 +409,8 @@ MENU_LISTENER(MultiplayerRoleChanged)
 		mpModeItem->setEnabled(!joining);
 	if(mpArenaItem)
 		mpArenaItem->setEnabled(!joining);
+	if(mpFragsItem)
+		mpFragsItem->setEnabled(!joining);
 	return true;
 }
 
@@ -462,8 +467,14 @@ MENU_LISTENER(StartMultiplayer)
 		Net::InitVars.port = (uint16_t)port;
 		Net::InitVars.mode = Net::MODE_Host;
 		Net::InitVars.numPlayers = (byte)(2 + (mpPlayersItem ? mpPlayersItem->getCurrentOption() : 0));
-		Net::InitVars.gameMode = (mpModeItem && mpModeItem->getCurrentOption() == 1)
-			? Net::GM_Cooperative : Net::GM_Battle;
+		switch(mpModeItem ? mpModeItem->getCurrentOption() : 0)
+		{
+			default: Net::InitVars.gameMode = Net::GM_Battle; break;
+			case 1:  Net::InitVars.gameMode = Net::GM_TeamBattle; break;
+			case 2:  Net::InitVars.gameMode = Net::GM_Cooperative; break;
+		}
+		Net::InitVars.fragLimit =
+			(byte)mpFragLimits[mpFragsItem ? mpFragsItem->getCurrentOption() : 0];
 	}
 
 	// Connecting blocks until everyone is present, drawing through the same
@@ -774,7 +785,7 @@ static void BuildMultiplayerMenu()
 {
 	static const char* roles[] = { "Host a game", "Join a game" };
 	static const char* players[] = { "2", "3", "4", "5", "6", "7", "8" };
-	static const char* modes[] = { "Battle", "Cooperative" };
+	static const char* modes[] = { "Battle", "Team battle", "Cooperative" };
 	// Named for what a player can judge rather than for tics, which mean
 	// nothing to anyone who has not read the netcode.
 	static const char* connections[] = { "Same building", "Good", "Average",
@@ -787,6 +798,7 @@ static void BuildMultiplayerMenu()
 	// the first time it is changed -- "Host a game    Host a game".
 	static const char* arenas[] = { "Level 1", "Level 2", "Level 3", "Level 4",
 	                                "Level 5", "Level 6", "Level 7", "Level 8" };
+	static const char* fraglimits[] = { "None", "10", "20", "30", "50" };
 
 	mpRoleItem = new MultipleChoiceMenuItem(MultiplayerRoleChanged, roles, 2, 1);
 	AddLabeled(multiplayerMenu, mpRoleItem, "Role");
@@ -800,8 +812,11 @@ static void BuildMultiplayerMenu()
 	mpPlayersItem = new MultipleChoiceMenuItem(NULL, players, 7, 0);
 	AddLabeled(multiplayerMenu, mpPlayersItem, "Players");
 
-	mpModeItem = new MultipleChoiceMenuItem(NULL, modes, 2, 0);
+	mpModeItem = new MultipleChoiceMenuItem(NULL, modes, 3, 0);
 	AddLabeled(multiplayerMenu, mpModeItem, "Game");
+
+	mpFragsItem = new MultipleChoiceMenuItem(NULL, fraglimits, 5, 2);
+	AddLabeled(multiplayerMenu, mpFragsItem, "Frag limit");
 
 	mpArenaItem = new MultipleChoiceMenuItem(NULL, arenas, 8, 0);
 	AddLabeled(multiplayerMenu, mpArenaItem, "Arena");

@@ -304,7 +304,7 @@ Found on the way, in code this milestone was the first to exercise:
 
 ![The multiplayer setup screen, hosting](images/menu-multiplayer-setup.png)
 
-### M4 — The rules
+### M4 — The rules — **done**
 
 * Battle mode: ECWolf's `GM_Battle` already implies friendly fire, item
   respawn and no monsters.
@@ -314,6 +314,72 @@ Found on the way, in code this milestone was the first to exercise:
 
 *Exit:* a gate scripts two players into a fight and asserts the frag counters,
 the friendly-fire rule in both modes, and that a match ends when it should.
+
+**Done.** More of this was already present than the milestone assumed: frags
+are counted, a kill scores and a suicide costs one, players respawn in a
+netgame, and `GM_Battle` already meant no monsters and respawning items. What
+was missing was everything to do with sides.
+
+`Net::FriendlyFire()` was a global on/off -- it could answer "is
+player-versus-player switched on", which is the wrong shape of question for a
+mode whose entire rule is that the answer depends on *which two players*. It is
+now `Net::CanDamage(attacker, target)`, used by all four places that asked:
+the damage itself, and the three target-selection loops that must also not
+*aim* at a team-mate.
+
+Everything else that tested `gameMode == GM_Battle` was really asking "is this
+a deathmatch" and would have answered wrongly the moment a second deathmatch
+mode existed, so those became `Net::Deathmatch()`.
+
+Teams are dealt by player number for now. 9.5 describes a team and a character
+as the same thing, and the characters arrive in M5, at which point
+`PlayerTeam` becomes a lookup of the chosen one. Dealing them by number needs
+nothing on the wire, since every machine already agrees what number each player
+is -- but it does mean two players are never on the same side, which is why the
+gate needs three.
+
+The frag limit travels in the `StartPacket` with the seed and the game mode.
+Reaching it ends the match on every machine at once without a packet about it:
+frags only change when damage is applied, damage is applied in the same tic
+everywhere, so every machine reaches the same conclusion on its own. Announcing
+it instead would put the decision on one machine and make the others wait.
+
+The arenas' `next` was `MAP01`, so winning a deathmatch dropped everybody into
+the first floor of the campaign. Each now names itself, and is marked
+`nointermission` -- a floor tally between rounds of a deathmatch is the wrong
+screen, and the scoreboard is M6's business.
+
+Scripting a fight headlessly needed two new capture tools, and the constraint
+that shaped both is that a world override in a netgame must be applied
+*identically everywhere*. `--capture-warp` cannot be used: it pins
+`players[ConsolePlayer]`, which is a different pawn on each machine.
+
+* `--capture-duel A B [C]` stands two players face to face, with an optional
+  third at A's shoulder, on floor it finds in the map itself -- so every
+  machine computes the same positions without a byte being sent. The third
+  exists because team kills adding up cannot be demonstrated by one scorer.
+* `--capture-fire [N]` holds the trigger, injected into the local command
+  *before* it is sent, so the shot travels the way a real one does rather than
+  being applied behind the network's back.
+* `--capture-ammo` keeps everyone's magazines full, because a scripted fight
+  otherwise ends at about two kills.
+
+Two things this turned up:
+
+* **A pinned angle holds a player dead for ever.** A corpse turns towards the
+  angle it died facing, and only once it has arrived does the player become
+  eligible to respawn. The duel pinned the angle every tic, the death rotation
+  pushed it two degrees, the pin put it back, and the two never agreed -- so
+  after the first kill the fight simply stopped. It reads exactly like a weapon
+  or a network fault, and cost a long detour before it turned out to be the
+  test fixture standing on the death animation's foot. Dead players are left
+  where they fall now.
+* **The gates run a fresh binary against a stale `ec7wolf.pk3`.** They take the
+  executable from the build directory and everything else from the data
+  directory, so a MAPINFO or DECORATE change is invisible to them until the pk3
+  is copied across. Here that meant the arenas kept their old `next = MAP01`
+  and their tally screen, and the match hung on a screen waiting for a keypress
+  nobody was there to press.
 
 ### M5 — Marine and alien
 

@@ -59,7 +59,11 @@ enum Mode
 enum GameMode
 {
 	GM_Cooperative,
-	GM_Battle
+	GM_Battle,
+	// Corridor 7's team play, per the compendium's 9.5: players controlling
+	// the same character cannot damage one another, and their kills count
+	// together.
+	GM_TeamBattle
 };
 
 struct NetInit
@@ -77,6 +81,9 @@ struct NetInit
 	// 70 tics a second it needs a reply every 14.3ms. See
 	// docs/multiplayer.md.
 	byte ticDelay;
+	// Kills that end a match, or 0 for a match that only ends when someone
+	// leaves. Counted per team in team play, per player otherwise.
+	byte fragLimit;
 };
 
 extern NetInit InitVars;
@@ -94,9 +101,32 @@ bool CheckAck(bool send);
 void StartAck(AckType type);
 
 // TODO: Redo these as proper options (and probably move to wl_game or something)
-static bool FriendlyFire() { return InitVars.gameMode == GM_Battle; }
-static bool RespawnItems() { return InitVars.gameMode == GM_Battle; }
-static bool NoMonsters() { return InitVars.gameMode == GM_Battle; }
+//
+// Everything that used to ask "is this GM_Battle" was really asking "is this a
+// deathmatch", and answered wrongly the moment a second deathmatch mode
+// existed. Team play has no monsters and respawns items exactly as free-for-all
+// does; the only thing it changes is who may shoot whom.
+static bool Deathmatch() { return InitVars.gameMode != GM_Cooperative; }
+static bool RespawnItems() { return Deathmatch(); }
+static bool NoMonsters() { return Deathmatch(); }
+
+// Which side a player is on. Two teams, and the intent is that a team is the
+// character you chose -- 9.5 describes them as the same thing. The characters
+// arrive in M5; until then the sides are dealt by player number, which every
+// machine already agrees on and so needs nothing on the wire.
+byte PlayerTeam(unsigned int player);
+
+// Kills for a side: every member's frags added up, which is what 9.5 means by
+// team kills aggregating.
+int TeamFrags(byte team);
+
+// May this attacker hurt this target?
+//
+// This replaced a global FriendlyFire() flag, which could only answer "is
+// player-versus-player on at all". That is the wrong shape of question for a
+// mode whose whole rule is that the answer depends on which two players are
+// involved.
+bool CanDamage(const AActor *attacker, const AActor *target);
 
 }
 

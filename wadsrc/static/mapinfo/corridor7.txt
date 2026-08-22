@@ -645,6 +645,10 @@ map "MAP50" "Unused Corridor 7 Level"
 	cluster = 1
 }
 
+// A finished match starts another on the same arena, so each of these names
+// itself as its next level. They used to name MAP01, which meant winning a
+// deathmatch dropped everybody into the first floor of the campaign.
+//
 // The arenas are not the contiguous block the compendium describes. It puts
 // them at internal levels 51-58 with 59-60 empty, but the archive disagrees:
 // the maps at 58 and 59 are bare 64x64 boxes with one marker in them, the same
@@ -654,49 +658,56 @@ map "MAP50" "Unused Corridor 7 Level"
 // 51-57 and 60 rather than 51-58.
 map "MAP51" "Corridor 7 Network Level 1"
 {
-	next = "MAP01"
+	next = "MAP51"
+	nointermission
 	floornumber = 51
 	cluster = 1
 }
 
 map "MAP52" "Corridor 7 Network Level 2"
 {
-	next = "MAP01"
+	next = "MAP52"
+	nointermission
 	floornumber = 52
 	cluster = 1
 }
 
 map "MAP53" "Corridor 7 Network Level 3"
 {
-	next = "MAP01"
+	next = "MAP53"
+	nointermission
 	floornumber = 53
 	cluster = 1
 }
 
 map "MAP54" "Corridor 7 Network Level 4"
 {
-	next = "MAP01"
+	next = "MAP54"
+	nointermission
 	floornumber = 54
 	cluster = 1
 }
 
 map "MAP55" "Corridor 7 Network Level 5"
 {
-	next = "MAP01"
+	next = "MAP55"
+	nointermission
 	floornumber = 55
 	cluster = 1
 }
 
 map "MAP56" "Corridor 7 Network Level 6"
 {
-	next = "MAP01"
+	next = "MAP56"
+	nointermission
 	floornumber = 56
 	cluster = 1
 }
 
 map "MAP57" "Corridor 7 Network Level 7"
 {
-	next = "MAP01"
+	next = "MAP57"
+	nointermission
 	floornumber = 57
 	cluster = 1
 }
@@ -717,7 +728,8 @@ map "MAP59" "Corridor 7 Network Level 10"
 
 map "MAP60" "Corridor 7 Network Level 8"
 {
-	next = "MAP01"
+	next = "MAP60"
+	nointermission
 	floornumber = 60
 	cluster = 1
 }

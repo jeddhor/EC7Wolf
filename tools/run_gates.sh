@@ -94,6 +94,7 @@ multiplayer_loopback
 multiplayer_latency
 multiplayer_menu
 multiplayer_arenas
+multiplayer_rules
 gl_world
 gl_frame
 gl_live

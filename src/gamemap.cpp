@@ -351,7 +351,7 @@ void GameMap::GetHitlist(BYTE* hitlist) const
 
 const GameMap::PlayerSpawn *GameMap::GetPlayerSpawn(int player) const
 {
-	if(Net::InitVars.gameMode == Net::GM_Battle)
+	if(Net::Deathmatch())
 	{
 		if(deathmatchStarts.Size() == 0)
 			return NULL;
@@ -708,7 +708,7 @@ void GameMap::SpawnThings()
 	}
 
 	// If map doesn't have deathmatch starts and we require them find a fallback
-	if(deathmatchStarts.Size() == 0 && Net::InitVars.gameMode == Net::GM_Battle)
+	if(deathmatchStarts.Size() == 0 && Net::Deathmatch())
 	{
 		if(deathmatchFallbackStarts.Size() != 0)
 		{

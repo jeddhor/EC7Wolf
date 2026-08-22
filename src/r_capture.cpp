@@ -73,6 +73,38 @@ namespace
 	bool     g_haveBlend      = false;   // --capture-blend full-screen flash override
 	int      g_blendR = 0, g_blendG = 0, g_blendB = 0, g_blendA = 0;
 
+	// --capture-duel A B: stand players A and B face to face on the map's own
+	// floor and park everyone else out of the way, every tic.
+	//
+	// --capture-warp cannot be used for this. It pins players[ConsolePlayer],
+	// which is a different player on each machine, so two instances would pin
+	// two different pawns and the simulations would part company immediately.
+	// Everything here is computed from map data and applied to every player
+	// identically, which is the only shape a world override may take in a
+	// netgame.
+	// A and B face each other; the optional C stands at A's shoulder facing the
+	// same way, which is how a fight with two players on one side of it gets
+	// scripted -- and the only way to see team kills actually add up.
+	int      g_duelA = -1, g_duelB = -1, g_duelC = -1;
+	bool     g_duelFound      = false;
+	fixed    g_duelX[MAXPLAYERS], g_duelY[MAXPLAYERS];
+	angle_t  g_duelAngle[MAXPLAYERS];
+
+	// --capture-fire [FROMTIC]: hold the attack button down from a given tic.
+	// Injected into the local player's command before it is sent, so it reaches
+	// everyone else the way a real trigger pull would rather than being applied
+	// behind the network's back.
+	long     g_fireFrom       = -1;
+
+	// --capture-ammo: top every player's ammo up each tic.
+	//
+	// A scripted fight otherwise ends when the magazines do, at about two
+	// kills, which is too short to watch a rule that only shows up over a run
+	// of them. Applied to every player alike, so it stays deterministic --
+	// unlike --capture-give, which hands an item to players[ConsolePlayer] and
+	// so hands it to a different player on each machine.
+	bool     g_topUpAmmo      = false;
+
 	bool     g_haveWarp       = false;   // --capture-warp: pin player to a tile+angle
 	fixed    g_warpX = 0, g_warpY = 0;
 	angle_t  g_warpAngle = 0;
@@ -183,11 +215,13 @@ namespace
 		{
 			if(players[i].mo == NULL)
 				continue;
-			fprintf(g_playerFile, "%lu %u %d %d %u %d\n",
+			fprintf(g_playerFile, "%lu %u %d %d %u %d %d %u\n",
 				(unsigned long)g_ticCount, i,
 				players[i].mo->tilex, players[i].mo->tiley,
 				(unsigned)(players[i].mo->angle/ANGLE_1),
-				players[i].health);
+				players[i].health,
+				(int)players[i].frags,
+				(unsigned)Net::PlayerTeam(i));
 		}
 	}
 
@@ -455,6 +489,24 @@ void ParseArgs(int argc, char **argv)
 			g_havePush = true;
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-duel") == 0 && i + 2 < argc)
+		{
+			g_duelA = atoi(argv[++i]);
+			g_duelB = atoi(argv[++i]);
+			if(i + 1 < argc && argv[i+1][0] >= '0' && argv[i+1][0] <= '9')
+				g_duelC = atoi(argv[++i]);
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-ammo") == 0)
+		{
+			g_topUpAmmo = true;
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-fire") == 0)
+		{
+			g_fireFrom = (i + 1 < argc && argv[i+1][0] != '-') ? atol(argv[++i]) : 0;
+			g_armed = true;
+		}
 		else if(strcmp(arg, "--capture-warp") == 0 && i + 3 < argc)
 		{
 			const double tx = atof(argv[++i]);
@@ -545,7 +597,7 @@ void ParseArgs(int argc, char **argv)
 			Printf("Capture: FAILED to open player trace '%s'\n",
 				g_playerPath.GetChars());
 		else
-			fprintf(g_playerFile, "# tic player tilex tiley angle health\n");
+			fprintf(g_playerFile, "# tic player tilex tiley angle health frags team\n");
 	}
 
 	if(g_armed && !g_actorPath.IsEmpty())
@@ -654,6 +706,151 @@ bool OverrideRNGSeed(DWORD &seed)
 namespace Capture
 {
 
+	// Choose where the duel happens, once per level, from the map itself.
+	//
+	// Every machine runs this over the same map and in the same order, so every
+	// machine gets the same answer without a byte crossing the wire. Tiles are
+	// not hardcoded because the arenas do not share a layout and a tile that is
+	// floor in one is solid in the next.
+	void FindDuelSpots()
+	{
+		g_duelFound = true;
+		for(unsigned int i = 0;i < MAXPLAYERS;++i)
+		{
+			g_duelX[i] = g_duelY[i] = 0;
+			g_duelAngle[i] = 0;
+		}
+		if(map == NULL)
+			return;
+
+		const GameMap::Header &hdr = map->GetHeader();
+
+		TArray<unsigned int> open;
+		for(unsigned int y = 0;y < hdr.height;++y)
+		{
+			for(unsigned int x = 0;x < hdr.width;++x)
+			{
+				MapSpot spot = map->GetSpot(x, y, 0);
+				if(spot->tile == NULL && spot->sector != NULL)
+					open.Push(y*hdr.width + x);
+			}
+		}
+		if(open.Size() == 0)
+			return;
+
+		// The fight goes in the middle, where an arena is most likely to have
+		// room on both sides; the parked players go to the first open cells in
+		// scan order, which is the opposite corner of the map from it.
+		const unsigned int cx = hdr.width/2, cy = hdr.height/2;
+		unsigned int anchor = open[0];
+		unsigned int best = 0xFFFFFFFF;
+		for(unsigned int i = 0;i < open.Size();++i)
+		{
+			const unsigned int x = open[i]%hdr.width, y = open[i]/hdr.width;
+			const unsigned int dx = x > cx ? x-cx : cx-x;
+			const unsigned int dy = y > cy ? y-cy : cy-y;
+			const unsigned int d = dx*dx + dy*dy;
+			if(d < best) { best = d; anchor = open[i]; }
+		}
+
+		const unsigned int ax = anchor%hdr.width, ay = anchor/hdr.width;
+
+		// The opponent stands a few tiles away in whichever direction has open
+		// floor. Three tiles is inside every weapon's reach and far enough that
+		// the two are not standing in the same cell.
+		static const int dirs[4][2] = { {1,0}, {-1,0}, {0,1}, {0,-1} };
+		int bx = -1, by = -1, faceDir = 0;
+		for(unsigned int gap = 3;gap >= 2 && bx < 0;--gap)
+		{
+			for(unsigned int d = 0;d < 4;++d)
+			{
+				const int tx = (int)ax + dirs[d][0]*(int)gap;
+				const int ty = (int)ay + dirs[d][1]*(int)gap;
+				if(tx < 0 || ty < 0 || (unsigned)tx >= hdr.width || (unsigned)ty >= hdr.height)
+					continue;
+				MapSpot spot = map->GetSpot(tx, ty, 0);
+				if(spot->tile != NULL || spot->sector == NULL)
+					continue;
+				bx = tx; by = ty; faceDir = d;
+				break;
+			}
+		}
+		if(bx < 0)
+			return;
+
+		// Angles increase anticlockwise from east, which is how the rest of the
+		// engine reads them.
+		static const angle_t facing[4] = { 0, ANGLE_180, ANGLE_270, ANGLE_90 };
+
+		if(g_duelA >= 0 && g_duelA < MAXPLAYERS)
+		{
+			g_duelX[g_duelA] = (ax<<FRACBITS) + (FRACUNIT/2);
+			g_duelY[g_duelA] = (ay<<FRACBITS) + (FRACUNIT/2);
+			g_duelAngle[g_duelA] = facing[faceDir];
+		}
+		if(g_duelB >= 0 && g_duelB < MAXPLAYERS)
+		{
+			g_duelX[g_duelB] = ((unsigned)bx<<FRACBITS) + (FRACUNIT/2);
+			g_duelY[g_duelB] = ((unsigned)by<<FRACBITS) + (FRACUNIT/2);
+			g_duelAngle[g_duelB] = facing[faceDir] + ANGLE_180;
+		}
+
+		// One tile behind A, facing the same way. Auto-aim skips a team-mate, so
+		// C shoots past A at B rather than at the back of A's head.
+		if(g_duelC >= 0 && g_duelC < MAXPLAYERS)
+		{
+			const int tx = (int)ax - dirs[faceDir][0];
+			const int ty = (int)ay - dirs[faceDir][1];
+			if(tx >= 0 && ty >= 0 && (unsigned)tx < hdr.width && (unsigned)ty < hdr.height)
+			{
+				MapSpot spot = map->GetSpot(tx, ty, 0);
+				if(spot->tile == NULL && spot->sector != NULL)
+				{
+					g_duelX[g_duelC] = ((unsigned)tx<<FRACBITS) + (FRACUNIT/2);
+					g_duelY[g_duelC] = ((unsigned)ty<<FRACBITS) + (FRACUNIT/2);
+					g_duelAngle[g_duelC] = facing[faceDir];
+				}
+			}
+		}
+
+		unsigned int park = 0;
+		for(unsigned int i = 0;i < MAXPLAYERS;++i)
+		{
+			if((int)i == g_duelA || (int)i == g_duelB || (int)i == g_duelC)
+				continue;
+			// Spread the bystanders out so they cannot shoot each other either;
+			// this gate is about the two in the middle.
+			while(park < open.Size())
+			{
+				const unsigned int x = open[park]%hdr.width, y = open[park]/hdr.width;
+				const unsigned int dx = x > ax ? x-ax : ax-x;
+				const unsigned int dy = y > ay ? y-ay : ay-y;
+				if(dx + dy > 16)
+					break;
+				++park;
+			}
+			if(park >= open.Size())
+				break;
+			g_duelX[i] = ((open[park]%hdr.width)<<FRACBITS) + (FRACUNIT/2);
+			g_duelY[i] = ((open[park]/hdr.width)<<FRACBITS) + (FRACUNIT/2);
+			g_duelAngle[i] = ANGLE_90;
+			park += 4;
+		}
+	}
+
+// Hold the trigger for the local player.
+//
+// Deliberately injected into the command before it is exchanged rather than
+// applied to the pawn directly: the point of the gate this exists for is that
+// two machines agree about a fight, and a shot that never travelled over the
+// wire would prove nothing about that.
+void InjectControls(TicCmd_t &cmd)
+{
+	if(g_fireFrom < 0 || (long)gamestate.TimeCount < g_fireFrom)
+		return;
+	cmd.buttonstate[bt_attack] = true;
+}
+
 void PreTic()
 {
 	if(!g_armed || map == NULL)
@@ -713,6 +910,45 @@ void PreTic()
 	// reproduced for renderer comparison, independent of the deterministic bot.
 	// Applied every tic; both renderers are pinned identically, so software vs
 	// GL comparisons at any frame stay valid.
+	// Every player, from a table every machine computed the same way.
+	if(g_duelA >= 0)
+	{
+		if(!g_duelFound)
+			FindDuelSpots();
+		for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+		{
+			if(players[i].mo == NULL || g_duelX[i] == 0)
+				continue;
+			// The dead are left where they fell. A corpse turns towards the
+			// angle it died facing, and only once it has arrived does the
+			// player become eligible to respawn -- so pinning the angle of a
+			// dead player holds them dead for ever. It cost a long detour:
+			// the fight simply stopped after the first kill, which reads much
+			// more like a weapon or a network fault than like a test fixture
+			// standing on the death animation's foot.
+			if(players[i].health <= 0)
+				continue;
+			players[i].mo->x = g_duelX[i];
+			players[i].mo->y = g_duelY[i];
+			players[i].mo->angle = g_duelAngle[i];
+			players[i].mo->pitch = 0;
+		}
+	}
+
+	if(g_topUpAmmo)
+	{
+		for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+		{
+			if(players[i].mo == NULL)
+				continue;
+			for(AInventory *inv = players[i].mo->inventory;inv != NULL;inv = inv->inventory)
+			{
+				if(inv->IsKindOf(NATIVE_CLASS(Ammo)))
+					inv->amount = inv->maxamount;
+			}
+		}
+	}
+
 	if(g_haveWarp)
 	{
 		AActor *pmo = players[ConsolePlayer].mo;

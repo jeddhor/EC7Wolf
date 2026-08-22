@@ -736,6 +736,10 @@ void PollControls (bool absolutes)
 	pollAndroidControls();
 #endif
 
+	// Capture-time button presses, before the command is recorded or sent, so
+	// they travel like real ones.
+	Capture::InjectControls(cmd);
+
 	if (demorecord)
 	{
 		//

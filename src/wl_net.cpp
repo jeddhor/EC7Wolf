@@ -131,6 +131,7 @@ struct StartPacket
 	// line up. It is a property of the game, not of a preference, so it comes
 	// down the wire with the rest of it.
 	BYTE ticDelay;
+	BYTE fragLimit;
 	DWORD rngseed;
 	struct Client
 	{
@@ -278,6 +279,7 @@ NetInit InitVars = {
 	NET_DEFAULT_PORT,
 	1,
 	NULL,
+	0,
 	0,
 };
 
@@ -718,6 +720,7 @@ static void StartHost(InitStatusCallback callback)
 	startData->numPlayers = InitVars.numPlayers;
 	startData->gameMode = InitVars.gameMode;
 	startData->ticDelay = InitVars.ticDelay;
+	startData->fragLimit = InitVars.fragLimit;
 	startData->rngseed = rngseed;
 	for(unsigned int i = 1;i < InitVars.numPlayers;++i)
 	{
@@ -815,6 +818,7 @@ static void StartJoin(InitStatusCallback callback)
 				// The host's window, not whatever this machine chose: see
 				// StartPacket.
 				InitVars.ticDelay = data->ticDelay;
+				InitVars.fragLimit = data->fragLimit;
 				rngseed = data->rngseed;
 
 				Client[0].address = Packet->address;
@@ -918,6 +922,50 @@ void EndGame()
 }
 
 static void ResetTicDelay();
+
+byte PlayerTeam(unsigned int player)
+{
+	// Two sides, dealt by player number. See the note in wl_net.h: 9.5 makes a
+	// team and a character the same thing, and this becomes a lookup of the
+	// chosen character once there is more than one to choose.
+	return (byte)(player & 1);
+}
+
+int TeamFrags(byte team)
+{
+	int total = 0;
+	for(unsigned int i = 0;i < InitVars.numPlayers;++i)
+	{
+		if(PlayerTeam(i) == team)
+			total += players[i].frags;
+	}
+	return total;
+}
+
+bool CanDamage(const AActor *attacker, const AActor *target)
+{
+	// Monsters are everyone's business, and anything without an attacker
+	// behind it -- a wall, a laser, falling into something -- is not a
+	// question about players at all.
+	if(target == NULL || target->player == NULL)
+		return true;
+	if(attacker == NULL || attacker->player == NULL)
+		return true;
+
+	// Hurting yourself stays possible in every mode. It is how a player scores
+	// -1 by walking into their own splash, and the rule below would otherwise
+	// make you your own permanent teammate.
+	if(attacker == target)
+		return true;
+
+	if(InitVars.gameMode == GM_Cooperative)
+		return false;
+	if(InitVars.gameMode != GM_TeamBattle)
+		return true;
+
+	return PlayerTeam(attacker->player->GetPlayerNum()) !=
+	       PlayerTeam(target->player->GetPlayerNum());
+}
 
 void NewGame(int &difficulty, FString &map, FName (&playerClassNames)[MAXPLAYERS])
 {

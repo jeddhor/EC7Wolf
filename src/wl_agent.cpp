@@ -300,6 +300,45 @@ void player_t::GivePoints (int32_t points)
 ===============
 */
 
+// End the match when someone has won it.
+//
+// Evaluated on every machine from state every machine already agrees on -- a
+// frag only changes when damage is applied, and damage is applied in the same
+// tic everywhere -- so all of them end the match together without a packet
+// being sent about it. Announcing it over the wire instead would put the
+// decision on one machine and make everyone else wait for it.
+static void CheckFragLimit()
+{
+	if(Net::InitVars.fragLimit == 0 || !Net::Deathmatch())
+		return;
+
+	const int limit = Net::InitVars.fragLimit;
+
+	if(Net::InitVars.gameMode == Net::GM_TeamBattle)
+	{
+		for(byte team = 0;team < 2;++team)
+		{
+			if(Net::TeamFrags(team) >= limit)
+			{
+				Printf("Team %d reached the frag limit (%d).\n", team + 1, limit);
+				playstate = ex_completed;
+				return;
+			}
+		}
+		return;
+	}
+
+	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+	{
+		if(players[i].frags >= limit)
+		{
+			Printf("Player %u reached the frag limit (%d).\n", i + 1, limit);
+			playstate = ex_completed;
+			return;
+		}
+	}
+}
+
 static FRandom pr_damageplayer("PlayerTakeDamge");
 void player_t::TakeDamage (int points, AActor *attacker)
 {
@@ -362,10 +401,9 @@ void player_t::TakeDamage (int points, AActor *attacker)
 			if(attacker == mo)
 				--frags;
 			else
-			{
 				++attacker->player->frags;
-				Printf("Attacker got frag (%d)\n", attacker->player->frags);
-			}
+
+			CheckFragLimit();
 		}
 	}
 	else
@@ -1077,7 +1115,7 @@ AActor *player_t::FindTarget()
 				continue;
 
 			if ((check->flags & FL_SHOOTABLE) &&
-				(!check->player || Net::FriendlyFire()) &&
+				Net::CanDamage(mo, check) &&
 				mo->CheckVisibility(check, ANGLE_90/9))
 			{
 				const int dist = MAX(abs(check->x - mo->x), abs(check->y - mo->y));
@@ -1422,7 +1460,7 @@ ACTION_FUNCTION(A_CustomPunch)
 			continue;
 
 		if((check->flags & FL_SHOOTABLE) &&
-			(!check->player || Net::FriendlyFire()) &&
+			Net::CanDamage(self, check) &&
 			self->CheckVisibility(check, ANGLE_90/9))
 		{
 			const int checkdist = MAX(abs(check->x - self->x), abs(check->y - self->y));
@@ -1583,7 +1621,7 @@ ACTION_FUNCTION(A_C7GunAttack)
 		for(AActor::Iterator check = AActor::GetIterator(); check.Next();)
 		{
 			if(check == self || !(check->flags & FL_SHOOTABLE) ||
-				(check->player && !Net::FriendlyFire()))
+				!Net::CanDamage(self, check))
 				continue;
 			if(self->CheckVisibility(check, ANGLE_45))
 			{

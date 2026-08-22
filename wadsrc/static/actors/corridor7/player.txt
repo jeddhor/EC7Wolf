@@ -66,28 +66,102 @@ actor C7Player : PlayerPawn
 	player.weaponslot 7, "C7AssaultCannon"
 	player.weaponslot 8, "C7Disintegrator"
 	player.damagescreencolor "FF 00 00"
+	// C744 and C745, which these states used to name, are two frames of the
+	// exit vortex. Nobody ever saw it: a player is the one actor you are never
+	// looking at, so the placeholder survived until multiplayer made every
+	// player something the others have to draw.
+	//
+	// The archive has a complete human soldier at C459-C509 that no actor
+	// referenced -- five walk frames in eight rotations, a pain frame, a
+	// seven-frame death and a three-frame firing pose -- and a second one in
+	// grey immediately after it, which is what a game with more than one
+	// player on screen needs. co7map.txt names the first of them MARN.
 	states
 	{
 		Spawn:
-			C744 A -1
+			MARN A -1
 			stop
 		See:
-			C744 A 6
-			C745 A 6
+			MARN ABCDE 6
 			loop
 		Missile:
-			C744 A 10
+			MARN NOP 6 bright
 			goto See
 		Melee:
-			C745 A 10 bright
+			MARN NO 6 bright
 			goto See
 		Pain:
-			C744 A 5
+			MARN F 5
 			goto See
 		Death:
-			C745 A 0 A_Scream
-			C745 A 7 A_Fall
-			C745 A -1
+			MARN G 0 A_Scream
+			MARN G 5 A_Fall
+			MARN HIJKL 5
+			MARN M -1
+			stop
+	}
+}
+
+// The other half of 9.5: "players may select the Marine or alien classes with
+// different health, speed, and damage characteristics".
+//
+// Which alien is not recorded anywhere, so it is an argument rather than a
+// citation. Eitak is the game's primary alien-world guard -- the alien
+// counterpart to a human soldier -- it is upright and carries a weapon, and it
+// is one of only seven actors in the whole archive drawn in eight rotations.
+// A player is seen from every angle by definition, so whatever the original
+// used had to be one of those seven; of them, Eitak is the armed humanoid
+// guard rather than a sentry, a floating probe or a boss.
+//
+// The numbers are a reconstruction and are meant to read as one. What is
+// documented is the split of the arsenal: the guide's weapon table gives 1-4
+// to the human (and says the M-24 "starts with Marine") and 5-8 to the alien,
+// drawing on two separate ammunition pools. So the classes differ in damage by
+// carrying different halves of a documented armoury rather than by a
+// multiplier. Health follows the bestiary, where every alien warrior outlasts
+// the Marine's hundred; the speed difference is the invented part, and pays
+// for the extra health.
+actor C7AlienPlayer : C7Player
+{
+	health 150
+	player.maxhealth 150
+	player.displayname "Eitak Warrior"
+	player.forwardmove 0.8, 0.8
+	player.sidemove 0.8, 0.8
+	player.startitem "C7DualBlaster"
+	player.startitem "C7Bayonet"
+	player.startitem "C7Energy", 200
+	player.startitem "C7VisorCharge", 100
+	player.startitem "C7VisorMode", 1
+	player.startitem "C7EnergyCapacity", 100
+	painsound "c7/monster/attack/class18"
+	deathsound "c7/monster/death/class18"
+	states
+	{
+		Spawn:
+			EITK A -1
+			stop
+		See:
+			EITK ABCD 6
+			loop
+		Missile:
+			C634 A 3
+			C635 A 6
+			C636 A 5 bright
+			C637 A 6
+			goto See
+		Melee:
+			C636 A 6 bright
+			goto See
+		Pain:
+			C630 A 5
+			goto See
+		Death:
+			C630 A 0 A_Scream
+			C630 A 5 A_Fall
+			C631 A 4
+			C632 A 4
+			C633 A -1
 			stop
 	}
 }

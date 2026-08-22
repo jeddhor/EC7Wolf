@@ -125,6 +125,7 @@ int     panyadjustment;
 bool param_nowait = false;
 int     param_difficulty = 1;           // default is "normal"
 const char* param_tedlevel = NULL;            // default is not to start a level
+const char* param_playerclass = NULL;         // default is the first class in MAPINFO
 int     param_joystickindex = 0;
 
 int     param_joystickhat = -1;
@@ -836,7 +837,8 @@ static void DemoLoop()
 	if (param_tedlevel)
 	{
 		param_nowait = true;
-		NewGame(param_difficulty,param_tedlevel,false);
+		NewGame(param_difficulty,param_tedlevel,false,
+			param_playerclass ? FName(param_playerclass) : NAME_None);
 	}
 
 
@@ -1207,6 +1209,11 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 				Net::InitVars.joinAddress = argv[i];
 			}
 		}
+		else IFARG("--playerclass")
+		{
+			if(i + 1 < argc)
+				param_playerclass = argv[++i];
+		}
 		else IFARG("--battle")
 		{
 			Net::InitVars.gameMode = Net::GM_Battle;
@@ -1242,6 +1249,7 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 			if(i + 1 < argc && argv[i+1][0] >= '0' && argv[i+1][0] <= '9') ++i;
 		}
 		else IFARG("--capture-ammo") { }
+		else IFARG("--capture-forward") { if(i + 1 < argc && argv[i+1][0] != (char)45) ++i; }
 		else IFARG("--capture-fire") { if(i + 1 < argc && argv[i+1][0] != (char)45) ++i; }
 		else IFARG("--capture-players") { ++i; }
 		else IFARG("--capture-actors") { ++i; }

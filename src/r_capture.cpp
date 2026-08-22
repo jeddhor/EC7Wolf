@@ -105,6 +105,13 @@ namespace
 	// so hands it to a different player on each machine.
 	bool     g_topUpAmmo      = false;
 
+	// --capture-forward [FROMTIC]: walk forward from a given tic. Negative
+	// controly is forward (wl_agent.cpp thrusts by -controly), and RUNMOVE is
+	// the running magnitude, which is what forwardmove[1] scales -- so this
+	// measures the speed a player actually moves at rather than the value in
+	// their definition.
+	long     g_forwardFrom    = -1;
+
 	bool     g_haveWarp       = false;   // --capture-warp: pin player to a tile+angle
 	fixed    g_warpX = 0, g_warpY = 0;
 	angle_t  g_warpAngle = 0;
@@ -215,13 +222,16 @@ namespace
 		{
 			if(players[i].mo == NULL)
 				continue;
-			fprintf(g_playerFile, "%lu %u %d %d %u %d %d %u\n",
+			fprintf(g_playerFile, "%lu %u %d %d %u %d %d %u %d %s %d %d\n",
 				(unsigned long)g_ticCount, i,
 				players[i].mo->tilex, players[i].mo->tiley,
 				(unsigned)(players[i].mo->angle/ANGLE_1),
 				players[i].health,
 				(int)players[i].frags,
-				(unsigned)Net::PlayerTeam(i));
+				(unsigned)Net::PlayerTeam(i),
+				Net::TeamFrags(Net::PlayerTeam(i)),
+				players[i].mo->GetClass()->GetName().GetChars(),
+				players[i].mo->x, players[i].mo->y);
 		}
 	}
 
@@ -497,6 +507,11 @@ void ParseArgs(int argc, char **argv)
 				g_duelC = atoi(argv[++i]);
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-forward") == 0)
+		{
+			g_forwardFrom = (i + 1 < argc && argv[i+1][0] != '-') ? atol(argv[++i]) : 0;
+			g_armed = true;
+		}
 		else if(strcmp(arg, "--capture-ammo") == 0)
 		{
 			g_topUpAmmo = true;
@@ -597,7 +612,7 @@ void ParseArgs(int argc, char **argv)
 			Printf("Capture: FAILED to open player trace '%s'\n",
 				g_playerPath.GetChars());
 		else
-			fprintf(g_playerFile, "# tic player tilex tiley angle health frags team\n");
+			fprintf(g_playerFile, "# tic player tilex tiley angle health frags team teamfrags class x y\n");
 	}
 
 	if(g_armed && !g_actorPath.IsEmpty())
@@ -846,6 +861,12 @@ namespace Capture
 // wire would prove nothing about that.
 void InjectControls(TicCmd_t &cmd)
 {
+	if(g_forwardFrom >= 0 && (long)gamestate.TimeCount >= g_forwardFrom)
+	{
+		cmd.controly = -RUNMOVE;
+		cmd.buttonstate[bt_run] = true;
+	}
+
 	if(g_fireFrom < 0 || (long)gamestate.TimeCount < g_fireFrom)
 		return;
 	cmd.buttonstate[bt_attack] = true;

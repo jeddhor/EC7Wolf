@@ -95,6 +95,7 @@ multiplayer_latency
 multiplayer_menu
 multiplayer_arenas
 multiplayer_rules
+multiplayer_classes
 gl_world
 gl_frame
 gl_live

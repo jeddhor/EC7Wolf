@@ -123,7 +123,7 @@ press() {
 	sleep "${2:-1}"
 }
 
-# Walk the cursor down to a row instead of counting keystrokes to it.
+# Walk the cursor to the bottom row instead of counting keystrokes to it.
 #
 # Counting assumes every keystroke arrives. One did not, once, in a full suite
 # run: the cursor stopped a row short on the rank ladder, Return started a
@@ -132,27 +132,35 @@ press() {
 # timeout twenty minutes later, which is the most expensive way to learn that
 # xdotool dropped a key.
 #
-# menu_cursor.py reads back which row is actually highlighted, so a dropped key
-# costs one more Down rather than the run. Both targets here are the bottom row
-# of their menu, and the thresholds are measured at the 1280x800 these captures
-# run at: Multiplayer sits at y=460 on the ladder, Start at y=543 on the setup
-# screen, and the row above each is at least 40 pixels higher.
-walk_to_row() {  # walk_to_row MIN_Y WHAT
-	_min=$1
-	_what=$2
+# The first version of this walked until the cursor passed a pixel row measured
+# off a screenshot. That broke twice in a fortnight, because both menus grew a
+# row and the threshold then matched the row above the one wanted. Both targets
+# here -- Multiplayer on the ladder, Start on the setup screen -- are the last
+# row of their menu, and "the last row" is a fact about the menu rather than
+# about its current height: walk down until the selection wraps to the top,
+# then step back up one.
+walk_to_bottom() {  # walk_to_bottom WHAT
+	_what=$1
+	_prev=-1
 	_try=0
-	_y=-1
-	while [ "$_try" -lt 8 ]; do
+	while [ "$_try" -lt 12 ]; do
 		DISPLAY=$display import -window root "$work/nav.png" 2>/dev/null || true
 		_y=$(python3 "$here/menu_cursor.py" "$work/nav.png" 2>/dev/null || echo -1)
-		if [ "$_y" -ge "$_min" ]; then
-			printf '  ..   cursor on %s (y=%s)\n' "$_what" "$_y"
+		if [ "$_y" -lt 0 ]; then
+			printf '  FAIL no menu on screen while looking for %s\n' "$_what"
+			return 1
+		fi
+		if [ "$_y" -lt "$_prev" ]; then
+			# Wrapped round to the top, so the row before this one was the last.
+			press Up 0.8
+			printf '  ..   cursor on %s (bottom row, y=%s)\n' "$_what" "$_prev"
 			return 0
 		fi
+		_prev=$_y
 		press Down 0.8
 		_try=$((_try + 1))
 	done
-	printf '  FAIL never reached %s; cursor stuck at y=%s\n' "$_what" "$_y"
+	printf '  FAIL never found the bottom of the menu holding %s\n' "$_what"
 	return 1
 }
 
@@ -164,7 +172,7 @@ DISPLAY=$display import -window root "$work/ranks.png" 2>/dev/null || true
 
 # Captain is preselected and the section label is skipped, so Multiplayer is
 # three steps down -- but get there by looking, not by counting.
-walk_to_row 440 "Multiplayer" || exit 1
+walk_to_bottom "Multiplayer" || exit 1
 press Return 2.5
 
 DISPLAY=$display import -window root "$work/setup.png" 2>/dev/null || true
@@ -181,7 +189,7 @@ DISPLAY=$display import -window root "$work/address.png" 2>/dev/null || true
 # joining leaves them disabled, and the list wraps, so counting too far comes
 # back round to the address. Walking to the row cannot overshoot, and does not
 # care how many rows the setup screen grows.
-walk_to_row 520 "Start" || exit 1
+walk_to_bottom "Start" || exit 1
 DISPLAY=$display import -window root "$work/before-start.png" 2>/dev/null || true
 press Return 3
 DISPLAY=$display import -window root "$work/after-start.png" 2>/dev/null || true

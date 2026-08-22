@@ -41,6 +41,7 @@ extern  bool     startgame;
 //
 extern  int      param_difficulty;
 extern  const char* param_tedlevel;
+extern  const char* param_playerclass;
 extern  int      param_joystickindex;
 extern  int      param_joystickhat;
 extern  int      param_samplerate;

@@ -80,6 +80,11 @@ static MenuItem *mpStartItem = NULL;
 static const int mpDelayTics[] = { 0, 6, 10, 16 };
 static MultipleChoiceMenuItem *mpArenaItem = NULL;
 static MultipleChoiceMenuItem *mpFragsItem = NULL;
+static MultipleChoiceMenuItem *mpClassItem = NULL;
+// Kept in the same order as the characters option list, and in the order
+// MAPINFO lists the player classes -- which is also the order that decides
+// which side you are on in team play.
+static const char* const mpClassNames[] = { "C7Player", "C7AlienPlayer" };
 // Kept in the same order as the fraglimits option list.
 static const int mpFragLimits[] = { 0, 10, 20, 30, 50 };
 // Eight arenas, and not the contiguous run the compendium describes: the maps
@@ -491,10 +496,13 @@ MENU_LISTENER(StartMultiplayer)
 		arena = mpArenaMaps[pick];
 	}
 
+	const FName character =
+		mpClassNames[mpClassItem ? mpClassItem->getCurrentOption() : 0];
+
 	Menu::closeMenus();
 	// No briefing: an arena has no story to open with, and the text screen
 	// would be one player reading while the rest of the game waits.
-	NewGame(gd_medium, arena, false);
+	NewGame(gd_medium, arena, false, character);
 
 	if(readThis)
 		readThis->setHighlighted(false);
@@ -799,9 +807,16 @@ static void BuildMultiplayerMenu()
 	static const char* arenas[] = { "Level 1", "Level 2", "Level 3", "Level 4",
 	                                "Level 5", "Level 6", "Level 7", "Level 8" };
 	static const char* fraglimits[] = { "None", "10", "20", "30", "50" };
+	static const char* characters[] = { "Marine", "Eitak warrior" };
 
 	mpRoleItem = new MultipleChoiceMenuItem(MultiplayerRoleChanged, roles, 2, 1);
 	AddLabeled(multiplayerMenu, mpRoleItem, "Role");
+
+	// Never disabled alongside the host-only rows: your character is yours
+	// whether you are hosting or joining, and in team play it is also which
+	// side you are on.
+	mpClassItem = new MultipleChoiceMenuItem(NULL, characters, 2, 0);
+	AddLabeled(multiplayerMenu, mpClassItem, "Character");
 
 	mpAddressItem = new TextInputMenuItem("", 39, NULL, NULL, true);
 	AddLabeled(multiplayerMenu, mpAddressItem, "Server address");
@@ -829,7 +844,10 @@ static void BuildMultiplayerMenu()
 	mpStartItem = new MenuItem("Start", StartMultiplayer);
 	multiplayerMenu.addItem(mpStartItem);
 
-	multiplayerMenu.setCurrentPosition(1);
+	// Open on the server address: joining is the default role, and the address
+	// is the one row a joining player must fill in. Counted rather than named,
+	// so it moves when the rows above it do -- Role, Character, then this.
+	multiplayerMenu.setCurrentPosition(2);
 	MultiplayerRoleChanged(0);
 }
 
@@ -874,9 +892,14 @@ void CreateMenus()
 		// Game and Quit, and the difficulty ladder is a rank.
 		mainMenu.setEscapeSound("");
 
-		if(gameinfo.PlayerClasses.Size() > 1)
-			mainMenu.addItem(new MenuSwitcherMenuItem("New Mission", playerClasses, C7ConfirmNewMission));
-		else if(!Net::IsArbiter())
+		// No character menu here, even though there are now two characters.
+		// The campaign is the Marine's: the manual sends a special-forces
+		// Marine down to restore contact, and no briefing, line of dialogue or
+		// ending accommodates anybody else. The second class exists for
+		// multiplayer, which is where 9.5 puts the choice and where the setup
+		// screen offers it -- so New Mission still goes straight to the rank
+		// ladder rather than asking single player a question it has no use for.
+		if(!Net::IsArbiter())
 			mainMenu.addItem(new MenuItem("New Mission", JoinNetGame));
 		else if(useEpisodeMenu)
 			mainMenu.addItem(new MenuSwitcherMenuItem("New Mission", episodes, C7ConfirmNewMission));

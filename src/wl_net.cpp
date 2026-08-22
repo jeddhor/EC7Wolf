@@ -38,6 +38,7 @@
 #include "id_us.h"
 #include "id_vh.h"
 #include "g_mapinfo.h"
+#include "thingdef/thingdef.h"
 #include "wl_agent.h"
 #include "wl_debug.h"
 #include "wl_game.h"
@@ -925,10 +926,24 @@ static void ResetTicDelay();
 
 byte PlayerTeam(unsigned int player)
 {
-	// Two sides, dealt by player number. See the note in wl_net.h: 9.5 makes a
-	// team and a character the same thing, and this becomes a lookup of the
-	// chosen character once there is more than one to choose.
-	return (byte)(player & 1);
+	// The character you chose, which 9.5 says is the same thing as your side:
+	// team play "prevents players controlling the same character from damaging
+	// one another". Until M5 there was one character to choose and this dealt
+	// sides by player number instead.
+	//
+	// Nothing about this crosses the wire on its own account. Every machine
+	// already knows every player's class, because NewGamePacket carries one
+	// per player and Net::NewGame keeps them all.
+	if(player >= MAXPLAYERS || gamestate.playerClass[player] == NULL)
+		return 0;
+
+	const FName className = gamestate.playerClass[player]->GetName();
+	for(unsigned int i = 0;i < gameinfo.PlayerClasses.Size();++i)
+	{
+		if(gameinfo.PlayerClasses[i] == className)
+			return (byte)i;
+	}
+	return 0;
 }
 
 int TeamFrags(byte team)

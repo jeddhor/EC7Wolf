@@ -381,7 +381,7 @@ Two things this turned up:
   and their tally screen, and the match hung on a screen waiting for a keypress
   nobody was there to press.
 
-### M5 — Marine and alien
+### M5 — Marine and alien — **done**
 
 The original let you *be* the alien, and that is the most distinctive thing in
 this whole feature.
@@ -395,6 +395,70 @@ this whole feature.
 
 *Exit:* a gate starts a two-player match with one of each class and asserts
 each has the right pawn, health and speed. Screenshots of both.
+
+**Done.** The plumbing was indeed already there -- `NewGamePacket` carries a
+class index per player and `Net::NewGame` keeps them all, so nothing new
+crosses the wire. What took the work was deciding what the alien *is*, and
+discovering what the Marine was.
+
+**The Marine had no body.** `C7Player`'s states named C744 and C745, which are
+two frames of the exit vortex. Nobody had ever seen it, because a player is the
+one actor you are never looking at -- until multiplayer, where every player is
+something the others have to draw. The archive turned out to hold a complete
+human soldier nobody had wired up: five walk frames in eight rotations, a pain
+frame, a seven-frame death and a three-frame firing pose, at C459-C509, with a
+*second* one in grey immediately after it. Two skins is what a game with more
+than one player on screen needs, which is a decent argument that this is what
+they were for. `co7map.txt` names the first of them MARN.
+
+**The alien is Eitak**, and that is an argument rather than a citation, so here
+it is. §9.5 says only "the Marine or alien classes". Eitak is the game's
+primary alien-world guard -- the alien counterpart to a human soldier rather
+than a sentry, a floating probe or a boss -- it is upright and carries a
+weapon, and it is one of only seven actors in the entire archive drawn in eight
+rotations. A player is seen from every angle by definition, so whatever the
+original used had to be one of those seven, and of the seven it is the obvious
+one.
+
+![What the Marine sees](images/multiplayer-marine-view.png)
+![What the alien sees](images/multiplayer-alien-view.png)
+
+**The numbers are a reconstruction and are meant to read as one.** §9.5 names
+three axes and gives a figure for none of them. What *is* documented is the
+split of the arsenal: the guide's weapon table gives 1-4 to the human, notes
+that the M-24 "starts with Marine", and gives 5-8 to the alien, drawing on two
+separate ammunition pools. So the classes differ in damage by carrying
+different halves of a documented armoury rather than by a multiplier. Health
+follows the bestiary, where every alien warrior outlasts the Marine's hundred.
+The speed difference is the invented part, and pays for the extra health.
+
+| | Marine | Eitak warrior |
+|---|---|---|
+| health | 100 | 150 |
+| stride | full | four fifths |
+| starts with | M-24 C.A.W., standard ammunition | Dual Blaster, alien energy |
+
+**A team is now the character**, which is what §9.5 said it was all along:
+`PlayerTeam` looks up the player's class instead of dealing sides by player
+number. The M4 gate had to be told who is playing what, since it can no longer
+rely on two players being on opposite sides for free.
+
+Two things worth recording:
+
+* **Declaring a second player class silently added a menu.** ECWolf inserts a
+  "Choose Player" step whenever MAPINFO lists more than one class, so New
+  Mission started asking single-player players whether they would like to be an
+  alien. The campaign is the Marine's -- the manual sends a special-forces
+  Marine down to restore contact, and no briefing, line of dialogue or ending
+  accommodates anybody else -- so the C7 menu skips it and the choice stays
+  where §9.5 puts it, in the multiplayer setup screen.
+* **The menu gate's pixel threshold broke again.** M3 replaced counted
+  keystrokes with "walk until the highlighted row is past y=N", which survived
+  M4 growing the screen by one row and failed when M5 grew it by another: the
+  threshold then matched the row *above* the one wanted. It walks until the
+  selection wraps to the top and steps back up one now. Both targets are the
+  last row of their menu, and being last is a fact about the menu rather than
+  about its current height.
 
 ### M6 — Presentation
 

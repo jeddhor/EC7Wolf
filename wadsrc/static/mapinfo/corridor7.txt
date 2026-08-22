@@ -5,7 +5,7 @@ gameinfo
 	// build one from C7PAL instead of applying Wolf3D's palette-specific map.
 	gamecolormap = "C7CMAP"
 	translator = "xlat/corridor7.txt"
-	playerclasses = "C7Player"
+	playerclasses = "C7Player", "C7AlienPlayer"
 	signon = "C7G0005"
 	titlepage = "C7G0005"
 	titletime = 6

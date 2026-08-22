@@ -70,10 +70,14 @@ check() {
 	else printf '  FAIL %s\n' "$message"; status=1; fi
 }
 
-# match TAG MODEFLAG NPLAYERS DUEL_A DUEL_B FRAGLIMIT [DUEL_C] [MAXTICS]
+# match TAG MODEFLAG NPLAYERS DUEL_A DUEL_B FRAGLIMIT [DUEL_C] [MAXTICS] [CLASSES]
+#
+# CLASSES is one player class per player, in player order. Since M5 a team is
+# the character you are playing, so a team test has to say who is playing what
+# rather than relying on the old rule that dealt sides by player number.
 match() {
 	tag=$1; mode=$2; nplayers=$3; duel_a=$4; duel_b=$5; fraglimit=$6
-	duel_c=${7:-}; maxtics=${8:-300}
+	duel_c=${7:-}; maxtics=${8:-300}; classes=${9:-}
 
 	pid0=; pid1=; pid2=
 	n=0
@@ -82,6 +86,15 @@ match() {
 			role="--host $nplayers --port $base_port"
 		else
 			role="--port $((base_port + n)) --join 127.0.0.1:$base_port"
+		fi
+
+		# The nth word of CLASSES belongs to player n; absent means the first
+		# class MAPINFO lists, which is the Marine.
+		if [ -n "$classes" ]; then
+			cls=$(printf '%s\n' "$classes" | cut -d' ' -f$((n + 1)))
+			cls_arg="--playerclass $cls"
+		else
+			cls_arg=""
 		fi
 
 		# shellcheck disable=SC2086
@@ -94,7 +107,7 @@ match() {
 			"$mode" --fraglimit "$fraglimit" --net-delay 6 \
 			--capture-duel "$duel_a" "$duel_b" $duel_c --capture-fire 40 --capture-ammo \
 			--capture-players "$work/$tag-$n.tr" --capture-maxtics "$maxtics" \
-			$role >"$work/$tag-$n.log" 2>&1 ) &
+			$cls_arg $role >"$work/$tag-$n.log" 2>&1 ) &
 		eval "pid$n=\$!"
 		n=$((n + 1))
 		[ "$n" -lt "$nplayers" ] && sleep 3
@@ -137,7 +150,7 @@ else
 fi
 
 printf '\nTeam play: two team-mates face to face\n'
-match mates --teams 3 0 2 0
+match mates --teams 3 0 2 0 "" 300 "C7Player C7AlienPlayer C7Player"
 if [ -s "$work/mates-0.tr" ]; then
 	t0=$(final "$work/mates-0.tr" 0 8)
 	t2=$(final "$work/mates-0.tr" 2 8)
@@ -156,7 +169,7 @@ else
 fi
 
 printf '\nTeam play: opponents face to face\n'
-match foes --teams 3 0 1 0
+match foes --teams 3 0 1 0 "" 300 "C7Player C7AlienPlayer C7Player"
 if [ -s "$work/foes-0.tr" ]; then
 	t0=$(final "$work/foes-0.tr" 0 8)
 	t1=$(final "$work/foes-0.tr" 1 8)
@@ -172,22 +185,28 @@ else
 fi
 
 printf '\nTeam kills add up\n'
-match agg --teams 3 0 1 3 2 1200
+# No frag limit here, and a long match: the point is to watch the total, and a
+# limit would stop the fight the moment one team-mate happened to reach it.
+match agg --teams 3 0 1 0 2 1200 "C7AlienPlayer C7Player C7AlienPlayer"
 if [ -s "$work/agg-0.tr" ]; then
 	f0=$(final "$work/agg-0.tr" 0 7)
 	f2=$(final "$work/agg-0.tr" 2 7)
-	printf '  ..   team-mates 0 and 2 scored %s and %s against player 1\n' "$f0" "$f2"
+	tf=$(final "$work/agg-0.tr" 0 9)
+	printf '  ..   team-mates 0 and 2 scored %s and %s; their team total reads %s\n' "$f0" "$f2" "$tf"
 	check "both of them got kills" test "$f0" -ge 1 -a "$f2" -ge 1
-	check "and together they reached the team limit of 3" test $((f0 + f2)) -ge 3
-	check "which neither had reached alone" test "$f0" -lt 3 -a "$f2" -lt 3
-	if grep -q "Team 1 reached the frag limit" "$work/agg-0.log" 2>/dev/null; then
-		printf '  ok   and the match was called on the team total\n'
-	else
-		printf '  FAIL the team total never ended the match\n'; status=1
-	fi
+	check "the team total is the two of them added up" test "$tf" -eq $((f0 + f2))
+	check "which is more than either managed alone" test "$tf" -gt "$f0" -a "$tf" -gt "$f2"
 	check "both machines agreed throughout" agree agg 3
 else
 	printf '  FAIL no player trace\n'; status=1
+fi
+
+printf '\nA team frag limit counts the team\n'
+match teamlimit --teams 3 0 1 3 2 900 "C7Player C7AlienPlayer C7Player"
+if grep -q "Team . reached the frag limit" "$work/teamlimit-0.log" 2>/dev/null; then
+	printf '  ok   the match was called on a team total, not on one player\n'
+else
+	printf '  FAIL a team frag limit never ended the match\n'; status=1
 fi
 
 printf '\nA frag limit ends the match\n'

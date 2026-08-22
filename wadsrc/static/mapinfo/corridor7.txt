@@ -645,6 +645,13 @@ map "MAP50" "Unused Corridor 7 Level"
 	cluster = 1
 }
 
+// The arenas are not the contiguous block the compendium describes. It puts
+// them at internal levels 51-58 with 59-60 empty, but the archive disagrees:
+// the maps at 58 and 59 are bare 64x64 boxes with one marker in them, the same
+// shape as the unused level at 50, while a full arena -- 23 wall pages, 116
+// objects -- sits at 60 carrying the name "Network Lvl 8". The names below are
+// the archive's own. Eight real arenas, as the compendium concludes, but at
+// 51-57 and 60 rather than 51-58.
 map "MAP51" "Corridor 7 Network Level 1"
 {
 	next = "MAP01"
@@ -694,21 +701,21 @@ map "MAP57" "Corridor 7 Network Level 7"
 	cluster = 1
 }
 
-map "MAP58" "Corridor 7 Network Level 8"
+map "MAP58" "Corridor 7 Network Level 9"
 {
 	next = "MAP01"
 	floornumber = 58
 	cluster = 1
 }
 
-map "MAP59" "Corridor 7 Network Level 9"
+map "MAP59" "Corridor 7 Network Level 10"
 {
 	next = "MAP01"
 	floornumber = 59
 	cluster = 1
 }
 
-map "MAP60" "Corridor 7 Network Level 10"
+map "MAP60" "Corridor 7 Network Level 8"
 {
 	next = "MAP01"
 	floornumber = 60

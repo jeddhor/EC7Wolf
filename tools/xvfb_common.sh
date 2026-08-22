@@ -57,3 +57,22 @@ xvfb_start() {
 xvfb_stop() {
 	[ -n "${xvfb:-}" ] && kill "$xvfb" 2>/dev/null || true
 }
+
+# Kill the pids given, skipping empty ones.
+#
+# The reason this exists rather than each trap writing kill "${pid:-0}": kill 0
+# does not mean "kill nothing", it signals every process in the current process
+# group -- the script, and whatever ran it. Traps run on the early exits too,
+# which are exactly the paths where the pids have not been set yet, so the
+# default was arming a gate to shoot the gate runner.
+# The trailing "|| true" is not decoration. These run from EXIT traps under
+# set -e, and by then the pid is usually a process that has already been
+# reaped, so kill fails; as the last command of an AND-OR list that aborts the
+# function before it can return, and a trap that ends badly makes the script
+# exit badly. Three gates printed PASS and exited 1.
+kill_pids() {
+	for _kp in "$@"; do
+		[ -n "$_kp" ] && kill "$_kp" 2>/dev/null || true
+	done
+	return 0
+}

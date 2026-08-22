@@ -189,6 +189,18 @@ The separator needed nothing new: `LabelMenuItem` already draws in this shell
 as small dim capitals over a hairline, which is exactly the break the ask
 described.
 
+The gate drives the menu with xdotool, and originally counted keystrokes to
+each row. That assumes every keystroke arrives. One did not, once, in a full
+suite run: the cursor stopped a row short on the rank ladder, Return started a
+single-player game instead of opening Multiplayer, and the host sat waiting for
+a player who was off playing MAP01 alone -- surfacing twenty minutes later as
+what looked like a netcode timeout. It now reads back which row is actually
+highlighted (`tools/menu_cursor.py`, which finds the yellow row) and walks
+until it is on the one it wants, so a dropped key costs one more keypress
+rather than the run. It also cannot overshoot a wrapping list, and stopped
+needing to be retuned every time the setup screen grew a row -- which M3
+promptly did.
+
 The text field was the part expected to be work, and it was. Two things:
 
 * **The shell renders a row's value through `getValueText()`**, which
@@ -216,7 +228,7 @@ Two things found by building it that were not menu problems at all:
   `StartPacket` now, with the game mode and the seed, because it is a property
   of the game rather than a preference.
 
-### M3 — Arenas
+### M3 — Arenas — **done**
 
 * The eight arenas offered by name in the setup screen.
 * **Random starts** from the placed spawn points, per §9.5. Requires finding
@@ -226,6 +238,71 @@ Two things found by building it that were not menu problems at all:
 
 *Exit:* a gate loads all eight, counts the starts in each, and asserts two
 players entering the same arena are placed apart.
+
+**Done**, and the milestone as written contained two wrong assumptions. Both
+were about the map data, and both had to be settled by reading it rather than
+the documentation.
+
+**The arenas are not where §9.1 says they are.** The compendium's table puts
+the network levels at 51-58 and calls 59-60 empty, and it flags a discrepancy
+with the manual, which claims ten. Counting the contents of the archive:
+
+| lump | archived name | wall pages | objects |
+|---|---|---:|---:|
+| MAP51-MAP57 | Network Lvl 1-7 | 8-26 | 4-102 |
+| MAP58 | Network Lvl 9 | 2 | 1 |
+| MAP59 | Network Lvl 10 | 2 | 1 |
+| MAP60 | Network Lvl 8 | 23 | 116 |
+
+MAP58 and MAP59 are bare 64x64 boxes holding a single marker, the same shape
+as the unused level at 50. The eighth real arena is at 60, and the archive
+calls it "Network Lvl 8". So the compendium has the count right and the range
+wrong, and MAPINFO had inherited the wrong range: it named MAP58 "Network Level
+8" and MAP60 "Network Level 10". Both corrected, and the arena list the menu
+offers is 51-57 and 60.
+
+**There are no placed multiplayer starts to be random about.** §9.5 says
+starting positions are "assigned randomly from placed starts", and the
+milestone above was written expecting to go looking for whatever marks one in
+plane 1. Each arena contains exactly one `Player1Start` and nothing else that
+could be a start -- the markers that fill the arenas, 104 and 105, are masked
+wall overrides and are not objects at all. Whatever the original did, it was
+not choosing among starts a designer placed.
+
+That matters because the arenas also contain no monsters, and ECWolf finds
+deathmatch starts for a map that has none by falling back first to monster
+positions and then to the co-op starts. Both fallbacks come up empty or
+singular here, so every player would have been dealt the same tile and a match
+would have begun with everyone standing inside everyone else.
+
+`GameMap::GenerateDeathmatchStarts` deals starts from the arena's floor
+instead: open cells with no solid actor on them, shuffled, then taken in order
+subject to a five-tile separation so the set covers the arena rather than
+clustering wherever the shuffle looked first. If an arena is too tight to hold
+32 starts that far apart the separation is relaxed rather than the set returned
+short.
+
+The shuffle is driven by the game seed the host sends in the `StartPacket`,
+mixed with the map name, and deliberately does not draw from the global RNG
+streams -- those are shared with the simulation, and drawing from them during
+map load would make the number of floor tiles in a map a term in every later
+random number in the match. Everyone therefore deals the same hand, which is
+what the gate checks: the two player traces have to come out identical, not
+merely plausible.
+
+Found on the way, in code this milestone was the first to exercise:
+
+* `GetPlayerSpawn` read `players[p].mo->x` after testing `!players[p].mo &&
+  players[p].health <= 0`. Before the first spawn of a round every pawn is null
+  while health is already set, so the `&&` let that through to dereference it.
+  It had never fired because no shipped map had deathmatch starts to select
+  among.
+* The setup rows were labelled with `setText`, and a multiple-choice item keeps
+  its current value in its text -- so the first time a row was changed it
+  renamed itself to its own value, and Role read "Host a game    Host a game".
+  `AddLabeled` already existed for exactly this and says so in its comment.
+
+![The multiplayer setup screen, hosting](images/menu-multiplayer-setup.png)
 
 ### M4 — The rules
 
@@ -273,6 +350,25 @@ shows progress under a deliberately slow connection.
 
 *Exit:* a gate that fires malformed, truncated and oversized packets at a host
 and requires it to survive them; the whole suite green.
+
+Standing against this milestone, found earlier and not yet fixed:
+
+* **The handshake is the fragile part, not the tic path.** `Net::NewGame` and
+  `Net::Init` exchange with a synchronous `ExchangePacket` that has no delay
+  window to hide a round trip in, so a lost packet there costs the whole
+  connection rather than a tic. At 5% loss it regularly fails to complete. Once
+  a match is running the delayed path rides out the same link.
+* The latency gate stalls occasionally at 2% loss -- twice in a day's runs,
+  taking about 180 seconds and finishing a few tics short, against 32 seconds
+  and a clean pass otherwise. Same cause as above, and worth a retry rather
+  than a mystery when it happens.
+
+  It used to report that stall as *"the two sides diverged"*, because it
+  compared the two checksum logs whole and a truncated run is missing its tail.
+  That is the most alarming thing this gate can say and it was saying it about
+  a link problem. It now judges agreement on the tics both sides actually
+  simulated and reports falling short separately, so a real desync still fails
+  the gate and a stall no longer impersonates one.
 
 ---
 

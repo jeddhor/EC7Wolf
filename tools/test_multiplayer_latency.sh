@@ -46,7 +46,7 @@ work=$(mktemp -d /tmp/ec7wolf-mplat.XXXXXX)
 display=:161
 xvfb_start "$display" "$work/xvfb.log" 640x400x24 || exit 1
 cleanup() {
-	kill ${host_pid:-0} ${client_pid:-0} ${relay_pid:-0} 2>/dev/null || true
+	kill_pids "${host_pid:-}" "${client_pid:-}" "${relay_pid:-}"
 	xvfb_stop
 	rm -rf "$work"
 }
@@ -101,7 +101,12 @@ match() {   # match TAG NETDELAY
 	printf '  %-9s delay %-2s  host %3s / client %3s tics in %sms = %s tics/sec\n' \
 		"$tag" "$net_delay" "$host_tics" "$client_tics" "$elapsed_ms" "$rate"
 	echo "$rate" > "$work/$tag.rate"
+	# Both sides, not just the host. A stall leaves one of them short, and
+	# recording only the host's count hid that from the completeness check
+	# below -- which then let a truncated run reach the comparison and be
+	# reported as a desync.
 	echo "$host_tics" > "$work/$tag.tics"
+	echo "$client_tics" > "$work/$tag.client-tics"
 }
 
 printf 'a %sms round trip with %s%% loss, %s tics each way\n' \
@@ -113,15 +118,37 @@ match immediate 0 1
 status=0
 
 # 1. The delayed run has to actually finish, and agree tic for tic.
-if [ "$(cat "$work/delayed.tics")" -lt "$tics" ]; then
-	printf '\nFAIL: with input delay the match did not reach %s tics.\n' "$tics"
-	status=1
-elif ! diff -q "$work/delayed-host.txt" "$work/delayed-client.txt" >/dev/null 2>&1; then
-	printf '\nFAIL: the two sides diverged with input delay on.\n'
-	diff "$work/delayed-host.txt" "$work/delayed-client.txt" | head -4 | sed 's/^/    /'
+#
+# Two separate questions, and the answers must not be run together. A stall
+# cuts one side short; comparing the two logs whole then reports the missing
+# tail as a divergence, which sends whoever reads it hunting a desync that
+# never happened. So agreement is judged on the tics both sides actually
+# simulated, and falling short is its own failure with its own message.
+delayed_host=$(cat "$work/delayed.tics")
+delayed_client=$(cat "$work/delayed.client-tics")
+shared=$delayed_host
+[ "$delayed_client" -lt "$shared" ] && shared=$delayed_client
+
+if [ "$shared" -lt 1 ]; then
+	printf '\nFAIL: with input delay the match simulated nothing.\n'
 	status=1
 else
-	printf '  ok   in sync, every tic, over a lossy link\n'
+	head -n "$shared" "$work/delayed-host.txt"   > "$work/dh.cmp"
+	head -n "$shared" "$work/delayed-client.txt" > "$work/dc.cmp"
+
+	if ! cmp -s "$work/dh.cmp" "$work/dc.cmp"; then
+		printf '\nFAIL: the two sides diverged with input delay on.\n'
+		diff "$work/dh.cmp" "$work/dc.cmp" | head -4 | sed 's/^/    /'
+		status=1
+	elif [ "$delayed_host" -lt "$tics" ] || [ "$delayed_client" -lt "$tics" ]; then
+		printf '\nFAIL: with input delay the match did not reach %s tics (host %s, client %s).\n' \
+			"$tics" "$delayed_host" "$delayed_client"
+		printf '      They agreed on all %s tics they did simulate, so this is\n' "$shared"
+		printf '      the link stalling rather than the two games drifting apart.\n'
+		status=1
+	else
+		printf '  ok   in sync, every tic, over a lossy link\n'
+	fi
 fi
 
 # 2. And it has to be worth having. The effect measured while writing this was

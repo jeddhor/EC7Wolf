@@ -31,6 +31,7 @@
 #include "id_vl.h"
 #include "id_vh.h"
 #include "gamemap.h"
+#include "wl_net.h"
 #include "thingdef/thingdef.h"
 #include "a_inventory.h"
 #ifdef ECWOLF_RENDERER_OPENGL
@@ -96,6 +97,11 @@ namespace
 	// says nothing about whether an alien patrolled, backed off, or stood still
 	// for 500 tics -- so the AI work is measured from this rather than by eye.
 	FString  g_actorPath;
+	// --capture-players PATH: trace each player's pawn each tic. Deliberately
+	// a second file rather than more rows in the actor trace, whose readers
+	// take every row to be one monster and the population to be stable.
+	FString  g_playerPath;
+	FILE    *g_playerFile     = NULL;
 	FILE    *g_actorFile      = NULL;
 
 	// --capture-give CLASS: hand the player an inventory item once, at the first
@@ -168,6 +174,23 @@ namespace
 	// pathing flag alongside the tile: "did it move" is not the same question as
 	// "is it patrolling", and a patrol that has run into a wall shows up here as
 	// dir == nodir with FL_PATHING still set.
+	void TracePlayers()
+	{
+		if(g_playerFile == NULL)
+			return;
+
+		for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+		{
+			if(players[i].mo == NULL)
+				continue;
+			fprintf(g_playerFile, "%lu %u %d %d %u %d\n",
+				(unsigned long)g_ticCount, i,
+				players[i].mo->tilex, players[i].mo->tiley,
+				(unsigned)(players[i].mo->angle/ANGLE_1),
+				players[i].health);
+		}
+	}
+
 	void TraceActors()
 	{
 		if(g_actorFile == NULL)
@@ -326,6 +349,12 @@ namespace
 			g_checksumFile = NULL;
 		}
 
+		if(g_playerFile != NULL)
+		{
+			fclose(g_playerFile);
+			g_playerFile = NULL;
+		}
+
 		if(g_actorFile != NULL)
 		{
 			fclose(g_actorFile);
@@ -353,6 +382,11 @@ void ParseArgs(int argc, char **argv)
 		else if(strcmp(arg, "--capture-checksum") == 0 && i + 1 < argc)
 		{
 			g_checksumPath = argv[++i];
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-players") == 0 && i + 1 < argc)
+		{
+			g_playerPath = argv[++i];
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-actors") == 0 && i + 1 < argc)
@@ -502,6 +536,16 @@ void ParseArgs(int argc, char **argv)
 		if(g_checksumFile == NULL)
 			Printf("Capture: FAILED to open checksum log '%s'\n",
 				g_checksumPath.GetChars());
+	}
+
+	if(g_armed && !g_playerPath.IsEmpty())
+	{
+		g_playerFile = fopen(g_playerPath.GetChars(), "w");
+		if(g_playerFile == NULL)
+			Printf("Capture: FAILED to open player trace '%s'\n",
+				g_playerPath.GetChars());
+		else
+			fprintf(g_playerFile, "# tic player tilex tiley angle health\n");
 	}
 
 	if(g_armed && !g_actorPath.IsEmpty())
@@ -764,6 +808,7 @@ void PerTic()
 			(unsigned long)g_ticCount, (unsigned int)ticCrc);
 
 	TraceActors();
+	TracePlayers();
 
 	// A tic-based quit keeps the determinism gate reproducible under the
 	// current wall-clock frame pacing, where the tic-per-frame ratio varies.

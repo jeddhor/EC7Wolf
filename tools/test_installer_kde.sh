@@ -189,7 +189,7 @@ from ec7install import identity; print(identity.WM_CLASS)")
 
 display=:129
 xvfb_start "$display" "$work/xvfb.log" 640x480x24 || exit 1
-trap 'kill ${game:-0} 2>/dev/null; xvfb_stop; rm -rf "$work"' EXIT INT TERM
+trap 'kill_pids "${game:-}"; xvfb_stop; rm -rf "$work"' EXIT INT TERM
 
 DISPLAY=$display SDL_VIDEODRIVER=x11 \
 	SDL_VIDEO_X11_WMCLASS="$wanted" \

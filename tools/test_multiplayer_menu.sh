@@ -39,7 +39,7 @@ display=:173
 port=5029    # what the setup screen offers by default, so nothing is typed here
 xvfb_start "$display" "$work/xvfb.log" 1280x800x24 || exit 1
 cleanup() {
-	kill ${host_pid:-0} ${client_pid:-0} 2>/dev/null || true
+	kill_pids "${host_pid:-}" "${client_pid:-}"
 	xvfb_stop
 	if [ -n "${KEEP_WORK:-}" ]; then
 		printf '\nkept: %s\n' "$work"
@@ -123,17 +123,48 @@ press() {
 	sleep "${2:-1}"
 }
 
+# Walk the cursor down to a row instead of counting keystrokes to it.
+#
+# Counting assumes every keystroke arrives. One did not, once, in a full suite
+# run: the cursor stopped a row short on the rank ladder, Return started a
+# single-player game instead of opening Multiplayer, and the host sat waiting
+# for a player who was off playing MAP01 alone. It surfaced as a netcode
+# timeout twenty minutes later, which is the most expensive way to learn that
+# xdotool dropped a key.
+#
+# menu_cursor.py reads back which row is actually highlighted, so a dropped key
+# costs one more Down rather than the run. Both targets here are the bottom row
+# of their menu, and the thresholds are measured at the 1280x800 these captures
+# run at: Multiplayer sits at y=460 on the ladder, Start at y=543 on the setup
+# screen, and the row above each is at least 40 pixels higher.
+walk_to_row() {  # walk_to_row MIN_Y WHAT
+	_min=$1
+	_what=$2
+	_try=0
+	_y=-1
+	while [ "$_try" -lt 8 ]; do
+		DISPLAY=$display import -window root "$work/nav.png" 2>/dev/null || true
+		_y=$(python3 "$here/menu_cursor.py" "$work/nav.png" 2>/dev/null || echo -1)
+		if [ "$_y" -ge "$_min" ]; then
+			printf '  ..   cursor on %s (y=%s)\n' "$_what" "$_y"
+			return 0
+		fi
+		press Down 0.8
+		_try=$((_try + 1))
+	done
+	printf '  FAIL never reached %s; cursor stuck at y=%s\n' "$_what" "$_y"
+	return 1
+}
+
 press Escape 1.5
 press Escape 2
 press Return 2.5          # New Mission -> the rank ladder
 
 DISPLAY=$display import -window root "$work/ranks.png" 2>/dev/null || true
 
-# Captain is preselected, and the section label is skipped, so three steps down
-# reach Multiplayer: Major, President, Multiplayer.
-press Down 0.8
-press Down 0.8
-press Down 1
+# Captain is preselected and the section label is skipped, so Multiplayer is
+# three steps down -- but get there by looking, not by counting.
+walk_to_row 440 "Multiplayer" || exit 1
 press Return 2.5
 
 DISPLAY=$display import -window root "$work/setup.png" 2>/dev/null || true
@@ -146,13 +177,11 @@ press Return 1.5
 
 DISPLAY=$display import -window root "$work/address.png" 2>/dev/null || true
 
-# Down to Start, past the port, and go.
-# Three steps to Start: Port, Connection, Start. Players and Game are skipped
-# because joining leaves them disabled, and the list wraps -- five steps come
-# back round to the address, which is a silent way to press the wrong thing.
-press Down 0.7
-press Down 0.7
-press Down 0.9
+# Down to Start, past the port. Players, Game and Arena are skipped because
+# joining leaves them disabled, and the list wraps, so counting too far comes
+# back round to the address. Walking to the row cannot overshoot, and does not
+# care how many rows the setup screen grows.
+walk_to_row 520 "Start" || exit 1
 DISPLAY=$display import -window root "$work/before-start.png" 2>/dev/null || true
 press Return 3
 DISPLAY=$display import -window root "$work/after-start.png" 2>/dev/null || true

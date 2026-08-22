@@ -48,7 +48,7 @@ work=$(mktemp -d /tmp/ec7wolf-mp.XXXXXX)
 display=:157
 xvfb_start "$display" "$work/xvfb.log" 640x400x24 || exit 1
 cleanup() {
-	kill "${host_pid:-0}" "${client_pid:-0}" 2>/dev/null || true
+	kill_pids "${host_pid:-}" "${client_pid:-}"
 	xvfb_stop
 	rm -rf "$work"
 }

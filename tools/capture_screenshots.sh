@@ -39,7 +39,7 @@ done
 
 display=:141
 xvfb_start "$display" "$work/xvfb.log" 1280x800x24
-trap 'kill ${game:-0} 2>/dev/null; xvfb_stop; rm -rf "$work"' EXIT INT TERM
+trap 'kill_pids "${game:-}"; xvfb_stop; rm -rf "$work"' EXIT INT TERM
 
 shoot() {  # shoot NAME
 	DISPLAY=$display import -window root "$out/$1.png"

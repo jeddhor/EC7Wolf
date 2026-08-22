@@ -93,6 +93,7 @@ corridor7_controls
 multiplayer_loopback
 multiplayer_latency
 multiplayer_menu
+multiplayer_arenas
 gl_world
 gl_frame
 gl_live

@@ -230,6 +230,7 @@ class GameMap
 		void			GetHitlist(BYTE* hitlist) const;
 		int				GetMarketLumpNum() const { return markerLump; }
 		const PlayerSpawn *GetPlayerSpawn(int player) const;
+		void			GenerateDeathmatchStarts();
 		Plane::Map		*GetSpot(unsigned int x, unsigned int y, unsigned int z) const { return &GetPlane(z).map[y*header.width+x]; }
 		Plane::Map		*GetSpotByTag(unsigned int tag, Plane::Map *start) const;
 		const Zone		&GetZone(unsigned int index) { return zonePalette[index]; }

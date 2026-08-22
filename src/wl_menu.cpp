@@ -78,6 +78,13 @@ static MenuItem *mpStartItem = NULL;
 // in. Measured at an 80ms round trip: 8.6 tics a second at zero against 21.4
 // at eight.
 static const int mpDelayTics[] = { 0, 6, 10, 16 };
+static MultipleChoiceMenuItem *mpArenaItem = NULL;
+// Eight arenas, and not the contiguous run the compendium describes: the maps
+// it puts at 58 and 59 are empty boxes, and the eighth real arena is at 60.
+// See the note above the network levels in mapinfo/corridor7.txt.
+static const char* const mpArenaMaps[] = {
+	"MAP51", "MAP52", "MAP53", "MAP54", "MAP55", "MAP56", "MAP57", "MAP60"
+};
 
 MENU_LISTENER(MultiplayerRoleChanged);
 MENU_LISTENER(StartMultiplayer);
@@ -397,6 +404,8 @@ MENU_LISTENER(MultiplayerRoleChanged)
 		mpPlayersItem->setEnabled(!joining);
 	if(mpModeItem)
 		mpModeItem->setEnabled(!joining);
+	if(mpArenaItem)
+		mpArenaItem->setEnabled(!joining);
 	return true;
 }
 
@@ -461,7 +470,25 @@ MENU_LISTENER(StartMultiplayer)
 	// callback the startup path uses.
 	Net::Init(MultiplayerStatus);
 
-	return JoinNetGame(which);
+	// One map for everybody, and it is the host's. Net::NewGame exchanges the
+	// name and keeps the arbiter's, so a client deliberately names nothing
+	// rather than guessing at an arena it would only be overruled about.
+	FString arena;
+	if(!joining)
+	{
+		const int pick = mpArenaItem ? mpArenaItem->getCurrentOption() : 0;
+		arena = mpArenaMaps[pick];
+	}
+
+	Menu::closeMenus();
+	// No briefing: an arena has no story to open with, and the text screen
+	// would be one player reading while the rest of the game waits.
+	NewGame(gd_medium, arena, false);
+
+	if(readThis)
+		readThis->setHighlighted(false);
+
+	return true;
 }
 MENU_LISTENER(ReadThis)
 {
@@ -755,29 +782,32 @@ static void BuildMultiplayerMenu()
 
 	multiplayerMenu.setHeadText("Multiplayer", true);
 
+	// setLabel, not setText: a multiple-choice item puts its current value in
+	// the text, so a row labelled with setText renames itself to its own value
+	// the first time it is changed -- "Host a game    Host a game".
+	static const char* arenas[] = { "Level 1", "Level 2", "Level 3", "Level 4",
+	                                "Level 5", "Level 6", "Level 7", "Level 8" };
+
 	mpRoleItem = new MultipleChoiceMenuItem(MultiplayerRoleChanged, roles, 2, 1);
-	mpRoleItem->setText("Role");
-	multiplayerMenu.addItem(mpRoleItem);
+	AddLabeled(multiplayerMenu, mpRoleItem, "Role");
 
 	mpAddressItem = new TextInputMenuItem("", 39, NULL, NULL, true);
-	mpAddressItem->setText("Server address");
-	multiplayerMenu.addItem(mpAddressItem);
+	AddLabeled(multiplayerMenu, mpAddressItem, "Server address");
 
 	mpPortItem = new TextInputMenuItem("5029", 5, NULL, NULL, true);
-	mpPortItem->setText("Port");
-	multiplayerMenu.addItem(mpPortItem);
+	AddLabeled(multiplayerMenu, mpPortItem, "Port");
 
 	mpPlayersItem = new MultipleChoiceMenuItem(NULL, players, 7, 0);
-	mpPlayersItem->setText("Players");
-	multiplayerMenu.addItem(mpPlayersItem);
+	AddLabeled(multiplayerMenu, mpPlayersItem, "Players");
 
 	mpModeItem = new MultipleChoiceMenuItem(NULL, modes, 2, 0);
-	mpModeItem->setText("Game");
-	multiplayerMenu.addItem(mpModeItem);
+	AddLabeled(multiplayerMenu, mpModeItem, "Game");
+
+	mpArenaItem = new MultipleChoiceMenuItem(NULL, arenas, 8, 0);
+	AddLabeled(multiplayerMenu, mpArenaItem, "Arena");
 
 	mpDelayItem = new MultipleChoiceMenuItem(NULL, connections, 4, 2);
-	mpDelayItem->setText("Connection");
-	multiplayerMenu.addItem(mpDelayItem);
+	AddLabeled(multiplayerMenu, mpDelayItem, "Connection");
 
 	multiplayerMenu.addItem(new LabelMenuItem(""));
 

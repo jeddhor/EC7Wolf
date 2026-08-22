@@ -367,7 +367,13 @@ const GameMap::PlayerSpawn *GameMap::GetPlayerSpawn(int player) const
 			fixed closest = INT_MAX;
 			for(unsigned int p = 0;p < Net::InitVars.numPlayers;++p)
 			{
-				if(!players[p].mo && players[p].health <= 0)
+				// A player with no pawn has no position to be far from, and
+				// the next line reads one. Before the first spawn of a round
+				// every pawn is null while health is already set, so the
+				// original && let this through to dereference it -- unnoticed
+				// only because no shipped map had deathmatch starts to select
+				// among.
+				if(!players[p].mo || players[p].health <= 0)
 					continue;
 
 				fixed player_distance = P_AproxDistance(players[p].mo->x - spot.x, players[p].mo->y - spot.y);
@@ -716,11 +722,143 @@ void GameMap::SpawnThings()
 		}
 		else
 		{
+			// The Corridor 7 arenas defeat both fallbacks above: they carry a
+			// single player start each and contain no monsters, so the co-op
+			// branch would deal every player the same tile and a match would
+			// begin with everyone standing inside everyone else. Deal starts
+			// from the arena's own floor instead.
+			GenerateDeathmatchStarts();
+
 			// If the map has no monsters and no deathmatch starts, use the co-op starts
-			TMap<unsigned int, PlayerSpawn>::Pair *pair;
-			for(TMap<unsigned int, PlayerSpawn>::Iterator iter(playerStarts);iter.NextPair(pair);)
-				deathmatchStarts.Push(pair->Value);
+			if(deathmatchStarts.Size() == 0)
+			{
+				TMap<unsigned int, PlayerSpawn>::Pair *pair;
+				for(TMap<unsigned int, PlayerSpawn>::Iterator iter(playerStarts);iter.NextPair(pair);)
+					deathmatchStarts.Push(pair->Value);
+			}
 		}
+	}
+}
+
+// Starts for a map that was drawn with none.
+//
+// The compendium reads the manual as saying starting positions are "assigned
+// randomly from placed starts", but the archived arenas contain one placed
+// start apiece, so whatever the original did it was not choosing among starts
+// the level designer put down. What the arenas do have is floor, and a great
+// deal of it, so the starts are dealt from that.
+//
+// Every player has to deal the same hand. The shuffle is therefore driven by
+// the game seed, which the host sends everybody in the StartPacket before any
+// of this runs, mixed with the map name so that the same seed does not put
+// player one on the same tile in every arena of a session. It deliberately
+// does not touch the global RNG streams: those are shared with the simulation,
+// and drawing from them here would make the number of tiles in a map a term in
+// every later random number.
+void GameMap::GenerateDeathmatchStarts()
+{
+	if(NumPlanes() == 0)
+		return;
+
+	const unsigned int width = header.width, height = header.height;
+
+	// A tile with something solid standing on it is not floor for this
+	// purpose. Arenas are full of scenery and the pickups are not solid, so
+	// this rejects little, but spawning inside a column is worth one pass.
+	TArray<bool> blocked;
+	blocked.Resize(width*height);
+	for(unsigned int i = 0;i < blocked.Size();++i)
+		blocked[i] = false;
+	for(AActor::Iterator iter = AActor::GetIterator();iter.Next();)
+	{
+		AActor *const actor = iter;
+		if(!(actor->flags & FL_SOLID))
+			continue;
+		const unsigned int tx = actor->tilex, ty = actor->tiley;
+		if(tx < width && ty < height)
+			blocked[ty*width + tx] = true;
+	}
+
+	TArray<unsigned int> candidates;
+	for(unsigned int y = 0;y < height;++y)
+	{
+		for(unsigned int x = 0;x < width;++x)
+		{
+			MapSpot spot = GetSpot(x, y, 0);
+			// A wall has a tile; open floor has a sector and no tile.
+			if(spot->tile != NULL || spot->sector == NULL)
+				continue;
+			if(blocked[y*width + x])
+				continue;
+			candidates.Push(y*width + x);
+		}
+	}
+
+	if(candidates.Size() == 0)
+		return;
+
+	// xorshift, seeded from the shared game seed and the map name. Small and
+	// self-contained on purpose: it has to produce the same sequence on every
+	// machine in the game, which rules out anything the platform supplies.
+	uint32_t state = rngseed ^ 0x9E3779B9u;
+	for(const char *c = map.GetChars();*c;++c)
+		state = state*16777619u ^ (unsigned char)*c;
+	if(state == 0)
+		state = 1;
+	struct Shuffle
+	{
+		static uint32_t Next(uint32_t &s)
+		{
+			s ^= s<<13; s ^= s>>17; s ^= s<<5;
+			return s;
+		}
+	};
+
+	for(unsigned int i = candidates.Size();i > 1;--i)
+	{
+		const unsigned int j = Shuffle::Next(state) % i;
+		const unsigned int tmp = candidates[i-1];
+		candidates[i-1] = candidates[j];
+		candidates[j] = tmp;
+	}
+
+	// Take them in shuffled order but refuse ones that crowd a start already
+	// taken, so the set covers the arena instead of clustering wherever the
+	// shuffle happened to look first. If the arena is too tight to hold
+	// MinSeparation apart, the requirement is relaxed rather than returning a
+	// short set: a cramped arena still has to be playable.
+	const unsigned int Wanted = 32;
+	unsigned int minSeparation = 5;
+	while(deathmatchStarts.Size() < Wanted && minSeparation > 0)
+	{
+		for(unsigned int i = 0;i < candidates.Size() && deathmatchStarts.Size() < Wanted;++i)
+		{
+			const unsigned int cell = candidates[i];
+			const unsigned int x = cell%width, y = cell/width;
+
+			bool crowded = false;
+			for(unsigned int s = 0;s < deathmatchStarts.Size();++s)
+			{
+				const unsigned int sx = deathmatchStarts[s].x>>FRACBITS;
+				const unsigned int sy = deathmatchStarts[s].y>>FRACBITS;
+				const unsigned int dx = sx > x ? sx - x : x - sx;
+				const unsigned int dy = sy > y ? sy - y : y - sy;
+				if(dx < minSeparation && dy < minSeparation)
+				{
+					crowded = true;
+					break;
+				}
+			}
+			if(crowded)
+				continue;
+
+			PlayerSpawn spawn;
+			spawn.x = (x<<FRACBITS) + (FRACUNIT/2);
+			spawn.y = (y<<FRACBITS) + (FRACUNIT/2);
+			spawn.angle = (unsigned short)((Shuffle::Next(state)%8)*45);
+			deathmatchStarts.Push(spawn);
+		}
+		--minSeparation;
 	}
 }
 

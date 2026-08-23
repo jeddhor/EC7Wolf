@@ -318,6 +318,9 @@ enum Button
 	// Corridor 7's own inset map panel (c7_automap.h), separate from
 	// ECWolf's full-viewport automap on bt_automap.
 	bt_c7map,
+	// Held to show the multiplayer standings. Tab is the floor map in this
+	// game, so the key the genre would use is taken.
+	bt_scoreboard,
 	NUMBUTTONS,
 
 	// AM buttons

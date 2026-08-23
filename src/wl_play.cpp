@@ -30,6 +30,7 @@
 #include "wl_inter.h"
 #include "wl_net.h"
 #include "c7_automap.h"
+#include "c7_scoreboard.h"
 #include "c7_cdaudio.h"
 #include "wl_play.h"
 #include "g_mapinfo.h"
@@ -139,6 +140,9 @@ ControlScheme controlScheme[] =
 	{ bt_showstatusbar,		"Show Status",	-1,			-1,				-1,	CS_AxisDigital, 0 },
 	// Back/Select raises the floor map, which is the map button on a modern pad.
 	{ bt_c7map,				"Floor Map",	4,			sc_Tab,			-1, CS_AxisDigital, 0 },
+	// The scoreboard is on the key a shooter usually puts it on once Tab is
+	// spoken for. It does nothing outside a netgame.
+	{ bt_scoreboard,		"Scoreboard",	-1,			sc_Grave,		-1, CS_AxisDigital, 0 },
 	{ bt_pause,				"Pause",		-1,			sc_Pause,		-1, CS_AxisDigital, 0 },
 	{ bt_esc,				"Main Menu",	-1,			-1,				-1, CS_AxisDigital, 0 },
 
@@ -1319,10 +1323,19 @@ static void DrawC7MapOverlay()
 	C7Map_Draw();
 }
 
+// Held rather than toggled: a scoreboard is something you glance at without
+// letting go of anything else.
+static void DrawScoreboardOverlay()
+{
+	if(control[ConsolePlayer].buttonstate[bt_scoreboard])
+		C7Scoreboard_DrawOverlay();
+}
+
 void R_DrawPlayViewOverlays()
 {
 	DrawTopOverlayThunk();
 	DrawC7MapOverlay();
+	DrawScoreboardOverlay();
 	DrawPausedOverlay();
 }
 
@@ -1350,6 +1363,10 @@ void PlayFrame()
 	// Corridor 7's inset panel sits over the view in the same way, so it
 	// goes through the same seam.
 	Renderer->DrawViewOverlay(DrawC7MapOverlay);
+	// And the standings, on the same seam. R_DrawPlayViewOverlays below is the
+	// GL backend's coverage pass and is not the draw: an overlay added only
+	// there is told about but never painted.
+	Renderer->DrawViewOverlay(DrawScoreboardOverlay);
 
 	if(automap && !gamestate.victoryflag)
 		BasicOverhead();

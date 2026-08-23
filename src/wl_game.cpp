@@ -27,6 +27,7 @@
 #include "r_sprites.h"
 #include "v_video.h"
 #include "wl_inter.h"
+#include "c7_scoreboard.h"
 #include "wl_draw.h"
 #include "wl_net.h"
 #include "wl_play.h"
@@ -944,7 +945,13 @@ restartgame:
 					VL_FadeOut(0, 255, RPART(levelInfo->ExitFadeColor), GPART(levelInfo->ExitFadeColor), BPART(levelInfo->ExitFadeColor), levelInfo->ExitFadeDuration);
 
 				StartTravel ();
-				if(dointermission)
+				// A deathmatch has no floor to tally -- no kill, secret or
+				// treasure ratio means anything in an arena -- but it does
+				// have standings, and the round that just ended is the only
+				// moment everybody is looking at the same screen.
+				if(Net::Deathmatch())
+					C7Scoreboard_ShowTally();
+				else if(dointermission)
 					LevelCompleted ();              // do the intermission
 
 				LevelInfo &nextLevel = LevelInfo::Find(next);

@@ -367,6 +367,33 @@ static void CollectGC()
 	GC::DelSoftRootHead();
 }
 
+// The waiting screen for a game started from the command line.
+//
+// DrawStartupConsole cannot serve: for Corridor 7 it draws the signon splash
+// and returns before printing anything, which was a deliberate decision -- the
+// splash is the game's own opening and ECWolf's initialisation chatter has no
+// business over it. That is right for the eight lines of startup and wrong for
+// the one screen where the game is waiting on somebody else, which without a
+// word on it is indistinguishable from a hang.
+static bool DrawNetworkStatus(FString statusStr)
+{
+	const bool hasSignon = !gameinfo.SignonLump.IsEmpty();
+	if(hasSignon)
+		CA_CacheScreen(TexMan(gameinfo.SignonLump));
+	else
+		screen->Clear(0, 0, SCREENWIDTH, SCREENHEIGHT, GPalette.BlackIndex, 0);
+
+	// Low on the splash, where Corridor 7's own artwork is darkest.
+	PrintY = 200 - 8 - ConFont->GetHeight()*3;
+	PrintX = WindowX = 12;
+	WindowW = 296;
+	WindowH = ConFont->GetHeight()*3;
+	US_Print(ConFont, statusStr, CR_WHITE);
+
+	VH_UpdateScreen();
+	return false;
+}
+
 static bool DrawStartupConsole(FString statusStr)
 {
 	// Window for printing text to the screen is (12,76), (308, 182)
@@ -563,7 +590,7 @@ static void InitGame()
 //
 // Net game?
 //
-	Net::Init(DrawStartupConsole);
+	Net::Init(DrawNetworkStatus);
 
 //
 // initialize the menusalcProjection
@@ -1249,6 +1276,8 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 			if(i + 1 < argc && argv[i+1][0] >= '0' && argv[i+1][0] <= '9') ++i;
 		}
 		else IFARG("--capture-ammo") { }
+		else IFARG("--capture-scoreboard") { }
+		else IFARG("--capture-tally") { ++i; }
 		else IFARG("--capture-forward") { if(i + 1 < argc && argv[i+1][0] != (char)45) ++i; }
 		else IFARG("--capture-fire") { if(i + 1 < argc && argv[i+1][0] != (char)45) ++i; }
 		else IFARG("--capture-players") { ++i; }

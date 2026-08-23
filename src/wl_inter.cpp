@@ -616,7 +616,10 @@ static void C7PrintAt(FFont *font, int x, int y, const char *text,
 	US_Print(font, text, color);
 }
 
-static void C7StencilPrintAt(FFont *font, int x, int y, const char *text,
+// Not static: the multiplayer scoreboard draws in the same language and on the
+// same backdrop as the high-score page, and a second copy of this would be a
+// second place for the two to drift apart.
+void C7StencilPrintAt(FFont *font, int x, int y, const char *text,
 	BYTE paletteIndex)
 {
 	px = x;

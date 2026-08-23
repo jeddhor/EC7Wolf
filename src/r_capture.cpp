@@ -112,6 +112,17 @@ namespace
 	// their definition.
 	long     g_forwardFrom    = -1;
 
+	// --capture-scoreboard: hold the scoreboard key down.
+	bool     g_holdScoreboard = false;
+
+	// --capture-tally PATH: photograph the end-of-match page when it appears.
+	//
+	// That page is up for a few seconds somewhere in the middle of a match,
+	// at a moment decided by when somebody happens to reach the frag limit.
+	// No frame number finds it and no key sequence leads to it, so the page
+	// says when it is ready rather than the harness guessing.
+	FString  g_tallyPath;
+
 	bool     g_haveWarp       = false;   // --capture-warp: pin player to a tile+angle
 	fixed    g_warpX = 0, g_warpY = 0;
 	angle_t  g_warpAngle = 0;
@@ -507,6 +518,16 @@ void ParseArgs(int argc, char **argv)
 				g_duelC = atoi(argv[++i]);
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-tally") == 0 && i + 1 < argc)
+		{
+			g_tallyPath = argv[++i];
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-scoreboard") == 0)
+		{
+			g_holdScoreboard = true;
+			g_armed = true;
+		}
 		else if(strcmp(arg, "--capture-forward") == 0)
 		{
 			g_forwardFrom = (i + 1 < argc && argv[i+1][0] != '-') ? atol(argv[++i]) : 0;
@@ -861,6 +882,9 @@ namespace Capture
 // wire would prove nothing about that.
 void InjectControls(TicCmd_t &cmd)
 {
+	if(g_holdScoreboard)
+		cmd.buttonstate[bt_scoreboard] = true;
+
 	if(g_forwardFrom >= 0 && (long)gamestate.TimeCount >= g_forwardFrom)
 	{
 		cmd.controly = -RUNMOVE;
@@ -1074,6 +1098,13 @@ void PerTic()
 		Finalize();
 		Quit();
 	}
+}
+
+void WriteTallyShot()
+{
+	if(!g_armed || g_tallyPath.IsEmpty())
+		return;
+	WriteScreenshot(g_tallyPath.GetChars());
 }
 
 void NoteArtifactComplete()

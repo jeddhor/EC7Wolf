@@ -96,6 +96,7 @@ multiplayer_menu
 multiplayer_arenas
 multiplayer_rules
 multiplayer_classes
+multiplayer_presentation
 gl_world
 gl_frame
 gl_live

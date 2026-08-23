@@ -85,6 +85,7 @@ initial_sources(
 	actor.cpp
 	am_map.cpp
 	c7_automap.cpp
+	c7_scoreboard.cpp
 	c7_cdaudio.cpp
 	c7_flic.cpp
 	c7_menu.cpp

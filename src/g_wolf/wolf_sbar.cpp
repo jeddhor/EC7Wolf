@@ -623,7 +623,15 @@ void WolfStatusBar::DrawStatusBar()
 		FString level;
 		level.Format("%2s", levelInfo->FloorNumber.GetChars());
 		LatchString(10, 16, 2, level);
-		LatchNumber(30, 16, 7, players[ConsolePlayer].score, false, true);
+		// Frags rather than points in a deathmatch, which is what the SCORE
+		// box is for once there is no treasure to collect. DrawScore() below
+		// already made this substitution, but the Corridor 7 status bar does
+		// not go through it -- it draws its own boxes -- so the box had gone
+		// on reporting a score that nothing in an arena can change.
+		LatchNumber(30, 16, 7,
+			Net::Deathmatch() ? players[ConsolePlayer].frags
+			                  : players[ConsolePlayer].score,
+			false, true);
 		unsigned int ammo = 0;
 		if(players[ConsolePlayer].ReadyWeapon &&
 			players[ConsolePlayer].ReadyWeapon->ammo[AWeapon::PrimaryFire])

@@ -460,7 +460,7 @@ Two things worth recording:
   last row of their menu, and being last is a fact about the menu rather than
   about its current height.
 
-### M6 — Presentation
+### M6 — Presentation — **done**
 
 * A scoreboard, and frags on the HUD where Corridor 7 has room for them.
 * End-of-match tally in the original's visual language.
@@ -469,6 +469,62 @@ Two things worth recording:
 
 *Exit:* screenshot gates for the scoreboard and the tally; the join screen
 shows progress under a deliberately slow connection.
+
+**Done.** The visual language was not invented: Corridor 7 already has a page
+that lists people in order with a number beside each, and the scoreboard and
+the tally are drawn as members of that family -- the high-score page's font,
+printed through the same stencil, on its backdrop, with the same descending row
+colours, at its own coordinates. `C7StencilPrintAt` is shared rather than
+copied, so the two cannot drift apart.
+
+![The scoreboard, held during a match](images/multiplayer-scoreboard.png)
+![The tally when a match ends](images/multiplayer-tally.png)
+
+The scoreboard is held rather than toggled, on the backtick -- Tab is
+Corridor 7's floor map, so the key the genre would use is already spoken for.
+Rows are sorted by frags and by player number where those tie, because a sort
+that broke ties by anything else would give two players a different table for
+the same game. Your own row is marked, since with two of the same character on
+the board there is otherwise no telling which line is yours.
+
+**Frags were not on the HUD after all.** M4 recorded that the SCORE box shows
+frags in a deathmatch, and `DrawScore` does make that substitution -- but the
+Corridor 7 status bar never calls it. It draws its own boxes, and its box had
+gone on reporting a score that nothing in an arena can change. It reads frags
+now.
+
+**The end-of-match tally waits, but not for ever.** Ten seconds, or until
+somebody presses something; `ACK_Any`, so one player can move it along rather
+than everyone having to. A tally that blocks until a key arrives is a tally
+that can hang an entire match on one player who has gone to make tea.
+
+**Two join screens, and the worse one was the one nobody looks at.** The
+menu's shows a spinner, the address it is trying, the seconds elapsed and,
+after ten of them, what to check. The command line had no screen at all: for
+Corridor 7, `DrawStartupConsole` draws the signon splash and returns before
+printing anything -- a deliberate decision, since ECWolf's initialisation
+chatter has no business over the game's own opening art, and exactly wrong for
+the one screen where the game is waiting on somebody else. The network phase
+has its own callback now.
+
+![Waiting for a host that is not there](images/multiplayer-joining.png)
+
+Four things this turned up:
+
+* **An overlay added to `R_DrawPlayViewOverlays` is never drawn.** That
+  function is the GL backend's coverage pass; the actual painting goes through
+  `Renderer->DrawViewOverlay` once per overlay. An overlay registered only in
+  the first is told about and never painted, which looks exactly like a drawing
+  bug in the overlay itself.
+* **`Message()` cuts off what will not fit.** It clamps its box to 310 virtual
+  pixels, so the advice on the join screen ran off the right-hand edge --
+  explaining nothing, at length.
+* **A page cannot be photographed by waiting for its log line.** stdout to a
+  file is block-buffered, so "reached the frag limit" lands long after the
+  tally has been and gone. `--capture-tally` lets the page say when it is up,
+  which is the only thing that knows.
+* Two instances must not both stop at the same capture frame: whichever quits
+  first leaves the other waiting on a player who has gone.
 
 ### M7 — Hardening
 

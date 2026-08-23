@@ -666,6 +666,38 @@ static void SendReliablePacket(T &packet)
 	}
 }
 
+// A waiting screen has one job beyond waiting: to look unlike a crash.
+//
+// Both of the loops below used to call the status callback once and then sit
+// silent -- the client said "Waiting for sync" and then showed the same six
+// words whether the host was starting up, unreachable, or behind a firewall
+// that would never let the packet through. This gives them a line that moves,
+// a count of the seconds, and eventually a suggestion about why it might not
+// be working. The text is padded to a fixed width because Message() sizes its
+// box to the string and a shrinking box leaves the old one's edges behind, and
+// every line is kept under about thirty-six characters because Message() clamps
+// the box to 310 virtual pixels and simply cuts off whatever will not fit.
+static const char *SpinnerFrame(unsigned int step)
+{
+	static const char *frames[] = { "-", "\\", "|", "/" };
+	return frames[step & 3];
+}
+
+static FString WaitingStatus(const char *what, unsigned int step,
+	unsigned int seconds, const char *advice)
+{
+	FString out;
+	out.Format("%s %s   %us", SpinnerFrame(step), what, seconds);
+	while(out.Len() < 34)
+		out += ' ';
+	if(advice && seconds >= 10)
+	{
+		out += "\n";
+		out += advice;
+	}
+	return out;
+}
+
 static void StartHost(InitStatusCallback callback)
 {
 	unsigned int waitpos = 0;
@@ -677,12 +709,23 @@ static void StartHost(InitStatusCallback callback)
 
 	// Step 1: Get connection requests from each player
 	Printf("Waiting for %d players:\n   ", InitVars.numPlayers);
-	callback(BuildClientList(acked));
+	const uint32_t hostStart = SDL_GetTicks();
+	unsigned int hostSpin = 0;
+	FString hostWhat;
+
+	hostWhat.Format("Waiting for %u players on port %u",
+		(unsigned)InitVars.numPlayers, (unsigned)InitVars.port);
+	callback(WaitingStatus(hostWhat, hostSpin, 0, NULL) + "\n" + BuildClientList(acked));
 	while(nextclient != InitVars.numPlayers)
 	{
 		waitpos = (waitpos+1)%4;
 		Printf("\b\b\b%s", Waiting[waitpos]);
 		fflush(stdout);
+
+		++hostSpin;
+		callback(WaitingStatus(hostWhat, hostSpin,
+			(SDL_GetTicks() - hostStart)/1000, NULL)
+			+ "\n" + BuildClientList(acked));
 
 		if(SDLNet_UDP_Recv(Socket, Packet))
 		{
@@ -794,12 +837,26 @@ static void StartJoin(InitStatusCallback callback)
 	Uint8 requestData[] = {NET_RequestConnection};
 	UDPpacket packet = { -1, requestData, 1, 1, 0, address };
 
-	callback("Waiting for sync");
+	FString target;
+	target.Format("Connecting to %s", IPaddressToString(address).GetChars());
+	const uint32_t joinStart = SDL_GetTicks();
+	unsigned int spin = 0;
+
+	callback(WaitingStatus(target, spin, 0, NULL));
 	for(;;)
 	{
 		waitpos = (waitpos+1)%4;
 		Printf("\b\b\b%s", Waiting[waitpos]);
 		fflush(stdout);
+
+		// Four turns of the spinner a second, which is slow enough that the
+		// screen is not being rebuilt constantly and fast enough to read as
+		// something still happening.
+		++spin;
+		callback(WaitingStatus(target, spin,
+			(SDL_GetTicks() - joinStart)/1000,
+			"No answer yet. Check the address\n"
+			"and the host's port forwarding."));
 
 		// Send request periodically as a heart beat
 		if(waitpos == 0)

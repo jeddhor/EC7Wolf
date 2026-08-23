@@ -62,6 +62,9 @@ namespace Capture
 	// up by both the software render and the GL interpolation snapshots. No-op
 	// unless an override switch was supplied.
 	void PreTic();
+	// Screenshot the end-of-match page while it is on screen (--capture-tally).
+	// Called by the page itself, because nothing outside it knows when it is up.
+	void WriteTallyShot();
 	// Fold capture-time button presses into the local player's command,
 	// before it is sent (see --capture-fire).
 	void InjectControls(TicCmd_t &cmd);

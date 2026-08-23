@@ -310,23 +310,6 @@ static FString IPaddressToString(IPaddress address)
 	return out;
 }
 
-static FString BuildClientList(bool acked[MAXPLAYERS])
-{
-	FString clients;
-
-	for(unsigned i = 1;i < InitVars.numPlayers;++i)
-	{
-		FString client;
-		if(Client[i].address.host)
-			client.Format("%2u: %-21s %-6s", i, IPaddressToString(Client[i].address).GetChars(), acked[i] ? "Synced" : "");
-		else
-			client.Format("%2u: %-21s %-6s", i, "Waiting...", "");
-
-		clients += FString(i != 1 ? "\n": "") + client;
-	}
-	return clients;
-}
-
 // Returns the player number for a given ip address
 static int FindClient(IPaddress address)
 {
@@ -693,36 +676,25 @@ static void SendReliablePacket(T &packet)
 	}
 }
 
-// A waiting screen has one job beyond waiting: to look unlike a crash.
-//
-// Both of the loops below used to call the status callback once and then sit
-// silent -- the client said "Waiting for sync" and then showed the same six
-// words whether the host was starting up, unreachable, or behind a firewall
-// that would never let the packet through. This gives them a line that moves,
-// a count of the seconds, and eventually a suggestion about why it might not
-// be working. The text is padded to a fixed width because Message() sizes its
-// box to the string and a shrinking box leaves the old one's edges behind, and
-// every line is kept under about thirty-six characters because Message() clamps
-// the box to 310 virtual pixels and simply cuts off whatever will not fit.
-static const char *SpinnerFrame(unsigned int step)
+// A waiting screen has one job beyond waiting: to look unlike a crash. What it
+// takes to do that is a picture that keeps moving and a sentence that says what
+// is being waited for -- neither of which belongs here. This fills in the facts
+// and lets whoever is drawing decide how to show them.
+static void FillPeers(InitStatus &status, const bool acked[MAXPLAYERS])
 {
-	static const char *frames[] = { "-", "\\", "|", "/" };
-	return frames[step & 3];
-}
-
-static FString WaitingStatus(const char *what, unsigned int step,
-	unsigned int seconds, const char *advice)
-{
-	FString out;
-	out.Format("%s %s   %us", SpinnerFrame(step), what, seconds);
-	while(out.Len() < 34)
-		out += ' ';
-	if(advice && seconds >= 10)
+	status.peers.Clear();
+	for(unsigned int i = 1;i < InitVars.numPlayers;++i)
 	{
-		out += "\n";
-		out += advice;
+		InitStatus::Peer peer;
+		peer.name.Format("Player %u", i + 1);
+		if(!Client[i].address.host)
+			peer.state = "waiting";
+		else if(acked[i])
+			peer.state = "ready";
+		else
+			peer.state = IPaddressToString(Client[i].address);
+		status.peers.Push(peer);
 	}
-	return out;
 }
 
 // Every field of a start packet is a number a stranger chose.
@@ -779,23 +751,32 @@ static void StartHost(InitStatusCallback callback)
 
 	// Step 1: Get connection requests from each player
 	Printf("Waiting for %d players:\n   ", InitVars.numPlayers);
-	const uint32_t hostStart = SDL_GetTicks();
-	unsigned int hostSpin = 0;
-	FString hostWhat;
 
-	hostWhat.Format("Waiting for %u players on port %u",
-		(unsigned)InitVars.numPlayers, (unsigned)InitVars.port);
-	callback(WaitingStatus(hostWhat, hostSpin, 0, NULL) + "\n" + BuildClientList(acked));
+	InitStatus status;
+	status.phase = InitStatus::PHASE_Hosting;
+	status.detail.Format("port %u", (unsigned)InitVars.port);
+	status.seconds = 0;
+	FillPeers(status, acked);
+	callback(status);
+
+	const uint32_t hostStart = SDL_GetTicks();
+	uint32_t lastSpin = hostStart;
 	while(nextclient != InitVars.numPlayers)
 	{
-		waitpos = (waitpos+1)%4;
-		Printf("\b\b\b%s", Waiting[waitpos]);
-		fflush(stdout);
+		// Redrawn at something like a frame rate rather than once per socket
+		// poll: a waiting screen that only moves when a packet arrives is a
+		// waiting screen that does not move.
+		status.seconds = (SDL_GetTicks() - hostStart)/1000;
+		FillPeers(status, acked);
+		callback(status);
 
-		++hostSpin;
-		callback(WaitingStatus(hostWhat, hostSpin,
-			(SDL_GetTicks() - hostStart)/1000, NULL)
-			+ "\n" + BuildClientList(acked));
+		if(SDL_GetTicks() - lastSpin >= 400)
+		{
+			lastSpin = SDL_GetTicks();
+			waitpos = (waitpos+1)%4;
+			Printf("\b\b\b%s", Waiting[waitpos]);
+			fflush(stdout);
+		}
 
 		if(SDLNet_UDP_Recv(Socket, Packet))
 		{
@@ -809,7 +790,8 @@ static void StartHost(InitStatusCallback callback)
 				{
 					Printf("[%d] New connection from %u.%u.%u.%u:%u!\n", nextclient, Packet->address.host&0xFF, (Packet->address.host&0xFF00)>>8, (Packet->address.host&0xFF0000)>>16, (Packet->address.host&0xFF000000)>>24, BigShort(Packet->address.port));
 					Client[nextclient++].address = Packet->address;
-					callback(BuildClientList(acked));
+					FillPeers(status, acked);
+					callback(status);
 				}
 
 				Printf("   ");
@@ -817,7 +799,7 @@ static void StartHost(InitStatusCallback callback)
 		}
 		else
 		{
-			SDL_Delay(100);
+			SDL_Delay(16);
 			IN_ProcessEvents();
 		}
 	}
@@ -844,21 +826,32 @@ static void StartHost(InitStatusCallback callback)
 	startData->ByteSwap();
 
 	nextclient = 1;
+	uint32_t lastSend = 0;
 	while(nextclient != InitVars.numPlayers)
 	{
-		// Send off start packet to players who have not acked
-		for(unsigned int i = 1;i < InitVars.numPlayers;++i)
+		// Resent on a clock rather than once per pass, so that the redraw
+		// below can run at a frame rate without turning into a packet flood.
+		if(lastSend == 0 || SDL_GetTicks() - lastSend >= 100)
 		{
-			if(acked[i])
-				continue;
+			lastSend = SDL_GetTicks();
+			// Send off start packet to players who have not acked
+			for(unsigned int i = 1;i < InitVars.numPlayers;++i)
+			{
+				if(acked[i])
+					continue;
 
-			startPacket.address = Client[i].address;
-			startData->playerNumber = i;
+				startPacket.address = Client[i].address;
+				startData->playerNumber = i;
 
-			SDLNet_UDP_Send(Socket, -1, &startPacket);
+				SDLNet_UDP_Send(Socket, -1, &startPacket);
+			}
 		}
 
-		SDL_Delay(100);
+		status.seconds = (SDL_GetTicks() - hostStart)/1000;
+		FillPeers(status, acked);
+		callback(status);
+
+		SDL_Delay(16);
 		IN_ProcessEvents();
 
 		// Look for ack packets
@@ -872,7 +865,8 @@ static void StartHost(InitStatusCallback callback)
 				{
 					acked[client] = true;
 					++nextclient;
-					callback(BuildClientList(acked));
+					FillPeers(status, acked);
+					callback(status);
 				}
 			}
 		}
@@ -907,30 +901,32 @@ static void StartJoin(InitStatusCallback callback)
 	Uint8 requestData[] = {NET_RequestConnection};
 	UDPpacket packet = { -1, requestData, 1, 1, 0, address };
 
-	FString target;
-	target.Format("Connecting to %s", IPaddressToString(address).GetChars());
-	const uint32_t joinStart = SDL_GetTicks();
-	unsigned int spin = 0;
+	InitStatus status;
+	status.phase = InitStatus::PHASE_Joining;
+	status.detail = IPaddressToString(address);
+	status.seconds = 0;
+	callback(status);
 
-	callback(WaitingStatus(target, spin, 0, NULL));
+	const uint32_t joinStart = SDL_GetTicks();
+	uint32_t lastSpin = joinStart, lastRequest = 0;
 	for(;;)
 	{
-		waitpos = (waitpos+1)%4;
-		Printf("\b\b\b%s", Waiting[waitpos]);
-		fflush(stdout);
+		status.seconds = (SDL_GetTicks() - joinStart)/1000;
+		callback(status);
 
-		// Four turns of the spinner a second, which is slow enough that the
-		// screen is not being rebuilt constantly and fast enough to read as
-		// something still happening.
-		++spin;
-		callback(WaitingStatus(target, spin,
-			(SDL_GetTicks() - joinStart)/1000,
-			"No answer yet. Check the address\n"
-			"and the host's port forwarding."));
-
-		// Send request periodically as a heart beat
-		if(waitpos == 0)
+		if(SDL_GetTicks() - lastSpin >= 400)
 		{
+			lastSpin = SDL_GetTicks();
+			waitpos = (waitpos+1)%4;
+			Printf("\b\b\b%s", Waiting[waitpos]);
+			fflush(stdout);
+		}
+
+		// Send request periodically as a heart beat. On a clock, because the
+		// loop below now runs at a frame rate rather than ten times a second.
+		if(lastRequest == 0 || SDL_GetTicks() - lastRequest >= 400)
+		{
+			lastRequest = SDL_GetTicks();
 			SDLNet_UDP_Send(Socket, -1, &packet);
 		}
 
@@ -948,7 +944,23 @@ static void StartJoin(InitStatusCallback callback)
 			{
 				if(!ValidStartPacket(data, Packet->len))
 				{
-					Printf("Rejected a malformed start packet.\n");
+					// Counted and reported at most once a second: somebody
+					// firing these is firing a great many, and a line each
+					// would bury everything else in the log. Flushed, because
+					// this is the one thing here worth reading promptly, and
+					// stdout to a file does not flush itself in time to be
+					// read by anyone wondering what is going on.
+					static uint32_t lastReport = 0;
+					static unsigned int rejected = 0;
+					++rejected;
+					if(lastReport == 0 || SDL_GetTicks() - lastReport >= 1000)
+					{
+						lastReport = SDL_GetTicks();
+						Printf("Rejected %u malformed start packet%s.\n",
+							rejected, rejected == 1 ? "" : "s");
+						fflush(stdout);
+						rejected = 0;
+					}
 					continue;
 				}
 
@@ -972,13 +984,14 @@ static void StartJoin(InitStatusCallback callback)
 		}
 		else
 		{
-			SDL_Delay(100);
+			SDL_Delay(16);
 			IN_ProcessEvents();
 		}
 	}
 
 	Printf("\b\b\bRecieved sync from host! Sending ack...\n");
-	callback("Sync recieved");
+	status.detail = "Synchronised";
+	callback(status);
 
 	// Send ACK and forget, if we're waiting for ticcmd and we get a start, we'll send another ack then.
 	SendAck<StartPacket>(address, 0xFFFFFFFF);

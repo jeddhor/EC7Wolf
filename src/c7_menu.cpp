@@ -10,6 +10,9 @@
 ** virtual space would have quantised it to 320x200 and thrown that away.
 */
 
+#include <math.h>
+#include <SDL.h>
+
 #include "c7_menu.h"
 
 #include "wl_def.h"
@@ -380,6 +383,130 @@ bool C7Menu_Draw(const Menu *menu)
 // draw the menu. The value column already right-aligns it in the right place,
 // in the right font, on the right row, because that is what it does for every
 // other item.
+bool C7Menu_DrawWaiting(const char *heading, const char *detail,
+	const char *note, unsigned int seconds,
+	const C7WaitingRow *rows, int rowCount)
+{
+	if(!C7Menu_Active() || !LoadFonts() || screen == NULL)
+		return false;
+
+	const int labelX = (int)(kLabelX * SCREENWIDTH);
+	const int valueX = (int)(kValueX * SCREENWIDTH);
+	const int ruleW = valueX - labelX;
+
+	DrawBackdrop();
+
+	// The heading sits exactly where a menu's does, so that arriving here from
+	// the setup screen does not move the eye.
+	const int hy = Scaled(96);
+	FString head(heading ? heading : "");
+	head.ToUpper();
+	V_TTDrawText(g_bold, Scaled(30), labelX, hy, head, kWhiteR, kWhiteG, kWhiteB);
+	DrawRule(labelX, hy + Scaled(42), ruleW, Scaled(2));
+
+	int y = Scaled(196);
+
+	if(detail && *detail)
+	{
+		V_TTDrawText(g_regular, Scaled(23), labelX, y, detail,
+			kGreyR, kGreyG, kGreyB);
+		y += Scaled(46);
+	}
+
+	// An indeterminate bar: there is no total to measure against, so it sweeps
+	// rather than fills. A segment a fifth of the width slides across a dim
+	// track and eases at each end, which reads as activity without pretending
+	// to be progress.
+	{
+		const int barH = Scaled(6);
+		const int trackY = y;
+		screen->Clear(labelX, trackY, labelX + ruleW, trackY + barH,
+			ColorMatcher.Pick(38, 34, 26), 0);
+
+		const int segW = ruleW / 5;
+		const double period = 2200.0;
+		double phase = fmod((double)SDL_GetTicks(), period) / period;
+		// Triangle wave, then smoothstepped, so it slows at the turns instead
+		// of snapping back to the left.
+		double sweep = phase < 0.5 ? phase*2.0 : (1.0 - phase)*2.0;
+		sweep = sweep * sweep * (3.0 - 2.0 * sweep);
+		const int segX = labelX + (int)(sweep * (ruleW - segW));
+		screen->Clear(segX, trackY, segX + segW, trackY + barH,
+			ColorMatcher.Pick(kAmberR, kAmberG, kAmberB), 0);
+
+		y += barH + Scaled(34);
+	}
+
+	// Elapsed time, right-aligned in the value column like any other value.
+	{
+		FString elapsed;
+		elapsed.Format("%u:%02u", seconds/60, seconds%60);
+		const int w = V_TTTextWidth(g_regular, Scaled(21), elapsed);
+		V_TTDrawText(g_regular, Scaled(21), valueX - w, Scaled(196),
+			elapsed, kAmberDimR, kAmberDimG, kAmberDimB);
+	}
+
+	for(int i = 0;i < rowCount;++i)
+	{
+		if(rows[i].label == NULL)
+			continue;
+		V_TTDrawText(g_regular, Scaled(21), labelX, y, rows[i].label,
+			kWhiteR, kWhiteG, kWhiteB);
+		if(rows[i].value)
+		{
+			const int w = V_TTTextWidth(g_regular, Scaled(21), rows[i].value);
+			V_TTDrawText(g_regular, Scaled(21), valueX - w, y, rows[i].value,
+				kGreyR, kGreyG, kGreyB);
+		}
+		y += Scaled(32);
+	}
+
+	// The note is wrapped to the column rather than clipped at it. The box this
+	// replaced cut whatever would not fit, which turned the one line explaining
+	// what to check into half a line explaining nothing.
+	if(note && *note)
+	{
+		y += Scaled(18);
+		const int size = Scaled(18);
+		FString word, line;
+		const char *p = note;
+		for(;;)
+		{
+			if(*p && *p != ' ' && *p != '\n')
+			{
+				word += *p++;
+				continue;
+			}
+
+			FString candidate = line.IsEmpty() ? word : line + " " + word;
+			if(!line.IsEmpty() && V_TTTextWidth(g_regular, size, candidate) > ruleW)
+			{
+				V_TTDrawText(g_regular, size, labelX, y, line, kDimR, kDimG, kDimB);
+				y += Scaled(24);
+				line = word;
+			}
+			else
+				line = candidate;
+			word = "";
+
+			if(*p == '\n')
+			{
+				V_TTDrawText(g_regular, size, labelX, y, line, kDimR, kDimG, kDimB);
+				y += Scaled(24);
+				line = "";
+			}
+			if(!*p)
+				break;
+			++p;
+		}
+		if(!line.IsEmpty())
+			V_TTDrawText(g_regular, size, labelX, y, line, kDimR, kDimG, kDimB);
+	}
+
+	VW_UpdateScreen();
+	return true;
+}
+
 bool C7Menu_LineInput(const Menu *menu, MenuItem *item, FString &text,
 	unsigned int maxLength, void (*setValue)(MenuItem *, const FString &))
 {

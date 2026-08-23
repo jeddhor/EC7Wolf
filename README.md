@@ -848,6 +848,7 @@ to it, so:
 
 If a connection never completes, the join screen says so — it shows the address
 it is trying, counts the seconds, and after ten of them suggests what to check.
+A host's screen lists the other players and what each one is doing.
 It is almost always one of: the address is wrong, the host has not forwarded the
 port, or the host is behind a network that cannot accept incoming connections
 at all (mobile tethering and some student or office networks). A player on such

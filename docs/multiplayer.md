@@ -526,6 +526,32 @@ has its own callback now.
 
 ![Waiting for a host that is not there](images/multiplayer-joining.png)
 
+That is the second version of this screen. The first used `Message()`, the
+bitmap window the engine has always used for "press Y to quit", and it was the
+wrong instrument in three separate ways: set in the 320x200 bitmap font while
+every other screen the player had just been looking at was not; sized to its
+text and then clipping whatever exceeded 310 virtual pixels, so the line
+explaining what to check ran off the edge; and repainted only when something
+called it, which made the spinner move in whatever steps the socket poll
+happened to take -- about two and a half distinct frames a second.
+
+The replacement is drawn by the menu shell: same backdrop, same heading over
+the same hairline, same label and value columns, same typeface. The other
+players appear as rows, which is the grammar the setup screen already uses. The
+bar sweeps on wall-clock time rather than on how often it is called, the note
+wraps to the column instead of being cut off at it, and the wait loops poll at
+about 60Hz instead of ten times a second -- measured at 40 redraws a second on
+software rendering.
+
+Worth noting where the fault really was: the network code was building the
+*sentence*. It formatted a spinner, padded the text to stop the box resizing,
+and handed the result to whoever was drawing -- which meant the one place with
+no idea what it was being drawn on was deciding how it looked. `Net::InitStatus`
+carries facts now, and the menu and the command line each present them their
+own way.
+
+
+
 Four things this turned up:
 
 * **An overlay added to `R_DrawPlayViewOverlays` is never drawn.** That

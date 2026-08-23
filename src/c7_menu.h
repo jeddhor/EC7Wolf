@@ -47,6 +47,32 @@ bool C7Menu_FadeColumn(const Menu *menu, bool out);
 bool C7Menu_LineInput(const Menu *menu, class MenuItem *item, class FString &text,
 	unsigned int maxLength, void (*setValue)(class MenuItem *, const class FString &));
 
+// Paints the screen shown while a network game is being connected, in the same
+// shell as the menus: same backdrop, same heading over the same hairline, same
+// label and value columns, same typeface.
+//
+// It is not a menu -- there is nothing to choose and nothing to press -- so it
+// does not go through C7Menu_Draw; but it has to look like one, because it is
+// what the player is looking at between pressing Start and the game beginning.
+//
+// `heading` is set in caps under the rule. `detail` is the line beneath it.
+// `note` is smaller and dimmer, for advice, and may be NULL. `seconds` is shown
+// as a value on the right. `rows` is an optional label/value list -- the other
+// players and what each is doing.
+//
+// The progress bar sweeps on wall-clock time rather than on how often this is
+// called, so it is smooth whatever the caller's loop is doing.
+//
+// Returns false if the shell cannot draw, so the caller can fall back.
+struct C7WaitingRow
+{
+	const char *label;
+	const char *value;
+};
+bool C7Menu_DrawWaiting(const char *heading, const char *detail,
+	const char *note, unsigned int seconds,
+	const C7WaitingRow *rows, int rowCount);
+
 // Drops the cached backdrop. Called on resolution and palette changes, since
 // the backdrop is composited for a specific screen size.
 void C7Menu_Invalidate();

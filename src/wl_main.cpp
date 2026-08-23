@@ -375,8 +375,20 @@ static void CollectGC()
 // business over it. That is right for the eight lines of startup and wrong for
 // the one screen where the game is waiting on somebody else, which without a
 // word on it is indistinguishable from a hang.
-static bool DrawNetworkStatus(FString statusStr)
+static bool DrawNetworkStatus(const Net::InitStatus &status)
 {
+	FString statusStr;
+	if(status.phase == Net::InitStatus::PHASE_Hosting)
+		statusStr.Format("Listening on %s", status.detail.GetChars());
+	else
+		statusStr.Format("Connecting to %s", status.detail.GetChars());
+	statusStr.AppendFormat("   %u:%02u", status.seconds/60, status.seconds%60);
+	for(unsigned int i = 0;i < status.peers.Size();++i)
+	{
+		statusStr.AppendFormat("\n%s: %s",
+			status.peers[i].name.GetChars(), status.peers[i].state.GetChars());
+	}
+
 	const bool hasSignon = !gameinfo.SignonLump.IsEmpty();
 	if(hasSignon)
 		CA_CacheScreen(TexMan(gameinfo.SignonLump));

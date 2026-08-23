@@ -158,7 +158,7 @@ sleep 2
 
 check "it survived being answered with rubbish" alive "$victim_pid"
 
-if grep -q "Rejected a malformed start packet" "$work/victim.log" 2>/dev/null; then
+if grep -q "malformed start packet" "$work/victim.log" 2>/dev/null; then
 	printf '  ok   and rejected the forged start packets by name\n'
 else
 	printf '  FAIL nothing was rejected, so nothing was examined\n'

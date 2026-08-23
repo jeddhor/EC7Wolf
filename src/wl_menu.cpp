@@ -28,6 +28,7 @@
 #include "wl_draw.h"
 #include "wl_game.h"
 #include "wl_net.h"
+#include "c7_menu.h"
 #include "wl_play.h"
 #include "wl_text.h"
 #include "v_palette.h"
@@ -420,12 +421,55 @@ MENU_LISTENER(MultiplayerRoleChanged)
 }
 
 // Net::Init reports progress through this while it waits for the other
-// players. DrawStartupConsole does the same job at startup but is private to
-// wl_main, and a connection begun from the menu should look like the menu
-// rather than like a boot log.
-static bool MultiplayerStatus(FString status)
+// players.
+//
+// It used to hand the string to Message(), the bitmap window the engine has
+// always used for "press Y to quit". That box is the wrong instrument for this
+// in three separate ways: it is set in the 320x200 bitmap font while every
+// other screen the player has just been looking at is not, it sizes itself to
+// its text and then clips whatever exceeds 310 virtual pixels -- so the line
+// explaining what to check ran off the edge -- and it only repaints when
+// something calls it, which made the spinner move in whatever steps the socket
+// poll happened to take. A player who has just come from the setup screen
+// deserves the screen they came from.
+static bool MultiplayerStatus(const Net::InitStatus &status)
 {
-	Message(status.GetChars());
+	const bool hosting = (status.phase == Net::InitStatus::PHASE_Hosting);
+
+	FString detail;
+	if(hosting)
+		detail.Format("Listening on %s", status.detail.GetChars());
+	else
+		detail.Format("Connecting to %s", status.detail.GetChars());
+
+	// Said only once it has been long enough to be worth saying. Before that it
+	// is ordinary waiting and an explanation would be noise.
+	const char *note = NULL;
+	if(status.seconds >= 10)
+	{
+		note = hosting
+			? "Nobody has connected yet. If the other players are not on this "
+			  "network, your router must forward UDP on this port to this "
+			  "machine."
+			: "No answer yet. Check the address, and that the host has "
+			  "forwarded this port to their machine.";
+	}
+
+	C7WaitingRow rows[MAXPLAYERS];
+	int rowCount = 0;
+	for(unsigned int i = 0;i < status.peers.Size() && rowCount < MAXPLAYERS;++i)
+	{
+		rows[rowCount].label = status.peers[i].name.GetChars();
+		rows[rowCount].value = status.peers[i].state.GetChars();
+		++rowCount;
+	}
+
+	if(C7Menu_DrawWaiting(hosting ? "Hosting" : "Joining", detail, note,
+		status.seconds, rows, rowCount))
+		return true;
+
+	// Every other game keeps the box it has always had.
+	Message(detail.GetChars());
 	return true;
 }
 

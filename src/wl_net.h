@@ -40,6 +40,7 @@
 #include "id_in.h"
 #include "wl_def.h"
 #include "zstring.h"
+#include "tarray.h"
 
 // The port the original's successors have used and the one the setup screen
 // offers. Here rather than in the implementation because the menu needs it too.
@@ -47,7 +48,35 @@
 
 namespace Net {
 
-typedef bool (*InitStatusCallback)(FString);
+// What the game is waiting for while it connects, as facts rather than as a
+// sentence.
+//
+// This used to be a preformatted string -- spinner, padding and all -- built in
+// the network code and handed to whatever drew it. That put the presentation in
+// the one place that has no idea what it is being presented on: the menu wanted
+// a panel in the Corridor 7 shell, the command line wanted a line of text on
+// the splash, and a string built for one of them was wrong on the other.
+struct InitStatus
+{
+	enum Phase
+	{
+		PHASE_Joining,	// dialling a host
+		PHASE_Hosting	// listening for players
+	};
+
+	struct Peer
+	{
+		FString name;	// "Player 2"
+		FString state;	// "waiting", an address, "synced"
+	};
+
+	Phase        phase;
+	FString      detail;	// the address being dialled, or the port being held
+	unsigned int seconds;	// since the wait began
+	TArray<Peer> peers;	// hosts only; empty while joining
+};
+
+typedef bool (*InitStatusCallback)(const InitStatus &);
 
 enum Mode
 {

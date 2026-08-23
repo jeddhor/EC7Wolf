@@ -292,6 +292,7 @@ behavior for other games was preserved wherever possible; these are the deltas.
 | [`docs/corridor7-technical-strategy-compendium.pdf`](docs/corridor7-technical-strategy-compendium.pdf) | Evidence-graded research dossier on the original game: mechanics, weapons and actors, map format and object codes, asset containers, executable offsets, and what changed from stock Wolfenstein 3D. Every claim carries an evidence grade, so a confirmed retail behaviour is never mixed up with an inference. It is the reference this port was built against. |
 | [`docs/renderer/`](docs/renderer/) | The renderer redesign, one document per phase — baseline and harness through the OpenGL cutover, hardening and optimization. |
 | [`docs/corridor7-video.md`](docs/corridor7-video.md) | The CD cinematics: what is on the disc, the FLIC format they are in, and how extraction and playback work. |
+| [`docs/multiplayer.md`](docs/multiplayer.md) | Network play, milestone by milestone: what the original had, what the map archive turned out to contain, what was reconstructed and from what evidence, and every wrong turn taken on the way. |
 | [`docs/ci.md`](docs/ci.md) | The gate suite and what CI can and cannot run. |
 
 ---
@@ -801,7 +802,142 @@ Everything else is the same either way:
 | **Enter** | **Cycle visor: Normal → Night Vision → Infrared** |
 | Tab | Corridor 7's inset proximity map |
 | F1 | Full-screen automap |
+| ` (backtick) | Scoreboard, while held — multiplayer only |
 | Esc | Main menu |
+
+---
+
+## Multiplayer
+
+Corridor 7's CD release shipped with network play, and this port brings it
+back — over the internet rather than over IPX or a modem, which is what the
+original had and what nobody now has.
+
+**New Mission → Multiplayer.** The entry sits under a NETWORK heading below the
+rank ladder. The setup screen asks for:
+
+| Row | Who sets it | What it does |
+| --- | --- | --- |
+| **Role** | each player | Host a game, or join one |
+| **Character** | each player | Marine or Eitak warrior — see below |
+| **Server address** | the player joining | `address` or `address:port` |
+| **Port** | each player | The host's listening port; a joiner may leave it alone and put the port in the address instead |
+| **Players** | the host | How many the match waits for before starting |
+| **Game** | the host | Battle, Team battle, or Cooperative |
+| **Frag limit** | the host | Kills that end a match, or None |
+| **Arena** | the host | Which of the eight arenas |
+| **Connection** | the host | How much input delay to hide the round trip behind |
+
+Everything except Role, Character and the address is the host's to decide, and
+travels to everyone when the match starts — including the connection setting,
+which has to be the same on every machine or the two sides disagree about which
+tic a keypress belongs to.
+
+### Hosting, and the part your router is involved in
+
+The host listens on **UDP port 5029** by default. Everyone else connects *out*
+to it, so:
+
+* **The host** must let UDP 5029 through their firewall, and — if they are
+  behind a home router, which is nearly everyone — forward UDP 5029 to their
+  machine. This is the step that stops most games from ever starting.
+* **Everyone joining** needs nothing forwarded and no firewall change. They are
+  making an outgoing connection, which routers already allow.
+* **On a LAN**, or over a VPN like Tailscale or ZeroTier, nothing needs
+  forwarding at either end.
+
+If a connection never completes, the join screen says so — it shows the address
+it is trying, counts the seconds, and after ten of them suggests what to check.
+It is almost always one of: the address is wrong, the host has not forwarded the
+port, or the host is behind a network that cannot accept incoming connections
+at all (mobile tethering and some student or office networks). A player on such
+a network has to be the one who joins, not the one who hosts.
+
+### The connection setting
+
+Lockstep is what makes this work at all and also what makes it hard: the game
+cannot simulate a tic until it has everyone's input for it, and Corridor 7 runs
+at 70 tics a second. Waiting for a reply between every one of those would need
+a round trip inside 14 milliseconds, which no internet connection has.
+
+So commands are stamped for a tic some way ahead and the game runs on commands
+sent that many tics ago, which gives the round trip that whole window to arrive
+in. **Connection** chooses the window:
+
+| Setting | Delay | For |
+| --- | --- | --- |
+| Same building | none | A LAN, where the round trip already fits in a tic |
+| Good | 6 tics | A fast connection, same country |
+| Average | 10 tics | The usual internet |
+| Poor | 16 tics | A long way, or a bad line |
+
+More delay costs responsiveness and buys tolerance. Measured over a link with
+an 80 ms round trip and 2% packet loss, a match runs at about 8 tics a second
+with no delay and about 21 with it.
+
+### Marine or alien
+
+The manual says players may select the Marine or the alien class, "with
+different health, speed, and damage characteristics", and gives no numbers for
+any of the three. The Marine is the campaign's; the alien is **Eitak**, the
+game's primary alien-world guard.
+
+| | Marine | Eitak warrior |
+| --- | --- | --- |
+| Health | 100 | 150 |
+| Speed | full | four fifths |
+| Starts with | M-24 C.A.W. and standard ammunition | Dual Blaster and alien energy |
+
+The weapon split is the documented part: the official guide gives weapons 1–4
+to the human and 5–8 to the alien, drawing on two separate ammunition pools.
+The health and speed figures are a reconstruction, and
+[docs/multiplayer.md](docs/multiplayer.md) says exactly which parts were
+inferred and from what.
+
+### Team play
+
+In Team battle your team **is** your character: everyone playing the Marine is
+on one side and everyone playing the alien on the other, players on the same
+side cannot damage one another, and their kills are counted together against
+the frag limit. That is the original's rule, not an invention.
+
+### The arenas
+
+Eight of them. The manual claims ten and the compendium places them at internal
+levels 51–58; the map archive agrees with neither. Two of the maps in that
+range are empty boxes, and the eighth real arena sits at level 60 under the
+name the archive gives it, "Network Lvl 8". The menu offers the eight that
+exist.
+
+### While you are playing
+
+Hold **`** (backtick) for the scoreboard — Tab is Corridor 7's floor map, so
+the key most shooters use is already taken. The SCORE box on the status bar
+counts frags rather than points in a deathmatch. When a frag limit is reached
+the standings come up on the high-score page's backdrop for ten seconds, then
+the next round starts on the same arena.
+
+### What is not here, and what is still rough
+
+IPX, modem and serial play, matchmaking, and any kind of server browser. You
+type an address, as the original's successors did.
+
+Two rough edges, measured rather than guessed at:
+
+* **Starting a match on a bad line can fail.** The exchange that begins a level
+  has no tolerance for a lost packet once the other player has moved on; at 5%
+  packet loss about half of connections do not complete. If a match will not
+  start, try again — and if it keeps failing, the game now prints which player
+  it is waiting on and whether it is waiting to be heard or to hear.
+* **A player who quits mid-match freezes the others.** They are waiting for a
+  tic that is never coming. It says so, every few seconds, naming the player.
+  Nobody is dropped automatically, because every remaining machine would have
+  to drop them in the same tic or the games diverge — which is a worse failure
+  than waiting.
+
+Neither affects a match already running on a decent connection.
+[`docs/multiplayer.md`](docs/multiplayer.md) has the measurements, and the
+record of one attempted fix that made the first of these four times worse.
 
 ---
 
@@ -823,6 +959,9 @@ The `tools/` directory carries the harnesses used to keep the port honest:
 | `test_corridor7.sh` | Repeatable development smoke test. |
 | `validate_corridor7_maps.sh` | Load-check campaign / bonus / archive maps. |
 | `test_corridor7_release_startup.sh` | Verify a packaged release boots title → menu → MAP01. |
+| `test_multiplayer_*.sh` | Network play: two or three instances on loopback, compared tic for tic. Loopback determinism, latency and loss, the menu path, the arenas and their starts, the rules, the classes, the screens, and a battery of malformed packets fired at both ends. |
+| `netdelay.py` | A UDP relay that adds delay, jitter and loss, so the latency gate can test an internet-shaped link without root or `tc`. |
+| `netfuzz.py` | The malformed-packet battery: empty, truncated, oversized, mistyped and lying datagrams, fixed rather than random so a failure can be reproduced. |
 
 ```sh
 tools/run_gates.sh                 # everything
@@ -845,9 +984,19 @@ pain-chance, damage, and frame-timing constants remain **evidence-based
 reconstructions** where the retail executable did not yield an unambiguous value.
 The victory *page* after the ending is the port's own rendering rather than a
 reproduction of the original's — but the **ending cinematic itself now plays**,
-from `SEQFOUR.CO7` on the CD, which this once listed as missing. Multiplayer, the
-network protocol, original demos, and non-CD executable editions are **not**
-supported — this port targets the **250,776-byte CD/Steam executable family**.
+from `SEQFOUR.CO7` on the CD, which this once listed as missing.
+
+**Multiplayer now works, but it is not the original's multiplayer.** You can
+play over the internet against another copy of this port; you cannot play
+against a DOS copy, because none of the original's IPX or modem protocol is
+reproduced — the transport is ECWolf's, over UDP. The arenas, the two
+characters and the team rule are the original's; the numbers behind the alien
+class are a reconstruction, since the manual names three characteristics and
+gives a figure for none of them. [`docs/multiplayer.md`](docs/multiplayer.md)
+sets out which parts are evidence and which are inference.
+
+Original demos and non-CD executable editions are **not** supported — this port
+targets the **250,776-byte CD/Steam executable family**.
 
 Full detail, including which specific values are reconstructed, lives in
 [`docs/corridor7.md`](docs/corridor7.md).

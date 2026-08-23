@@ -1,11 +1,28 @@
 # Multiplayer
 
-Corridor 7's CD release shipped multiplayer, and this port has never exposed
-it. ECWolf, which this forks, has a working network implementation that has
-never been reachable from the Corridor 7 menu. Both halves exist; nothing joins
-them, and one of them cannot survive the internet in its present form.
+Corridor 7's CD release shipped multiplayer, and this port did not expose it.
+ECWolf, which this forks, has a working network implementation that was never
+reachable from the Corridor 7 menu. Both halves existed; nothing joined them,
+and one of them could not survive the internet in its present form.
 
-This is the plan to fix that.
+**All eight milestones below are done.** You can host or join from the menu,
+over the internet, on any of the eight arenas, as the Marine or as the alien,
+free-for-all or in teams, with a scoreboard and a frag limit.
+
+What follows is the plan as it was written, with each milestone's outcome
+recorded underneath it -- including the several places where the plan turned
+out to be wrong about the game, and the places where a fix made things worse
+and was dropped. Those are the useful part. A milestone that went exactly as
+written teaches nobody anything.
+
+Two things it does **not** do, stated here rather than at the end:
+
+* It does not talk to a DOS copy. None of the original's IPX or modem protocol
+  is reproduced; the transport is ECWolf's, over UDP.
+* The exchange that starts a level is still fragile on a lossy link -- about
+  half of connections complete at 5% packet loss -- and a player who leaves
+  mid-match freezes the others rather than being dropped. Both are written up
+  under M7, with measurements.
 
 ---
 
@@ -526,7 +543,7 @@ Four things this turned up:
 * Two instances must not both stop at the same capture frame: whichever quits
   first leaves the other waiting on a player who has gone.
 
-### M7 — Hardening
+### M7 — Hardening — **done**
 
 * Malformed and hostile packets rejected rather than trusted — this is a socket
   open to the internet, and the current code reads structures straight off it.
@@ -537,24 +554,96 @@ Four things this turned up:
 *Exit:* a gate that fires malformed, truncated and oversized packets at a host
 and requires it to survive them; the whole suite green.
 
-Standing against this milestone, found earlier and not yet fixed:
+**Done**, with one item deliberately left standing and written up below rather
+than papered over.
 
-* **The handshake is the fragile part, not the tic path.** `Net::NewGame` and
-  `Net::Init` exchange with a synchronous `ExchangePacket` that has no delay
-  window to hide a round trip in, so a lost packet there costs the whole
-  connection rather than a tic. At 5% loss it regularly fails to complete. Once
-  a match is running the delayed path rides out the same link.
-* The latency gate stalls occasionally at 2% loss -- twice in a day's runs,
-  taking about 180 seconds and finishing a few tics short, against 32 seconds
-  and a clean pass otherwise. Same cause as above, and worth a retry rather
-  than a mystery when it happens.
+#### What was actually reachable from a forged packet
 
-  It used to report that stall as *"the two sides diverged"*, because it
-  compared the two checksum logs whole and a truncated run is missing its tail.
-  That is the most alarming thing this gate can say and it was saying it about
-  a link problem. It now judges agreement on the tics both sides actually
-  simulated and reports falling short separately, so a real desync still fails
-  the gate and a stall no longer impersonates one.
+`CheckPacketType` proves a datagram is at least `sizeof(T)` and carries the
+right type byte. That is enough for every fixed-size packet and not enough for
+the start packet, which ends in a client array whose length is declared by a
+byte *inside* the packet -- so the size of the struct was never the size that
+mattered. From one forged datagram, before this milestone:
+
+* `numPlayers` up to 255, walking `Client[MAXPLAYERS]` off the end of itself
+  and **writing** as it went.
+* `playerNumber` up to 255, becoming an index into `players[]`.
+* a `gameMode` outside its enum, and a tic delay large enough to swamp the
+  extratics ring.
+* `ArgS[256]` in a debug command with no terminator anywhere in it, handed
+  straight to `FString`, which reads off the end of the datagram looking for
+  one.
+
+A client sitting on a join screen is the most exposed the game ever is: an open
+socket, waiting, willing to believe the first thing that answers. It now
+believes only the host it dialled, and only after the contents have been
+checked against the length actually received.
+
+Two things that are *not* defects and are worth saying so:
+
+* **A host waiting for players will accept a connection request from anyone.**
+  That is what hosting means, and a bare `0x00` byte is a well-formed request.
+  The gate leaves those out when shooting at a waiting host, because proving
+  that somebody can join proves nothing.
+* **Movement fields are unbounded on the wire but bounded by their reader** --
+  `wl_agent.cpp` clamps `controly` to ±100 before using it, so a peer sending
+  nonsense moves absurdly rather than dangerously.
+
+#### The exchange that starts a level, which is still fragile
+
+`Net::NewGame` exchanges the map and difficulty with a synchronous
+`ExchangePacket`: every player sends, every player waits for everyone else's
+packet *and* for everyone else to acknowledge its own. There is no delay window
+to hide a round trip in, and no recovery once a peer has left the exchange.
+
+**Measured at 5% loss and an 80 ms round trip: six connections in twelve
+complete.** The rest hang before the level loads. Once a match is running the
+delayed tic path rides out the same link without trouble; this is the minute
+before that.
+
+A stuck exchange used to say nothing whatever -- the game simply stopped. It
+now reports, every three seconds, which player it is waiting on and which half
+it is waiting for, because those fail for different reasons: *no packet* means
+theirs is not arriving, *no ack* means ours is not.
+
+**An attempted fix made it markedly worse, and is recorded here so that nobody
+tries it again without measuring.** A player leaves the exchange as soon as it
+has everyone's packet and everyone has acked its own -- which says nothing
+about whether its own ack arrived. If that ack is lost, the player it was owed
+to waits for ever, resending a packet the sender no longer recognises:
+`HandleCommandPackets` knows `StartPacket` and re-acks it, and did not know
+`NewGamePacket`. Teaching it to re-ack that too is the obvious symmetry, it is
+what the start packet already does, and measured over twelve connections each
+way it took the success rate from **6 in 12 down to 1 in 12**. The reason is
+not yet understood. It is not in the tree.
+
+Fixing this properly means reworking the exchange so that leaving it is
+negotiated rather than assumed, which is a larger change than hardening and
+wants its own measurements. Until then: a connection that does not complete
+should be retried, and the diagnostic says which end to look at.
+
+#### And a player who leaves takes everyone with them
+
+The same shape of problem, one layer up. The delayed tic exchange assembles a
+tic from every player's commands and will wait for ever for one that is never
+coming -- so a player who quits, crashes or walks out of wireless range leaves
+everybody else frozen, in silence.
+
+It now says so, every three seconds, naming the player it is waiting on. It
+does not act on it, and that is deliberate: dropping a player is a decision
+every remaining machine would have to reach in the *same tic* or they diverge
+from each other, which is a worse failure than waiting. Doing it properly means
+a vote, or an arbiter with the authority to declare somebody gone, and that is
+a design rather than a patch.
+
+The same stall is what makes the latency gate intermittent -- at 2% loss it
+hits perhaps one run in three, because both instances stop at a fixed tic count
+and whichever finishes first stops answering the other. That gate now retries
+the delayed run once and says when it did. What it is there to prove is that
+input delay keeps a match in sync and makes it several times faster, and a link
+that stalled answers neither question; a real regression still fails both
+attempts.
+
 
 ---
 
@@ -567,6 +656,27 @@ Standing against this milestone, found earlier and not yet fixed:
 
 ## Risks, honestly
 
+Written before any of it was built. Kept as written, with what actually
+happened in the last column.
+
+| Risk | Why it matters | What reduces it | How it turned out |
+| --- | --- | --- | --- |
+| Lockstep over the internet | The entire feature is unplayable without M1 | M1 is first, and its gate is latency and loss, not loopback | Solved. 8 tics/sec to 21 on an 80 ms link |
+| Desync | Silent, and fatal; two players simply diverge | The determinism harness already exists and every milestone's gate uses it | Never happened once in the tic path. Every gate compares tic for tic |
+| Text entry in the Corridor 7 shell | The one part of M2 that is not assembly | Fall back to the engine's own menu style for that one field if it proves stubborn | Needed the fallback's opposite: the shell draws the field, the engine's own version drew it in the wrong place entirely |
+| Alien class fidelity | §9.5 gives characteristics, not numbers | Treat as an evidence-based reconstruction and say so, as the port does elsewhere | Done that way. The weapon split turned out to be documented; health and speed are not |
+| Nobody to test with | Two machines and a person at each | Every gate is two local instances; a real session between two houses is the acceptance test, not the development loop | Still true. Everything here was proven on loopback and a simulated link; nobody has yet played it between two houses |
+
+The risk that was not on this list is the one that cost the most: **the plan
+was wrong about the game more often than the code was wrong about the plan.**
+The arenas are not where the documentation says. The Marine had no body. There
+were no placed multiplayer starts to be random about. Frags were not on the HUD
+after M4 said they were. Each of those was found by building the thing and
+looking at it, not by reading.
+
+<details>
+<summary>The original risk table, before the last column was added</summary>
+
 | Risk | Why it matters | What reduces it |
 | --- | --- | --- |
 | Lockstep over the internet | The entire feature is unplayable without M1 | M1 is first, and its gate is latency and loss, not loopback |
@@ -574,3 +684,5 @@ Standing against this milestone, found earlier and not yet fixed:
 | Text entry in the Corridor 7 shell | The one part of M2 that is not assembly | Fall back to the engine's own menu style for that one field if it proves stubborn |
 | Alien class fidelity | §9.5 gives characteristics, not numbers | Treat as an evidence-based reconstruction and say so, as the port does elsewhere |
 | Nobody to test with | Two machines and a person at each | Every gate is two local instances; a real session between two houses is the acceptance test, not the development loop |
+
+</details>

@@ -454,7 +454,11 @@ static void HandleCommandPackets()
 		DebugCmd cmd;
 		cmd.Type = static_cast<EDebugCmd>(data->CommandType);
 		cmd.ArgI = data->ArgI;
-		cmd.ArgS = data->ArgS;
+		// ArgS is a fixed 256 bytes in the packet and nothing obliges a sender
+		// to put a terminator in it. Handing that straight to FString reads off
+		// the end of the datagram looking for one.
+		cmd.ArgS = FString(data->ArgS,
+			strnlen(data->ArgS, sizeof(data->ArgS)));
 		DoDebugKey(client, cmd);
 	}
 	else if(CheckPacketType<EndGamePacket>(Packet))
@@ -505,8 +509,31 @@ static void ExchangePacket(T (&packets)[MAXPLAYERS])
 	// resend our packet in case it got lost.
 	unsigned int resend = 0;
 	bool waiting = false;
+	// A synchronous exchange that cannot finish used to say nothing whatever:
+	// the game simply stopped, with no indication of which player it was
+	// waiting on or whether it was waiting to be heard or to hear. Both halves
+	// matter, because they fail for different reasons -- a missing ack means
+	// our packet is not arriving, a missing packet means theirs is not.
+	unsigned int stuckFor = 0;
 	while(numAcked != InitVars.numPlayers || numReceived != InitVars.numPlayers)
 	{
+		if(++stuckFor % 3000 == 0)
+		{
+			FString missing;
+			for(unsigned int i = 0;i < InitVars.numPlayers;++i)
+			{
+				if(i == (unsigned)ConsolePlayer)
+					continue;
+				if(!received[i])
+					missing.AppendFormat(" %u(no packet)", i + 1);
+				else if(!acked[i])
+					missing.AppendFormat(" %u(no ack)", i + 1);
+			}
+			Printf("Still exchanging tic %d after %us, waiting on:%s\n",
+				(int)gamestate.TimeCount, stuckFor/1000,
+				missing.IsEmpty() ? " nobody -- which should be impossible" :
+					missing.GetChars());
+		}
 		if(resend == 0)
 		{
 			for(unsigned int i = 0;i < InitVars.numPlayers;++i)
@@ -698,6 +725,43 @@ static FString WaitingStatus(const char *what, unsigned int step,
 	return out;
 }
 
+// Every field of a start packet is a number a stranger chose.
+//
+// CheckPacketType only proves the packet is at least sizeof(T) and carries the
+// right type byte. That is enough for the fixed-size packets and not enough for
+// this one, which ends in a client array whose length is declared by a byte
+// inside the packet -- so the size that matters is not the size of the struct.
+//
+// What the unchecked version allowed, from one forged UDP datagram: numPlayers
+// up to 255 walking Client[MAXPLAYERS] off the end of itself and writing as it
+// went, playerNumber up to 255 becoming an index into players[], a gameMode
+// outside the enum, and a tic delay large enough to swamp the extratics ring.
+// A client sitting on a "waiting for sync" screen is the most exposed the game
+// ever is: it is holding an open socket, it has told nobody where it is, and
+// it will believe the first thing that answers.
+static bool ValidStartPacket(const StartPacket *data, int len)
+{
+	if(data->numPlayers < 1 || data->numPlayers > MAXPLAYERS)
+		return false;
+	if(data->playerNumber >= data->numPlayers)
+		return false;
+	if(data->gameMode > GM_TeamBattle)
+		return false;
+	// The delayed path stamps commands this far ahead and holds them in a ring
+	// of MAXEXTRATICS; half of that leaves room for the tics still in flight.
+	if(data->ticDelay > MAXEXTRATICS/2)
+		return false;
+
+	// The array the packet says it has, rather than the one the struct
+	// declares: sizeof(StartPacket) counts none of it.
+	const size_t needed =
+		sizeof(StartPacket) + sizeof(StartPacket::Client)*(data->numPlayers - 1);
+	if(len < 0 || (size_t)len < needed)
+		return false;
+
+	return true;
+}
+
 static void StartHost(InitStatusCallback callback)
 {
 	unsigned int waitpos = 0;
@@ -706,6 +770,12 @@ static void StartHost(InitStatusCallback callback)
 
 	if(!(Socket = SDLNet_UDP_Open(InitVars.port)))
 		throw CFatalError("Could not open UDP socket.");
+
+	// --host takes whatever number it is given, and Client[] holds MAXPLAYERS.
+	if(InitVars.numPlayers < 1)
+		InitVars.numPlayers = 1;
+	if(InitVars.numPlayers > MAXPLAYERS)
+		InitVars.numPlayers = MAXPLAYERS;
 
 	// Step 1: Get connection requests from each player
 	Printf("Waiting for %d players:\n   ", InitVars.numPlayers);
@@ -868,8 +938,20 @@ static void StartJoin(InitStatusCallback callback)
 		if(SDLNet_UDP_Recv(Socket, Packet))
 		{
 			const StartPacket *data = reinterpret_cast<StartPacket *>(Packet->data);
+			// Only from the host actually dialled. Without this the client
+			// takes its player number, its player count and the addresses of
+			// everyone else in the game from whoever answers first.
+			if(Packet->address.host != address.host ||
+				Packet->address.port != address.port)
+				continue;
 			if(CheckPacketType<StartPacket>(Packet))
 			{
+				if(!ValidStartPacket(data, Packet->len))
+				{
+					Printf("Rejected a malformed start packet.\n");
+					continue;
+				}
+
 				ConsolePlayer = data->playerNumber;
 				InitVars.numPlayers = data->numPlayers;
 				InitVars.gameMode = static_cast<GameMode>(data->gameMode);
@@ -1210,8 +1292,28 @@ static void ExchangeDelayedTicCmds(TicCmdPacket (&packets)[MAXPLAYERS])
 	// already holds every command for the tic about to run.
 	unsigned int resend = 0;
 	bool waiting = false;
+	// A tic that cannot be assembled used to stop the game in silence. It has
+	// two quite different causes and the player deserves to be told which:
+	// packets are being lost on a link bad enough to outrun the resends, or a
+	// player has gone and is never going to send anything again. Nothing here
+	// acts on it -- dropping a player is a decision every machine would have to
+	// take in the same tic or they diverge -- but a game that has stopped
+	// should at least say what it has stopped on.
+	unsigned int stuckFor = 0;
 	for(;;)
 	{
+		if(++stuckFor % 3000 == 0)
+		{
+			FString missing;
+			for(unsigned int i = 0;i < InitVars.numPlayers;++i)
+			{
+				if(i != (unsigned)ConsolePlayer && !have[i])
+					missing.AppendFormat(" %u", i + 1);
+			}
+			Printf("Waiting %us for tic %u from player%s\n",
+				stuckFor/1000, (unsigned)(TicSeq + 1), missing.GetChars());
+		}
+
 		while(SDLNet_UDP_Recv(Socket, Packet))
 		{
 			if(CheckPacketType<TicCmdPacket>(Packet))

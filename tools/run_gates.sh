@@ -98,6 +98,7 @@ multiplayer_rules
 multiplayer_classes
 multiplayer_presentation
 multiplayer_hostile
+multiplayer_setup
 gl_world
 gl_frame
 gl_live

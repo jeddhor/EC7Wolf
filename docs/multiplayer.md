@@ -622,6 +622,39 @@ negotiated rather than assumed, which is a larger change than hardening and
 wants its own measurements. Until then: a connection that does not complete
 should be retried, and the diagnostic says which end to look at.
 
+#### Pressing Start on a screen nobody has typed in
+
+Found by a person on a Linux box rather than by any of this, which is the wrong
+way round for a milestone called hardening.
+
+The setup screen opens with Role on "Join a game" and the address empty --
+exactly the state a player is in the first time they open it. Pressing Start
+there killed the process outright, and so did setting Role to "Host a game" and
+pressing Start, which is what somebody hosting for the first time does and has
+no address to type.
+
+Two faults, one on top of the other:
+
+* `StartMultiplayer` read and trimmed the address *before* it consulted the
+  role, so hosting went through the address handling too, despite a host never
+  having one.
+* `FString::StripLeftRight` walks off the end of an empty string. `j` is a
+  `size_t`, so `j = max - 1` on a length of zero is `SIZE_MAX`, the `j >= i`
+  that follows is true, and the copy loop then writes its way up the address
+  space until glibc stops it. Both overloads had it. Nothing in the engine had
+  ever called it on a string that might be empty, so it sat there unnoticed.
+
+The second is the real one and is fixed in `FString` rather than at the call
+site, since it was a trap laid for every future caller. The gate is
+`multiplayer_setup`: one instance, no network, two keypresses -- press Start on
+an untouched screen, then press it again as a host -- and it must survive both,
+end up actually listening, and abort nowhere. Verified to fail without the
+`FString` guard.
+
+Worth noting what let this through: every gate up to here typed an address in,
+because every gate was written to exercise the thing working. None of them
+tried the screen the way somebody sees it first.
+
 #### And a player who leaves takes everyone with them
 
 The same shape of problem, one layer up. The delayed tic exchange assembles a

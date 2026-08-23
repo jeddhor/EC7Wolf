@@ -680,6 +680,13 @@ void FString::StripRight (const char *charset)
 void FString::StripLeftRight ()
 {
 	size_t max = Len(), i, j, k;
+	// An empty string has nothing to strip, and saying so is not merely
+	// tidy: j is a size_t, so "j = max - 1" on an empty string is SIZE_MAX,
+	// the j >= i that follows is true, and the copy loop below then walks
+	// the whole address space writing as it goes. glibc catches it as a
+	// buffer overflow and aborts the process.
+	if (max == 0)
+		return;
 	for (i = 0; i < max; ++i)
 	{
 		if (!isspace(Chars[i]))
@@ -716,6 +723,9 @@ void FString::StripLeftRight (const FString &charset)
 void FString::StripLeftRight (const char *charset)
 {
 	size_t max = Len(), i, j, k;
+	// See the note in the no-argument version above.
+	if (max == 0)
+		return;
 	for (i = 0; i < max; ++i)
 	{
 		if (!strchr (charset, Chars[i]))

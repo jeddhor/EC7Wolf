@@ -433,6 +433,9 @@ MENU_LISTENER(StartMultiplayer)
 {
 	const bool joining = (mpRoleItem != NULL && mpRoleItem->getCurrentOption() == 1);
 
+	// Only a player joining has an address to read, and a host's is empty by
+	// definition -- so this used to run over an empty string on the way to
+	// hosting as well as on the way to a mistyped join.
 	FString address = mpAddressItem ? mpAddressItem->getValue() : "";
 	address.StripLeftRight();
 	if(joining && address.IsEmpty())

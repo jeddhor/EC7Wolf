@@ -41,7 +41,20 @@ public class AppSettings {
 
 	public static void resetBaseDir(Context ctx)
 	{
-		belokoBaseDir  =  Environment.getExternalStorageDirectory().toString() + "/Beloko";
+		// App-specific external storage rather than /sdcard/Beloko.
+		//
+		// getExternalStorageDirectory() was fine when this was written and is
+		// useless now: under scoped storage, which applies to every app
+		// targeting a modern SDK, an app cannot read or write there. This
+		// directory needs no permission on any Android version, survives
+		// upgrades, and is reachable from a computer over USB and from the
+		// phone's own Files app -- so a person can still put the game data in
+		// it, which is the whole point of it being outside the app.
+		//
+		// It is Android/data/<package>/files on the shared volume.
+		java.io.File external = ctx.getExternalFilesDir(null);
+		belokoBaseDir = (external != null ? external.toString()
+			: ctx.getFilesDir().toString());
 		setStringOption(ctx, "base_path", belokoBaseDir);
 	}
 

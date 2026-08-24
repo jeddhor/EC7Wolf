@@ -93,8 +93,11 @@ public class LaunchFragment extends Fragment{
 			@Override
 			public void onClick(View v) {
 				String missingFiles;
-				if ((missingFiles = Utils.checkFiles(fullBaseDir , new String[] {"ecwolf.pk3"})) != null)
-					Utils.copyAsset(getActivity(), "ecwolf.pk3", fullBaseDir);
+				// ec7wolf.pk3, not ecwolf.pk3: that is what this fork builds and what
+				// the APK carries in its assets. Asking for the other name copies
+				// nothing and the game starts with no data at all.
+				if ((missingFiles = Utils.checkFiles(fullBaseDir , new String[] {"ec7wolf.pk3"})) != null)
+					Utils.copyAsset(getActivity(), "ec7wolf.pk3", fullBaseDir);
 				startGame(fullBaseDir);
 			}
 		});
@@ -130,7 +133,7 @@ public class LaunchFragment extends Fragment{
 		//File ecwolfpk3 = new File(base + "/ecwolf.pk3"  );
 		//if (!ecwolfpk3.exists())
 		{
-			Utils.copyAsset(getActivity(),"ecwolf.pk3",base);
+			Utils.copyAsset(getActivity(),"ec7wolf.pk3",base);
 		}
 
 

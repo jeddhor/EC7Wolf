@@ -1,7 +1,7 @@
 #ifndef __R_GLDEVICE_H__
 #define __R_GLDEVICE_H__
 
-#include <epoxy/gl.h>
+#include "render/opengl/r_glcompat.h"
 struct SDL_Window;
 typedef void *SDL_GLContext;
 

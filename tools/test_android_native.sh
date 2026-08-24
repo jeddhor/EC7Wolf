@@ -93,7 +93,26 @@ for abi in arm64-v8a x86_64; do
 		status=1
 	fi
 
-	# 4. Built against an API the device will run. The NDK records it in
+	# 4. The OpenGL backend is in there.
+	#
+	# The goal is parity: what works on a desktop works on the phone. The build
+	# is arranged to fall back to the software renderer when GL cannot be
+	# found, which is the right behaviour and also a silent one -- a missing
+	# GLES library or a stray find_package would produce a working build that
+	# had quietly lost the renderer. Two ways of asking, because either alone
+	# can be satisfied by accident.
+	if "$READELF" -d "$so" | grep -q "libGLESv3.so"; then
+		printf '  ok   it links GLES v3\n'
+	else
+		printf '  FAIL no GLES: this has fallen back to the software renderer\n'
+		status=1
+	fi
+	glsyms=$("$NM" --defined-only "$so" 2>/dev/null | grep -ciE "GLWorld|GLRenderer|GLPalette" || true)
+	[ -n "$glsyms" ] || glsyms=0
+	printf '  ..   %s OpenGL backend symbols\n' "$glsyms"
+	check "the OpenGL backend was compiled in" test "$glsyms" -gt 0
+
+	# 5. Built against an API the device will run. The NDK records it in
 	#    .note.android.ident, and llvm-readelf prints that note as raw bytes
 	#    rather than as fields -- the API level is the first of them, little
 	#    endian, so 21 appears as "15 00 00 00". Parsed rather than pattern

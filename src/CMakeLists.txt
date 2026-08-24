@@ -372,26 +372,44 @@ if(ECWOLF_RENDERER_SOFTWARE)
 	target_compile_definitions(engine PRIVATE ECWOLF_RENDERER_SOFTWARE=1)
 endif()
 if(ECWOLF_RENDERER_OPENGL)
-	# Desktop OpenGL with libepoxy for function loading (no init call needed).
-	# Disable gracefully rather than failing the build if the dependency is
-	# absent, so the software renderer always builds.
-	find_package(OpenGL)
-	find_path(EPOXY_INCLUDE_DIR epoxy/gl.h)
-	find_library(EPOXY_LIBRARY NAMES epoxy)
-	if(OPENGL_FOUND AND EPOXY_LIBRARY AND EPOXY_INCLUDE_DIR)
+	set(ECWOLF_GL_SOURCES
+		render/opengl/r_glcompat.cpp
+		render/opengl/r_gldevice.cpp
+		render/opengl/r_glshader.cpp
+		render/opengl/r_glpalette.cpp
+		render/opengl/r_glworld.cpp
+		render/opengl/r_glxbrz.cpp
+		render/opengl/r_glrenderer.cpp
+	)
+
+	if(ANDROID)
+		# The same renderer, against OpenGL ES 3.0. There is no loader to find:
+		# Android links the entry points directly, so libepoxy has nothing to
+		# do and is not looked for. render/opengl/r_glcompat.h supplies the two
+		# epoxy functions the backend uses and the version directive its
+		# shaders need.
+		#
+		# Everything the backend asks for is in core GLES 3.0 -- of sixty-five
+		# distinct entry points, only glDebugMessageCallback is not, and that
+		# is a development aid compiled out there.
 		target_compile_definitions(engine PRIVATE ECWOLF_RENDERER_OPENGL=1)
-		target_include_directories(engine PRIVATE ${EPOXY_INCLUDE_DIR})
-		target_link_libraries(engine PRIVATE OpenGL::GL ${EPOXY_LIBRARY})
-		target_sources(engine PRIVATE
-			render/opengl/r_gldevice.cpp
-			render/opengl/r_glshader.cpp
-			render/opengl/r_glpalette.cpp
-			render/opengl/r_glworld.cpp
-			render/opengl/r_glxbrz.cpp
-			render/opengl/r_glrenderer.cpp
-		)
+		target_link_libraries(engine PRIVATE GLESv3 EGL)
+		target_sources(engine PRIVATE ${ECWOLF_GL_SOURCES})
 	else()
-		message(WARNING "ECWOLF_RENDERER_OPENGL requested but OpenGL/libepoxy not found; building without the OpenGL backend.")
+		# Desktop OpenGL with libepoxy for function loading (no init call needed).
+		# Disable gracefully rather than failing the build if the dependency is
+		# absent, so the software renderer always builds.
+		find_package(OpenGL)
+		find_path(EPOXY_INCLUDE_DIR epoxy/gl.h)
+		find_library(EPOXY_LIBRARY NAMES epoxy)
+		if(OPENGL_FOUND AND EPOXY_LIBRARY AND EPOXY_INCLUDE_DIR)
+			target_compile_definitions(engine PRIVATE ECWOLF_RENDERER_OPENGL=1)
+			target_include_directories(engine PRIVATE ${EPOXY_INCLUDE_DIR})
+			target_link_libraries(engine PRIVATE OpenGL::GL ${EPOXY_LIBRARY})
+			target_sources(engine PRIVATE ${ECWOLF_GL_SOURCES})
+		else()
+			message(WARNING "ECWOLF_RENDERER_OPENGL requested but OpenGL/libepoxy not found; building without the OpenGL backend.")
+		endif()
 	endif()
 endif()
 if(ECWOLF_RENDERER_VULKAN)

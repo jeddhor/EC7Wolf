@@ -9,6 +9,12 @@ Nothing about the *game* is the obstacle. The engine is ours and already knows
 Corridor 7; the pieces that have rotted are all on the Android side of the
 fence. This is the plan to bring them back and put Corridor 7 on a phone.
 
+**The goal is parity.** Everything that works on desktop Linux and Windows
+works on Android -- including the OpenGL renderer, which is the point of having
+written it. A modern phone has a GPU that will not notice this workload; giving
+it the software renderer because the port was easier that way would be a
+strange thing to do on purpose.
+
 ---
 
 ## What is already true
@@ -43,13 +49,12 @@ without touching the engine.
 already a game this engine knows, so nothing about game *identification* should
 need Android-specific work.
 
-**The renderer question answers itself.** Our OpenGL backend is compiled only
-when desktop OpenGL and libepoxy are found, and Android has neither -- the
-probe fails, CMake warns, and the build falls back to the software renderer we
-kept for exactly this kind of reason. **No GLES port is needed to get Corridor 7
-running on a phone.** Whether the software renderer is *fast enough* on a phone
-is a separate question, asked in M6 and answered with measurements rather than
-in advance.
+**The renderer has a fallback, and we are not going to use it.** Our OpenGL
+backend is compiled only when desktop OpenGL and libepoxy are found, and
+Android has neither -- so the probe fails, CMake warns, and the build falls
+back to the software renderer. That is a good safety net and a poor
+destination: the phone this is aimed at has a GPU that would not notice the
+work. The backend is ported to OpenGL ES instead, in M1.
 
 ### What has rotted
 
@@ -150,7 +155,58 @@ last one was written first as a pattern match on a label `llvm-readelf` does
 not print, so it silently never ran -- the note is raw bytes, and the API level
 is the first of them, little endian.
 
-### M1 — An APK that assembles
+### M1 — The renderer, on the GPU — **done**
+
+Parity means the OpenGL backend, not the fallback.
+
+* The backend building against OpenGL ES 3.0.
+* Desktop unaffected: the same source, the same gates, the same output.
+
+*Exit:* the native gate asserts the Android libraries link GLES and contain the
+backend, and every desktop GL gate still passes.
+
+**Done, and it was much smaller than expected.** The measurement is the reason
+to record it: of the **sixty-five distinct GL entry points** the backend calls,
+exactly **one** is outside core GLES 3.0 -- `glDebugMessageCallback`, a
+development aid. Every GLSL feature in use is core GLES 3.0 too: `texelFetch`,
+`usampler2D`, `textureSize`, `gl_VertexID`, explicit attribute locations. There
+was no rewrite to do because desktop GL 3.3 core and GLES 3.0 are, for a
+renderer of this shape, the same thing wearing different headers.
+
+What actually differed:
+
+* **Where the headers live and who loads them.** `render/opengl/r_glcompat.h`
+  includes `<GLES3/gl3.h>` on Android and `<epoxy/gl.h>` everywhere else, and
+  supplies the two epoxy functions the backend uses -- `epoxy_gl_version` and
+  `epoxy_has_gl_extension`. Android needs no loader at all: it links the entry
+  points. The extension query has to use the indexed form, because the single
+  `GL_EXTENSIONS` string was removed in GLES 3.0 and asking for it returns
+  NULL, which would report every extension as absent rather than fail.
+* **The version directive and precision.** Desktop wants `#version 330 core`;
+  GLES wants `#version 300 es` *and* a fragment shader that states its own
+  precision, since there is no default for float and a shader without one does
+  not compile. Rather than fork nine shader sources, `GLShader::Build` now owns
+  the preamble: it strips whatever version line a shader carried and prepends
+  the right one. One place decides the dialect, and the desktop gates prove the
+  change is invisible there.
+* **`GL_MULTISAMPLE` does not exist in GLES**, because multisampling is a
+  property of the framebuffer rather than a switch. The enable and disable are
+  compiled out; an MSAA framebuffer simply resolves as one.
+* **The debug callback** is compiled out on Android. KHR_debug's entry points
+  are not declared by the GLES headers and would need `eglGetProcAddress`,
+  which is loader machinery for a development aid -- and the `glGetError` path
+  beside it already does the job.
+
+The context request differs by three lines: `SDL_GL_CONTEXT_PROFILE_ES` and 3.0
+instead of core and 3.3, with the same version test against a floor of 30
+rather than 33.
+
+The native gate now asserts both that the libraries link GLES v3 and that the
+backend's symbols are present, because the fallback is silent by design: a
+missing GLES library would produce a perfectly working build that had quietly
+lost the renderer.
+
+### M2 — An APK that assembles
 
 * The launcher's CMake brought up to a modern SDK: `aapt`, `d8`, `apksigner`,
   and the `support-v4` dependency either repointed or removed.
@@ -161,7 +217,7 @@ is the first of them, little endian.
 -- package, version, ABIs and permissions all as intended -- and verifies the
 signature with `apksigner verify`.
 
-### M2 — It starts
+### M3 — It starts
 
 * Installs on the emulator and reaches the engine rather than dying in the
   launcher.
@@ -171,7 +227,7 @@ signature with `apksigner verify`.
 screenshot of the Corridor 7 title screen, with logcat showing MAP01 loaded.
 This is the milestone that proves the whole idea, and it proves it on hardware.
 
-### M3 — Data, the way a person would do it
+### M4 — Data, the way a person would do it
 
 * An install path that does not involve `adb` -- the game's files have to get
   onto a phone somehow, and "push it with developer tools" is not an answer.
@@ -182,7 +238,7 @@ This is the milestone that proves the whole idea, and it proves it on hardware.
 *Exit:* a gate that installs the APK on a clean emulator with no data pushed,
 drives the in-app import, and reaches MAP01.
 
-### M4 — Controls a person can play with
+### M5 — Controls a person can play with
 
 * Touch controls covering Corridor 7's verbs: move, turn, strafe, fire, open,
   weapon cycle, **visor mode**, **drop mine**, **floor map**.
@@ -194,7 +250,7 @@ drives the in-app import, and reaches MAP01.
 *Exit:* a gate that drives synthetic touch events through `adb shell input` and
 asserts, from the player trace, that each verb did what it should.
 
-### M5 — It is EC7Wolf
+### M6 — It is EC7Wolf
 
 * Package name, application id, label, and the icon set that already exists for
   five other platforms.
@@ -204,21 +260,18 @@ asserts, from the player trace, that each verb did what it should.
 *Exit:* the badging gate from M1 extended to assert identity, and a screenshot
 of the launcher.
 
-### M6 — Fast enough to play
+### M7 — Fast enough to play
 
-* Measure the software renderer on the phone: frame times at its real
-  resolution, which is a great many more pixels than a 1994 raycaster was
-  written for.
-* Decide, on the numbers, whether a GLES backend is needed. Our GL work is
-  desktop 3.3 core; GLES 3.0 is a real port, not a flag, and is only worth it
-  if the measurement says so.
-* Whatever the answer, a documented resolution and scaling default that is
-  playable.
+* Measure the GL renderer on the phone: frame times at its real resolution,
+  which is a great many more pixels than a 1994 raycaster was written for.
+* Compare against the software fallback, so the choice of default is a
+  measurement rather than an assumption.
+* A documented resolution and scaling default that is playable.
 
 *Exit:* a benchmark gate recording frame times at the shipped default, and a
 figure written down here.
 
-### M7 — Shipping
+### M8 — Shipping
 
 * A build script, and the suite extended to cover the Android build.
 * README section: what it needs, how to install it, where the data goes.
@@ -244,7 +297,7 @@ figure written down here.
 
 | Risk | Why it matters | What reduces it |
 | --- | --- | --- |
-| The software renderer is too slow on a phone | Would turn M6 into a GLES port, which is a project rather than a milestone | Measure early -- the numbers can be taken as soon as M2 runs, well before M6 is due |
+| ~~The software renderer is too slow on a phone~~ | *Retired by M1.* The GL backend builds for GLES 3.0, so the phone's GPU does the work | -- |
 | Eleven-year-old Java against a 2025 SDK | The launcher may need more than repointing; `aapt` v1 is deprecated and could vanish from a future build-tools | It builds against what is on this machine, and the fallback is `aapt2`, which is present |
 | The emulator is x86_64 and phones are arm64 | A gate that passes on the emulator says nothing about the device that matters | Both ABIs are built from M0; arm64-v8a is the one that is tested on hardware, and the badging gate checks both are packaged |
 | Scoped storage | The most likely place for this to become tedious | The engine takes its directory as an argument, so this is entirely a Java-side decision |

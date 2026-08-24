@@ -25,7 +25,7 @@
 #include <math.h>
 #include <algorithm>
 
-#include <epoxy/gl.h>
+#include "render/opengl/r_glcompat.h"
 
 #include "render/opengl/r_glworld.h"
 #include "render/opengl/r_gldevice.h"
@@ -1958,6 +1958,11 @@ namespace
 	// vid_gldebug (config Vid_GLDebug or --gl-debug) and cost nothing when off.
 
 	// KHR_debug message callback: routes driver diagnostics into the console.
+	//
+	// Compiled only where KHR_debug exists. GLES 3.0 declares neither
+	// GLAPIENTRY nor the severity enums below, and the caller does not install
+	// this there -- see InstallGLDebug.
+#ifndef __ANDROID__
 	void GLAPIENTRY GLDebugCallback(GLenum source, GLenum type, GLuint id,
 		GLenum severity, GLsizei, const GLchar *message, const void *)
 	{
@@ -1968,6 +1973,7 @@ namespace
 		Printf("GL debug [%s]: %s\n", sev, message ? message : "");
 		(void)source; (void)type; (void)id;
 	}
+#endif
 
 	bool gGLDebugInstalled = false;
 	void InstallGLDebug()
@@ -1975,6 +1981,16 @@ namespace
 		if(gGLDebugInstalled || !vid_gldebug)
 			return;
 		gGLDebugInstalled = true;	// attempt once per process
+#ifdef __ANDROID__
+		// GLES 3.0 has no debug callback. It arrived in 3.2, and on 3.0 it is
+		// reachable only through KHR_debug's suffixed entry points, which are
+		// not declared by the GLES headers and would have to be fetched with
+		// eglGetProcAddress. That is loader machinery for a development aid,
+		// and the glGetError path below already does the job -- so this simply
+		// does not exist on Android.
+		Printf("GL debug: no debug callback on GLES; using glGetError checks.\n");
+		return;
+#else
 		if(!epoxy_has_gl_extension("GL_KHR_debug"))
 		{
 			Printf("GL debug: GL_KHR_debug unavailable; using glGetError checks.\n");
@@ -1986,6 +2002,7 @@ namespace
 		glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE,
 			0, NULL, GL_TRUE);
 		Printf("GL debug: KHR_debug callback installed.\n");
+#endif
 	}
 
 	// Drain glGetError after a live stage; a no-op unless vid_gldebug is set.
@@ -2279,7 +2296,12 @@ namespace
 		glDisable(GL_CULL_FACE);
 		if(msaa)
 		{
+#ifndef __ANDROID__
+			// Desktop only. In GLES multisampling is a property of the
+			// framebuffer rather than a switch, and there is no such enum --
+			// an MSAA framebuffer simply resolves as one.
 			glEnable(GL_MULTISAMPLE);
+#endif
 			// The silhouettes of sprites and masked walls come from a shader
 			// `discard`, which multisampling cannot smooth on its own -- a
 			// discarded fragment kills every sample. The filtered path writes
@@ -2305,7 +2327,9 @@ namespace
 			glBlitFramebuffer(0, 0, vw, vh, 0, 0, vw, vh,
 				GL_COLOR_BUFFER_BIT, GL_NEAREST);
 			glBindFramebuffer(GL_FRAMEBUFFER, gLive.worldFbo);
+#ifndef __ANDROID__
 			glDisable(GL_MULTISAMPLE);
+#endif
 		}
 		DestroyWorldGL(wr);	// frees per-frame VBOs; borrowed resources kept
 		gLive.haveWorld = true;

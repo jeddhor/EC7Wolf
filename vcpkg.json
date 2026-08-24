@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "ec7wolf",
+  "version-string": "1.0-beta",
+  "description": "EC7Wolf - a Corridor 7: Alien Invasion source port built on ECWolf",
+  "homepage": "https://github.com/jasontripp/corr7port",
+  "dependencies": [
+    "sdl2",
+    "sdl2-mixer",
+    "sdl2-net",
+    "libepoxy",
+    "zlib",
+    "bzip2",
+    "libjpeg-turbo"
+  ]
+}

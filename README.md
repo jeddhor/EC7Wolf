@@ -645,11 +645,29 @@ This produces `build/ec7wolf` and `build/ec7wolf.pk3`.
 
 1. Install **[CMake](https://cmake.org/)** and **Visual Studio** with the
    *Desktop development with C++* workload (or MSYS2/MinGW-w64).
-2. Obtain **SDL2**, **SDL2_mixer**, **SDL2_net**, zlib and libjpeg. `vcpkg`
-   makes this painless:
+2. Obtain **SDL2**, **SDL2_mixer**, **SDL2_net** and **libepoxy**. The repository
+   carries a `vcpkg.json`, so from the `ECWolf` directory:
    ```bat
-   vcpkg install sdl2 sdl2-mixer sdl2-net zlib libjpeg-turbo bzip2
+   cd ECWolf
+   vcpkg install
    ```
+   No package names: `vcpkg install` with no arguments reads the manifest. This
+   matters, because **the `vcpkg` that comes with Visual Studio only works this
+   way.** Naming packages on the command line is *classic mode*, and the copy on
+   a Developer PowerShell's PATH does not have it — it answers:
+
+   > error: Could not locate a manifest (vcpkg.json) above the current working
+   > directory. This vcpkg distribution does not have a classic mode instance.
+
+   which means "you are in the wrong directory, or you wanted the manifest".
+   Run it from `ECWolf`, where the manifest is.
+
+   If you have your own bootstrapped clone of vcpkg, classic mode still works
+   and the manifest is ignored:
+   ```bat
+   vcpkg install sdl2 sdl2-mixer sdl2-net libepoxy zlib bzip2 libjpeg-turbo
+   ```
+
    Or take upstream's *VC development* zips and pass `-DSDL2_DIR=…\cmake` and
    friends, which is what the installer does.
 3. Build **from a Developer PowerShell**, so `cl.exe` and Ninja are on the PATH:
@@ -660,8 +678,25 @@ This produces `build/ec7wolf` and `build/ec7wolf.pk3`.
    cmake --build build
    cmake --build build
    ```
+   With the manifest, CMake installs the dependencies itself at configure time,
+   so step 2 is optional — it is there so you can see the downloads happen
+   before a build that looks like it has hung.
+
+   The toolchain path is wherever your vcpkg lives. For the copy bundled with
+   Visual Studio, ask it:
+   ```bat
+   where vcpkg
+   ```
+   and use the `scripts\buildsystems\vcpkg.cmake` beside it.
 4. Put `ec7wolf.exe`, `ec7wolf.pk3` and the SDL and libepoxy **DLLs** together
    with your game data, then run it.
+
+> 🛠 **No libepoxy, no OpenGL — on Windows too.** This list used to leave it
+> out, which produced a build that worked and had quietly lost the hardware
+> renderer. CMake says so, once, in the configure output:
+> `ECWOLF_RENDERER_OPENGL requested but OpenGL/libepoxy not found`. If the game
+> reports the software renderer at startup and you expected otherwise, that
+> line is why.
 
 > ⚠️ **If CMake is older than your Visual Studio** it will not have a generator
 > for it — CMake 3.31 knows nothing of Visual Studio 2026 — and will quietly

@@ -4,12 +4,25 @@
     android:versionCode="1"
     android:versionName="1.0" >
 
-    <uses-sdk
-        android:minSdkVersion="14"
-        android:targetSdkVersion="22" />
+    <!-- minSdk 21 is the NDK's floor: r27 and later refuse to build for
+         anything older, and r30 is what this uses.
 
-    <!-- OpenGL ES 2.0 -->
-    <uses-feature android:glEsVersion="0x00020000" />
+         targetSdk is deliberately current rather than the lowest that will
+         install. Android has refused to install apps below a moving
+         targetSdkVersion floor since Android 14, so the old value of 22 was
+         not merely dated ; a modern phone rejects it outright. Targeting
+         something just above the floor would buy a migration to do again in a
+         year, and the usual reason to stay low is scoped storage, which does
+         not apply here: the game's files live in app-specific external
+         storage, which needs no permission on any version. -->
+    <uses-sdk
+        android:minSdkVersion="21"
+        android:targetSdkVersion="36" />
+
+    <!-- The renderer is GLES 3.0. Declared so the Play Store and the package
+         manager both know it, and so a device that cannot run it says so
+         rather than launching to a black screen. -->
+    <uses-feature android:glEsVersion="0x00030000" android:required="true" />
 
     <!-- application
         android:allowBackup="true"
@@ -26,8 +39,13 @@
         </activity>
     </application -->
 
+    <!-- INTERNET is multiplayer. ACCESS_WIFI_STATE is what the launcher uses
+         to show the address a host should be reached on.
+
+         WRITE_EXTERNAL_STORAGE is gone: at this target it grants nothing at
+         all, and the game data lives in app-specific external storage, which
+         is readable and writable without asking anybody. -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
 

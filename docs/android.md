@@ -206,7 +206,7 @@ backend's symbols are present, because the fallback is silent by design: a
 missing GLES library would produce a perfectly working build that had quietly
 lost the renderer.
 
-### M2 — An APK that assembles
+### M2 — An APK that assembles — **done**
 
 * The launcher's CMake brought up to a modern SDK: `aapt`, `d8`, `apksigner`,
   and the `support-v4` dependency either repointed or removed.
@@ -216,6 +216,57 @@ lost the renderer.
 *Exit:* a gate that builds the APK and reads it back with `aapt dump badging`
 -- package, version, ABIs and permissions all as intended -- and verifies the
 signature with `apksigner verify`.
+
+**Done.** 19MB, both ABIs, five native libraries each, the game data, and a
+valid v1/v2/v3 signature. `tools/build_android.sh` builds it end to end.
+
+**support-v4 was removed rather than repointed.** The launcher imported exactly
+one class from it -- `FragmentActivity` -- and never used it: every fragment in
+`EntryActivity` is a framework fragment (`android.app.Fragment`,
+`getFragmentManager`). Extending `Activity` instead deletes the dependency, and
+with it the pinned path into a repository Google deleted.
+
+**The manifest targets 36 rather than the lowest that installs.** Android has
+enforced a rising `targetSdkVersion` floor at install time since Android 14, so
+22 was not merely dated -- a modern phone refuses it. Targeting just over the
+floor would buy the same migration again in a year. The usual reason to stay
+low is scoped storage, and that does not apply here: the game's files go in
+app-specific external storage, which needs no permission on any version. So
+`WRITE_EXTERNAL_STORAGE` is gone as well, since at this target it grants
+nothing. `minSdk` is 21, the NDK's floor. GLES 3.0 is declared as required,
+which is now true.
+
+Four things were broken in ways that produce a *working build* and a broken
+app, which is the reason the gate reads the finished archive rather than
+trusting the build:
+
+* **Three of the five native libraries were not being packaged.**
+  `libec7wolf.so` needs SDL2, SDL2_mixer and SDL2_net; the packaging step
+  copied only the engine and the touch controls. Nothing checks a native
+  dependency until the loader goes looking for it at launch.
+* **The Java asked for a library nobody builds.** `Game.java` loaded `"ecwolf"`
+  and `libecwolf.so`; this fork builds `ec7wolf`. The gate now reads the name
+  out of `Game.java` and checks the archive contains that, because these two
+  have already disagreed once.
+* **`find_file` cannot see the SDK from an NDK build.** The toolchain sets
+  `CMAKE_FIND_ROOT_PATH_MODE_*` to `ONLY`, which is right for everything being
+  cross-compiled and wrong for host tools: `android.jar`, `aapt`, `d8` and
+  `apksigner` are all on the host. The failure arrives much later as ninja
+  looking for a file called `ANDROID_SDK_JAR-NOTFOUND`. They also needed
+  `NO_DEFAULT_PATH`, or the build picks up Debian's `aapt v0.2-debian` from the
+  PATH instead of the one beside the `d8` it is paired with.
+* **CMake caches a failed `find_file`.** A build directory first configured
+  without the SDK paths keeps the `NOTFOUND` for ever, so the build script
+  clears those entries before configuring.
+
+The APK is assembled around the primary ABI and the others are added to the
+archive afterwards, because CMake configures one ABI per build directory and no
+single configure can see them all. Signing happens last, since adding to an
+archive invalidates whatever signature was on it.
+
+Signed with a generated debug key kept out of the repository. It exists because
+Android will not install an unsigned APK; a release key is a decision for
+whoever ships this.
 
 ### M3 — It starts
 

@@ -45,6 +45,26 @@ BUILD_TOOLS=$(ls -d "$SDK"/build-tools/* 2>/dev/null | sort -V | tail -1)
 PLATFORM=$(ls -d "$SDK"/platforms/android-* 2>/dev/null | sort -V | tail -1)
 
 abis=${*:-"arm64-v8a x86_64"}
+# arm64-v8a is what a phone runs, so it is the ABI the APK is assembled around;
+# the rest are added to it afterwards.
+primary=$(printf '%s\n' $abis | head -1)
+
+# A debug key, generated once and kept out of the repository. It signs nothing
+# anybody should trust: it exists because Android will not install an unsigned
+# APK, and a release key is a decision for whoever ships this rather than
+# something to invent here.
+keystore=${ANDROID_KEYSTORE:-$builds/ec7wolf-debug.keystore}
+keyalias=${ANDROID_KEYALIAS:-ec7wolf}
+keypass=${ANDROID_KEYPASS:-android}
+if [ ! -f "$keystore" ]; then
+	mkdir -p "$(dirname "$keystore")"
+	printf 'generating a debug signing key at %s\n' "$keystore"
+	keytool -genkeypair -v -keystore "$keystore" -alias "$keyalias" \
+		-storepass "$keypass" -keypass "$keypass" \
+		-keyalg RSA -keysize 2048 -validity 10000 \
+		-dname "CN=EC7Wolf Debug, OU=None, O=None, L=None, S=None, C=None" \
+		>/dev/null 2>&1
+fi
 
 if [ ! -d "$root/deps/SDL" ]; then
 	printf 'deps/SDL is missing; run tools/fetch_android_deps.sh first\n' >&2
@@ -71,6 +91,17 @@ for abi in $abis; do
 	# CMake is the thing that would have created it.
 	mkdir -p "$out"
 	printf '=== %s ===\n' "$abi"
+	# find_file caches a miss. A build directory first configured without the
+	# SDK paths keeps ANDROID_SDK_JAR-NOTFOUND for ever afterwards, and the
+	# failure surfaces much later as ninja looking for a file called
+	# "ANDROID_SDK_JAR-NOTFOUND". Clearing them costs nothing and is not worth
+	# discovering twice.
+	if [ -f "$out/CMakeCache.txt" ]; then
+		cmake -U ANDROID_SDK_JAR -U ANDROID_AAPT_BINARY -U ANDROID_D8_BINARY \
+			-U ANDROID_ADB_BINARY -U ANDROID_APK_SIGNER -U ANDROID_SUPPORT_V4_JAR \
+			-B "$out" >/dev/null 2>&1 || true
+	fi
+
 	cmake -S "$root" -B "$out" -G Ninja \
 		-DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
 		-DANDROID_ABI="$abi" \
@@ -82,6 +113,9 @@ for abi in $abis; do
 		-DSDL2MIXER_FLAC=OFF -DSDL2MIXER_OPUS=OFF -DSDL2MIXER_MOD=OFF \
 		-DSDL2MIXER_WAVPACK=OFF -DSDL2MIXER_GME=OFF -DSDL2MIXER_MIDI=OFF \
 		-DSDL2MIXER_SAMPLES=OFF -DSDL2MIXER_CMD=OFF \
+		-DANDROID_SIGN_KEYSTORE="$keystore" \
+		-DANDROID_SIGN_KEYNAME="$keyalias" \
+		-DANDROID_SIGN_STOREPASS="$keypass" \
 		>"$out/configure.log" 2>&1 || {
 			printf 'configure failed; tail of %s/configure.log:\n' "$out"
 			tail -20 "$out/configure.log"
@@ -98,4 +132,57 @@ for abi in $abis; do
 	printf '  %s\n' "$out/src/libec7wolf.so"
 done
 
-printf '\ndone\n'
+# --- the APK -------------------------------------------------------------
+#
+# Built from the primary ABI, then the other ABIs' libraries are added to the
+# same archive and it is signed again. CMake configures one ABI per build
+# directory, so there is no single configure that can see them all; adding to
+# the archive afterwards is how one APK ends up containing every architecture.
+
+printf '\n=== apk ===\n'
+primary_out="$builds/android-$primary"
+cmake --build "$primary_out" --target engine-android --parallel "$(nproc)" \
+	>"$primary_out/apk.log" 2>&1 || {
+		printf 'apk build failed; errors from %s/apk.log:\n' "$primary_out"
+		grep -viE "^--|^Adding |Deflate|Store" "$primary_out/apk.log" | tail -15
+		exit 1
+	}
+
+apk="$primary_out/ec7wolf.apk"
+[ -f "$apk" ] || { printf 'no apk at %s\n' "$apk" >&2; exit 1; }
+
+for abi in $abis; do
+	[ "$abi" = "$primary" ] && continue
+
+	# Staged by hand rather than taken from the launcher's own lib directory:
+	# that directory is a side effect of building the engine-android target,
+	# which is only built for the primary ABI. Collecting the libraries from
+	# where they were actually built is both cheaper and less mysterious than
+	# building an APK per architecture to get at them.
+	stage="$builds/android-$abi/apk-stage"
+	rm -rf "$stage"
+	mkdir -p "$stage/lib/$abi"
+	for lib in \
+		"$builds/android-$abi/src/libec7wolf.so" \
+		"$builds/android-$abi/android-libs/TouchControls/libtouchcontrols.so" \
+		"$builds/android-$abi/deps/SDL/libSDL2.so" \
+		"$builds/android-$abi/deps/SDL_mixer/libSDL2_mixer.so" \
+		"$builds/android-$abi/deps/SDL_net/libSDL2_net.so"
+	do
+		[ -f "$lib" ] || { printf '  MISSING %s\n' "$lib"; exit 1; }
+		cp "$lib" "$stage/lib/$abi/"
+	done
+
+	printf '  adding %s libraries\n' "$abi"
+	# aapt add takes paths relative to its working directory, and those become
+	# the paths inside the archive, so this runs from the directory holding lib/.
+	( cd "$stage" && "$BUILD_TOOLS/aapt" add -f "$apk" "lib/$abi"/*.so >/dev/null )
+done
+
+# Signed last, because adding to the archive invalidates whatever signature was
+# on it.
+"$BUILD_TOOLS/apksigner" sign --ks "$keystore" --ks-key-alias "$keyalias" \
+	--ks-pass "pass:$keypass" --key-pass "pass:$keypass" "$apk" 2>/dev/null
+
+printf '\n%s\n' "$apk"
+printf 'done\n'

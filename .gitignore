@@ -15,3 +15,4 @@ __pycache__/
 deps/SDL/
 deps/SDL_mixer/
 deps/SDL_net/
+builds/ec7wolf-debug.keystore

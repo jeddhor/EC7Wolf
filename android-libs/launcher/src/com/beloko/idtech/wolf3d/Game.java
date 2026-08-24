@@ -54,12 +54,16 @@ public class Game extends SDLActivity
 	protected String[] getLibraries() {
 		return new String[] {
 			"touchcontrols",
-			"ecwolf"
+			// This fork's engine is ec7wolf, not ecwolf. The name has to match
+			// ENGINE_BINARY_NAME: a mismatch installs perfectly and then fails
+			// at launch with an UnsatisfiedLinkError naming a library nobody
+			// built.
+			"ec7wolf"
 		};
     }
 
 	protected String getMainSharedObject() {
-		return getContext().getApplicationInfo().nativeLibraryDir + "/libecwolf.so";
+		return getContext().getApplicationInfo().nativeLibraryDir + "/libec7wolf.so";
 	}
 
 	public void start_quake2() {

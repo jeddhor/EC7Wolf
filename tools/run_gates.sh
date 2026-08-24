@@ -71,7 +71,7 @@ done
 # gl_selftest is here rather than below because --gltest is handled before the
 # IWAD is opened: it needs no game data, and it is the only thing that proves the
 # shaders actually compile on the runner's driver. A broken shader still links.
-data_free_gates='definitions names android_native gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
+data_free_gates='definitions names android_native android_apk gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
 
 data_gates='
 corridor7
@@ -221,6 +221,9 @@ for g in $data_free_gates; do
 			# hosted runner.
 			run_gate "$g" "android native libraries" \
 				"$here/test_android_native.sh" ;;
+		android_apk)
+			# Reads a built APK back; skips when there is not one.
+			run_gate "$g" "android apk" "$here/test_android_apk.sh" ;;
 		names)
 			# Names used but never defined. Python does not notice until
 			# the line runs, and in an installer plenty of lines run only

@@ -54,19 +54,24 @@ add_jar(engine-android
 	org/libsdl/app/SDLSurface.java
 	INCLUDE_JARS
 		"${ANDROID_SDK_JAR}"
-		"${ANDROID_SUPPORT_V4_JAR}"
 )
 
 add_dependencies(engine-android engine touchcontrols pk3)
 
 add_custom_command(TARGET engine-android POST_BUILD
+	# Every shared library the engine needs, not just the two this used to
+	# copy. libec7wolf.so has SDL2, SDL2_mixer and SDL2_net in its NEEDED list;
+	# an APK without them installs happily and then dies at launch, because
+	# nothing checks a native dependency until the loader goes looking for it.
 	COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:engine>" "${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_ANDROID_ARCH_ABI}/$<TARGET_FILE_NAME:engine>"
 	COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:touchcontrols>" "${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_ANDROID_ARCH_ABI}/$<TARGET_FILE_NAME:touchcontrols>"
+	COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:SDL2>" "${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_ANDROID_ARCH_ABI}/$<TARGET_FILE_NAME:SDL2>"
+	COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:SDL2_mixer>" "${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_ANDROID_ARCH_ABI}/$<TARGET_FILE_NAME:SDL2_mixer>"
+	COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:SDL2_net>" "${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_ANDROID_ARCH_ABI}/$<TARGET_FILE_NAME:SDL2_net>"
 	COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/../assets" "${OUTPUT_DIR}/assets"
 	COMMAND "${ANDROID_AAPT_BINARY}" package -f $<$<CONFIG:Debug>:--debug-mode> -M "${CMAKE_CURRENT_SOURCE_DIR}/../AndroidManifest.xml" -S "${CMAKE_CURRENT_SOURCE_DIR}/../res" -A "${OUTPUT_DIR}/assets" -I "${ANDROID_SDK_JAR}" -F "${APK_OUTPUT}"
 	COMMAND "${ANDROID_D8_BINARY}" $<$<CONFIG:Release>:--release> $<$<CONFIG:MinSizeRel>:--release> --output . --lib "${ANDROID_SDK_JAR}"
 		"engine-android.jar"
-		"${ANDROID_SUPPORT_V4_JAR}"
 	COMMAND "${ANDROID_AAPT_BINARY}" add -f "${APK_OUTPUT}" "classes.dex" "lib/${CMAKE_ANDROID_ARCH_ABI}/*"
 	COMMAND "${ANDROID_APK_SIGNER}" sign --ks-pass "pass:${ANDROID_SIGN_STOREPASS}" --ks "${ANDROID_SIGN_KEYSTORE}" --ks-key-alias "${ANDROID_SIGN_KEYNAME}" "${APK_OUTPUT}"
 	WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"

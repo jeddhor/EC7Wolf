@@ -1,11 +1,16 @@
 package com.beloko.wolf3d;
 
+import android.app.Activity;
 import android.app.ActionBar;
 import android.app.ActionBar.Tab;
 import android.app.Fragment;
 import android.app.FragmentTransaction;
 import android.os.Bundle;
-import android.support.v4.app.FragmentActivity;
+// Was android.support.v4.app.FragmentActivity. This class never used it:
+// every fragment here is a framework fragment (android.app.Fragment,
+// getFragmentManager), so FragmentActivity contributed nothing but a
+// dependency on a support library that Google deleted from the repository
+// the build looked for it in.
 import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MotionEvent;
@@ -17,7 +22,7 @@ import com.beloko.idtech.GamePadFragment;
 import com.beloko.idtech.IntroDialog;
 import com.beloko.idtech.OptionsFragment;
 import com.beloko.idtech.R;
-public class EntryActivity extends FragmentActivity  {
+public class EntryActivity extends Activity  {
 
 
 	final static int LAUNCH_FRAG = 0;
@@ -129,17 +134,17 @@ public class EntryActivity extends FragmentActivity  {
 	}
 
 	public static class TabListener<T extends Fragment> implements ActionBar.TabListener {
-		private final FragmentActivity mActivity;
+		private final Activity mActivity;
 		private final String mTag;
 		private final Class<T> mClass;
 		private final Bundle mArgs;
 		private Fragment mFragment;
 
-		public TabListener(FragmentActivity activity, String tag, Class<T> clz) {
+		public TabListener(Activity activity, String tag, Class<T> clz) {
 			this(activity, tag, clz, null);
 		}
 
-		public TabListener(FragmentActivity activity, String tag, Class<T> clz, Bundle args) {
+		public TabListener(Activity activity, String tag, Class<T> clz, Bundle args) {
 			mActivity = activity;
 			mTag = tag;
 			mClass = clz;

@@ -66,10 +66,21 @@ in advance.
 
 `aapt` (v1, which the launcher's CMake wants) survives in build-tools 34
 through 37, alongside `aapt2`, `d8` and `apksigner`. NDK r30 is installed.
-Platforms 34 to 36.1 are present. There is an **x86_64 Android 36 system
-image** and a working emulator, which means every milestone below can be gated
-without a physical device -- at the price of building for two ABIs, x86_64 for
-the emulator and arm64-v8a for real hardware.
+Platforms 34 to 36.1 are present. There is an x86_64 Android 36 system image
+and a working emulator.
+
+**And a real phone**, attached over wireless debugging: a Galaxy S25 Ultra,
+`SM-S938U1`, **Android 16, SDK 36, arm64-v8a**. That makes arm64-v8a the ABI
+that matters and the emulator the convenience, rather than the other way round,
+and it means acceptance is a thing that can actually be done rather than
+something to apologise for at the end.
+
+It also imposes a hard constraint that settles one of the questions above.
+Android has refused to *install* apps below a minimum `targetSdkVersion` since
+Android 14, and the bar has risen since. A manifest declaring `targetSdkVersion
+22` will not go onto this phone at all -- so raising it is not tidying, it is
+the difference between having an app and not. The exact floor gets measured in
+M1 rather than guessed at.
 
 ---
 
@@ -106,9 +117,9 @@ signature with `apksigner verify`.
   launcher.
 * The C7 data placed where `argv[1]` can be pointed at it.
 
-*Exit:* a gate that boots a headless emulator, installs, launches, and captures
-a screenshot of the Corridor 7 title screen; plus logcat showing MAP01 loaded.
-This is the milestone that proves the whole idea.
+*Exit:* a gate that installs on the attached phone, launches, and captures a
+screenshot of the Corridor 7 title screen, with logcat showing MAP01 loaded.
+This is the milestone that proves the whole idea, and it proves it on hardware.
 
 ### M3 — Data, the way a person would do it
 
@@ -145,8 +156,9 @@ of the launcher.
 
 ### M6 — Fast enough to play
 
-* Measure the software renderer on the emulator and, if possible, on hardware:
-  frame times at a phone's resolution.
+* Measure the software renderer on the phone: frame times at its real
+  resolution, which is a great many more pixels than a 1994 raycaster was
+  written for.
 * Decide, on the numbers, whether a GLES backend is needed. Our GL work is
   desktop 3.3 core; GLES 3.0 is a real port, not a flag, and is only worth it
   if the measurement says so.
@@ -184,6 +196,7 @@ figure written down here.
 | --- | --- | --- |
 | The software renderer is too slow on a phone | Would turn M6 into a GLES port, which is a project rather than a milestone | Measure early -- the numbers can be taken as soon as M2 runs, well before M6 is due |
 | Eleven-year-old Java against a 2025 SDK | The launcher may need more than repointing; `aapt` v1 is deprecated and could vanish from a future build-tools | It builds against what is on this machine, and the fallback is `aapt2`, which is present |
-| The emulator is x86_64 and phones are arm64 | A gate that passes on the emulator says nothing about the device that matters | Both ABIs are built from M0, and the badging gate checks both are packaged |
+| The emulator is x86_64 and phones are arm64 | A gate that passes on the emulator says nothing about the device that matters | Both ABIs are built from M0; arm64-v8a is the one that is tested on hardware, and the badging gate checks both are packaged |
 | Scoped storage | The most likely place for this to become tedious | The engine takes its directory as an argument, so this is entirely a Java-side decision |
-| Nobody to test on real hardware | Every gate here runs on an emulator | The emulator is the development loop; a real phone is the acceptance test, and that is stated rather than glossed |
+| ~~Nobody to test on real hardware~~ | *Retired before the work started.* A Galaxy S25 Ultra on Android 16 is attached over wireless debugging, so every milestone can end on the device it is meant for | -- |
+| Android 16 is the newest there is | The launcher was written for Android 5. Everything between then and now -- scoped storage, runtime permissions, background limits, install-time targetSdk floors -- lands at once | Better to find out on the device than to ship for an emulator two versions behind |

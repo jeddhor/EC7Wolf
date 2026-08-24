@@ -129,6 +129,18 @@ check "it reached the game loop" engine_said 'DemoLoop: Starting the game loop'
 check "it loaded MAP01" engine_said 'MAP01 - Corridor 7 Level 1'
 check "nothing crashed" test "$(grep -c 'Fatal signal' "$log")" -eq 0
 
+# Corridor 7 is a landscape game and the manifest says so, but SDL overrides
+# the manifest: with no orientation hint it derives the activity's orientation
+# from the window it is creating, and the GL probe's window is 32x32 -- square
+# counts as portrait. Launching therefore flipped the whole activity to
+# portrait (1440x3120) before the real window flipped it back. Both halves are
+# checked because either one alone can pass while the game still turns over.
+check "it never asked for a portrait orientation" \
+	test "$(grep -cE 'requestedOrientation=(1|7|9|12) ' "$log")" -eq 0
+check "every surface it was given was landscape" \
+	test "$(sed -n 's/.*Window size: \([0-9]*\)x\([0-9]*\).*/\1 \2/p' "$log" |
+		awk '$2 > $1' | wc -l)" -eq 0
+
 printf '\nWhat the phone drew\n'
 shot=$shots/screen.png
 adb exec-out screencap -p > "$shot" 2>/dev/null || true

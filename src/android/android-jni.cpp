@@ -515,6 +515,16 @@ int SDL_main(int argc, char* argv[])
 
 	SDL_SetHint(SDL_HINT_ACCELEROMETER_AS_JOYSTICK, "false");
 
+	// Corridor 7 is a landscape game and the manifest says sensorLandscape,
+	// but SDL overrides that: with no orientation hint set it derives the
+	// activity's orientation from whatever window it is creating, and a window
+	// at least as tall as it is wide counts as portrait. The GL probe's window
+	// is 32x32, so probing for a core context flipped the whole activity into
+	// portrait (1440x3120) until the real window flipped it back -- a visible
+	// portrait flash at every launch, and the resize storm underneath the
+	// start-up races in Android_SetScreenSize.
+	SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+
 	JNIEnv *env = env_ = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
 	JavaVM *vm;
 	env_->GetJavaVM(&vm);

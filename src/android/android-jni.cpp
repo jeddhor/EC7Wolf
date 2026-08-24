@@ -4,6 +4,8 @@
 #include <jni.h>
 #include <android/log.h>
 #include <unistd.h>
+#include <mutex>
+#include <atomic>
 
 #include "TouchControlsContainer.h"
 #include "JNITouchControlsUtils.h"
@@ -273,8 +275,20 @@ void setHideSticks(bool v)
 }
 
 
+// Serialised, because two things call it and they are not on the same thread.
+//
+// Android_SetScreenSize runs once from the initial display mode, on the SDL
+// thread, and again from an SDL window resize event on whichever thread is
+// pumping events -- and at start-up the display settles from portrait to
+// landscape, so both happen at once. The controls, the texture cache and the
+// file handle the PNG reader uses are all shared globals, so the two runs
+// corrupt each other. It crashed in vsnprintf, which is not a place anybody
+// would go looking for a threading bug.
 void initControls(int width, int height,const char * graphics_path,const char *settings_file)
 {
+	static std::mutex controlsInitMutex;
+	std::lock_guard<std::mutex> lock(controlsInitMutex);
+
 	touchcontrols::GLScaleWidth = (float)width;
 	touchcontrols::GLScaleHeight = (float)height;
 
@@ -380,11 +394,18 @@ void initControls(int width, int height,const char * graphics_path,const char *s
 
 }
 
+static void ApplyPendingScreenSize();
+
 int inMenuLast = 1;
 int inAutomapLast = 0;
 void frameControls()
 {
 	//LOGI("frameControls\n");
+
+	ApplyPendingScreenSize();
+	// Nothing to drive until the controls exist; the pointers below are null.
+	if(!controlsCreated)
+		return;
 
 	int inMenuNew = PortableInMenu();
 	if (inMenuLast != inMenuNew)
@@ -488,7 +509,8 @@ extern int WL_Main(int, char*[]);
 extern "C"
 int SDL_main(int argc, char* argv[])
 {
-	// We hack in a control overlay by doing direct OpenGL ES 1.x calls
+	// The control overlay draws itself with ES 2 shaders over the game's
+	// context; see android-libs/TouchControls.
 	SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengles");
 
 	SDL_SetHint(SDL_HINT_ACCELEROMETER_AS_JOYSTICK, "false");
@@ -524,12 +546,43 @@ int SDL_main(int argc, char* argv[])
 	return 0;
 }
 
+// Recorded here, acted on in frameControls.
+//
+// This runs from an SDL window-event watcher, and a watcher runs on whichever
+// thread pushed the event -- for a resize on Android that is the Java main
+// thread. initControls builds GL textures, and the GL context belongs to the
+// SDL thread, so calling it from here ran it on a thread with no context at
+// all: the texture loader took a failure path, threw, and the exception
+// unwound out through SDL into the JNI trampoline, where there is no handler.
+// That is the 0xebad8084 crash. Only the size is recorded here.
+static std::atomic<bool> screenSizePending(false);
+
 void Android_SetScreenSize(int w, int h)
 {
 	android_screen_width = w;
 	android_screen_height = h;
+	screenSizePending.store(true);
+}
 
-	initControls(android_screen_width,-android_screen_height,graphicpath.c_str(),(graphicpath + "/game_controls.xml").c_str());
+// Called from frameControls, which runs on the SDL thread with the context
+// current, so this is the one place control textures can be built.
+static void ApplyPendingScreenSize()
+{
+	if(!screenSizePending.exchange(false))
+		return;
+
+	try
+	{
+		initControls(android_screen_width,-android_screen_height,graphicpath.c_str(),(graphicpath + "/game_controls.xml").c_str());
+	}
+	catch(const std::exception &e)
+	{
+		LOGI("initControls failed: %s", e.what());
+	}
+	catch(...)
+	{
+		LOGI("initControls failed");
+	}
 }
 
 static int Android_EventWatch(void *, SDL_Event *event)

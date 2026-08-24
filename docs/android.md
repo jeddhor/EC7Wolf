@@ -268,15 +268,42 @@ Signed with a generated debug key kept out of the repository. It exists because
 Android will not install an unsigned APK; a release key is a decision for
 whoever ships this.
 
-### M3 — It starts
+### M3 — It starts — **done**
 
-* Installs on the emulator and reaches the engine rather than dying in the
-  launcher.
-* The C7 data placed where `argv[1]` can be pointed at it.
+Corridor 7 runs on a Galaxy S25 Ultra: title screen, then MAP01 drawn by the
+GL renderer at 3120x1440, with the C7 status bar over it.
 
-*Exit:* a gate that installs on the attached phone, launches, and captures a
-screenshot of the Corridor 7 title screen, with logcat showing MAP01 loaded.
-This is the milestone that proves the whole idea, and it proves it on hardware.
+Two things were in the way, and both were the same mistake seen from
+different angles -- the touch controls build GL textures, and they were being
+built on a thread that had no GL context.
+
+* `Android_SetScreenSize` was called from an SDL window-event watcher, and a
+  watcher runs on whichever thread pushed the event. On Android a resize comes
+  from the Java main thread. The GL context belongs to the SDL thread, so the
+  texture loader took a failure path and threw, and the exception unwound out
+  through SDL into the JNI trampoline where there is no handler: SIGSEGV at
+  `0xebad8084`, one frame of backtrace, nothing to read. `Android_SetScreenSize`
+  now only records the size; `frameControls` applies it, on the SDL thread with
+  the context current, inside a `try`.
+* Before that, the display settling from portrait to landscape at start-up ran
+  two `initControls` calls at once over shared globals -- the control list, the
+  texture cache, the PNG reader's file handle. It crashed in `vsnprintf`, which
+  is not where anybody would look for a threading bug. Serialised with a mutex.
+
+The library itself was ES 1.x fixed-function code running against an ES 3.0
+context (`-DUSE_GLES2`, link `GLESv2`), and `loadShader` read an uninitialised
+info-log length. Fixed, but the controls are still M5's job; `frameControls`
+returns early until they exist, so the engine no longer depends on them.
+
+*Exit:* `tools/test_android_device.sh` installs on the attached phone, drives
+the launcher, and checks the engine found the C7 data, chose the OpenGL
+renderer, reached the game loop, loaded MAP01, drew a frame that is not black,
+and crashed at no point. It skips cleanly with no phone attached.
+
+The gate steers with `--tedlevel MAP01` through the launcher's extra-args box,
+found by resource id rather than by screen position. The `Game` activity is
+not exported, so that box is the only way to pass an argument in from outside
+the app.
 
 ### M4 — Data, the way a person would do it
 

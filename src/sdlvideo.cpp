@@ -741,13 +741,43 @@ SDLFB::SDLFB (int width, int height, bool fullscreen)
 	// the window must be GL-capable and must not also drive an SDL_Renderer.
 	UsingGL = R_GLLiveWantPresent();
 
+#ifdef __ANDROID__
+	// A phone has one window and it is the screen. There is no windowed mode to
+	// fall back to, and asking for an arbitrary 640x480 window is how this
+	// arrived at "Could not create new screen (640 x 480)" -- the retry ladder
+	// above tries a different resolution, then toggles fullscreen, then gives
+	// up, and none of that helps when the request was never going to be
+	// honoured in the first place.
+	fullscreen = true;
+	{
+		SDL_DisplayMode dm;
+		if (SDL_GetCurrentDisplayMode(0, &dm) == 0 && dm.w > 0 && dm.h > 0)
+		{
+			WinWidth = dm.w;
+			WinHeight = dm.h;
+		}
+	}
+#endif
+
 	Uint32 winflags = (fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
 	if (UsingGL)
 	{
+		// The second place in the tree that asks for a GL context, and it has
+		// to agree with GLDevice::Create about what it is asking for. Requesting
+		// a desktop core profile here on Android makes SDL_CreateWindow itself
+		// fail, before any of the renderer's own code runs -- so the backend
+		// looks absent when it is merely unreachable.
+#ifdef __ANDROID__
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
+			SDL_GL_CONTEXT_PROFILE_ES);
+#else
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
 			SDL_GL_CONTEXT_PROFILE_CORE);
+#endif
 		SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 		SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 		winflags |= SDL_WINDOW_OPENGL;

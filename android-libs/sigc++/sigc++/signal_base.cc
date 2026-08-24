@@ -16,7 +16,7 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 #include <sigc++/signal_base.h>
-#include <memory> // std::auto_ptr
+#include <memory> // std::unique_ptr
 
 namespace sigc {
 namespace internal {
@@ -138,7 +138,11 @@ void signal_impl::sweep()
 //static
 void* signal_impl::notify(void* d)
 {
-  std::auto_ptr<self_and_iter> si(static_cast<self_and_iter*>(d));
+  // Was std::auto_ptr, which C++17 removed and the NDK's libc++ therefore
+  // does not provide. Nothing here copies the pointer -- it is taken
+  // ownership of and deleted at the end of the scope -- so unique_ptr does
+  // exactly what this always meant.
+  std::unique_ptr<self_and_iter> si(static_cast<self_and_iter*>(d));
 
   if (si->self_->exec_count_ == 0)
   {

@@ -57,13 +57,29 @@ static void in_finishevent(void)
 ///////////////////////
 
 
-extern int SDL_SendKeyboardKey(Uint8 state, SDL_Scancode scancode);
-
+// Injects a key from the touch controls, and from the Java side generally.
+//
+// This called SDL_SendKeyboardKey, which is internal to SDL: it was declared
+// here by hand and resolved only because SDL used to be compiled into the
+// same binary. Built against SDL as a library it is an undefined symbol, and
+// the link fails at the very last step of the build.
+//
+// SDL_PushEvent is the public equivalent, with one difference: the internal
+// call also updates the state array behind SDL_GetKeyboardState, and this
+// does not. That costs nothing here -- the engine never reads it. id_in.cpp
+// keeps its own Keyboard[] and fills it from SDL_KEYDOWN and SDL_KEYUP,
+// which is exactly what arrives below.
 int PortableKeyEvent(int state, int code, int unicode){
-	if (state)
-		SDL_SendKeyboardKey(SDL_PRESSED, (SDL_Scancode)code);
-	else
-		SDL_SendKeyboardKey(SDL_RELEASED, (SDL_Scancode) code);
+	SDL_Event ev;
+	SDL_zero(ev);
+	ev.type = state ? SDL_KEYDOWN : SDL_KEYUP;
+	ev.key.timestamp = SDL_GetTicks();
+	ev.key.state = state ? SDL_PRESSED : SDL_RELEASED;
+	ev.key.repeat = 0;
+	ev.key.keysym.scancode = (SDL_Scancode)code;
+	ev.key.keysym.sym = SDL_GetKeyFromScancode((SDL_Scancode)code);
+	ev.key.keysym.mod = KMOD_NONE;
+	SDL_PushEvent(&ev);
 
 	return 0;
 }

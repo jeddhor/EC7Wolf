@@ -89,7 +89,7 @@ M1 rather than guessed at.
 Each ends with a gate that can be run from a terminal, as the multiplayer work
 did. A milestone is not done because it looks done.
 
-### M0 — A native library
+### M0 — A native library — **done**
 
 * SDL 2.32.10 vendored at `deps/SDL`, resolving the launcher's symlink.
 * The engine and its bundled dependencies cross-compiling under NDK r30 for
@@ -99,6 +99,56 @@ did. A milestone is not done because it looks done.
 *Exit:* a script that produces `libecwolf.so` for both ABIs from a clean tree,
 and a gate that checks each one is a valid shared object for the architecture
 it claims, exports `SDL_main`, and links nothing the device will not have.
+
+**Done.** `libec7wolf.so` builds for both ABIs, 14.6MB for arm64, exporting
+`SDL_main` and needing nothing the phone does not have.
+
+Three dependencies rather than one. `LocateSDL2.cmake` wants `deps/SDL`,
+`deps/SDL_mixer` and `deps/SDL_net`, so `tools/fetch_android_deps.sh` fetches
+all three, pinned to exactly the versions the desktop build links -- 2.32.10,
+2.8.1 and 2.2.0 -- so that a bug found on a phone can be reproduced on a
+workstation rather than blamed on a version nobody wrote down. They are
+gitignored: 136MB is not worth committing for one platform.
+
+**SDL_mixer needs no external codecs at all**, which was not obvious. It stops
+during configure asking for sources under `external/` that nothing fetches, and
+the reflex is to run its download script and pull in ogg, vorbis, flac, mpg123,
+opus and the rest. None of them are wanted here: Corridor 7's digitised sound
+is decoded by the engine, its music is synthesised by the engine's OPL, and the
+CD soundtrack is Ogg Vorbis -- which SDL_mixer decodes with stb_vorbis, built
+in, no dependency. FLAC, Opus, MOD, WavPack, GME and MIDI are off.
+
+Four things had to be fixed, and each was a build that stopped with a message
+about something other than the actual problem:
+
+* **The cross-compile needs a native build first.** Nothing can run `zipdir` to
+  make the pk3 on the host it is not built for, so a `TOOLS_ONLY` build exports
+  the host tools and the Android configure imports them. Without it CMake says
+  `include could not find requested file: IMPORTFILE-NOTFOUND`, which mentions
+  neither tools nor cross-compiling.
+* **`std::auto_ptr`**, in the vendored sigc++ that TouchControls uses. C++17
+  removed it and the NDK's libc++ does not provide it. It appears exactly once,
+  taking ownership of a pointer and deleting it at the end of a scope, with no
+  copying anywhere -- so `std::unique_ptr` is what it always meant. Fixed there
+  rather than by pinning the whole library to C++14, since it is one line and
+  nothing else in it uses a removed API.
+* **`SDL_SendKeyboardKey`**, which the touch-control input path called to inject
+  keys. It is internal to SDL, declared by hand in `in_android.cpp`, and
+  resolved only because SDL used to be compiled into the same binary. Against
+  SDL as a library it is an undefined symbol at the final link. `SDL_PushEvent`
+  is the public equivalent; the only thing it does not do is update the array
+  behind `SDL_GetKeyboardState`, which this engine never reads -- `id_in.cpp`
+  keeps its own `Keyboard[]` and fills it from the events.
+* The OpenGL backend, as predicted, finds neither desktop GL nor libepoxy,
+  warns, and builds without it. **The software renderer is what runs on the
+  phone**, and nothing had to be done to arrange that.
+
+The gate checks four things per ABI, none of which is "a file appeared": the
+right machine, an exported `SDL_main`, every `NEEDED` library either shipped or
+present on a device, and the API level recorded in `.note.android.ident`. That
+last one was written first as a pattern match on a label `llvm-readelf` does
+not print, so it silently never ran -- the note is raw bytes, and the API level
+is the first of them, little endian.
 
 ### M1 — An APK that assembles
 

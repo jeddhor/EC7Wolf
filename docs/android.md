@@ -1,0 +1,189 @@
+# Android
+
+ECWolf has an Android port. This fork has never built it, and the parts that
+would are eleven years old: they target an SDK from 2015, expect a support
+library that was deleted from Google's repository, and reach for SDL sources at
+a path that does not exist in this tree.
+
+Nothing about the *game* is the obstacle. The engine is ours and already knows
+Corridor 7; the pieces that have rotted are all on the Android side of the
+fence. This is the plan to bring them back and put Corridor 7 on a phone.
+
+---
+
+## What is already true
+
+Established by reading the tree and checking each claim against the SDK on this
+machine, rather than assumed.
+
+**The port is real and complete in outline.** `docs/changelog` records "Android
+support is now merged" in ECWolf 1.3.1. `android-libs/` holds Emile Belanger's
+`TouchControls` library and a stripped-down Java launcher from his Wolf3D Touch
+lineage, plus `libpng`, `sigc++` and `TinyXML` for the NDK side. The top-level
+`CMakeLists.txt` pulls all five in behind `if(ANDROID)`, `src/android/` carries
+the JNI glue, and the launcher's own CMake assembles a real APK with
+`aapt`/`d8`/`apksigner` and offers a `runadb` target that installs it, launches
+it and tails logcat.
+
+**The licence permits it.** `android-libs/launcher/License.txt` is explicit:
+the front end is GPLv2, and "ECWolf and products deriving from it are allowed
+to use this code under the terms of the LGPLv2.1". This fork is such a
+derivative.
+
+**The native entry point is small and already does the right thing.**
+`SDL_main` in `android-jni.cpp` takes `argv[1]` as a game directory, sets it as
+`HOME` and `XDG_CONFIG_HOME`, `chdir`s into it, takes `argv[2]` as the
+touch-control graphics path, and hands everything after that to `WL_Main`. So
+where the game data lives is a decision the Java side makes and passes in --
+which is the whole of the scoped-storage problem, and means it can be solved
+without touching the engine.
+
+**The IWAD picker is generic.** `wl_iwad_picker_android.cpp` and
+`NativeLib.pickIWad` present whatever list the engine hands them. Corridor 7 is
+already a game this engine knows, so nothing about game *identification* should
+need Android-specific work.
+
+**The renderer question answers itself.** Our OpenGL backend is compiled only
+when desktop OpenGL and libepoxy are found, and Android has neither -- the
+probe fails, CMake warns, and the build falls back to the software renderer we
+kept for exactly this kind of reason. **No GLES port is needed to get Corridor 7
+running on a phone.** Whether the software renderer is *fast enough* on a phone
+is a separate question, asked in M6 and answered with measurements rather than
+in advance.
+
+### What has rotted
+
+| Thing | State | Why it matters |
+| --- | --- | --- |
+| `deps/SDL` | Missing. `android-libs/launcher/src/org/libsdl/app` is a **broken symlink** into it | This is how the SDL Java glue is kept in step with the native SDL. Vendoring SDL 2.32.10 there -- the version the desktop build already uses -- fixes the symlink and guarantees the two match |
+| `minSdkVersion 14`, `targetSdkVersion 22` | Android 4.0 and 5.1, both from 2015 | NDK r27 and later refuse API levels below 21. The NDK here is r30 |
+| `support-v4-13.0.0.jar` | Hardcoded to a path in the deleted `extras/android/m2repository` | The SDK here has 23.1.0 and 23.3.0 in that repository, not 13.0.0. The dependency may be removable entirely |
+| `WRITE_EXTERNAL_STORAGE` + a directory chooser | Predates scoped storage | On Android 11 and later this is not how an app reads a folder of game data |
+| `com.beloko.wolf3dhg`, Wolf3D strings and art | Another game's identity | This is EC7Wolf |
+| Touch controls | Authored for Wolf3D's verbs | Corridor 7 adds the visor cycle, proximity mines and the floor-map panel |
+
+### What this machine has
+
+`aapt` (v1, which the launcher's CMake wants) survives in build-tools 34
+through 37, alongside `aapt2`, `d8` and `apksigner`. NDK r30 is installed.
+Platforms 34 to 36.1 are present. There is an **x86_64 Android 36 system
+image** and a working emulator, which means every milestone below can be gated
+without a physical device -- at the price of building for two ABIs, x86_64 for
+the emulator and arm64-v8a for real hardware.
+
+---
+
+## Milestones
+
+Each ends with a gate that can be run from a terminal, as the multiplayer work
+did. A milestone is not done because it looks done.
+
+### M0 — A native library
+
+* SDL 2.32.10 vendored at `deps/SDL`, resolving the launcher's symlink.
+* The engine and its bundled dependencies cross-compiling under NDK r30 for
+  **x86_64** and **arm64-v8a**.
+* Whatever minimum API level the NDK insists on, applied consistently.
+
+*Exit:* a script that produces `libecwolf.so` for both ABIs from a clean tree,
+and a gate that checks each one is a valid shared object for the architecture
+it claims, exports `SDL_main`, and links nothing the device will not have.
+
+### M1 — An APK that assembles
+
+* The launcher's CMake brought up to a modern SDK: `aapt`, `d8`, `apksigner`,
+  and the `support-v4` dependency either repointed or removed.
+* Manifest raised to a supported API level.
+* Both ABIs packaged into one APK.
+
+*Exit:* a gate that builds the APK and reads it back with `aapt dump badging`
+-- package, version, ABIs and permissions all as intended -- and verifies the
+signature with `apksigner verify`.
+
+### M2 — It starts
+
+* Installs on the emulator and reaches the engine rather than dying in the
+  launcher.
+* The C7 data placed where `argv[1]` can be pointed at it.
+
+*Exit:* a gate that boots a headless emulator, installs, launches, and captures
+a screenshot of the Corridor 7 title screen; plus logcat showing MAP01 loaded.
+This is the milestone that proves the whole idea.
+
+### M3 — Data, the way a person would do it
+
+* An install path that does not involve `adb` -- the game's files have to get
+  onto a phone somehow, and "push it with developer tools" is not an answer.
+* Scoped storage handled properly: app-specific external storage, or the
+  Storage Access Framework for picking a folder once.
+* The `.pk3` shipped inside the APK rather than expected beside the data.
+
+*Exit:* a gate that installs the APK on a clean emulator with no data pushed,
+drives the in-app import, and reaches MAP01.
+
+### M4 — Controls a person can play with
+
+* Touch controls covering Corridor 7's verbs: move, turn, strafe, fire, open,
+  weapon cycle, **visor mode**, **drop mine**, **floor map**.
+* The existing control editor kept working, since it is already better than
+  anything worth writing from scratch.
+* Gamepad support confirmed, given `GenericAxisValues` and friends are already
+  in the launcher.
+
+*Exit:* a gate that drives synthetic touch events through `adb shell input` and
+asserts, from the player trace, that each verb did what it should.
+
+### M5 — It is EC7Wolf
+
+* Package name, application id, label, and the icon set that already exists for
+  five other platforms.
+* The launcher's Wolf3D strings, about box and art replaced.
+* Nothing left claiming to be somebody else's app.
+
+*Exit:* the badging gate from M1 extended to assert identity, and a screenshot
+of the launcher.
+
+### M6 — Fast enough to play
+
+* Measure the software renderer on the emulator and, if possible, on hardware:
+  frame times at a phone's resolution.
+* Decide, on the numbers, whether a GLES backend is needed. Our GL work is
+  desktop 3.3 core; GLES 3.0 is a real port, not a flag, and is only worth it
+  if the measurement says so.
+* Whatever the answer, a documented resolution and scaling default that is
+  playable.
+
+*Exit:* a benchmark gate recording frame times at the shipped default, and a
+figure written down here.
+
+### M7 — Shipping
+
+* A build script, and the suite extended to cover the Android build.
+* README section: what it needs, how to install it, where the data goes.
+* Honest limits recorded, including the API level and what that means for
+  distribution.
+
+*Exit:* the whole suite green with the Android gates in it.
+
+---
+
+## What is not in this plan
+
+* **Google Play.** A targetSdk this old could not be published, and raising it
+  far enough is a separate project involving scoped storage, permissions and
+  privacy declarations. Sideloading is the target.
+* **iOS.** Nothing in the tree suggests it, and nothing here would carry over.
+* **Multiplayer on Android.** It should work -- it is the same engine over UDP
+  -- but it is not what any of the gates above test, and claiming it without
+  testing it would be the sort of thing this port's documentation exists to
+  avoid.
+
+## Risks, honestly
+
+| Risk | Why it matters | What reduces it |
+| --- | --- | --- |
+| The software renderer is too slow on a phone | Would turn M6 into a GLES port, which is a project rather than a milestone | Measure early -- the numbers can be taken as soon as M2 runs, well before M6 is due |
+| Eleven-year-old Java against a 2025 SDK | The launcher may need more than repointing; `aapt` v1 is deprecated and could vanish from a future build-tools | It builds against what is on this machine, and the fallback is `aapt2`, which is present |
+| The emulator is x86_64 and phones are arm64 | A gate that passes on the emulator says nothing about the device that matters | Both ABIs are built from M0, and the badging gate checks both are packaged |
+| Scoped storage | The most likely place for this to become tedious | The engine takes its directory as an argument, so this is entirely a Java-side decision |
+| Nobody to test on real hardware | Every gate here runs on an emulator | The emulator is the development loop; a real phone is the acceptance test, and that is stated rather than glossed |

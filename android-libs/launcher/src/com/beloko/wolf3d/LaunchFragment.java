@@ -170,7 +170,7 @@ public class LaunchFragment extends Fragment{
 	 * player with no data got a black screen and no explanation. This says what
 	 * is missing and refuses to launch until it is not.
 	 */
-	void refreshDataStatus() {
+	public void refreshDataStatus() {
 		if (dataStatusTextView == null)
 			return;
 

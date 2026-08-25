@@ -329,18 +329,52 @@ public class DiscImport
 		}
 		finally { cueIn.close(); }
 
-		final Cue cue = parseCue(cueText);
-		if (cue.tracks.isEmpty())
-			throw new IOException("the cue sheet lists no tracks");
-
 		final ParcelFileDescriptor pfd = resolver.openFileDescriptor(binUri, "r");
 		if (pfd == null)
 			throw new IOException("could not open the disc image");
 
 		final FileInputStream fis = new FileInputStream(pfd.getFileDescriptor());
-		final FileChannel ch = fis.getChannel();
-		int produced = 0;
 		try
+		{
+			return ripChannel(fis.getChannel(), cueText, gameDir, listener);
+		}
+		finally
+		{
+			try { fis.close(); } catch (IOException ignored) {}
+			try { pfd.close(); } catch (IOException ignored) {}
+		}
+	}
+
+	/**
+	 * The same thing from ordinary files, which is what a disc image inside a
+	 * zip becomes once it has been unpacked.
+	 */
+	public static int ripFiles(File cueFile, File binFile, File gameDir,
+		GameDataImport.Listener listener) throws IOException
+	{
+		final byte[] all = new byte[64 * 1024];
+		int n;
+		final FileInputStream cueIn = new FileInputStream(cueFile);
+		try { n = Math.max(0, cueIn.read(all)); }
+		finally { cueIn.close(); }
+
+		final FileInputStream fis = new FileInputStream(binFile);
+		try
+		{
+			return ripChannel(fis.getChannel(), new String(all, 0, n, "ISO-8859-1"),
+				gameDir, listener);
+		}
+		finally { fis.close(); }
+	}
+
+	private static int ripChannel(FileChannel ch, String cueText, File gameDir,
+		GameDataImport.Listener listener) throws IOException
+	{
+		final Cue cue = parseCue(cueText);
+		if (cue.tracks.isEmpty())
+			throw new IOException("the cue sheet lists no tracks");
+
+		int produced = 0;
 		{
 			final long imageSectors = ch.size() / RAW_SECTOR;
 
@@ -403,12 +437,6 @@ public class DiscImport
 				ripAudio(ch, track.startSector, end, dest, listener);
 				++produced;
 			}
-		}
-		finally
-		{
-			try { ch.close(); } catch (IOException ignored) {}
-			try { fis.close(); } catch (IOException ignored) {}
-			try { pfd.close(); } catch (IOException ignored) {}
 		}
 		return produced;
 	}

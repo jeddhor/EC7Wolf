@@ -65,6 +65,7 @@ done
 [ -z "$missing" ] || { printf 'SKIP: no game data in %s (missing:%s)\n' "$data" "$missing"; exit 0; }
 
 pkg=org.ec7wolf.EC7Wolf
+B=/storage/emulated/0/Android/data/$pkg/files/Corridor7/FULL
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT INT TERM
 
@@ -173,39 +174,53 @@ check "it will not start the game" play_disabled
 check "it asks for CORR7CD.EXE, not just the .CO7 files" says 'CORR7CD.EXE'
 
 printf '\nImporting\n'
-tap_match 'id/import_data_button' >/dev/null 2>&1; sleep 2
-check "it offers a zip and a folder" tap_match 'text="From a zip file"'
-sleep 5
-# Scroll the list until the zip shows up, rather than using the picker's search
-# box: the search in DocumentsUI did not filter the listing on this phone, and
-# a Downloads folder with a few hundred files in it is the normal case, not a
-# strange one. The list is alphabetical, so this terminates.
-pick_zip() {
+#
+# Handed straight to the app as an intent rather than driven through the system
+# file picker. That is not a shortcut around the feature: "open with EC7Wolf" is
+# how somebody imports a download from their browser or a file manager, and it
+# is a real path a player takes. It is also the only one a test can drive --
+# this tablet's DocumentsUI ignores injected input entirely, in either view
+# mode, by tap or by held press or by DPAD, so a gate resting on it tests
+# nothing but Google's UI on a good day.
+#
+# The URI has to come from MediaStore: adb cannot mint a content:// URI, but it
+# can look one up for a file it just put in Downloads, and --grant-read-uri-permission
+# is what lets the app read it.
+adb shell am force-stop "$pkg" >/dev/null 2>&1 || true
+mediaid=$(adb shell "content query --uri content://media/external/downloads --projection _id:_display_name" 2>/dev/null |
+	grep -i "$(basename "$zip")" | grep -oE '_id=[0-9]+' | cut -d= -f2 | head -1)
+if [ -z "$mediaid" ]; then
+	adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
+		-d "file:///sdcard/Download/$(basename "$zip")" >/dev/null 2>&1 || true
+	sleep 5
+	mediaid=$(adb shell "content query --uri content://media/external/downloads --projection _id:_display_name" 2>/dev/null |
+		grep -i "$(basename "$zip")" | grep -oE '_id=[0-9]+' | cut -d= -f2 | head -1)
+fi
+check "the archive has a content URI to hand over" test -n "$mediaid"
+[ -n "$mediaid" ] || { printf '\nFAIL: see above.\n'; exit 1; }
+
+adb logcat -c >/dev/null 2>&1 || true
+adb shell am start -a android.intent.action.VIEW -t application/zip \
+	-d "content://media/external/downloads/$mediaid" --grant-read-uri-permission \
+	-n "$pkg/com.beloko.wolf3d.EntryActivity" >/dev/null 2>&1
+# Importing is not instant -- a zip of loose files is seconds, a disc image is
+# minutes because it is unpacked and then the soundtrack is encoded. Wait for
+# the thing that says it worked rather than for a fixed time.
+wait_for_data() {
 	i=0
-	while [ $i -lt 40 ]; do
-		tap_match 'text="Corridor7.zip"' && return 0
-		adb shell input swipe "$swipe_x" "$swipe_from" "$swipe_x" "$swipe_to" 200 >/dev/null 2>&1
+	while [ $i -lt 120 ]; do
+		on_phone "$B/MAPTEMP.CO7" && return 0
+		sleep 3
 		i=$((i + 1))
 	done
 	return 1
 }
-check "the picker found the zip" pick_zip
-sleep 15
+check "the app accepted the archive and imported it" wait_for_data
 
-# Whether the tap actually selected anything is a different question from
-# whether the file was on screen, and the two failures read identically further
-# down -- five checks complaining about missing files when the truth is that
-# the picker is still open. Say which it is.
-if adb shell dumpsys window 2>/dev/null | grep -q "mCurrentFocus.*documentsui"; then
-	printf '  FAIL the file picker did not act on the tap and is still open\n'
-	printf '       This is the harness driving the system picker, not necessarily\n'
-	printf '       the import: tap the file by hand to tell the two apart.\n'
-	status=1
-	adb shell am force-stop com.google.android.documentsui >/dev/null 2>&1 || true
-	adb shell am force-stop "$pkg" >/dev/null 2>&1 || true
-	printf '\nFAIL: see above.\n'
-	exit 1
-fi
+# The import reports itself in a dialog, which sits over the status text the
+# next checks read.
+tap_match 'text="OK"' >/dev/null 2>&1 || true
+sleep 2
 
 printf '\nThe launcher, after importing\n'
 status_text > "$work/status.txt" 2>/dev/null || : > "$work/status.txt"
@@ -213,7 +228,6 @@ printf '  ..   %s\n' "$(cut -c1-72 "$work/status.txt")"
 check "it says the data is there" says 'Ready to play'
 check "it will start the game now" play_enabled
 
-B=/storage/emulated/0/Android/data/$pkg/files/Corridor7/FULL
 check "the executable came across too" on_phone "$B/CORR7CD.EXE"
 # The extras are only useful in their own directories.
 check "the cinematics went into video/" on_phone "$B/video/SEQTHREE.CO7"

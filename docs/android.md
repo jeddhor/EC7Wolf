@@ -525,14 +525,49 @@ disc-import fault: adb-pushed soundtrack files failed exactly the same way, and
 "CD audio: playing track 03" was printed on both sides of it, which is why it
 went unnoticed through M4.
 
-*Exit:* `test_android_apk.sh` covers the packaging and the JNI contract -- that
-`libc7rip.so` ships and its three entry points match the Java class declaring
-them. The end-to-end run is confirmed by hand rather than gated, because this
-device's DocumentsUI does not respond to injected input at all: not taps on rows
-in either view mode, not held presses, not `input touchscreen`, not DPAD focus
-plus Enter, with a fresh picker and a fresh app. That is the same wall that
-blocks the M4 zip gate, and driving a file picker is the one thing standing
-between both imports and being gated.
+**A zip may hold the disc image**, which is how the disc path became testable.
+The image is unpacked into the game directory first -- ISO 9660 means seeking
+and a zip stream does not seek -- and removed again whether the rip works or
+not. It checks for room before it starts: a few hundred megabytes on a phone
+that is routinely close to full is not a safe assumption, and running out
+halfway leaves a truncated image and an error from somewhere much further in.
+
+*Exit:* `test_android_import.sh` covers both, and drives neither through the
+file picker. See "Importing without the picker" below.
+
+### Importing without the picker
+
+Both import gates hand the archive to the app as an **intent** rather than
+driving the Storage Access Framework picker.
+
+This is not a way around the feature. "Open with EC7Wolf" is a road a player
+actually takes -- a zip downloaded in a browser, a file tapped in a file manager
+-- and arguably a friendlier one than hunting through a folder picker. The
+launcher declares `ACTION_VIEW` and `ACTION_SEND` for zip archives and imports
+whatever it is handed, disc image included.
+
+It is also the only road a test can drive. This tablet's DocumentsUI ignores
+injected input completely: not taps on rows in list or grid view, not held
+presses, not `input touchscreen`, not DPAD focus plus Enter, with a fresh picker
+and a fresh app, having ruled out touch filtering by an obscuring window. It
+worked exactly once and never again. A gate resting on that tests Google's UI on
+a good day and nothing at all on a bad one.
+
+The one wrinkle is getting a `content://` URI from a shell script, since adb
+cannot mint one. It can look one up, because a file put in Downloads is indexed
+by MediaStore:
+
+    content query --uri content://media/external/downloads --projection _id:_display_name
+    am start -a android.intent.action.VIEW -t application/zip \
+        -d content://media/external/downloads/<id> --grant-read-uri-permission
+
+`--grant-read-uri-permission` is what lets the app read it.
+
+Driving the picker itself would need a real UiAutomator instrumentation APK,
+which injects through `UiAutomation` rather than `adb shell input` and is not
+subject to whatever this device is doing. That is worth building the day the
+picker interaction is itself the thing under test; it is not worth it to reach
+code that an intent reaches directly.
 
 ### M7 — Fast enough to play — **done**
 

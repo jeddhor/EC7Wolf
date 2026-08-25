@@ -70,6 +70,38 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Hand EC7Wolf an archive and it imports from it: a zip of the
+                 game files, or a zip holding the CD image itself. This is how
+                 a download from a browser or a tap in a file manager reaches
+                 the importer without going through a folder picker, and it is
+                 also the only way the import can be tested without driving
+                 somebody else's UI.
+
+                 Two filters because Android matches on the MIME type the
+                 provider reports, and a zip arrives as any of these depending
+                 on where it came from. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.SEND" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/zip" />
+            </intent-filter>
         </activity>
        
           <activity

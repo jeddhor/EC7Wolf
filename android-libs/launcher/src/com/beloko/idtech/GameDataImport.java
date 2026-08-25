@@ -140,13 +140,22 @@ public class GameDataImport
 		return false;
 	}
 
-	/** Copy the game files out of a zip the player picked. */
+	/**
+	 * Copy the game files out of a zip the player picked.
+	 *
+	 * A zip holding a disc image is handled too. The image has to be unpacked
+	 * first -- reading ISO 9660 means seeking, and a zip stream does not seek --
+	 * so a few hundred megabytes land in the game directory briefly and are
+	 * deleted whether the rip works or not.
+	 */
 	public static int importFromZip(ContentResolver resolver, Uri zip, File gameDir,
 		Listener listener) throws IOException
 	{
 		InputStream raw = resolver.openInputStream(zip);
 		if(raw == null) throw new IOException("could not open the archive");
 
+		if(!gameDir.exists()) gameDir.mkdirs();
+		File cueTmp = null, binTmp = null;
 		int copied = 0;
 		ZipInputStream in = new ZipInputStream(raw);
 		try
@@ -158,6 +167,38 @@ public class GameDataImport
 				// Match on the base name: the files are usually one directory
 				// down inside the archive, and we do not care what it is called.
 				String name = new File(entry.getName()).getName();
+				final String lower = name.toLowerCase(Locale.US);
+
+				if(lower.endsWith(".cue") && cueTmp == null)
+				{
+					cueTmp = new File(gameDir, "import.cue.tmp");
+					if(listener != null) listener.onProgress("Unpacking " + name);
+					writeTo(in, cueTmp);
+					continue;
+				}
+				if(lower.endsWith(".bin") && binTmp == null)
+				{
+					// A disc image is a few hundred megabytes and has to be
+					// unpacked before it can be read, because ISO 9660 means
+					// seeking and a zip stream does not seek. Check there is
+					// room first: running out halfway leaves a truncated image
+					// and an error from somewhere much further in, and phones
+					// are routinely close to full.
+					final long need = entry.getSize();
+					final long free = gameDir.getUsableSpace();
+					if(need > 0 && free > 0 && free < need + (64L << 20))
+					{
+						throw new IOException(String.format(Locale.US,
+							"not enough room to unpack the disc image: it needs %d MB "
+							+ "and there is %d MB free", need >> 20, free >> 20));
+					}
+					binTmp = new File(gameDir, "import.bin.tmp");
+					if(listener != null)
+						listener.onProgress("Unpacking " + name + " (this is the big one)");
+					writeTo(in, binTmp);
+					continue;
+				}
+
 				String sub = destinationFor(name);
 				if(sub == null) continue;
 
@@ -169,6 +210,27 @@ public class GameDataImport
 		finally
 		{
 			try { in.close(); } catch(IOException ignored) {}
+		}
+
+		// A disc image in the archive is worth more than any loose files beside
+		// it: it carries the cinematics and the soundtrack, which nothing else
+		// does. Ripped after the archive is closed, because it needs to seek.
+		if(cueTmp != null && binTmp != null)
+		{
+			try
+			{
+				copied += DiscImport.ripFiles(cueTmp, binTmp, gameDir, listener);
+			}
+			finally
+			{
+				cueTmp.delete();
+				binTmp.delete();
+			}
+		}
+		else
+		{
+			if(cueTmp != null) cueTmp.delete();
+			if(binTmp != null) binTmp.delete();
 		}
 		return copied;
 	}

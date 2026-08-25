@@ -459,7 +459,7 @@ the import in M4 has to be done once more after upgrading from an earlier build.
 version code is not 1, that a launcher icon exists at every density from mdpi to
 xxxhdpi, and that nothing a player sees names another app.
 
-### M6.5 — The whole disc, ripped on the device — **implemented, one tap unverified**
+### M6.5 — The whole disc, ripped on the device — **done**
 
 Point the importer at a folder holding a `.cue` and its `.bin` and it takes the
 disc apart: the game data, the three cinematics the installer leaves behind, and
@@ -504,20 +504,35 @@ the implementation and comparing results:
   a rename on either side would otherwise fail only when somebody imported a
   disc.
 
-**What is not verified: the end-to-end run on a device.** The importer cannot be
-driven by the test harness, because this tablet's DocumentsUI does not respond to
-injected input at all -- not taps on rows in list or grid view, not held presses,
-not `input touchscreen`, not DPAD focus plus Enter, with a fresh picker and a
-fresh app. The same wall blocks the zip import gate (M4), where a person tapping
-by hand confirmed the app is fine and only the automation is not. So this needs
-one manual tap to close, and until then the Java and the encoder are unproven in
-the same breath even though every piece under them checks out.
+**Confirmed on the tablet**, by hand: a `.cue` and a `.bin` in a folder, nothing
+else, and the game starts on MAP01 with the cinematics and the soundtrack
+playing. The encoder's output measured `duration=183.400000` for track 7 against
+a recorded 183.400 -- so the ripped audio is not merely present but the right
+length to the millisecond.
 
-*Exit (partly met):* `test_android_apk.sh` covers the packaging and the JNI
-contract. The end-to-end assertion -- a `.cue`/`.bin` and nothing else, ending at
-MAP01 with `3 of 3` cinematics and `4 of 4` soundtrack files -- is still owed,
-and is blocked on being able to drive a file picker on this device rather than on
-anything in the importer.
+**It also turned up a bug that had nothing to do with ripping.** The soundtrack
+would not play, with
+
+    Unable to load music file ./cdaudio/track03.ogg: Couldn't open '...'
+
+while the engine's own file layer had already counted `4 of 4` in that same
+directory. `Mix_LoadMUS` goes through `SDL_RWFromFile`, and **on Android a path
+that does not begin with `/` is not a filesystem path at all** -- SDL hands it to
+the asset manager and looks inside the APK. The engine reaches its game data
+through a relative path, so every track failed to open no matter how it got
+there. `SD_StartMusicFile` resolves to an absolute path now. This was never a
+disc-import fault: adb-pushed soundtrack files failed exactly the same way, and
+"CD audio: playing track 03" was printed on both sides of it, which is why it
+went unnoticed through M4.
+
+*Exit:* `test_android_apk.sh` covers the packaging and the JNI contract -- that
+`libc7rip.so` ships and its three entry points match the Java class declaring
+them. The end-to-end run is confirmed by hand rather than gated, because this
+device's DocumentsUI does not respond to injected input at all: not taps on rows
+in either view mode, not held presses, not `input touchscreen`, not DPAD focus
+plus Enter, with a fresh picker and a fresh app. That is the same wall that
+blocks the M4 zip gate, and driving a file picker is the one thing standing
+between both imports and being gated.
 
 ### M7 — Fast enough to play — **done**
 

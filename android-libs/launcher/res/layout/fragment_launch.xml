@@ -42,6 +42,29 @@
     </RelativeLayout>
 
     <LinearLayout
+        android:id="@+id/data_status_linearlayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:orientation="vertical"
+        android:padding="8dp" >
+
+        <TextView
+            android:id="@+id/data_status_textview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textAppearance="?android:attr/textAppearanceMedium" />
+
+        <Button
+            android:id="@+id/import_data_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Import Game Data" />
+    </LinearLayout>
+
+    <LinearLayout
         android:id="@+id/start_buttons_linearlayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

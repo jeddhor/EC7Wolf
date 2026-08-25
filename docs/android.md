@@ -305,16 +305,57 @@ found by resource id rather than by screen position. The `Game` activity is
 not exported, so that box is the only way to pass an argument in from outside
 the app.
 
-### M4 — Data, the way a person would do it
+### M4 — Data, the way a person would do it — **done**
 
-* An install path that does not involve `adb` -- the game's files have to get
-  onto a phone somehow, and "push it with developer tools" is not an answer.
-* Scoped storage handled properly: app-specific external storage, or the
-  Storage Access Framework for picking a folder once.
-* The `.pk3` shipped inside the APK rather than expected beside the data.
+The player supplies Corridor 7 themselves, through the launcher, with no
+developer tools. Both ways in are implemented and both were driven end to end
+on the phone from a wiped app:
 
-*Exit:* a gate that installs the APK on a clean emulator with no data pushed,
-drives the in-app import, and reaches MAP01.
+* **From a zip** -- entries are matched on their base name, so it does not
+  matter what the folder inside the archive is called.
+* **From a folder** -- the Storage Access Framework, walked with
+  `DocumentsContract` (there is no androidx in this build). It descends up to
+  three levels, because a disc is usually unpacked into a directory of its own
+  and the player will point at the parent.
+
+Both pick up the CD extras when they are alongside the game: the cinematics go
+to `video/` and a ripped soundtrack to `cdaudio/`, which is where the engine
+looks. A phone installed this way gets the animations and the music that this
+project's own desktop install went without for weeks.
+
+The `.pk3` was already shipping inside the APK and is copied out on launch.
+
+**The required-file list was wrong, and the way it was wrong is worth keeping.**
+It was derived from `BaseFileNames` in `wl_iwad.cpp`, which gives seven files
+for Corridor 7. Import exactly those and the launcher says the data is present
+and the engine then refuses to start, reporting
+
+    Can not find base game data. (*.wl6, *.wl1, *.sdm, *.sod, *.n3d)
+
+which names five extensions that have nothing to do with Corridor 7 and does
+not name the file it actually wants. The missing file is **`CORR7CD.EXE`**:
+Corridor 7 keeps its palette inside its own executable, and
+`file_vswap.cpp` reads `C7PAL` out of it at offset `0x2FFC0`, trusting it only
+when the file is exactly 250,776 bytes. `C7PAL` is in the iwad's `MustContain`,
+so without the executable the whole install is rejected. The launcher now asks
+for it by name, and says so specifically when the executable is present but is
+a different build.
+
+The launcher also refuses to start the game when data is missing, instead of
+launching into a black screen with no explanation, and the first-run text no
+longer tells the player to copy `*.WL6` files to `/sdcard/Beloko/`, a path that
+has not existed since M2 moved to scoped storage.
+
+The pickers open at Downloads. Left to itself the folder picker starts at the
+root of storage, which the SAF refuses to grant, so the first thing the player
+saw was "To protect your privacy, choose another folder" -- which reads as a
+refusal rather than as an instruction to go somewhere else.
+
+*Exit:* `tools/test_android_import.sh` clears the app, pushes a zip to
+Downloads, and drives the launcher: it checks the data is reported missing,
+that `CORR7CD.EXE` is named, that the game **cannot** be started, then imports,
+checks the extras landed in their own directories with no `.part` files left
+behind, and finally plays MAP01 with the cinematics and soundtrack found.
 
 ### M5 — Controls a person can play with
 

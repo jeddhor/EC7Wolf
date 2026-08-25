@@ -45,6 +45,15 @@ BUILD_TOOLS=$(ls -d "$SDK"/build-tools/* 2>/dev/null | sort -V | tail -1)
 PLATFORM=$(ls -d "$SDK"/platforms/android-* 2>/dev/null | sort -V | tail -1)
 
 abis=${*:-"arm64-v8a x86_64"}
+# Building one ABI is the right thing to do while iterating on a phone -- it
+# halves the cycle -- but the APK it leaves behind has only that ABI in it, and
+# nothing about testing on the phone will reveal that. Say so, because the APK
+# gate finding it later reads like a regression rather than a shortcut.
+case " $abis " in
+	*" arm64-v8a "*) case " $abis " in *" x86_64 "*) : ;;
+		*) printf 'NOTE: single-ABI build; the APK will not be release-ready.\n' ;; esac ;;
+	*) printf 'NOTE: single-ABI build; the APK will not be release-ready.\n' ;;
+esac
 # arm64-v8a is what a phone runs, so it is the ABI the APK is assembled around;
 # the rest are added to it afterwards.
 primary=$(printf '%s\n' $abis | head -1)

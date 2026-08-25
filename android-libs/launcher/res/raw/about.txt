@@ -1,3 +1,6 @@
-Thank you for downloading ECWolf.
+EC7Wolf -- Corridor 7: Alien Invasion, built on ECWolf.
 
-Please consider supporting Beloko Games on Google Play if you like this app.
+ECWolf is by Braden Obrzut and contributors. The Android launcher and the touch
+controls are based on the work of Beloko Games.
+
+Corridor 7 itself is not included. See the PLAY tab to import your own copy.

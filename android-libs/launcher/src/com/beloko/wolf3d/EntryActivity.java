@@ -59,7 +59,7 @@ public class EntryActivity extends Activity  {
 
 		if (IntroDialog.showIntro(this))
 		{
-			IntroDialog.show(this,"ECWolf", R.raw.intro);
+			IntroDialog.show(this,"EC7Wolf", R.raw.intro);
 		}
 		/*else
 		{

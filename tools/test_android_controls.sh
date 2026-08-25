@@ -54,6 +54,17 @@ adb shell ls "$B/MAPTEMP.CO7" >/dev/null 2>&1 ||
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT INT TERM
+# Escape closes the soft keyboard on some Android versions and does nothing on
+# others -- Samsung's Android 11 IME ignores it, and the keyboard then covers
+# the button the next tap is aimed at, so the tap lands on a key instead. Back
+# always closes it, but back with no keyboard up navigates away, so ask first.
+hide_keyboard() {
+	if adb shell dumpsys input_method 2>/dev/null | grep -q 'mInputShown=true'; then
+		adb shell input keyevent 4 >/dev/null 2>&1
+		sleep 1
+	fi
+}
+
 status=0
 check() {
 	message=$1; shift
@@ -93,15 +104,48 @@ adb shell am start -n "$pkg/com.beloko.wolf3d.EntryActivity" >/dev/null 2>&1
 sleep 5
 # Straight into a level, with mines to drop: the player starts MAP01 with none,
 # and a verb that cannot be exercised cannot be tested.
-adb shell input tap $(( W / 2 )) $(( H * 83 / 100 )) >/dev/null 2>&1   # the args box
+#
+# By resource id, not by a fraction of the screen. The launcher's own widgets
+# are laid out by Android, and where they land on a 2560x1600 tablet is not
+# where they land on a 3120x1440 phone.
+# uiautomator will not dump while anything on screen is animating; it says so
+# on stderr, leaves the previous dump in place, and a launcher that has just
+# been started is animating. Delete, retry, and if it truly cannot be found say
+# so -- this used to fail the "set -e" way, killing the gate with no output at
+# all after the header.
+tap_id() {
+	i=0
+	while [ $i -lt 6 ]; do
+		adb shell rm -f /sdcard/ec7-ui.xml >/dev/null 2>&1
+		adb shell uiautomator dump /sdcard/ec7-ui.xml >/dev/null 2>&1
+		bounds=$(adb shell cat /sdcard/ec7-ui.xml 2>/dev/null | tr '>' '\n' | grep "$1" |
+			grep -o 'bounds="\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]"' | head -1 | tr -cs '0-9' ' ')
+		if [ -n "$bounds" ]; then
+			set -- $bounds
+			adb shell input tap $(( ($1 + $3) / 2 )) $(( ($2 + $4) / 2 ))
+			return 0
+		fi
+		sleep 2; i=$((i + 1))
+	done
+	return 1
+}
+if ! tap_id 'id/extra_args_edittext'; then
+	printf '  FAIL could not find the launcher on screen\n'
+	printf '\nFAIL: see above.\n'
+	exit 1
+fi
 sleep 2
 adb shell input text '%s--tedlevel%sMAP01%s--capture-verbs%s--capture-give%sC7Mines' >/dev/null 2>&1
 sleep 2
-adb shell input keyevent 111 >/dev/null 2>&1
+hide_keyboard
 sleep 1
 adb logcat -c >/dev/null 2>&1 || true
-adb shell input tap $(( W / 2 )) $(( H * 94 / 100 )) >/dev/null 2>&1   # Play Game
-sleep 26
+if ! tap_id 'id/start_full'; then
+	printf '  FAIL could not find the Play button\n'
+	printf '\nFAIL: see above.\n'
+	exit 1
+fi
+sleep 28
 
 trace() { adb logcat -d 2>/dev/null | grep -oE 'verbs tic=[0-9]+ .*' | tail -1; }
 field() { printf '%s\n' "$2" | tr ' ' '\n' | sed -n "s/^$1=//p"; }

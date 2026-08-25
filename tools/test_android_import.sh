@@ -64,6 +64,17 @@ pkg=org.ec7wolf.EC7Wolf
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT INT TERM
 
+# Escape closes the soft keyboard on some Android versions and does nothing on
+# others -- Samsung's Android 11 IME ignores it, and the keyboard then covers
+# the button the next tap is aimed at, so the tap lands on a key instead. Back
+# always closes it, but back with no keyboard up navigates away, so ask first.
+hide_keyboard() {
+	if adb shell dumpsys input_method 2>/dev/null | grep -q 'mInputShown=true'; then
+		adb shell input keyevent 4 >/dev/null 2>&1
+		sleep 1
+	fi
+}
+
 status=0
 check() {
 	message=$1; shift
@@ -177,6 +188,21 @@ pick_zip() {
 check "the picker found the zip" pick_zip
 sleep 15
 
+# Whether the tap actually selected anything is a different question from
+# whether the file was on screen, and the two failures read identically further
+# down -- five checks complaining about missing files when the truth is that
+# the picker is still open. Say which it is.
+if adb shell dumpsys window 2>/dev/null | grep -q "mCurrentFocus.*documentsui"; then
+	printf '  FAIL the file picker did not act on the tap and is still open\n'
+	printf '       This is the harness driving the system picker, not necessarily\n'
+	printf '       the import: tap the file by hand to tell the two apart.\n'
+	status=1
+	adb shell am force-stop com.google.android.documentsui >/dev/null 2>&1 || true
+	adb shell am force-stop "$pkg" >/dev/null 2>&1 || true
+	printf '\nFAIL: see above.\n'
+	exit 1
+fi
+
 printf '\nThe launcher, after importing\n'
 status_text > "$work/status.txt" 2>/dev/null || : > "$work/status.txt"
 printf '  ..   %s\n' "$(cut -c1-72 "$work/status.txt")"
@@ -194,7 +220,7 @@ check "no half-written files were left behind" no_partials
 printf '\nPlaying it\n'
 tap_match 'id/extra_args_edittext' >/dev/null 2>&1; sleep 1
 adb shell input text '%s--tedlevel%sMAP01' >/dev/null 2>&1; sleep 1
-adb shell input keyevent 111 >/dev/null 2>&1; sleep 1
+hide_keyboard; sleep 1
 adb logcat -c >/dev/null 2>&1 || true
 tap_match 'id/start_full' >/dev/null 2>&1
 sleep 28

@@ -97,6 +97,17 @@ tap_widget() {
 		}
 }
 
+# Escape closes the soft keyboard on some Android versions and does nothing on
+# others -- Samsung's Android 11 IME ignores it, and the keyboard then covers
+# the button the next tap is aimed at, so the tap lands on a key instead. Back
+# always closes it, but back with no keyboard up navigates away, so ask first.
+hide_keyboard() {
+	if adb shell dumpsys input_method 2>/dev/null | grep -q 'mInputShown=true'; then
+		adb shell input keyevent 4 >/dev/null 2>&1
+		sleep 1
+	fi
+}
+
 printf '\nStarting a level\n'
 adb shell am force-stop "$pkg" >/dev/null 2>&1 || true
 adb shell am start -n "$pkg/com.beloko.wolf3d.EntryActivity" >/dev/null 2>&1
@@ -110,7 +121,7 @@ check "the launcher came up" tap_widget extra_args_edittext
 sleep 1
 adb shell input text '%s--tedlevel%sMAP01' >/dev/null 2>&1
 sleep 1
-adb shell input keyevent 111 >/dev/null 2>&1   # dismiss the keyboard
+hide_keyboard   # dismiss the keyboard
 sleep 1
 
 adb logcat -c >/dev/null 2>&1 || true

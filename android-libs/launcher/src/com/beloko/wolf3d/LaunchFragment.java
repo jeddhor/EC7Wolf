@@ -72,7 +72,7 @@ public class LaunchFragment extends Fragment{
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 
-		AppSettings.setGame(IDGame.Wolf3d);
+		AppSettings.setGame(IDGame.Corridor7);
 		demoBaseDir = AppSettings.getQuakeDemoDir();
 		fullBaseDir = AppSettings.getQuakeFullDir();
 

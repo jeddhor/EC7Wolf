@@ -1,6 +1,6 @@
 add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/com/beloko/idtech/R.java"
-	COMMAND "${ANDROID_AAPT_BINARY}" package -m -J ${CMAKE_CURRENT_BINARY_DIR} -M ../AndroidManifest.xml -S ../res -I "${ANDROID_SDK_JAR}" --custom-package com.beloko.idtech
-	DEPENDS ../AndroidManifest.xml ../res
+	COMMAND "${ANDROID_AAPT_BINARY}" package -m -J ${CMAKE_CURRENT_BINARY_DIR} -M "${ANDROID_MANIFEST}" -S ../res -I "${ANDROID_SDK_JAR}" --custom-package com.beloko.idtech
+	DEPENDS "${ANDROID_MANIFEST}" ../res
 	WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 	COMMENT "Generating resources"
 )
@@ -70,7 +70,7 @@ add_custom_command(TARGET engine-android POST_BUILD
 	COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:SDL2_mixer>" "${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_ANDROID_ARCH_ABI}/$<TARGET_FILE_NAME:SDL2_mixer>"
 	COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:SDL2_net>" "${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_ANDROID_ARCH_ABI}/$<TARGET_FILE_NAME:SDL2_net>"
 	COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/../assets" "${OUTPUT_DIR}/assets"
-	COMMAND "${ANDROID_AAPT_BINARY}" package -f $<$<CONFIG:Debug>:--debug-mode> -M "${CMAKE_CURRENT_SOURCE_DIR}/../AndroidManifest.xml" -S "${CMAKE_CURRENT_SOURCE_DIR}/../res" -A "${OUTPUT_DIR}/assets" -I "${ANDROID_SDK_JAR}" -F "${APK_OUTPUT}"
+	COMMAND "${ANDROID_AAPT_BINARY}" package -f $<$<CONFIG:Debug>:--debug-mode> -M "${ANDROID_MANIFEST}" -S "${CMAKE_CURRENT_SOURCE_DIR}/../res" -A "${OUTPUT_DIR}/assets" -I "${ANDROID_SDK_JAR}" -F "${APK_OUTPUT}"
 	COMMAND "${ANDROID_D8_BINARY}" $<$<CONFIG:Release>:--release> $<$<CONFIG:MinSizeRel>:--release> --output . --lib "${ANDROID_SDK_JAR}"
 		"engine-android.jar"
 	COMMAND "${ANDROID_AAPT_BINARY}" add -f "${APK_OUTPUT}" "classes.dex" "lib/${CMAKE_ANDROID_ARCH_ABI}/*"

@@ -60,7 +60,7 @@ for f in AUDIOHED.CO7 AUDIOT.CO7 MAPTEMP.CO7 VGADICT.CO7 VGAHEAD.CO7 \
 done
 [ -z "$missing" ] || { printf 'SKIP: no game data in %s (missing:%s)\n' "$data" "$missing"; exit 0; }
 
-pkg=com.beloko.wolf3dhg
+pkg=org.ec7wolf.EC7Wolf
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT INT TERM
 
@@ -133,7 +133,7 @@ printf '  ..   %s (%s)\n' "$(adb shell getprop ro.product.model 2>/dev/null | tr
 adb install -r "$apk" >/dev/null 2>&1
 adb shell pm clear "$pkg" >/dev/null 2>&1
 check "the app has no data at all" \
-	absent_on_phone "/storage/emulated/0/Android/data/$pkg/files/Wolf3d/FULL/MAPTEMP.CO7"
+	absent_on_phone "/storage/emulated/0/Android/data/$pkg/files/Corridor7/FULL/MAPTEMP.CO7"
 
 printf '\nThe player brings a zip\n'
 zip=$work/Corridor7.zip
@@ -183,7 +183,7 @@ printf '  ..   %s\n' "$(cut -c1-72 "$work/status.txt")"
 check "it says the data is there" says 'Ready to play'
 check "it will start the game now" play_enabled
 
-B=/storage/emulated/0/Android/data/$pkg/files/Wolf3d/FULL
+B=/storage/emulated/0/Android/data/$pkg/files/Corridor7/FULL
 check "the executable came across too" on_phone "$B/CORR7CD.EXE"
 # The extras are only useful in their own directories.
 check "the cinematics went into video/" on_phone "$B/video/SEQTHREE.CO7"

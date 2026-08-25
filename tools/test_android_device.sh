@@ -61,7 +61,7 @@ if adb shell dumpsys window 2>/dev/null | grep -q 'mDreamingLockscreen=true'; th
 	exit 0
 fi
 
-pkg=com.beloko.wolf3dhg
+pkg=org.ec7wolf.EC7Wolf
 shots=$(mktemp -d)
 trap 'rm -rf "$shots"' EXIT INT TERM
 

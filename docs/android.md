@@ -64,7 +64,7 @@ work. The backend is ported to OpenGL ES instead, in M1.
 | `minSdkVersion 14`, `targetSdkVersion 22` | Android 4.0 and 5.1, both from 2015 | NDK r27 and later refuse API levels below 21. The NDK here is r30 |
 | `support-v4-13.0.0.jar` | Hardcoded to a path in the deleted `extras/android/m2repository` | The SDK here has 23.1.0 and 23.3.0 in that repository, not 13.0.0. The dependency may be removable entirely |
 | `WRITE_EXTERNAL_STORAGE` + a directory chooser | Predates scoped storage | On Android 11 and later this is not how an app reads a folder of game data |
-| `com.beloko.wolf3dhg`, Wolf3D strings and art | Another game's identity | This is EC7Wolf |
+| `com.beloko.wolf3dhg`, Wolf3D strings and art | Another game's identity | **Done in M6:** `org.ec7wolf.EC7Wolf`, generated from `versiondefs.cmake` |
 | Touch controls | Authored for Wolf3D's verbs | Corridor 7 adds the visor cycle, proximity mines and the floor-map panel |
 
 ### What this machine has
@@ -422,15 +422,123 @@ sticks move and turn the player, and the mine button spends a mine. The mine
 goes last, because a proximity mine dropped at your feet is a proximity mine
 dropped at your feet.
 
-### M6 — It is EC7Wolf
+### M6 — It is EC7Wolf — **done**
 
-* Package name, application id, label, and the icon set that already exists for
-  five other platforms.
-* The launcher's Wolf3D strings, about box and art replaced.
-* Nothing left claiming to be somebody else's app.
+The app was somebody else's: application id `com.beloko.wolf3dhg`, label
+"ECWolf", version 1.0, another game's icon, and its data in a directory called
+`Wolf3d`. It is now `org.ec7wolf.EC7Wolf`, labelled EC7Wolf, versioned
+`1.0-beta140` (code 140), with this project's own icon and its data in
+`Corridor7`.
 
-*Exit:* the badging gate from M1 extended to assert identity, and a screenshot
-of the launcher.
+**The identity is generated, not written down twice.** `AndroidManifest.xml.in`
+is configured from `src/versiondefs.cmake`, which is where `PRODUCT_IDENTIFIER`,
+`PRODUCT_NAME` and the version already lived for the other five platforms. The
+version code counts commits since the beta anchor, so it rises on its own and
+never needs maintaining. The gate reads the same file, so editing one side alone
+fails the build rather than shipping a mismatch.
+
+The icon comes from the existing five-platform icon set rather than being drawn
+again, and now covers xxhdpi and xxxhdpi as well -- those densities postdate this
+launcher, and without them Android upscales a 96-pixel icon onto a modern screen.
+
+**One thing deliberately not renamed:** the entry activity is still the class
+`com.beloko.wolf3d.EntryActivity`. That is Beloko's launcher code, which this
+fork uses and credits in the about text. Renaming the Java packages would churn
+thirty-odd files, show a player nothing, and make the borrowing harder to see
+rather than easier. The gate checks the application id, the label and the
+launcher entry's label -- what a person actually sees -- and excludes the class
+name explicitly so that the exemption is written down rather than accidental.
+
+Changing the application id makes this a different app to Android, which is the
+point: `com.beloko.wolf3dhg` may well be the ECWolf a player bought from Beloko,
+and this must not install over it. It also means the data directory moves, so
+the import in M4 has to be done once more after upgrading from an earlier build.
+
+*Exit:* `tools/test_android_apk.sh` asserts the application id and label match
+`src/versiondefs.cmake`, that the version is not the placeholder 1.0, that the
+version code is not 1, that a launcher icon exists at every density from mdpi to
+xxxhdpi, and that nothing a player sees names another app.
+
+### M6.5 — The whole disc, ripped on the device
+
+Today a player has to bring already-extracted files: the `.CO7` set, and if they
+want the cinematics and the soundtrack, those too, in the right subdirectories.
+On a desktop that is a scripted afternoon. On a phone it is not reasonable at
+all. What a player actually has is **the disc image** -- a `.bin` and a `.cue` --
+and the app should be able to take that and produce everything itself.
+
+Everything needed to do it is already in this repository, in Python, and none of
+it needs anything a phone lacks except one thing.
+
+**The three pieces.**
+
+* **The game data.** Track 1 is `MODE1/2352`: sixteen bytes of header, 2048 of
+  data, 288 of error correction, repeated. Strip that and it is an ISO 9660
+  filesystem. `tools/extract_c7_video.py` already walks ISO 9660 in pure Python
+  precisely because `isoinfo` lists this disc and then extracts nothing from it.
+  Pure arithmetic, no dependencies, port it to Java.
+* **The cinematics.** The same track, the same walk -- `SEQONE.CO7`,
+  `SEQTHREE.CO7`, `SEQFOUR.CO7`, about 27 MB. They are on the disc and in no
+  installed game directory, which is why nobody has them. Free once the walk
+  above exists.
+* **The soundtrack.** Audio tracks in a `.bin` are already raw CD audio: 16-bit
+  little-endian stereo at 44.1 kHz, in 2352-byte sectors, no header. Extracting
+  them is a byte copy. **Encoding them is the one hard part.**
+
+**The one hard problem: there is no Vorbis encoder on Android.**
+
+`tools/make_cdaudio.py` pipes the raw sectors into `ffmpeg -c:a libvorbis`.
+There is no ffmpeg on a phone, and the SDL_mixer this project ships decodes with
+**stb_vorbis** and **drflac** -- both decoder-only. So the four music tracks
+(3, 5, 7 and 9; the even ones are silent gaps) have to be turned into something
+the engine can play, by something we ship.
+
+| Option | Cost | Verdict |
+|---|---|---|
+| Vendor `libogg` + `libvorbis` + `libvorbisenc` | ~500 KB of BSD-licensed C; a few minutes of CPU once | **Recommended** |
+| `MediaCodec` + `MediaMuxer` to Opus-in-Ogg | Muxing Ogg needs API 29; minSdk is 21; and stb_vorbis cannot decode Opus | Rejected |
+| `MediaCodec` FLAC, or vendor `libFLAC` | drflac can play it, but it is lossless: ~140 MB | Fallback only |
+| Write `.wav` and widen the engine's lookup | No encoder at all; ~273 MB for four tracks | Last resort |
+
+Vendoring the encoder wins on every axis that matters: it produces the *same*
+`trackNN.ogg` the desktop rip produces (~17 MB, byte-comparable), it works on
+every API level, and it is the same library family already trusted for playback.
+The licence is BSD and this binary is already GPL-3 because of xBRZ, so there is
+no new constraint.
+
+**Where it plugs in.** M4 already built the import: a zip or a folder, chosen
+through the Storage Access Framework, with `destinationFor()` deciding what each
+file is. A `.cue` becomes another thing that function recognises. The folder
+path matters more than the zip here, because a `.cue` names its `.bin` as a
+sibling and a single-document URI cannot see siblings -- picking the folder
+gives access to both.
+
+**Things that will go wrong, written down in advance.**
+
+* **`PREGAP` shifts file offsets.** `INDEX 01` is a position on the disc; the
+  pregap is not in the file. Get this wrong and every track starts two seconds
+  early, which sounds almost right -- this disc's even-numbered tracks are
+  silent gaps, so the damage hides. The acceptance test below is designed to
+  catch exactly this.
+* **316 MB, streamed.** Never read the image into memory, and never materialise
+  the whole ISO. Extract by sector offset, which is how the desktop rip was
+  finally done.
+* **It takes minutes, not seconds.** Encoding ~1550 seconds of audio needs a
+  progress display and must survive the screen turning off.
+* **Storage.** The image plus the output needs headroom, and the player will
+  want to delete the 316 MB image afterwards -- so say so when it finishes.
+* **Not every disc image is this one.** Handle `MODE1/2048` and a missing
+  `.cue`, and fail with a sentence that names what was wrong rather than
+  "import failed".
+
+*Exit:* a gate that hands the app a `.cue`/`.bin` pair and nothing else, and
+then asserts the game starts on MAP01 with `3 of 3` cinematics and `4 of 4`
+soundtrack files. **The audio is checked against the desktop rip**, not merely
+for existence: `corr7/extracted-ogg/` already holds what `ffmpeg` produced, so
+the PCM the device extracts can be compared with the PCM the desktop encoded
+from. That compares the sector arithmetic directly and is independent of any
+difference between two Vorbis encoders -- and it is what turns the pregap trap
+from a thing somebody notices a year later into a failing test.
 
 ### M7 — Fast enough to play
 

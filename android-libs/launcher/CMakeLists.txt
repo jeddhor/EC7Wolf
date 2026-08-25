@@ -2,7 +2,17 @@ find_package(Java REQUIRED)
 include(UseJava)
 
 set(APK_OUTPUT "${CMAKE_BINARY_DIR}/${ENGINE_BINARY_NAME}.apk")
-set(APK_PACKAGE_NAME "com.beloko.wolf3dhg")
+# The application id, and everything else a phone shows about this app, comes
+# from src/versiondefs.cmake. The manifest is generated from it so the two
+# cannot drift: this used to say com.beloko.wolf3dhg, with a label of "ECWolf"
+# and a version of 1.0, none of which was true.
+set(APK_PACKAGE_NAME "${PRODUCT_IDENTIFIER}")
+# Monotonic, and free: it counts commits since the beta anchor, so it rises
+# with every commit and never needs maintaining. Android only requires that it
+# increases between releases.
+set(ANDROID_VERSION_CODE "${EC7WOLF_BETA}")
+set(ANDROID_MANIFEST "${CMAKE_CURRENT_BINARY_DIR}/AndroidManifest.xml")
+configure_file(AndroidManifest.xml.in "${ANDROID_MANIFEST}" @ONLY)
 set(APK_ENTRY_ACTIVITY "com.beloko.wolf3d.EntryActivity")
 
 set(ANDROID_SDK "ANDROID_SDK-NOTFOUND" CACHE PATH "Path to android.jar")

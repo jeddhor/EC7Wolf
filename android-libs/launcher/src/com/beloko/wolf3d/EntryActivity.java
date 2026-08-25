@@ -48,7 +48,7 @@ public class EntryActivity extends Activity  {
 		final ActionBar actionBar = getActionBar();
 		actionBar.setNavigationMode(ActionBar.NAVIGATION_MODE_TABS);
 
-		AppSettings.setGame(IDGame.Wolf3d);
+		AppSettings.setGame(IDGame.Corridor7);
 		AppSettings.reloadSettings(getApplication());
 
 		actionBar.addTab(actionBar.newTab().setText("play").setTabListener(new TabListener<LaunchFragment>(this, "play", LaunchFragment.class)));

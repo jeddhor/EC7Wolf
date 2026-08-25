@@ -47,8 +47,8 @@ if adb shell dumpsys window 2>/dev/null | grep -q 'mDreamingLockscreen=true'; th
 	printf 'SKIP: %s is locked\n' "$serial"; exit 0
 fi
 
-pkg=com.beloko.wolf3dhg
-B=/storage/emulated/0/Android/data/$pkg/files/Wolf3d/FULL
+pkg=org.ec7wolf.EC7Wolf
+B=/storage/emulated/0/Android/data/$pkg/files/Corridor7/FULL
 adb shell ls "$B/MAPTEMP.CO7" >/dev/null 2>&1 ||
 	{ printf 'SKIP: no game data on %s; run test_android_import.sh\n' "$serial"; exit 0; }
 

@@ -182,8 +182,22 @@ run_gate() {
 	start=$(date +%s)
 	if "$@" >"$log_dir/$name.log" 2>&1; then
 		end=$(date +%s)
-		printf 'PASS  %3ds\n' "$((end - start))"
-		passed=$((passed + 1))
+		# A gate that decided it had nothing to test says so on its first line
+		# and exits 0, because "this runner has no phone" is not a build
+		# failure. It is not a pass either, and reporting it as one is how a
+		# suite comes to say the Android gates are green on a machine with no
+		# Android device attached.
+		first=$(sed -n '/[^[:space:]]/{p;q;}' "$log_dir/$name.log" 2>/dev/null)
+		case $first in
+			SKIP:*)
+				printf 'SKIP  %s\n' "${first#SKIP: }"
+				skipped=$((skipped + 1))
+				;;
+			*)
+				printf 'PASS  %3ds\n' "$((end - start))"
+				passed=$((passed + 1))
+				;;
+		esac
 	else
 		end=$(date +%s)
 		printf 'FAIL  %3ds  %s\n' "$((end - start))" "$log_dir/$name.log"

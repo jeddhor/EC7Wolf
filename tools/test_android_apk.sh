@@ -128,6 +128,56 @@ else
 	printf '  ..   no apksigner; signature unchecked\n'
 fi
 
+# --- identity ---------------------------------------------------------------
+#
+# Milestone 6. This was another game's app: the id was com.beloko.wolf3dhg, the
+# label said ECWolf, the version said 1.0, and the icon was somebody else's.
+# The manifest is generated from src/versiondefs.cmake now, and this reads the
+# same file, so the check fails if either side is edited alone.
+printf '\nIdentity\n'
+defs=$root/src/versiondefs.cmake
+want_id=$(sed -n 's/^set(PRODUCT_IDENTIFIER "\(.*\)").*/\1/p' "$defs" | head -1)
+want_name=$(sed -n 's/^set(PRODUCT_NAME "\(.*\)").*/\1/p' "$defs" | head -1)
+got_id=$(printf '%s\n' "$badging" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
+got_label=$(printf '%s\n' "$badging" | sed -n "s/^application-label:'\([^']*\)'.*/\1/p")
+got_version=$(printf '%s\n' "$badging" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")
+got_code=$(printf '%s\n' "$badging" | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p")
+printf '  ..   %s, %s, %s (code %s)\n' "$got_id" "$got_label" "$got_version" "$got_code"
+
+check "the application id is the project's own" test "$got_id" = "$want_id"
+check "the label is the project's own name" test "$got_label" = "$want_name"
+# "1.0" was the placeholder the launcher shipped with; anything derived from
+# versiondefs.cmake looks like 1.0-betaN.
+check "the version is a real one, not the placeholder" \
+	sh -c "case \"$got_version\" in 1.0) exit 1 ;; '') exit 1 ;; *) exit 0 ;; esac"
+check "the version code is monotonic, not 1" test "${got_code:-0}" -gt 1
+
+# Every launcher density. xxhdpi and xxxhdpi postdate this launcher, and
+# without them Android upscales the 96px icon onto a modern screen.
+for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+	case $contents in
+		*"drawable-$d"*ic_launcher.png*) printf '  ok   an icon for %s\n' "$d" ;;
+		*) printf '  FAIL no launcher icon for %s\n' "$d"; status=1 ;;
+	esac
+done
+
+# Nothing a person sees claims to be the app this was forked from. That is the
+# application id, the label, and the label on the launcher entry -- deliberately
+# not the entry activity's *class* name, which is still com.beloko.wolf3d.
+# That is Beloko's launcher code, which this fork uses and credits in the about
+# text; renaming the Java packages would churn thirty-odd files, show a player
+# nothing, and make the borrowing harder to see rather than easier.
+identity_lines=$(printf '%s\n' "$badging" |
+	grep -E "^package:|^application-label|^application:|^launchable-activity" |
+	sed "s/name='com\.beloko\.[A-Za-z0-9_.]*'//")
+if printf '%s\n' "$identity_lines" | grep -qi "beloko"; then
+	printf '  FAIL something a player sees still names another app\n'
+	printf '%s\n' "$identity_lines" | grep -i beloko | sed 's/^/       /'
+	status=1
+else
+	printf '  ok   nothing a player sees names another app\n'
+fi
+
 printf '\n'
 if [ "$status" -eq 0 ]; then
 	printf 'PASS: an APK a phone would accept.\n'

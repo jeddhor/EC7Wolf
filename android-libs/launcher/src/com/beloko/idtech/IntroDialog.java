@@ -6,8 +6,13 @@ import java.io.InputStream;
 
 import android.app.Dialog;
 import android.content.Context;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.util.DisplayMetrics;
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.TextView;
 
@@ -16,10 +21,30 @@ public class IntroDialog {
 	public static void show(final Context ctx,String title,int textid)
 	{
 		final Dialog dialog = new Dialog(ctx);
+		// No system title bar: the layout draws its own, so that the space
+		// around it is ours to set rather than the platform's.
+		dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
 		dialog.setContentView(R.layout.intro);
-		dialog.setTitle(title);
 		dialog.setCancelable(true);
-		//there are a lot of settings, for dialog, check them all out!
+
+		// A dialog left to itself wraps its content, which for a paragraph of
+		// text on a landscape screen produces a tall narrow column down the
+		// middle. Give it most of the width and let the height follow the text,
+		// capped so a long message scrolls instead of running off the screen.
+		Window window = dialog.getWindow();
+		if (window != null)
+		{
+			DisplayMetrics metrics = ctx.getResources().getDisplayMetrics();
+			window.setLayout((int)(metrics.widthPixels * 0.72f),
+				WindowManager.LayoutParams.WRAP_CONTENT);
+			// The window's own background would otherwise draw a light panel
+			// with square corners behind the frame the layout draws.
+			window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+		}
+
+		final TextView heading = (TextView) dialog.findViewById(R.id.intro_title);
+		if (heading != null)
+			heading.setText(title);
 
 		//set up text
 		final TextView text = (TextView) dialog.findViewById(R.id.textView1);

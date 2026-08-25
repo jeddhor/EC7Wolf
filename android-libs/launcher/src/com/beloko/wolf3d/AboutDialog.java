@@ -56,23 +56,10 @@ public class AboutDialog {
 			}
 		});
 
-		button = (Button) dialog.findViewById(R.id.about_rate_button);
-
-		Animation mAnimation = new AlphaAnimation(1, 0);
-		mAnimation.setDuration(500);
-		mAnimation.setInterpolator(new LinearInterpolator());
-		mAnimation.setRepeatCount(Animation.INFINITE);
-		mAnimation.setRepeatMode(Animation.REVERSE); 
-		button.startAnimation(mAnimation);
-
-		button.setOnClickListener(new OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				Intent marketIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(
-						"https://play.google.com/store/apps/details?id=" + ctx.getPackageName()));
-				ctx.startActivity(marketIntent);        
-			}
-		});
+		// There was a flashing "Rate Me!" button here that opened a Play Store
+		// page for this package. EC7Wolf is not on Play, so it could only ever
+		// show a missing app, and a nag to rate a free source port is not what
+		// this dialog is for.
 
 		button = (Button) dialog.findViewById(R.id.about_ok_button);
 		button.setOnClickListener(new OnClickListener() {

@@ -5,4 +5,9 @@
     <color name="light_green">#ff00e747</color>
     <color name="red">#ffff0000</color>
 
+    <!-- The first-run dialog draws its own frame, so it needs its own text
+         colours rather than the light theme's near-black on white. -->
+    <color name="dialog_text">#ffe8e8ec</color>
+    <color name="dialog_title">#ffffffff</color>
+
 </resources>

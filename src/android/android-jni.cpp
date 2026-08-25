@@ -382,12 +382,13 @@ void initControls(int width, int height,const char * graphics_path,const char *s
 		tcGameMain->addControl(new touchcontrols::Button("mine",touchcontrols::RectF(20,10,23,13),"mine",PORT_ACT_C7_MINE));
 		tcGameMain->addControl(new touchcontrols::Button("quick_save",touchcontrols::RectF(24,0,26,2),"save",PORT_ACT_QUICKSAVE));
 		tcGameMain->addControl(new touchcontrols::Button("quick_load",touchcontrols::RectF(20,0,22,2),"load",PORT_ACT_QUICKLOAD));
-		// Corridor 7 has two maps. Its own inset floor panel is the one a
-		// player wants and gets the obvious icon; ECWolf's full-viewport
-		// automap keeps its button but takes the F1 icon, which is the key it
-		// is bound to, so the two are told apart at a glance.
+		// Corridor 7 has two maps and both get a picture of one. The game's own
+		// inset floor panel takes the level-overview icon; ECWolf's
+		// full-viewport automap takes a folded paper map. It used to be
+		// labelled "F1" after the key it is bound to, which tells a player
+		// holding a tablet nothing at all.
 		tcGameMain->addControl(new touchcontrols::Button("floor_map",touchcontrols::RectF(4,0,6,2),"map",PORT_ACT_C7_FLOORMAP));
-		tcGameMain->addControl(new touchcontrols::Button("map",touchcontrols::RectF(2,0,4,2),"f1",PORT_ACT_MAP));
+		tcGameMain->addControl(new touchcontrols::Button("map",touchcontrols::RectF(2,0,4,2),"foldmap",PORT_ACT_MAP));
 		tcGameMain->addControl(new touchcontrols::Button("run",touchcontrols::RectF(7,0,9,2),"run",PORT_ACT_ALWAYS_RUN));
 		tcGameMain->addControl(new touchcontrols::Button("keyboard",touchcontrols::RectF(9,0,11,2),"keyboard",KEY_SHOW_KBRD,false,true));
 

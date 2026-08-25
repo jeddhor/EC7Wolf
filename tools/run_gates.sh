@@ -71,7 +71,7 @@ done
 # gl_selftest is here rather than below because --gltest is handled before the
 # IWAD is opened: it needs no game data, and it is the only thing that proves the
 # shaders actually compile on the runner's driver. A broken shader still links.
-data_free_gates='definitions names android_native android_apk android_device android_import android_controls gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
+data_free_gates='definitions names android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
 
 data_gates='
 corridor7
@@ -97,6 +97,7 @@ gl_visibility
 gl_parity
 gl_filtering
 gl_hardening
+gl_bench
 gl_modeswitch
 glxbrz_parity
 xbrz_scaling
@@ -244,12 +245,19 @@ for g in $data_free_gates; do
 			# one gate that skips on the self-hosted runner too.
 			run_gate "$g" "android device" \
 				"$here/test_android_device.sh" ;;
+		gl_bench)
+			# Frame time at the shipped default. A floor, not a competition.
+			run_gate "$g" "gl frame time" "$here/test_gl_bench.sh" \
+				"$build_dir" "$data_dir" ;;
 		android_controls)
 			# Presses each control on an attached phone and reads the result out
 			# of the game's own state. Needs hardware and the data on it.
 			run_gate "$g" "android controls" \
 				"$here/test_android_controls.sh" ;;
 		android_import)
+			# Runs after android_device and android_controls on purpose: it
+			# clears the app to test a first install, which destroys the game
+			# data those two need. Ordered the other way, they skip.
 			# Wipes the app and installs the game the way a player would,
 			# through the launcher's own import. Needs a phone and a copy of
 			# the game to zip up, and skips without either.

@@ -540,16 +540,77 @@ from. That compares the sector arithmetic directly and is independent of any
 difference between two Vorbis encoders -- and it is what turns the pregap trap
 from a thing somebody notices a year later into a failing test.
 
-### M7 — Fast enough to play
+### M7 — Fast enough to play — **done**
 
-* Measure the GL renderer on the phone: frame times at its real resolution,
-  which is a great many more pixels than a 1994 raycaster was written for.
-* Compare against the software fallback, so the choice of default is a
-  measurement rather than an assumption.
-* A documented resolution and scaling default that is playable.
+Measured on the target: a Galaxy Tab S5e, Snapdragon 670, **Adreno 615**,
+2560x1600 screen, MAP01, 400 frames.
 
-*Exit:* a benchmark gate recording frame times at the shipped default, and a
-figure written down here.
+| render resolution | ms/frame | fps | present |
+|---|---|---|---|
+| **640x480 (the shipped default)** | **5.8** | **172** | -- |
+| 640x400 | 6.0 | 166 | 55% |
+| 1280x800 | 12.9 | 78 | 76% |
+| 1920x1200 | 26.2 | 38 | 85% |
+| 2560x1600 (native) | 39.0 | 26 | 89% |
+
+**The default is fine and the ceiling is not.** As shipped the game renders at
+640x480 and the compositor scales that to the native window, which is 172 fps
+on this tablet. Raising the render resolution to the panel's native 2560x1600
+costs about seven times the frame time and lands at 26 fps. Anybody who does
+that and finds the game crawling is not seeing a broken port; they are seeing a
+1994 game asked to draw 64 times as many pixels as it was written for.
+
+**Where the time goes.** `present` -- the compositor -- is 89% of a frame at
+native, while the 3D world it composites costs 0.45 ms. So this is not the
+renderer being slow at rendering. Each pixel of the composite does a dependent
+texture fetch: an 8-bit index, then a palette lookup keyed by it. That pattern
+misses the texture cache, and the miss rate rises with the size of the index
+texture, which is why the cost tracks the render resolution even though the
+window is always native.
+
+That fetch cannot simply be removed. The palette is animated -- the visor, the
+damage flashes, Corridor 7's rotating DAC ramp -- so the frame has to stay
+indexed until the palette is applied. See [[c7-gl-filtering-msaa]] for the same
+constraint in a different guise.
+
+**What was tried, and what it was worth.** The compositor allocated two
+screen-sized buffers, filled them a byte at a time, and created *and destroyed*
+two GL textures, every frame. At 2560x1600 that is 8 MB of allocation and two
+4 MB texture creations per frame. Making all of it persistent is worth about
+**6% on the Adreno** (41.6 -> 39.0 ms) and nothing measurable on a desktop
+GPU. It is kept because it removes obvious waste, not because it rescued
+anything.
+
+Two things that looked like wins and were not, both measured:
+
+* Uploading the 8-bit layer straight from the frame buffer with
+  `GL_UNPACK_ROW_LENGTH`, avoiding the packed copy entirely: **3.4 ms a frame
+  slower**. The strided upload path is not the fast one.
+* Uploading only the dirty rectangle of the opacity plane: **1.9 ms slower**,
+  for the same reason, and the "dirty rectangle" is the view -- most of the
+  screen.
+
+Skipping the per-pixel key-test loop entirely made no measurable difference,
+and skipping both texture uploads saved only 2.2 ms of the 37. The remaining
+cost is the fragment work, which is why the resolution is the lever and
+micro-optimising around it is not.
+
+**Two measurement traps, both of which cost real time here.**
+
+* **Xvfb has no GPU.** It gives llvmpipe, and a full-screen shader pass on a
+  software rasteriser tells you nothing about a renderer. An A/B run under it
+  showed no difference between two versions that differ by 6% on real hardware,
+  because llvmpipe's fill swamped both. `tools/bench_gl.sh` uses SDL's
+  `offscreen` driver, which is the real GPU with no window.
+* **One run is not a measurement.** Repeats of identical code varied by 25% on
+  a desktop sharing its GPU with a session -- larger than most changes worth
+  making. The benchmark takes a median of several runs, and an A/B done any
+  other way should be disbelieved.
+
+*Exit:* `tools/test_gl_bench.sh` records the median frame time at the shipped
+default and fails past a deliberately generous 33 ms ceiling -- the point is to
+catch a structural regression, not to police tuning on whatever machine the
+suite happens to run on.
 
 ### M8 — Shipping
 

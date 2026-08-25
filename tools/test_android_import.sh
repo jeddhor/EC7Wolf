@@ -40,7 +40,11 @@ apk=$(ls "$builds"/android-arm64-v8a/ec7wolf.apk 2>/dev/null | head -1)
 [ -n "$apk" ] || { printf 'SKIP: no arm64 APK; run tools/build_android.sh\n'; exit 0; }
 
 if [ -n "${ANDROID_SERIAL:-}" ]; then serial=$ANDROID_SERIAL
-else serial=$("$ADB" devices 2>/dev/null | awk '$2 == "device" { print $1 }' | head -1); fi
+else # -F'\t': adb delimits with a tab, and a wireless serial can contain a
+	# space -- "adb-XXXX-YYYY (2)._adb-tls-connect._tcp". Splitting on
+	# whitespace puts "(2)._adb-tls-connect._tcp" in $2, the test for "device"
+	# fails, and every gate reports that no device is attached while one is.
+	serial=$("$ADB" devices 2>/dev/null | awk -F'\t' '$2 == "device" { print $1 }' | head -1); fi
 [ -n "$serial" ] || { printf 'SKIP: no Android device attached\n'; exit 0; }
 
 adb() { "$ADB" -s "$serial" "$@"; }

@@ -2049,6 +2049,15 @@ namespace
 		bool   haveViewRect;           // wcx..wch describe this frame's view
 		TArray<unsigned char> overlayCover; // per-view-rect: 1 where post-world 2D drew
 		bool   haveOverlayCover;       // overlayCover is valid for this frame
+
+		// The compositor's own scratch, kept between frames. Rebuilding these
+		// per frame is what made present cost 88% of a 2560x1600 frame.
+		TArray<unsigned char> overlayIdx;   // the 8-bit 2D layer, tightly packed
+		TArray<unsigned char> overlayOpac;  // 255 except where the world shows
+		bool   overlayOpaqueAll;       // overlayOpac has no holes in it
+		int    opacDirtyX, opacDirtyY, opacDirtyW, opacDirtyH; // last frame's holes
+		GLuint overlayIdxTex, overlayOpacTex;
+		int    overlayTexW, overlayTexH;
 		FString  capPath;              // headless: last presented frame is kept here
 		TArray<unsigned char> lastRGB; // most recent presented frame (top-down RGB)
 		int    lastW, lastH;
@@ -2069,6 +2078,14 @@ namespace
 			vx(0), vy(0), vw(0), vh(0), fw(0), fh(0),
 			wcx(0), wcy(0), wcw(0), wch(0), haveViewRect(false),
 			haveOverlayCover(false), lastW(0), lastH(0),
+			// Every one of these has to be here. This struct has a user-provided
+			// constructor, so a member left out of the list is not zeroed -- it
+			// is indeterminate, and an indeterminate GLuint that happens to be
+			// non-zero reaches glDeleteTextures. That is what it did: the
+			// gl_modeswitch gate caught the ledger going to -2.
+			overlayOpaqueAll(false),
+			opacDirtyX(0), opacDirtyY(0), opacDirtyW(0), opacDirtyH(0),
+			overlayIdxTex(0), overlayOpacTex(0), overlayTexW(0), overlayTexH(0),
 			staticCacheValid(false) {}
 	};
 	GLLive gLive;
@@ -2594,18 +2611,53 @@ void R_GLLivePresent(const unsigned char *mem, int pitch, int fw, int fh,
 
 	// Overlay: opaque 2D everywhere, except the view region's key texels when a
 	// world was rendered this frame (those reveal the GL world behind them).
+	//
+	// Everything here is reused between frames. It used to allocate two
+	// screen-sized TArrays, fill them a byte at a time, build two GL textures
+	// from scratch and delete them again -- every frame. At 320x200 that is 64 KB
+	// a side and invisible; at 2560x1600 it is 4 MB a side, and it made the
+	// compositor 88% of a 38 ms frame while the 3D world it composites cost 3 ms.
 	const int W = fw, H = fh;
-	TArray<unsigned char> idx((unsigned)(W * H)), opac((unsigned)(W * H));
-	idx.Resize((unsigned)(W * H));
-	opac.Resize((unsigned)(W * H));
-	for(int y = 0; y < H; ++y)
-		for(int x = 0; x < W; ++x)
-		{
-			idx[y * W + x] = mem[y * pitch + x];
-			opac[y * W + x] = 255;
-		}
+	const size_t plane = (size_t)W * H;
+	if(gLive.overlayOpac.Size() != plane)
+	{
+		gLive.overlayIdx.Resize((unsigned)plane);
+		gLive.overlayOpac.Resize((unsigned)plane);
+		// Opaque everywhere. Only the view region is ever cleared below, and
+		// only those texels are put back, so the rest is written once ever.
+		memset(&gLive.overlayOpac[0], 255, plane);
+		gLive.overlayOpaqueAll = true;
+	}
+	unsigned char *const idx = &gLive.overlayIdx[0];
+	unsigned char *const opac = &gLive.overlayOpac[0];
+
+	// Copied into a tightly-packed buffer and uploaded from there. Handing the
+	// driver mem's own stride with GL_UNPACK_ROW_LENGTH looks like it should be
+	// cheaper -- no copy at all -- and measured 3.4 ms a frame *slower* at
+	// 2560x1600: the strided path evidently is not the fast one. Measure before
+	// removing this copy again.
+	if(pitch == W)
+		memcpy(idx, mem, plane);
+	else
+		for(int y = 0; y < H; ++y)
+			memcpy(idx + (size_t)y * W, mem + (size_t)y * pitch, (size_t)W);
+
+	// Undo the previous frame's holes rather than repainting the whole plane:
+	// the holes only ever appear inside the view rectangle.
+	if(!gLive.overlayOpaqueAll)
+	{
+		for(int r = 0; r < gLive.opacDirtyH; ++r)
+			memset(opac + (size_t)(gLive.opacDirtyY + r) * W + gLive.opacDirtyX,
+				255, (size_t)gLive.opacDirtyW);
+		gLive.overlayOpaqueAll = true;
+	}
+
 	if(gLive.haveWorld)
 	{
+		// Remember what to restore next frame.
+		gLive.opacDirtyX = gLive.vx; gLive.opacDirtyY = gLive.vy;
+		gLive.opacDirtyW = gLive.vw; gLive.opacDirtyH = gLive.vh;
+		gLive.overlayOpaqueAll = false;
 		const unsigned char key = GPalette.Remap[0];
 		for(int r = 0; r < gLive.vh; ++r)
 			for(int c = 0; c < gLive.vw; ++c)
@@ -2628,10 +2680,34 @@ void R_GLLivePresent(const unsigned char *mem, int pitch, int fw, int fh,
 					opac[fy * W + fx] = 0;
 			}
 	}
-	GLuint oIdx = CreateR8UITexture(&idx[0], W, H);
-	gLedger.tex++;
-	GLuint oOpac = CreateR8UITexture(&opac[0], W, H);
-	gLedger.tex++;
+	// The two overlay textures are created once for a given size and updated in
+	// place after that. Creating a texture is not the same cost as uploading to
+	// one: the driver has to allocate, and on a tile-based GPU that is worse.
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	if(gLive.overlayTexW != W || gLive.overlayTexH != H)
+	{
+		if(gLive.overlayIdxTex) { glDeleteTextures(1, &gLive.overlayIdxTex); gLedger.tex--; }
+		if(gLive.overlayOpacTex) { glDeleteTextures(1, &gLive.overlayOpacTex); gLedger.tex--; }
+		gLive.overlayIdxTex = CreateR8UITexture(idx, W, H);
+		gLedger.tex++;
+		gLive.overlayOpacTex = CreateR8UITexture(opac, W, H);
+		gLedger.tex++;
+		gLive.overlayTexW = W;
+		gLive.overlayTexH = H;
+	}
+
+	glBindTexture(GL_TEXTURE_2D, gLive.overlayIdxTex);
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, W, H, GL_RED_INTEGER, GL_UNSIGNED_BYTE, idx);
+
+	// Sent whole, not as the rectangle that changed. Uploading just the dirty
+	// region needs GL_UNPACK_ROW_LENGTH to describe a sub-rectangle of the
+	// plane, and that strided path measured 1.9 ms a frame *slower* here than
+	// simply sending all of it -- and the "dirty region" is the view rectangle,
+	// which is most of the screen anyway.
+	glBindTexture(GL_TEXTURE_2D, gLive.overlayOpacTex);
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, W, H, GL_RED_INTEGER, GL_UNSIGNED_BYTE, opac);
+	const GLuint oIdx = gLive.overlayIdxTex;
+	const GLuint oOpac = gLive.overlayOpacTex;
 
 	glUseProgram(gLive.screenProg);
 	const GLint uMode = glGetUniformLocation(gLive.screenProg, "uMode");
@@ -2660,10 +2736,7 @@ void R_GLLivePresent(const unsigned char *mem, int pitch, int fw, int fh,
 	glUniform1i(uMode, 1);
 	DrawScreenQuad(-1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f);
 
-	glDeleteTextures(1, &oIdx);
-	gLedger.tex--;
-	glDeleteTextures(1, &oOpac);
-	gLedger.tex--;
+	// oIdx/oOpac belong to gLive and outlive the frame.
 
 	R_GLXBRZEnd(drawableW, drawableH);
 	R_GLXBRZWriteParity(mem, pitch, fw, fh, gLive.haveWorld);
@@ -2713,6 +2786,10 @@ static void FreeLiveResources(bool audit)
 	if(gLive.paletteTex)  { glDeleteTextures(1, &gLive.paletteTex);      gLedger.tex--; }
 	if(gLive.colormapTex) { glDeleteTextures(1, &gLive.colormapTex);     gLedger.tex--; }
 	if(gLive.c7RampFloorTex) { glDeleteTextures(1, &gLive.c7RampFloorTex); gLedger.tex--; }
+	// The compositor's overlay pair now outlives the frame, so it has to be
+	// freed here like everything else -- the audit below balances the ledger.
+	if(gLive.overlayIdxTex)  { glDeleteTextures(1, &gLive.overlayIdxTex);  gLedger.tex--; }
+	if(gLive.overlayOpacTex) { glDeleteTextures(1, &gLive.overlayOpacTex); gLedger.tex--; }
 
 	// Resource-leak check: after teardown the live ledger must balance to zero and
 	// the texture caches must be empty. A nonzero balance means a live GL object

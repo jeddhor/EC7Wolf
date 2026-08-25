@@ -8,7 +8,9 @@ Put them on your phone as a folder or a zip file, then press IMPORT GAME DATA on
 the PLAY tab and point it at them. The files are copied into this app's own
 storage, so you only have to do it once.
 
-If the CD animations (SEQONE.CO7, SEQTHREE.CO7, SEQFOUR.CO7) or a ripped
-soundtrack (track03.ogg and friends) are alongside them, those are imported too.
+Better still, point it at a folder holding the CD image itself -- a .cue and its
+.bin. EC7Wolf will take the disc apart for you and pull out the game, the three
+CD animations the installer leaves behind, and the soundtrack, which nothing
+else ever copies off the disc.
 
 The Android launcher is based on the work of Beloko Games.

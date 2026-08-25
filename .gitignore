@@ -15,4 +15,6 @@ __pycache__/
 deps/SDL/
 deps/SDL_mixer/
 deps/SDL_net/
+deps/ogg/
+deps/vorbis/
 builds/ec7wolf-debug.keystore

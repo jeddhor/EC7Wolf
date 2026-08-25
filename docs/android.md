@@ -459,86 +459,65 @@ the import in M4 has to be done once more after upgrading from an earlier build.
 version code is not 1, that a launcher icon exists at every density from mdpi to
 xxxhdpi, and that nothing a player sees names another app.
 
-### M6.5 — The whole disc, ripped on the device
+### M6.5 — The whole disc, ripped on the device — **implemented, one tap unverified**
 
-Today a player has to bring already-extracted files: the `.CO7` set, and if they
-want the cinematics and the soundtrack, those too, in the right subdirectories.
-On a desktop that is a scripted afternoon. On a phone it is not reasonable at
-all. What a player actually has is **the disc image** -- a `.bin` and a `.cue` --
-and the app should be able to take that and produce everything itself.
+Point the importer at a folder holding a `.cue` and its `.bin` and it takes the
+disc apart: the game data, the three cinematics the installer leaves behind, and
+the soundtrack that nothing else ever copies off the disc.
 
-Everything needed to do it is already in this repository, in Python, and none of
-it needs anything a phone lacks except one thing.
+**How it is put together.** The reading is Java, in `DiscImport`, because all of
+it is arithmetic over a stream and a `content://` URI opened as a file
+descriptor seeks -- so a 316 MB image is read in place rather than copied first.
+The data track is MODE1/2352 (16 bytes of header, 2048 of data, 288 of error
+correction) with ISO 9660 underneath, walked directly; the audio tracks are
+already raw CD audio, so ripping them is a byte copy.
 
-**The three pieces.**
+Encoding is the one thing Java has no answer for, and it is the whole reason
+`android-libs/c7rip` exists: this project's SDL_mixer decodes Ogg with
+**stb_vorbis**, which cannot write one. `libc7rip.so` is libogg plus the encoder
+half of libvorbis plus about a hundred lines of JNI, 1.7 MB, and it is its own
+small library because the launcher runs in a different process from the game and
+has no business loading the engine, SDL and the touch controls to compress audio.
+It streams: the longest track is 636 seconds, which is 112 MB of PCM for a file
+that lands around 7 MB, and none of it is written to disc as samples.
 
-* **The game data.** Track 1 is `MODE1/2352`: sixteen bytes of header, 2048 of
-  data, 288 of error correction, repeated. Strip that and it is an ISO 9660
-  filesystem. `tools/extract_c7_video.py` already walks ISO 9660 in pure Python
-  precisely because `isoinfo` lists this disc and then extracts nothing from it.
-  Pure arithmetic, no dependencies, port it to Java.
-* **The cinematics.** The same track, the same walk -- `SEQONE.CO7`,
-  `SEQTHREE.CO7`, `SEQFOUR.CO7`, about 27 MB. They are on the disc and in no
-  installed game directory, which is why nobody has them. Free once the walk
-  above exists.
-* **The soundtrack.** Audio tracks in a `.bin` are already raw CD audio: 16-bit
-  little-endian stereo at 44.1 kHz, in 2352-byte sectors, no header. Extracting
-  them is a byte copy. **Encoding them is the one hard part.**
+Both dependencies are fetched, not vendored -- `tools/fetch_android_deps.sh`
+takes ogg v1.3.5 and vorbis v1.3.7, both BSD-licensed. Neither is built with its
+own CMakeLists: libogg's asks for `cmake_minimum_required(2.8.12)`, which current
+CMake refuses outright, and libvorbis's does `find_package(Ogg REQUIRED)` and
+cannot see a sibling target. Both are two dozen source files, so they are
+compiled directly and `config_types.h` is written from known answers rather than
+probed for.
 
-**The one hard problem: there is no Vorbis encoder on Android.**
+**What is verified.** The disc arithmetic, against the real image, by mirroring
+the implementation and comparing results:
 
-`tools/make_cdaudio.py` pipes the raw sectors into `ffmpeg -c:a libvorbis`.
-There is no ffmpeg on a phone, and the SDL_mixer this project ships decodes with
-**stb_vorbis** and **drflac** -- both decoder-only. So the four music tracks
-(3, 5, 7 and 9; the even ones are silent gaps) have to be turned into something
-the engine can play, by something we ship.
+* 18 files found on the data track; **all 12 that also exist in an installed copy
+  are byte-identical**, and the three `SEQ*.CO7` cinematics are found at the
+  right sizes.
+* The audio track boundaries produce 636.080, 347.573, 183.400 and 381.653
+  seconds -- **exactly** the durations recorded for the desktop rip. That is the
+  pregap trap this plan warned about, and it is not present: INDEX 01 to the next
+  INDEX 01 is the right span for this cue.
+* `libc7rip.so` is packaged and its three JNI entry points carry names matching
+  the Java class that declares them, which `test_android_apk.sh` now checks --
+  a rename on either side would otherwise fail only when somebody imported a
+  disc.
 
-| Option | Cost | Verdict |
-|---|---|---|
-| Vendor `libogg` + `libvorbis` + `libvorbisenc` | ~500 KB of BSD-licensed C; a few minutes of CPU once | **Recommended** |
-| `MediaCodec` + `MediaMuxer` to Opus-in-Ogg | Muxing Ogg needs API 29; minSdk is 21; and stb_vorbis cannot decode Opus | Rejected |
-| `MediaCodec` FLAC, or vendor `libFLAC` | drflac can play it, but it is lossless: ~140 MB | Fallback only |
-| Write `.wav` and widen the engine's lookup | No encoder at all; ~273 MB for four tracks | Last resort |
+**What is not verified: the end-to-end run on a device.** The importer cannot be
+driven by the test harness, because this tablet's DocumentsUI does not respond to
+injected input at all -- not taps on rows in list or grid view, not held presses,
+not `input touchscreen`, not DPAD focus plus Enter, with a fresh picker and a
+fresh app. The same wall blocks the zip import gate (M4), where a person tapping
+by hand confirmed the app is fine and only the automation is not. So this needs
+one manual tap to close, and until then the Java and the encoder are unproven in
+the same breath even though every piece under them checks out.
 
-Vendoring the encoder wins on every axis that matters: it produces the *same*
-`trackNN.ogg` the desktop rip produces (~17 MB, byte-comparable), it works on
-every API level, and it is the same library family already trusted for playback.
-The licence is BSD and this binary is already GPL-3 because of xBRZ, so there is
-no new constraint.
-
-**Where it plugs in.** M4 already built the import: a zip or a folder, chosen
-through the Storage Access Framework, with `destinationFor()` deciding what each
-file is. A `.cue` becomes another thing that function recognises. The folder
-path matters more than the zip here, because a `.cue` names its `.bin` as a
-sibling and a single-document URI cannot see siblings -- picking the folder
-gives access to both.
-
-**Things that will go wrong, written down in advance.**
-
-* **`PREGAP` shifts file offsets.** `INDEX 01` is a position on the disc; the
-  pregap is not in the file. Get this wrong and every track starts two seconds
-  early, which sounds almost right -- this disc's even-numbered tracks are
-  silent gaps, so the damage hides. The acceptance test below is designed to
-  catch exactly this.
-* **316 MB, streamed.** Never read the image into memory, and never materialise
-  the whole ISO. Extract by sector offset, which is how the desktop rip was
-  finally done.
-* **It takes minutes, not seconds.** Encoding ~1550 seconds of audio needs a
-  progress display and must survive the screen turning off.
-* **Storage.** The image plus the output needs headroom, and the player will
-  want to delete the 316 MB image afterwards -- so say so when it finishes.
-* **Not every disc image is this one.** Handle `MODE1/2048` and a missing
-  `.cue`, and fail with a sentence that names what was wrong rather than
-  "import failed".
-
-*Exit:* a gate that hands the app a `.cue`/`.bin` pair and nothing else, and
-then asserts the game starts on MAP01 with `3 of 3` cinematics and `4 of 4`
-soundtrack files. **The audio is checked against the desktop rip**, not merely
-for existence: `corr7/extracted-ogg/` already holds what `ffmpeg` produced, so
-the PCM the device extracts can be compared with the PCM the desktop encoded
-from. That compares the sector arithmetic directly and is independent of any
-difference between two Vorbis encoders -- and it is what turns the pregap trap
-from a thing somebody notices a year later into a failing test.
+*Exit (partly met):* `test_android_apk.sh` covers the packaging and the JNI
+contract. The end-to-end assertion -- a `.cue`/`.bin` and nothing else, ending at
+MAP01 with `3 of 3` cinematics and `4 of 4` soundtrack files -- is still owed,
+and is blocked on being able to drive a file picker on this device rather than on
+anything in the importer.
 
 ### M7 — Fast enough to play — **done**
 

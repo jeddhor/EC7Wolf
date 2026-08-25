@@ -24,6 +24,13 @@ SDL_TAG=release-2.32.10
 SDL_MIXER_TAG=release-2.8.1
 SDL_NET_TAG=release-2.2.0
 
+# The Vorbis encoder, for turning a disc image's audio tracks into the
+# soundtrack files the engine plays (docs/android.md M6.5). Only the encoder is
+# new: this project's SDL_mixer decodes Ogg with stb_vorbis, which cannot write
+# one. Both are BSD-licensed.
+OGG_TAG=v1.3.5
+VORBIS_TAG=v1.3.7
+
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(cd "$here/.." && pwd)
 dest="$root/deps/SDL"
@@ -55,6 +62,8 @@ force=no
 fetch SDL       "$SDL_TAG"       https://github.com/libsdl-org/SDL.git
 fetch SDL_mixer "$SDL_MIXER_TAG" https://github.com/libsdl-org/SDL_mixer.git
 fetch SDL_net   "$SDL_NET_TAG"   https://github.com/libsdl-org/SDL_net.git
+fetch ogg       "$OGG_TAG"       https://github.com/xiph/ogg.git
+fetch vorbis    "$VORBIS_TAG"    https://github.com/xiph/vorbis.git
 
 # The one thing that has to be true afterwards, checked rather than assumed:
 # the launcher reaches SDL's Java glue through a symlink into deps/SDL, and a
@@ -65,3 +74,11 @@ if [ ! -e "$link/SDLActivity.java" ]; then
 	exit 1
 fi
 printf 'ok: the launcher can see SDLActivity.java\n'
+
+# vorbisenc is the whole reason vorbis is fetched, and it is a separate source
+# file that some configurations leave out.
+if [ ! -f "$root/deps/vorbis/lib/vorbisenc.c" ]; then
+	printf 'FAIL: deps/vorbis has no vorbisenc.c; the encoder would be missing\n' >&2
+	exit 1
+fi
+printf 'ok: the Vorbis encoder is present\n'

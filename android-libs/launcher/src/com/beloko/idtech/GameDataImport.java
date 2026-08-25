@@ -79,7 +79,7 @@ public class GameDataImport
 	}
 
 	/** Which subdirectory a file belongs in, or null if we do not want it. */
-	private static String destinationFor(String name)
+	static String destinationFor(String name)
 	{
 		String upper = name.toUpperCase(Locale.US);
 		for(int i = 0; i < REQUIRED.length; ++i)
@@ -96,7 +96,7 @@ public class GameDataImport
 	}
 
 	/** Canonical upper-case name, so an import from a lower-case zip is tidy. */
-	private static String canonical(String name)
+	static String canonical(String name)
 	{
 		return name.toUpperCase(Locale.US).endsWith(".OGG")
 			? name.toLowerCase(Locale.US) : name.toUpperCase(Locale.US);
@@ -173,12 +173,125 @@ public class GameDataImport
 		return copied;
 	}
 
-	/** Copy the game files out of a folder the player picked. */
+	/**
+	 * Copy the game files out of a folder the player picked.
+	 *
+	 * If that folder holds a disc image rather than loose files, the image is
+	 * taken apart instead -- which is the more likely case, because the game's
+	 * installer leaves the cinematics on the CD and nothing at all copies the
+	 * soundtrack off it. A .cue names its .bin as a sibling, which is why this
+	 * wants a folder: a single-document URI cannot see siblings.
+	 */
 	public static int importFromTree(ContentResolver resolver, Uri tree, File gameDir,
 		Listener listener) throws IOException
 	{
+		final Uri[] pair = findDiscImage(resolver, tree,
+			DocumentsContract.getTreeDocumentId(tree), 0);
+		if(pair != null)
+			return DiscImport.rip(resolver, pair[0], pair[1], gameDir, listener);
+
 		return walk(resolver, tree, DocumentsContract.getTreeDocumentId(tree),
 			gameDir, listener, 0);
+	}
+
+	/**
+	 * Look for a cue sheet and the image it names, in the same directory.
+	 *
+	 * @return { cue, bin } or null. The bin is matched by the name inside the
+	 *         cue rather than by extension, because a cue can name anything and
+	 *         a folder can hold more than one image.
+	 */
+	private static Uri[] findDiscImage(ContentResolver resolver, Uri tree,
+		String documentId, int depth)
+	{
+		if(depth > 3)
+			return null;
+
+		Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, documentId);
+		Cursor c = resolver.query(children, new String[] {
+			DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+			DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+			DocumentsContract.Document.COLUMN_MIME_TYPE }, null, null, null);
+		if(c == null)
+			return null;
+
+		final List<String> subdirs = new ArrayList<String>();
+		String cueId = null, cueName = null;
+		final java.util.HashMap<String, String> here = new java.util.HashMap<String, String>();
+		try
+		{
+			while(c.moveToNext())
+			{
+				final String id = c.getString(0);
+				final String name = c.getString(1);
+				final String mime = c.getString(2);
+				if(DocumentsContract.Document.MIME_TYPE_DIR.equals(mime))
+				{
+					subdirs.add(id);
+					continue;
+				}
+				here.put(name.toLowerCase(Locale.US), id);
+				if(cueId == null && name.toLowerCase(Locale.US).endsWith(".cue"))
+				{
+					cueId = id;
+					cueName = name;
+				}
+			}
+		}
+		finally
+		{
+			c.close();
+		}
+
+		if(cueId != null)
+		{
+			final String bin = binNamedBy(resolver,
+				DocumentsContract.buildDocumentUriUsingTree(tree, cueId));
+			if(bin != null)
+			{
+				final String binId = here.get(bin.toLowerCase(Locale.US));
+				if(binId != null)
+					return new Uri[] {
+						DocumentsContract.buildDocumentUriUsingTree(tree, cueId),
+						DocumentsContract.buildDocumentUriUsingTree(tree, binId) };
+			}
+			// A cue whose image is missing is worth saying so about rather than
+			// quietly falling back to copying loose files that are not there.
+			android.util.Log.w("GameDataImport",
+				"found " + cueName + " but not the image it names");
+		}
+
+		for(String id : subdirs)
+		{
+			final Uri[] found = findDiscImage(resolver, tree, id, depth + 1);
+			if(found != null)
+				return found;
+		}
+		return null;
+	}
+
+	/** The FILE line of a cue sheet, which is the image beside it. */
+	private static String binNamedBy(ContentResolver resolver, Uri cue)
+	{
+		try
+		{
+			InputStream in = resolver.openInputStream(cue);
+			if(in == null)
+				return null;
+			try
+			{
+				final byte[] buf = new byte[8192];
+				final int n = Math.max(0, in.read(buf));
+				final DiscImport.Cue parsed =
+					DiscImport.parseCue(new String(buf, 0, n, "ISO-8859-1"));
+				return parsed.binName;
+			}
+			finally { in.close(); }
+		}
+		catch(IOException e)
+		{
+			return null;
+		}
 	}
 
 	/**

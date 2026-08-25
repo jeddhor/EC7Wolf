@@ -16,6 +16,8 @@ add_jar(engine-android
 	com/beloko/idtech/CDAudioPlayer.java
 	com/beloko/idtech/DirectoryChooserDialog.java
 	com/beloko/idtech/DialogStyle.java
+	com/beloko/idtech/DiscImport.java
+	com/beloko/idtech/VorbisEncoder.java
 	com/beloko/idtech/GameDataImport.java
 	com/beloko/idtech/GamePadFragment.java
 	com/beloko/idtech/GD.java
@@ -58,7 +60,7 @@ add_jar(engine-android
 		"${ANDROID_SDK_JAR}"
 )
 
-add_dependencies(engine-android engine touchcontrols pk3)
+add_dependencies(engine-android engine touchcontrols c7rip pk3)
 
 add_custom_command(TARGET engine-android POST_BUILD
 	# Every shared library the engine needs, not just the two this used to
@@ -70,6 +72,10 @@ add_custom_command(TARGET engine-android POST_BUILD
 	COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:SDL2>" "${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_ANDROID_ARCH_ABI}/$<TARGET_FILE_NAME:SDL2>"
 	COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:SDL2_mixer>" "${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_ANDROID_ARCH_ABI}/$<TARGET_FILE_NAME:SDL2_mixer>"
 	COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:SDL2_net>" "${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_ANDROID_ARCH_ABI}/$<TARGET_FILE_NAME:SDL2_net>"
+	# The disc importer's Vorbis encoder. Loaded by the launcher process, which
+	# does not load the engine, so it is not in anybody's NEEDED list and has to
+	# be copied on its own account.
+	COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:c7rip>" "${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_ANDROID_ARCH_ABI}/$<TARGET_FILE_NAME:c7rip>"
 	COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/../assets" "${OUTPUT_DIR}/assets"
 	COMMAND "${ANDROID_AAPT_BINARY}" package -f $<$<CONFIG:Debug>:--debug-mode> -M "${ANDROID_MANIFEST}" -S "${CMAKE_CURRENT_SOURCE_DIR}/../res" -A "${OUTPUT_DIR}/assets" -I "${ANDROID_SDK_JAR}" -F "${APK_OUTPUT}"
 	COMMAND "${ANDROID_D8_BINARY}" $<$<CONFIG:Release>:--release> $<$<CONFIG:MinSizeRel>:--release> --output . --lib "${ANDROID_SDK_JAR}"

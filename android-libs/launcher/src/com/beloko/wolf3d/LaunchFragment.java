@@ -185,7 +185,8 @@ public class LaunchFragment extends Fragment{
 		} else {
 			dataStatusTextView.setText(
 				"Corridor 7 data not found.\n\nUse Import Game Data and point it at "
-				+ "your Corridor 7 folder or a zip of it. Missing: " + missing);
+				+ "your Corridor 7 files -- a folder, a zip, or the folder holding a "
+				+ ".cue and .bin disc image. Missing: " + missing);
 			if (startFullButton != null) startFullButton.setEnabled(false);
 		}
 	}
@@ -215,7 +216,8 @@ public class LaunchFragment extends Fragment{
 	void askWhereTheDataIs() {
 		AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
 		builder.setTitle("Import Game Data");
-		builder.setItems(new String[] { "From a zip file", "From a folder" },
+		builder.setItems(new String[] { "From a zip file",
+				"From a folder or disc image" },
 			new DialogInterface.OnClickListener() {
 				public void onClick(DialogInterface dialog, int which) {
 					if (which == 0) {

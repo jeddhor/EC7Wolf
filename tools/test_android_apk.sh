@@ -128,6 +128,37 @@ else
 	printf '  ..   no apksigner; signature unchecked\n'
 fi
 
+# --- the disc importer's encoder ---------------------------------------------
+#
+# libc7rip carries libvorbis so the disc importer can write the soundtrack, and
+# it is loaded by the launcher process, which loads nothing else native. Two
+# ways for that to break silently: the library not being packaged at all, and
+# the JNI entry points not matching the Java class that declares them -- a
+# rename on either side leaves symbols that no longer pair up, and the failure
+# is an UnsatisfiedLinkError at the moment somebody tries to import a disc.
+printf '\nThe disc importer\n'
+case $contents in
+	*libc7rip.so*) printf '  ok   libc7rip.so is packaged\n' ;;
+	*) printf '  FAIL libc7rip.so is missing; a disc image cannot be ripped\n'; status=1 ;;
+esac
+
+riplib=$(mktemp -d)
+if unzip -o -q -j "$apk" 'lib/arm64-v8a/libc7rip.so' -d "$riplib" 2>/dev/null &&
+	[ -f "$riplib/libc7rip.so" ]; then
+	for sym in nativeOpen nativeWrite nativeClose; do
+		if strings "$riplib/libc7rip.so" |
+			grep -q "Java_com_beloko_idtech_VorbisEncoder_$sym"; then
+			printf '  ok   VorbisEncoder.%s has a native symbol\n' "$sym"
+		else
+			printf '  FAIL VorbisEncoder.%s has no matching native symbol\n' "$sym"
+			status=1
+		fi
+	done
+else
+	printf '  ..   could not extract libc7rip.so to check its symbols\n'
+fi
+rm -rf "$riplib"
+
 # --- identity ---------------------------------------------------------------
 #
 # Milestone 6. This was another game's app: the id was com.beloko.wolf3dhg, the

@@ -1,28 +1,55 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- The gamepad help dialog. Same shape as intro.xml, and for the same reason:
+     it used to be a RelativeLayout at match_parent by match_parent inside a
+     dialog window, which on a landscape screen is a tall narrow column with the
+     text against the frame. DialogStyle gives the window its width; the padding
+     here is what keeps the text off the border. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent" >
+    android:layout_height="wrap_content"
+    android:background="@drawable/dialog_border"
+    android:orientation="vertical"
+    android:padding="24dp" >
+
+    <TextView
+        android:id="@+id/notice_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textColor="@color/dialog_title"
+        android:textAppearance="?android:attr/textAppearanceLarge"
+        android:textStyle="bold" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="2dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="16dp"
+        android:background="@color/holo_blue" />
 
     <ScrollView
         android:id="@+id/scrollview"
-        android:layout_width="fill_parent"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_above="@+id/button1"
-        android:layout_alignParentTop="true" >
+        android:scrollbarStyle="outsideOverlay" >
 
         <TextView
             android:id="@+id/textView1"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
+            android:lineSpacingMultiplier="1.15"
             android:text=""
+            android:textColor="@color/dialog_text"
             android:textAppearance="?android:attr/textAppearanceMedium" />
     </ScrollView>
 
     <Button
         android:id="@+id/button1"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
+        android:layout_gravity="end|right"
+        android:layout_marginTop="20dp"
+        android:minWidth="120dp"
         android:text="OK" />
 
-</RelativeLayout>
+</LinearLayout>

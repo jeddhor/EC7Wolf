@@ -16,10 +16,14 @@ public class NoticeDialog {
 	public static void show(final Context ctx,String title, String text)
 	{
 		final Dialog dialog = new Dialog(ctx);
+		DialogStyle.noTitleBar(dialog);
 		dialog.setContentView(R.layout.notice);
-		dialog.setTitle(title);
 		dialog.setCancelable(true);
-		//there are a lot of settings, for dialog, check them all out!
+		DialogStyle.frame(dialog, ctx);
+
+		final TextView heading = (TextView) dialog.findViewById(R.id.notice_title);
+		if (heading != null)
+			heading.setText(title);
 
 		final TextView textView = (TextView) dialog.findViewById(R.id.textView1);
 		textView.setText(text);

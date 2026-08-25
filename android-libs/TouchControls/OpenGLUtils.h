@@ -15,6 +15,10 @@ extern "C" {
 namespace touchcontrols
 {
 
+// The GL objects here belong to one context; see OpenGLUtils.cpp.
+bool GLES2ContextLost();
+void GLES2Forget();
+
 extern float GLScaleWidth ;
 extern float GLScaleHeight ;
 

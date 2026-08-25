@@ -357,17 +357,70 @@ that `CORR7CD.EXE` is named, that the game **cannot** be started, then imports,
 checks the extras landed in their own directories with no `.part` files left
 behind, and finally plays MAP01 with the cinematics and soundtrack found.
 
-### M5 — Controls a person can play with
+### M5 — Controls a person can play with — **done**
 
-* Touch controls covering Corridor 7's verbs: move, turn, strafe, fire, open,
-  weapon cycle, **visor mode**, **drop mine**, **floor map**.
-* The existing control editor kept working, since it is already better than
-  anything worth writing from scratch.
-* Gamepad support confirmed, given `GenericAxisValues` and friends are already
-  in the launcher.
+Corridor 7 is playable by hand on the phone: two sticks, fire, use, weapon
+cycling, and the three verbs Wolfenstein does not have -- **visor**, **drop
+mine**, **floor map**. Each one is checked by pressing it and reading the
+result out of the simulation.
 
-*Exit:* a gate that drives synthetic touch events through `adb shell input` and
-asserts, from the player trace, that each verb did what it should.
+**The controls had never been drawn once since the renderer cutover.**
+`frameControls()` was called from inside `if (UsingRenderer)` -- the SDL_Renderer
+path -- and Phase 11 replaced that with the GL backend. So from the cutover
+until now the overlay was not initialised and not drawn, on the one platform
+with no keyboard. It is now called in the GL present path, between
+`R_GLLivePresent` and `SDL_GL_SwapWindow`.
+
+Four separate faults sat behind that, each of which produced a working-looking
+build that drew nothing:
+
+* **ES 1.x against an ES 3.0 context.** `openGLStart` set up the overlay with
+  `glMatrixMode`, `glOrthof`, `glEnableClientState` and `glTexEnvf`, and the
+  engine linked `GLESv1_CM`. None of that exists in the context the engine
+  actually creates. The library's ES2 path bakes its vertices into clip space
+  and wants no projection at all -- only the viewport, blending, and the depth
+  test out of the way. The engine now links `GLESv2` and builds with
+  `USE_GLES2`, so both sides resolve the same headers.
+* **Thirteen non-void functions with no return**, including every control's
+  `initGL`. That is undefined behaviour, clang compiles it to a trap, and the
+  crash lands in `_Unwind_Resume` and the allocator -- nowhere near the cause.
+  Fixed, and the library now builds with `-Werror=return-type` so it cannot
+  come back.
+* **Texture names invented rather than generated.** The loader counted up from
+  20000 and handed the result to `glBindTexture`, which ES 2 tolerated and ES 3
+  rejects with `GL_INVALID_VALUE`. It also risked colliding with the renderer's
+  own textures, since the overlay now shares its context.
+* **GL objects outliving their context.** Android drops a context with its
+  surface; the programs and textures made before that are dead names, and
+  `glUseProgram` returns `GL_INVALID_VALUE` for a program that linked perfectly.
+  The overlay now notices the context has changed and rebuilds.
+
+The overlay also saves and restores the state it touches. Leaving depth writes
+disabled was enough to render the entire world black on the next frame while
+the controls themselves looked perfect.
+
+**Taps were being lost.** Touch events arrive on the event thread; the game
+samples buttons once a tic. A quick tap begins and ends inside one of those
+gaps and the simulation never sees it -- on a keyboard nobody presses a key for
+four milliseconds, on a touchscreen that is how people press things. Each press
+is now held until it has been sampled at least once.
+
+`--capture-verbs` was added for the gate: it prints Corridor 7's verb state
+whenever it changes. Screenshots cannot do this job -- the level's textures
+animate on their own, so two frames of a completely idle game differ in nearly
+every pixel.
+
+**Gamepad support is not confirmed.** The bindings exist -- `wl_play.cpp` puts
+Drop Mine, Visor Mode and Floor Map on pad buttons 2, 3 and 4 -- and the
+launcher carries Beloko's gamepad plumbing, but there is no pad here to test
+with, so this milestone claims nothing about it.
+
+*Exit:* `tools/test_android_controls.sh` starts a level with the trace on and
+presses each control in turn, asserting that firing spends ammunition, the
+visor button changes visor mode, the floor map button raises the panel, the
+sticks move and turn the player, and the mine button spends a mine. The mine
+goes last, because a proximity mine dropped at your feet is a proximity mine
+dropped at your feet.
 
 ### M6 — It is EC7Wolf
 

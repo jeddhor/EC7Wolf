@@ -94,6 +94,7 @@ bool Button::processPointer(int action, int pid, float x, float y)
 	{
 		return false;
 	}
+	return false;
 }
 
 
@@ -101,6 +102,7 @@ bool Button::initGL()
 {
 	int x,y;
 	glTex = loadTextureFromPNG(image,x,y);
+	return glTex != TEXTURE_LOAD_ERROR;
 }
 
 bool Button::drawGL(bool forEditor)
@@ -136,6 +138,7 @@ bool Button::drawGL(bool forEditor)
 			}
 		}
 	}
+	return true;
 }
 
 void Button::saveXML(TiXmlDocument &doc)

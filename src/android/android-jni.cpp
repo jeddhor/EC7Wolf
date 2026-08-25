@@ -4,10 +4,16 @@
 #include <jni.h>
 #include <android/log.h>
 #include <unistd.h>
+// ES 3.0, which is the context this engine creates. The touch control headers
+// pull in GLES2/gl2.h (via USE_GLES2), and that is a subset -- glBindVertexArray
+// is not in it. Included first so the ES 3 declarations are the ones in scope.
+#include <GLES3/gl3.h>
+
 #include <mutex>
 #include <atomic>
 
 #include "TouchControlsContainer.h"
+#include "OpenGLUtils.h"
 #include "JNITouchControlsUtils.h"
 
 extern "C"
@@ -73,43 +79,85 @@ const char * argv[32];
 std::string graphicpath;
 
 GLint viewport[4];
+// Saved across the overlay draw; see openGLStart.
+static GLboolean savedDepthTest, savedStencilTest, savedCullFace;
+static GLboolean savedScissor, savedBlend, savedDepthMask;
 
+// The state the overlay needs, and nothing else.
+//
+// This used to be OpenGL ES 1.x: a projection matrix built with glOrthof, a
+// modelview push, client-state arrays and glTexEnvf. None of that exists in ES
+// 3.0, which is the context this engine asks for -- the calls resolved through
+// libepoxy to nothing and the overlay drew nowhere. The control library's ES2
+// path bakes its vertices straight into clip space (GLES2scaleX/Y in
+// GLRect.cpp), so it wants no projection at all; it wants the viewport, alpha
+// blending, and the depth test out of the way.
 void openGLStart()
 {
-	// Draw over black bars
+	// Drain anything the renderer left behind, so the check in openGLEnd is
+	// reporting this overlay's mistakes and not somebody else's.
+	{
+		int guard = 0;
+		while(glGetError() != GL_NO_ERROR && ++guard < 32) {}
+	}
+
 	glGetIntegerv(GL_VIEWPORT, viewport);
-	glViewport(0, 0, android_screen_width, android_screen_height);
-	glMatrixMode(GL_PROJECTION);
-	glPushMatrix();
-	glLoadIdentity();
-	glOrthof(0.f, (GLfloat)android_screen_width, (GLfloat)android_screen_height, 0.f, 0.f, 1.f);
-	glMatrixMode(GL_MODELVIEW);
-	glPushMatrix();
+	// Saved so it can be put back. The renderer sets most of its state per
+	// frame, but not all of it, and leaving depth writes off was enough to make
+	// the whole world render black on the following frame while the overlay
+	// itself looked perfect.
+	savedDepthTest = glIsEnabled(GL_DEPTH_TEST);
+	savedStencilTest = glIsEnabled(GL_STENCIL_TEST);
+	savedCullFace = glIsEnabled(GL_CULL_FACE);
+	savedScissor = glIsEnabled(GL_SCISSOR_TEST);
+	savedBlend = glIsEnabled(GL_BLEND);
+	glGetBooleanv(GL_DEPTH_WRITEMASK, &savedDepthMask);
 
-	glDisable(GL_ALPHA_TEST);
+	// Everything the overlay depends on, set explicitly. It draws after a full
+	// frame of somebody else's rendering, and assuming any of this survived
+	// that is how an overlay comes to run without drawing a pixel: the shaders
+	// compile, the textures load, the draw calls are issued, and the result
+	// lands in a framebuffer nobody presents or is masked out.
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	// Vertex array object 0, and no buffers. The overlay draws from client-side
+	// arrays -- it hands glVertexAttribPointer a pointer into its own memory --
+	// and that is only legal on ES 3 with the default VAO. Worse, if the
+	// renderer leaves an array buffer bound, those pointers stop being pointers
+	// and are read as byte offsets into it, which is not an error the driver has
+	// to report and not a picture anybody wants.
+	glBindVertexArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+	glDisable(GL_SCISSOR_TEST);
 	glDisable(GL_DEPTH_TEST);
-	glDisableClientState(GL_COLOR_ARRAY);
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY );
-
-	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-	glEnable (GL_BLEND);
+	glDisable(GL_STENCIL_TEST);
+	glDisable(GL_CULL_FACE);
+	glDepthMask(GL_FALSE);
+	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glEnable(GL_TEXTURE_2D);
+	glActiveTexture(GL_TEXTURE0);
+
+	// Over the whole window, so the controls sit on the black bars too when the
+	// game's aspect does not fill the screen.
+	glViewport(0, 0, android_screen_width, android_screen_height);
 }
 
 void openGLEnd()
 {
-	glDisable (GL_BLEND);
-	glColor4f(1,1,1,1);
-	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-
-	// Restore viewport that SDL uses
+	// Exactly what was there before, back again.
+	if(savedDepthTest) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+	if(savedStencilTest) glEnable(GL_STENCIL_TEST); else glDisable(GL_STENCIL_TEST);
+	if(savedCullFace) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
+	if(savedScissor) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
+	if(savedBlend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+	glDepthMask(savedDepthMask);
 	glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
-	glMatrixMode(GL_MODELVIEW);
-	glPopMatrix();
-	glMatrixMode(GL_PROJECTION);
-	glPopMatrix();
+	// The overlay leaves its own program and buffers bound. Unbind, so a stale
+	// binding cannot quietly change what the next frame draws with.
+	glUseProgram(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void gameSettingsButton(int state)
@@ -327,9 +375,19 @@ void initControls(int width, int height,const char * graphics_path,const char *s
 		tcGameMain->setAlpha(gameControlsAlpha);
 		tcGameMain->addControl(new touchcontrols::Button("attack",touchcontrols::RectF(20,7,23,10),"shoot",KEY_SHOOT));
 		tcGameMain->addControl(new touchcontrols::Button("use",touchcontrols::RectF(23,6,26,9),"use",PORT_ACT_USE));
+		// The two verbs a player reaches for mid-fight, under the same thumb as
+		// fire and use. The infrared visor is how Corridor 7 is played in the
+		// dark, and it is on a button rather than in a menu for that reason.
+		tcGameMain->addControl(new touchcontrols::Button("visor",touchcontrols::RectF(23,9,26,12),"binocular",PORT_ACT_C7_VISOR));
+		tcGameMain->addControl(new touchcontrols::Button("mine",touchcontrols::RectF(20,10,23,13),"mine",PORT_ACT_C7_MINE));
 		tcGameMain->addControl(new touchcontrols::Button("quick_save",touchcontrols::RectF(24,0,26,2),"save",PORT_ACT_QUICKSAVE));
 		tcGameMain->addControl(new touchcontrols::Button("quick_load",touchcontrols::RectF(20,0,22,2),"load",PORT_ACT_QUICKLOAD));
-		tcGameMain->addControl(new touchcontrols::Button("map",touchcontrols::RectF(4,0,6,2),"map",PORT_ACT_MAP));
+		// Corridor 7 has two maps. Its own inset floor panel is the one a
+		// player wants and gets the obvious icon; ECWolf's full-viewport
+		// automap keeps its button but takes the F1 icon, which is the key it
+		// is bound to, so the two are told apart at a glance.
+		tcGameMain->addControl(new touchcontrols::Button("floor_map",touchcontrols::RectF(4,0,6,2),"map",PORT_ACT_C7_FLOORMAP));
+		tcGameMain->addControl(new touchcontrols::Button("map",touchcontrols::RectF(2,0,4,2),"f1",PORT_ACT_MAP));
 		tcGameMain->addControl(new touchcontrols::Button("run",touchcontrols::RectF(7,0,9,2),"run",PORT_ACT_ALWAYS_RUN));
 		tcGameMain->addControl(new touchcontrols::Button("keyboard",touchcontrols::RectF(9,0,11,2),"keyboard",KEY_SHOW_KBRD,false,true));
 
@@ -406,6 +464,15 @@ void frameControls()
 	// Nothing to drive until the controls exist; the pointers below are null.
 	if(!controlsCreated)
 		return;
+
+	// A context the overlay's objects do not belong to any more. Rebuild them
+	// before drawing, or every draw this frame is against dead names.
+	if(touchcontrols::GLES2ContextLost())
+	{
+		LOGI("touch overlay: GL context changed, rebuilding");
+		touchcontrols::GLES2Forget();
+		controlsContainer.initGL();
+	}
 
 	int inMenuNew = PortableInMenu();
 	if (inMenuLast != inMenuNew)

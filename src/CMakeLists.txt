@@ -309,11 +309,21 @@ elseif(ANDROID)
 
 	# Aarch64 linker seems to be setup improperly and requires these to be
  	# public for link-test
+	#
+	# GLESv2, not GLESv1_CM: this engine asks SDL for an ES 3.0 context, and
+	# libGLESv2 is where Android puts the ES2/ES3 entry points. Linking the ES1
+	# library meant the touch overlay's state calls compiled against
+	# GLES/gl.h -- glMatrixMode and friends -- which do not exist in the context
+	# that is actually current.
 	target_link_libraries(engine PUBLIC
 		touchcontrols
-		GLESv1_CM
+		GLESv2
 		log
 	)
+	# The same switch the touchcontrols target is built with, so the headers it
+	# shares with the engine resolve to the same OpenGL ES version on both
+	# sides. Without it GLRect.h hands the engine the ES 1.x header.
+	target_compile_definitions(engine PRIVATE USE_GLES2)
 endif()
 
 # Derive version info and generate header

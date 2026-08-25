@@ -972,6 +972,16 @@ void SDLFB::Update ()
 		int dw = Width, dh = Height;
 		SDL_GL_GetDrawableSize (Screen, &dw, &dh);
 		R_GLLivePresent (MemBuffer, Pitch, Width, Height, dw, dh);
+#ifdef __ANDROID__
+		// The touch overlay, on top of the finished frame and before the swap.
+		// It used to be hooked into the SDL_Renderer path below, which the GL
+		// cutover stopped using -- so from Phase 11 until now the controls were
+		// never initialised and never drawn, on a platform that has no keyboard.
+		{
+			extern void frameControls();
+			frameControls();
+		}
+#endif
 		SDL_GL_SwapWindow (Screen);
 		R_GLProfileEndFrame ();
 		// After the swap, where unwinding is safe: a capture whose artifact is

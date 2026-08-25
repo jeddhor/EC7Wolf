@@ -95,6 +95,15 @@ void postCommand(const char * cmd)
 
 bool my_buttonstate[NUMBUTTONS];
 
+// A press that arrives and departs between two polls used to be lost entirely.
+//
+// Touch events are delivered on the event thread while the game samples the
+// buttons once a tic; a quick tap can begin and end inside one of those gaps,
+// and the simulation never sees it. On a keyboard nobody presses a key for four
+// milliseconds, so this never came up -- on a touchscreen it is how people
+// press things. Each press is held until it has been sampled at least once.
+static bool my_buttonlatch[NUMBUTTONS];
+
 static bool alwaysrun = false;
 
 void PortableAction(int state, int action)
@@ -161,10 +170,28 @@ void PortableAction(int state, int action)
 		if (state)
 			alwaysrun = !alwaysrun;
 		break;
+
+	// The three verbs Corridor 7 has and Wolfenstein does not. The engine
+	// already binds them (wl_play.cpp): Visor Mode on bt_zoom, Drop Mine on
+	// bt_reload, Floor Map on bt_c7map -- so these go to the buttons rather
+	// than synthesising the keyboard presses those buttons happen to sit on.
+	case PORT_ACT_C7_VISOR:
+		key = bt_zoom;
+		break;
+	case PORT_ACT_C7_MINE:
+		key = bt_reload;
+		break;
+	case PORT_ACT_C7_FLOORMAP:
+		key = bt_c7map;
+		break;
 	}
 
 	if (key != -1)
+	{
 		my_buttonstate[key] = state;
+		if (state)
+			my_buttonlatch[key] = true;
+	}
 
 }
 
@@ -312,8 +339,11 @@ void pollAndroidControls()
 
 	for (int n=0;n<NUMBUTTONS;n++)
 	{
-		if (my_buttonstate[n])
+		if (my_buttonstate[n] || my_buttonlatch[n])
 			control[ConsolePlayer].buttonstate[n] = 1;
+		// Cleared only once it has been reported, so the shortest possible tap
+		// still lasts exactly one tic rather than none.
+		my_buttonlatch[n] = false;
 	}
 }
 

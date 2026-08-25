@@ -31,3 +31,10 @@ message("->${CMAKE_CURRENT_SOURCE_DIR} ->${LIBPNG_INCLUDE_DIR}")
 
 target_link_libraries(touchcontrols PUBLIC EGL GLESv2 log sigc++ TinyXML ${LIBPNG_LIBRARY})
  
+
+# A non-void function that falls off its end is undefined behaviour, and clang
+# compiles it to a trap. In this library that pattern was in thirteen places,
+# including every control's initGL, so building the touch overlay at all
+# crashed the moment the first control was created -- with a backtrace pointing
+# at _Unwind_Resume and the allocator, which is nowhere near the cause.
+target_compile_options(touchcontrols PRIVATE -Werror=return-type)

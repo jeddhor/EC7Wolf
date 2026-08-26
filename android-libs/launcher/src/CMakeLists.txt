@@ -17,6 +17,7 @@ add_jar(engine-android
 	com/beloko/idtech/DirectoryChooserDialog.java
 	com/beloko/idtech/DialogStyle.java
 	com/beloko/idtech/DiscImport.java
+	com/beloko/idtech/ImportCleanup.java
 	com/beloko/idtech/VorbisEncoder.java
 	com/beloko/idtech/GameDataImport.java
 	com/beloko/idtech/GamePadFragment.java

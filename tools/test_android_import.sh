@@ -218,8 +218,17 @@ wait_for_data() {
 check "the app accepted the archive and imported it" wait_for_data
 
 # The import reports itself in a dialog, which sits over the status text the
-# next checks read.
-tap_match 'text="OK"' >/dev/null 2>&1 || true
+# next checks read. "Keep", not "Delete" -- the archive is this gate's fixture
+# and the next run needs it. The offer to delete is checked, though: leaving it
+# out would be a silent regression in the tidy-up somebody asked for.
+snapshot >/dev/null 2>&1 || true
+if grep -q 'text="Delete"' "$work/ui.xml" 2>/dev/null; then
+	printf '  ok   the completion dialog offers to delete the archive\n'
+else
+	printf '  FAIL the completion dialog does not offer to delete the archive\n'
+	status=1
+fi
+tap_match 'text="Keep"' >/dev/null 2>&1 || tap_match 'text="OK"' >/dev/null 2>&1 || true
 sleep 2
 
 printf '\nThe launcher, after importing\n'

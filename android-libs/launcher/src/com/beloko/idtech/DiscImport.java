@@ -4,6 +4,7 @@ import android.content.ContentResolver;
 import android.net.Uri;
 import android.util.Log;
 
+import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -14,6 +15,12 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.Collections;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -53,6 +60,39 @@ public class DiscImport
 
 	/** libvorbis VBR quality. Transparent for this material, ~7 MB a track. */
 	private static final float QUALITY = 0.4f;
+
+	/**
+	 * A source of independent readers over the same image.
+	 *
+	 * The soundtrack is encoded on several threads at once, and a FileChannel
+	 * has one shared position -- so each worker needs its own handle rather than
+	 * a borrowed one.
+	 */
+	public interface ImageSource
+	{
+		Reader open() throws IOException;
+	}
+
+	/** One reader, and whatever has to be closed to let go of it. */
+	public static class Reader implements java.io.Closeable
+	{
+		public FileChannel channel;
+		private final java.io.Closeable[] toClose;
+
+		Reader(FileChannel channel, java.io.Closeable... toClose)
+		{
+			this.channel = channel;
+			this.toClose = toClose;
+		}
+
+		@Override public void close()
+		{
+			for (java.io.Closeable c : toClose)
+			{
+				try { c.close(); } catch (IOException ignored) {}
+			}
+		}
+	}
 
 	public static class Track
 	{
@@ -112,18 +152,42 @@ public class DiscImport
 		return cue;
 	}
 
-	/** One MODE1/2352 sector's 2048 bytes of user data. */
-	private static boolean readDataSector(FileChannel ch, long lba, byte[] out) throws IOException
+	/** How many raw sectors to pull in one read when copying a file out. */
+	private static final int READ_SECTORS = 64;
+
+	/** Reused across the whole rip: one seek and one allocation per sector adds up. */
+	private static final ThreadLocal<ByteBuffer> SCRATCH = new ThreadLocal<ByteBuffer>()
 	{
-		ByteBuffer buf = ByteBuffer.allocate(RAW_SECTOR);
+		@Override protected ByteBuffer initialValue()
+		{
+			return ByteBuffer.allocate(RAW_SECTOR * READ_SECTORS);
+		}
+	};
+
+	/** Fill buf with count raw sectors starting at lba. */
+	private static boolean readRaw(FileChannel ch, long lba, ByteBuffer buf, int count)
+		throws IOException
+	{
+		final int want = count * RAW_SECTOR;
+		buf.clear();
+		buf.limit(want);
 		ch.position(lba * RAW_SECTOR);
 		int got = 0;
-		while (got < RAW_SECTOR)
+		while (got < want)
 		{
 			final int n = ch.read(buf);
 			if (n < 0) return false;
 			got += n;
 		}
+		return true;
+	}
+
+	/** One MODE1/2352 sector's 2048 bytes of user data. */
+	private static boolean readDataSector(FileChannel ch, long lba, byte[] out) throws IOException
+	{
+		final ByteBuffer buf = SCRATCH.get();
+		if (!readRaw(ch, lba, buf, 1))
+			return false;
 		System.arraycopy(buf.array(), MODE1_OFFSET, out, 0, USER_DATA);
 		return true;
 	}
@@ -213,20 +277,29 @@ public class DiscImport
 	private static void extract(FileChannel ch, Entry e, File dest) throws IOException
 	{
 		final File tmp = new File(dest.getParentFile(), dest.getName() + ".part");
-		final OutputStream out = new FileOutputStream(tmp);
+		final OutputStream out = new BufferedOutputStream(new FileOutputStream(tmp), 1 << 20);
 		try
 		{
-			final byte[] sector = new byte[USER_DATA];
+			// Sixty-four sectors a time rather than one. Every sector used to
+			// cost a seek, a read and a fresh 2352-byte buffer, and the largest
+			// file on this disc is 21.7 MB -- about ten thousand of each.
+			final ByteBuffer buf = SCRATCH.get();
 			long left = e.size;
 			long lba = e.lba;
 			while (left > 0)
 			{
-				if (!readDataSector(ch, lba, sector))
+				final int sectors = (int)Math.min((long)READ_SECTORS,
+					(left + USER_DATA - 1) / USER_DATA);
+				if (!readRaw(ch, lba, buf, sectors))
 					throw new IOException("the image ends inside " + e.name);
-				final int n = (int)Math.min((long)USER_DATA, left);
-				out.write(sector, 0, n);
-				left -= n;
-				++lba;
+				final byte[] raw = buf.array();
+				for (int s = 0; s < sectors && left > 0; ++s)
+				{
+					final int n = (int)Math.min((long)USER_DATA, left);
+					out.write(raw, s * RAW_SECTOR + MODE1_OFFSET, n);
+					left -= n;
+				}
+				lba += sectors;
 			}
 		}
 		finally
@@ -329,20 +402,16 @@ public class DiscImport
 		}
 		finally { cueIn.close(); }
 
-		final ParcelFileDescriptor pfd = resolver.openFileDescriptor(binUri, "r");
-		if (pfd == null)
-			throw new IOException("could not open the disc image");
-
-		final FileInputStream fis = new FileInputStream(pfd.getFileDescriptor());
-		try
-		{
-			return ripChannel(fis.getChannel(), cueText, gameDir, listener);
-		}
-		finally
-		{
-			try { fis.close(); } catch (IOException ignored) {}
-			try { pfd.close(); } catch (IOException ignored) {}
-		}
+		return ripSource(new ImageSource() {
+			public Reader open() throws IOException
+			{
+				final ParcelFileDescriptor pfd = resolver.openFileDescriptor(binUri, "r");
+				if (pfd == null)
+					throw new IOException("could not open the disc image");
+				final FileInputStream fis = new FileInputStream(pfd.getFileDescriptor());
+				return new Reader(fis.getChannel(), fis, pfd);
+			}
+		}, cueText, gameDir, listener);
 	}
 
 	/**
@@ -358,16 +427,16 @@ public class DiscImport
 		try { n = Math.max(0, cueIn.read(all)); }
 		finally { cueIn.close(); }
 
-		final FileInputStream fis = new FileInputStream(binFile);
-		try
-		{
-			return ripChannel(fis.getChannel(), new String(all, 0, n, "ISO-8859-1"),
-				gameDir, listener);
-		}
-		finally { fis.close(); }
+		return ripSource(new ImageSource() {
+			public Reader open() throws IOException
+			{
+				final FileInputStream fis = new FileInputStream(binFile);
+				return new Reader(fis.getChannel(), fis);
+			}
+		}, new String(all, 0, n, "ISO-8859-1"), gameDir, listener);
 	}
 
-	private static int ripChannel(FileChannel ch, String cueText, File gameDir,
+	private static int ripSource(ImageSource source, String cueText, File gameDir,
 		GameDataImport.Listener listener) throws IOException
 	{
 		final Cue cue = parseCue(cueText);
@@ -375,10 +444,14 @@ public class DiscImport
 			throw new IOException("the cue sheet lists no tracks");
 
 		int produced = 0;
+		final Reader reader = source.open();
+		final FileChannel ch = reader.channel;
+		try
 		{
 			final long imageSectors = ch.size() / RAW_SECTOR;
 
 			// --- the data track ---------------------------------------------
+			final long tStart = android.os.SystemClock.elapsedRealtime();
 			if (listener != null) listener.onProgress("Reading the disc");
 			final byte[] pvd = new byte[USER_DATA];
 			if (!readDataSector(ch, PVD_LBA, pvd))
@@ -405,6 +478,9 @@ public class DiscImport
 				++produced;
 			}
 
+			Log.i(LOG, "data track extracted in "
+				+ (android.os.SystemClock.elapsedRealtime() - tStart) + " ms");
+
 			// --- the soundtrack ---------------------------------------------
 			if (!VorbisEncoder.isAvailable())
 			{
@@ -414,6 +490,18 @@ public class DiscImport
 
 			final File cdaudio = new File(gameDir, "cdaudio");
 			if (!cdaudio.exists()) cdaudio.mkdirs();
+
+			// All four at once.
+			//
+			// Encoding is 77% of a disc import -- 41 of 54 seconds measured on a
+			// Tab S5e -- and the four tracks have nothing to do with each other.
+			// Each worker opens its own reader over the image, because a
+			// FileChannel has a single shared position and sharing one would
+			// have them seeking over each other.
+			final List<Runnable> jobs = new ArrayList<Runnable>();
+			final List<File> wrote = Collections.synchronizedList(new ArrayList<File>());
+			final AtomicReference<IOException> failure = new AtomicReference<IOException>();
+			final AtomicInteger done = new AtomicInteger();
 
 			for (int wanted : MUSIC_TRACKS)
 			{
@@ -433,10 +521,74 @@ public class DiscImport
 
 				final File dest = new File(cdaudio,
 					String.format(Locale.US, "track%02d.ogg", wanted));
-				if (listener != null) listener.onProgress("Encoding " + dest.getName());
-				ripAudio(ch, track.startSector, end, dest, listener);
-				++produced;
+				final long from = track.startSector, to = end;
+				final int number = wanted;
+				jobs.add(new Runnable() {
+					public void run()
+					{
+						Reader mine = null;
+						try
+						{
+							mine = source.open();
+							final long t0 = android.os.SystemClock.elapsedRealtime();
+							// No per-track percentage: four of them reporting
+							// into one line reads as noise.
+							ripAudio(mine.channel, from, to, dest, null);
+							Log.i(LOG, "track " + number + " encoded in "
+								+ (android.os.SystemClock.elapsedRealtime() - t0) + " ms");
+							wrote.add(dest);
+						}
+						catch (IOException e)
+						{
+							failure.compareAndSet(null, e);
+						}
+						catch (RuntimeException e)
+						{
+							failure.compareAndSet(null, new IOException(e.getMessage()));
+						}
+						finally
+						{
+							if (mine != null) mine.close();
+							if (listener != null)
+								listener.onProgress("Encoding the soundtrack ("
+									+ done.incrementAndGet() + " of " + jobs.size() + " done)");
+						}
+					}
+				});
 			}
+
+			if (!jobs.isEmpty())
+			{
+				if (listener != null)
+					listener.onProgress("Encoding the soundtrack (0 of " + jobs.size() + " done)");
+				// Bounded by the cores that are actually there; four encoders on
+				// a two-big-core phone would only queue behind each other.
+				final int threads = Math.min(jobs.size(),
+					Math.max(1, Runtime.getRuntime().availableProcessors()));
+				final ExecutorService pool = Executors.newFixedThreadPool(threads);
+				try
+				{
+					for (Runnable job : jobs)
+						pool.execute(job);
+					pool.shutdown();
+					pool.awaitTermination(2, TimeUnit.HOURS);
+				}
+				catch (InterruptedException e)
+				{
+					pool.shutdownNow();
+					Thread.currentThread().interrupt();
+					throw new IOException("the import was interrupted");
+				}
+
+				final IOException bad = failure.get();
+				if (bad != null)
+					throw bad;
+				produced += wrote.size();
+			}
+		}
+		finally
+		{
+			reader.close();
 		}
 		return produced;
 	}

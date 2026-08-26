@@ -569,6 +569,50 @@ subject to whatever this device is doing. That is worth building the day the
 picker interaction is itself the thing under test; it is not worth it to reach
 code that an intent reaches directly.
 
+### Import speed, and clearing up afterwards
+
+**Where a disc import's time goes**, measured on the Tab S5e rather than guessed:
+
+| phase | time |
+|---|---|
+| unpacking the 316 MB image out of the zip | 11.2 s |
+| walking ISO 9660 and extracting the game data and cinematics | 1.3 s |
+| encoding the four soundtrack tracks | **41.5 s** |
+
+Encoding is 77% of it, and the four tracks have nothing to do with each other,
+so they are encoded at once on a pool bounded by the core count. That takes a
+disc import from **57-62 seconds to 26-33**. Each worker opens its own reader
+over the image: a `FileChannel` has one shared position, and sharing one would
+have four encoders seeking over each other.
+
+Two things measured and kept even though they changed nothing: buffering the
+copies at a megabyte and reading the data track sixty-four sectors at a time
+rather than one seek and one allocation per 2352-byte sector. The extraction
+they speed up is 1.3 seconds of a minute, so there was nothing there to win --
+that is worth writing down so the next person does not try it again expecting
+more. The progress reporting added alongside them **is** worth having: unpacking
+316 MB in silence is indistinguishable from a hang, and people force-stop apps
+that look hung.
+
+**Clearing up.** After a successful import the app offers to delete what it
+imported from -- a 316 MB disc image is not something to leave in Downloads.
+Three routes, because which one works depends on where the file came from:
+
+* a Storage Access Framework document, from the picker or a file manager's
+  "open with": deleted outright, the app holds a grant for it;
+* a MediaStore *media* item: the system asks the player itself, and that prompt
+  is the confirmation;
+* **a non-media file another app owns -- a zip a browser downloaded -- cannot be
+  deleted at all** on Android 11 and later, read access or not. `MediaStore`
+  answers `All requested items must be Media items` and there is no way round it
+  short of `MANAGE_EXTERNAL_STORAGE`, which is not a permission a game should
+  hold.
+
+So the offer is honest rather than a promise: it says which of the three
+happened, and when Android refuses it says so and suggests removing the file by
+hand, instead of doing nothing and leaving somebody wondering whether the button
+worked.
+
 ### M7 — Fast enough to play — **done**
 
 Measured on the target: a Galaxy Tab S5e, Snapdragon 670, **Adreno 615**,

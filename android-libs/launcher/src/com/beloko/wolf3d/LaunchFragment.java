@@ -36,6 +36,7 @@ import android.widget.Toast;
 
 import com.beloko.idtech.AppSettings;
 import com.beloko.idtech.GameDataImport;
+import com.beloko.idtech.ImportCleanup;
 import com.beloko.idtech.GD;
 import com.beloko.idtech.GD.IDGame;
 import com.beloko.idtech.Utils;
@@ -60,6 +61,7 @@ public class LaunchFragment extends Fragment{
 	ArrayList<String> argsHistory;
 
 	TextView dataStatusTextView;
+	Uri importedFrom;
 	Button startFullButton;
 
 	// Request codes for the two ways in. SAF hands the result back through
@@ -213,6 +215,56 @@ public class LaunchFragment extends Fragment{
 		}
 	}
 
+	/**
+	 * Offer to remove what was just imported from.
+	 *
+	 * A zip is the file the player picked; a folder holding a disc image means
+	 * the .cue and the .bin, which is where the hundreds of megabytes are. The
+	 * folder itself is left alone -- it may be the player's own and is not ours
+	 * to remove.
+	 */
+	void offerToDelete(boolean fromZip) {
+		final java.util.List<Uri> sources = new java.util.ArrayList<Uri>();
+		if (fromZip) {
+			if (importedFrom != null) sources.add(importedFrom);
+		} else {
+			sources.addAll(GameDataImport.lastDiscSources);
+		}
+		if (sources.isEmpty())
+			return;
+
+		long total = 0;
+		final StringBuilder names = new StringBuilder();
+		for (Uri u : sources) {
+			total += ImportCleanup.sizeOf(getActivity().getContentResolver(), u);
+			if (names.length() > 0) names.append(" and ");
+			names.append(ImportCleanup.displayName(getActivity().getContentResolver(), u));
+		}
+
+		new AlertDialog.Builder(getActivity())
+			.setTitle("Imported")
+			.setMessage("Corridor 7 is ready to play.\n\nDelete " + names
+				+ (total > 0 ? " (" + (total >> 20) + " MB)" : "")
+				+ " now that it has been copied in?")
+			.setPositiveButton("Delete", new DialogInterface.OnClickListener() {
+				public void onClick(DialogInterface d, int which) {
+					String said = null;
+					for (Uri u : sources) {
+						final String n = ImportCleanup.displayName(
+							getActivity().getContentResolver(), u);
+						final String s = ImportCleanup.describe(
+							ImportCleanup.delete(getActivity(), u), n);
+						if (s != null) said = s;
+					}
+					if (said != null)
+						android.widget.Toast.makeText(getActivity(), said,
+							android.widget.Toast.LENGTH_LONG).show();
+				}
+			})
+			.setNegativeButton("Keep", null)
+			.show();
+	}
+
 	void askWhereTheDataIs() {
 		AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
 		builder.setTitle("Import Game Data");
@@ -249,6 +301,7 @@ public class LaunchFragment extends Fragment{
 
 		final Uri uri = data.getData();
 		final boolean fromZip = requestCode == REQUEST_IMPORT_ZIP;
+		importedFrom = uri;
 		dataStatusTextView.setText("Importing...");
 
 		// Twenty-odd megabytes through a content provider is not something to
@@ -285,6 +338,8 @@ public class LaunchFragment extends Fragment{
 						refreshDataStatus();
 						if (message != null && dataStatusTextView != null)
 							dataStatusTextView.setText(message);
+						else if (message == null)
+							offerToDelete(fromZip);
 					}
 				});
 			}

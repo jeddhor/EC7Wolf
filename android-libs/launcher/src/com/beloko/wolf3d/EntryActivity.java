@@ -7,10 +7,12 @@ import android.app.Fragment;
 import android.app.FragmentTransaction;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
+import android.widget.Toast;
 // Was android.support.v4.app.FragmentActivity. This class never used it:
 // every fragment here is a framework fragment (android.app.Fragment,
 // getFragmentManager), so FragmentActivity contributed nothing but a
@@ -25,6 +27,7 @@ import com.beloko.idtech.GD;
 import com.beloko.idtech.GD.IDGame;
 import com.beloko.idtech.GameDataImport;
 import com.beloko.idtech.GamePadFragment;
+import com.beloko.idtech.ImportCleanup;
 import com.beloko.idtech.IntroDialog;
 import com.beloko.idtech.OptionsFragment;
 import com.beloko.idtech.R;
@@ -296,11 +299,39 @@ public class EntryActivity extends Activity  {
 							: missing == null
 								? "Imported " + count + " files. Corridor 7 is ready to play."
 								: "That archive did not have everything in it. Still missing: " + missing;
-						new AlertDialog.Builder(EntryActivity.this)
-							.setTitle("Import Game Data")
-							.setMessage(text)
-							.setPositiveButton("OK", null)
-							.show();
+
+						final AlertDialog.Builder builder = new AlertDialog.Builder(EntryActivity.this)
+							.setTitle("Import Game Data");
+
+						// Offer to clear up after ourselves. The archive is not
+						// needed once its contents are in app storage, and a
+						// disc image is a third of a gigabyte sitting in
+						// Downloads. Only offered when the import worked --
+						// deleting the source after a failure would take away
+						// the thing somebody needs to try again with.
+						final long size = ImportCleanup.sizeOf(getContentResolver(), source);
+						final String name = ImportCleanup.displayName(getContentResolver(), source);
+						if (failed == null && missing == null && name != null)
+						{
+							builder.setMessage(text + "\n\nDelete " + name
+									+ (size > 0 ? " (" + (size >> 20) + " MB)" : "")
+									+ " now that it has been copied in?")
+								.setPositiveButton("Delete", new DialogInterface.OnClickListener() {
+									public void onClick(DialogInterface d, int which) {
+										final String said = ImportCleanup.describe(
+											ImportCleanup.delete(EntryActivity.this, source), name);
+										if (said != null)
+											Toast.makeText(EntryActivity.this, said,
+												Toast.LENGTH_LONG).show();
+									}
+								})
+								.setNegativeButton("Keep", null);
+						}
+						else
+						{
+							builder.setMessage(text).setPositiveButton("OK", null);
+						}
+						builder.show();
 					}
 				});
 			}

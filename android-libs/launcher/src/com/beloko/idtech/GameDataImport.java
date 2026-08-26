@@ -5,6 +5,7 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.provider.DocumentsContract;
 
+import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -71,6 +72,16 @@ public class GameDataImport
 	 * own because that is where the engine looks for them.
 	 */
 	public static final String[] VIDEO = { "SEQONE.CO7", "SEQTHREE.CO7", "SEQFOUR.CO7" };
+
+	/**
+	 * What the last import actually read from, so the caller can offer to clean
+	 * it up. For a folder holding a disc image that is the .cue and the .bin --
+	 * the things worth hundreds of megabytes -- and not the folder itself,
+	 * which may be the player's own and is not ours to remove.
+	 *
+	 * Single-valued because one import runs at a time.
+	 */
+	public static List<Uri> lastDiscSources = new ArrayList<Uri>();
 
 	/** Progress for a UI that would otherwise sit still for twenty seconds. */
 	public interface Listener
@@ -193,9 +204,10 @@ public class GameDataImport
 							+ "and there is %d MB free", need >> 20, free >> 20));
 					}
 					binTmp = new File(gameDir, "import.bin.tmp");
-					if(listener != null)
-						listener.onProgress("Unpacking " + name + " (this is the big one)");
-					writeTo(in, binTmp);
+					final long tUnpack = android.os.SystemClock.elapsedRealtime();
+					writeTo(in, binTmp, need, "Unpacking " + name, listener);
+					android.util.Log.i("GameDataImport", "unpacked the disc image in "
+						+ (android.os.SystemClock.elapsedRealtime() - tUnpack) + " ms");
 					continue;
 				}
 
@@ -247,10 +259,16 @@ public class GameDataImport
 	public static int importFromTree(ContentResolver resolver, Uri tree, File gameDir,
 		Listener listener) throws IOException
 	{
+		lastDiscSources = new ArrayList<Uri>();
 		final Uri[] pair = findDiscImage(resolver, tree,
 			DocumentsContract.getTreeDocumentId(tree), 0);
 		if(pair != null)
-			return DiscImport.rip(resolver, pair[0], pair[1], gameDir, listener);
+		{
+			final int made = DiscImport.rip(resolver, pair[0], pair[1], gameDir, listener);
+			lastDiscSources.add(pair[0]);
+			lastDiscSources.add(pair[1]);
+			return made;
+		}
 
 		return walk(resolver, tree, DocumentsContract.getTreeDocumentId(tree),
 			gameDir, listener, 0);
@@ -422,14 +440,45 @@ public class GameDataImport
 	 */
 	private static void writeTo(InputStream in, File dest) throws IOException
 	{
+		writeTo(in, dest, 0, null, null);
+	}
+
+	/**
+	 * @param expected total bytes, or 0 when unknown; only used for progress.
+	 * @param label    what to call it while it copies, or null to stay quiet.
+	 */
+	private static void writeTo(InputStream in, File dest, long expected,
+		String label, Listener listener) throws IOException
+	{
 		File tmp = new File(dest.getParentFile(), dest.getName() + ".part");
-		OutputStream out = new FileOutputStream(tmp);
+		// Buffered, and a megabyte at a time. The small files here are a few
+		// hundred kilobytes and do not care, but a disc image is a third of a
+		// gigabyte and the syscall count is the difference between a wait and a
+		// long wait.
+		OutputStream out = new BufferedOutputStream(new FileOutputStream(tmp), 1 << 20);
 		try
 		{
-			byte[] buffer = new byte[64 * 1024];
+			byte[] buffer = new byte[1 << 20];
+			long done = 0;
+			long nextReport = 0;
 			int n;
 			while((n = in.read(buffer)) > 0)
+			{
 				out.write(buffer, 0, n);
+				done += n;
+				// Something has to move on screen: unpacking 316 MB in silence
+				// is indistinguishable from a hang, and people force-stop apps
+				// that look hung.
+				if(listener != null && label != null && done >= nextReport)
+				{
+					nextReport = done + (8L << 20);
+					if(expected > 0)
+						listener.onProgress(String.format(Locale.US, "%s  %d%%  (%d of %d MB)",
+							label, done * 100 / expected, done >> 20, expected >> 20));
+					else
+						listener.onProgress(String.format(Locale.US, "%s  %d MB", label, done >> 20));
+				}
+			}
 		}
 		finally
 		{

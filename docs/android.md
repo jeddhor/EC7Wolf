@@ -717,6 +717,11 @@ resolution costs, how to build it, and what this port does not claim.
   minutes rather than stalling the suite. The README warns players about the
   same prompt.
 
+The APK ships. `.github/workflows/release.yml` builds it on every `v*` tag and
+publishes `EC7Wolf-<version>-android.apk` beside the Windows and Linux
+downloads, with `test_android_apk.sh` gating it -- see [ci.md](ci.md) for the
+signing-key secret and why a release must not accept that gate's SKIP.
+
 *Exit:* met -- **43 passed, 0 failed, 0 skipped** on a Galaxy Tab S5e over
 wireless debugging, the five Android gates contributing 76 assertions
 (native 12, apk 26, device 12, controls 8, import 18).

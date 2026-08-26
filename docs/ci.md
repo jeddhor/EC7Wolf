@@ -98,3 +98,32 @@ About twenty minutes on this hardware, dominated by the gates that capture many
 frames — `gl_parity`, `gl_visibility`, `corridor7_invulnerability` and
 `corridor7_release_startup`. Run a subset by name while iterating and the whole
 suite before pushing.
+
+## Cutting a release
+
+`.github/workflows/release.yml` runs on a `v*` tag. It builds the engine for
+Linux x64, Linux arm64 and Windows x64, freezes the Windows installer, packages
+the source and the standalone installer -- and builds the **Android APK**, which
+is published alongside the desktop downloads as `EC7Wolf-<version>-android.apk`.
+
+The Android job is the only one that cross-compiles. It installs a JDK and the
+host tools, fetches SDL and the Vorbis encoder with
+`tools/fetch_android_deps.sh`, runs `tools/build_android.sh` for both ABIs, and
+then runs `tools/test_android_apk.sh` against what came out. That gate is the
+reason the job exists rather than a bare build step: it is the check that both
+architectures are present, that every native library made it into the archive,
+and that the thing is signed. It exits 0 when it decides to skip, so the job
+greps its output for `SKIP` and fails -- an unchecked APK must not reach a
+release wearing a green tick.
+
+**Signing.** Set `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASS` and
+`ANDROID_KEYSTORE_ALIAS` as repository secrets and every release is signed with
+the same key, so players upgrade in place. Without them the build generates a
+throwaway key: the APK works, but the next release will not install over it, and
+uninstalling to get past that deletes the player's imported game data along with
+the app. The workflow passes which of the two happened through to the release
+notes rather than leaving anyone to find out.
+
+No artifact contains game data, and the publish job proves it before creating
+the release -- including inside the APK, which is a zip that `dist/*.zip` does
+not match.

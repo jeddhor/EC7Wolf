@@ -508,6 +508,7 @@ From the [releases page](https://github.com/jeddhor/EC7Wolf/releases):
 | `…-linux-x64-full.tar.gz`<br>`…-linux-arm64-full.tar.gz` | the engine and the installer | `./installer/ec7wolf-setup` |
 | `…-linux-x64.tar.gz`<br>`…-linux-arm64.tar.gz` | the engine | `./run-ec7wolf.sh` |
 | `…-installer.zip` | the installer as Python, no engine — see route 4 | `installer/ec7wolf-setup` |
+| `…-android.apk` | the engine, touch controls and data importer, `arm64-v8a` + `x86_64` | sideload it — see route 7 |
 | `…-source.tar.gz` | the complete source | see route 5 |
 
 Every archive carries an `INSTALL.txt` at the top saying what it holds and what
@@ -772,7 +773,11 @@ Verified on a Galaxy S25 Ultra (Android 16, Adreno 830) and a Galaxy Tab S5e
 
 #### Installing the APK
 
-Download or build `ec7wolf.apk` (below), then either:
+Take **`EC7Wolf-…-android.apk`** from the
+[latest release](https://github.com/jeddhor/EC7Wolf/releases) — it is built by
+the same workflow as the Windows and Linux downloads, carries both `arm64-v8a`
+and `x86_64`, and contains no game data. Or build it yourself, below. Then
+either:
 
 ```sh
 adb install -r ec7wolf.apk
@@ -919,13 +924,23 @@ Two things worth knowing before the first build:
   when you ask for one, and `test_android_apk.sh` fails on it.
 
 Signing uses a debug keystore generated at `builds/ec7wolf-debug.keystore` on
-first build. Set `ANDROID_KEYSTORE`, `ANDROID_KEYALIAS` and `ANDROID_STOREPASS`
-to use your own.
+first build. Set `ANDROID_KEYSTORE`, `ANDROID_KEYALIAS` and `ANDROID_KEYPASS` to
+use your own.
+
+**A signing key is not cosmetic on Android.** An APK signed with a different key
+will not install over one already on the device, and getting past that means
+uninstalling — which deletes the game data you imported, because Android removes
+an app's storage along with the app. The release workflow signs with a stable
+key when the repository has one (`ANDROID_KEYSTORE_BASE64`,
+`ANDROID_KEYSTORE_PASS`, `ANDROID_KEYSTORE_ALIAS` as secrets), and generates a
+throwaway otherwise — in which case the release notes say so.
 
 #### Testing it
 
-Five gates cover Android, and they need a device attached (they skip cleanly
-when there is not one):
+Five gates cover Android. Two of them — `android_native` and `android_apk` —
+only look at what was built, so they run anywhere, and CI runs `android_apk` on
+every release. The other three drive a real device over `adb` and skip cleanly
+when there is not one:
 
 ```sh
 tools/run_gates.sh android

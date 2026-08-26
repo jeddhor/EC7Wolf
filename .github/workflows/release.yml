@@ -90,6 +90,115 @@ jobs:
           path: packages/*
           if-no-files-found: error
 
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    outputs:
+      # Whether players can upgrade in place, which the release notes have to
+      # say out loud because getting it wrong costs somebody their game data.
+      signing: ${{ steps.key.outputs.signing }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # the version counts commits; a shallow clone cannot
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # The host tools only: cross-compiling cannot run zipdir, so a native
+      # build exports it first. That build is TOOLS_ONLY and links no SDL.
+      - name: Install what the host tools need
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build zlib1g-dev
+
+      - name: Make sure the SDK has what the build picks
+        run: |
+          sdk=${ANDROID_SDK_ROOT:-$ANDROID_HOME}
+          [ -n "$sdk" ] || { echo "no Android SDK on this runner"; exit 1; }
+          sdkmanager=$(command -v sdkmanager ||
+            echo "$sdk/cmdline-tools/latest/bin/sdkmanager")
+          [ -x "$sdkmanager" ] ||
+            { echo "no sdkmanager at $sdkmanager"; exit 1; }
+          yes | "$sdkmanager" --licenses >/dev/null 2>&1 || true
+          "$sdkmanager" --install "platforms;android-36" \
+            "build-tools;36.0.0" >/dev/null
+          # build_android.sh takes the newest NDK present. The runner images
+          # ship one; if that ever stops being true, say so here rather than
+          # failing later inside CMake.
+          ls -d "$sdk"/ndk/* >/dev/null 2>&1 ||
+            { echo "no NDK on this runner"; exit 1; }
+          ls -d "$sdk"/ndk/*
+          # build_android.sh reads ANDROID_SDK_ROOT and falls back to a path
+          # under $HOME that does not exist here, so pin it for later steps.
+          echo "ANDROID_SDK_ROOT=$sdk" >> "$GITHUB_ENV"
+
+      # An APK signed with a throwaway key cannot upgrade the one before it:
+      # Android refuses an install whose signature changed, and uninstalling to
+      # get past that takes the player's imported game data with it, because
+      # app-specific storage goes when the app does. So a repository that has
+      # set ANDROID_KEYSTORE_BASE64 signs every release with the same key and
+      # players upgrade in place. Without the secret the build still produces a
+      # working APK, and the release notes say what that costs.
+      - name: Unlock the signing key, if this repository has one
+        id: key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          KEYSTORE_ALIAS: ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "ANDROID_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "ANDROID_KEYALIAS=${KEYSTORE_ALIAS:-ec7wolf}" >> "$GITHUB_ENV"
+            echo "ANDROID_KEYPASS=$KEYSTORE_PASS" >> "$GITHUB_ENV"
+            echo "signing with the repository's release key"
+            echo "signing=release" >> "$GITHUB_OUTPUT"
+          else
+            echo "no ANDROID_KEYSTORE_BASE64 secret: a throwaway debug key"
+            echo "will be generated, and this APK will not upgrade an earlier one"
+            echo "signing=throwaway" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch SDL and the Vorbis encoder
+        run: tools/fetch_android_deps.sh
+
+      - name: Build both ABIs and the APK
+        run: tools/build_android.sh
+
+      # The same gate the local suite runs: both architectures present, all
+      # five native libraries in each, signed under both schemes, and nothing
+      # a player sees naming another app. It exits 0 when it decides to skip,
+      # which in a release is the one answer that must not pass for success.
+      - name: Check the APK is release-ready
+        run: |
+          builds=$(cd "$GITHUB_WORKSPACE/.." && pwd)/builds
+          [ -f "$builds/android-arm64-v8a/ec7wolf.apk" ] ||
+            { echo "no APK was built"; exit 1; }
+          tools/test_android_apk.sh "$builds" | tee apk-gate.log
+          if grep -q '^SKIP' apk-gate.log; then
+            echo "the APK gate skipped itself; a release cannot ship unchecked"
+            exit 1
+          fi
+
+      - name: Name it after the release
+        run: |
+          builds=$(cd "$GITHUB_WORKSPACE/.." && pwd)/builds
+          release=$(python3 -c "import sys; sys.path.insert(0, 'tools'); \
+            import make_release; print(make_release.version())")
+          mkdir -p packages
+          cp "$builds/android-arm64-v8a/ec7wolf.apk" \
+             "packages/EC7Wolf-$release-android.apk"
+          ls -la packages
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android
+          path: packages/*
+          if-no-files-found: error
+
   portable:
     name: Installer and source packages
     runs-on: ubuntu-latest
@@ -109,7 +218,7 @@ jobs:
 
   publish:
     name: Publish the release
-    needs: [engine, portable]
+    needs: [engine, portable, android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -150,6 +259,15 @@ jobs:
               echo "game data inside $archive"; exit 1
             fi
           done
+          # An APK is a zip, and dist/*.zip does not match one. It carries
+          # ec7wolf.pk3, which is this project's own free data, and must carry
+          # nothing of the player's.
+          for archive in dist/*.apk; do
+            [ -e "$archive" ] || continue
+            if unzip -l "$archive" | grep -iE '\.CO7|CORR7CD' ; then
+              echo "game data inside $archive"; exit 1
+            fi
+          done
           echo "clean: no game data in any artifact"
 
       - name: Write the release notes
@@ -171,6 +289,12 @@ jobs:
           Raspberry Pi or other aarch64 machine). It has the engine and the
           installer together.
 
+          **On Android, take `…-android.apk`.** Sideload it, then hand it a zip
+          of your game files — or the CD image itself, which is the only way to
+          get the soundtrack and the cinematics onto a phone. Play Protect will
+          ask to upload the app to Google before it installs; **Don't send**
+          installs it anyway.
+
           Everything else, if you want it:
 
           | File | What is inside | What to run |
@@ -181,15 +305,30 @@ jobs:
           | `*-linux-x64-full.tar.gz`<br>`*-linux-arm64-full.tar.gz` | the engine and the installer | `./installer/ec7wolf-setup` |
           | `*-linux-x64.tar.gz`<br>`*-linux-arm64.tar.gz` | the engine, nothing else | `./run-ec7wolf.sh`, once your `.CO7` files are beside it |
           | `*-installer.zip` | the installer as Python, no engine — it downloads the source and builds it | `installer/ec7wolf-setup` (needs Python and PySide6) |
+          | `*-android.apk` | the engine, the touch controls and the data importer, for `arm64-v8a` and `x86_64` | sideload it; it imports your game data itself |
           | `*-source.tar.gz` | the complete source | see the README |
 
           Every archive has an `INSTALL.txt` at the top saying the same thing
           for that particular download.
 
           See the [README](https://github.com/jeddhor/EC7Wolf#installing-and-running)
-          for all six ways to install this, in detail.
+          for all seven ways to install this, in detail.
           PREAMBLE
           sed -i 's/^          //' notes.md
+
+          if [ "${{ needs.android.outputs.signing }}" = "throwaway" ]; then
+            cat >> notes.md <<'ANDROIDKEY'
+
+          > **About the APK's signature.** This one was signed with a key
+          > generated during the build, so a later release will not install
+          > over it — Android refuses an install whose signing key changed.
+          > Uninstalling first gets past that, but it also deletes the game
+          > data you imported, because Android removes an app's storage with
+          > the app. Re-importing takes about half a minute.
+          ANDROIDKEY
+            sed -i 's/^          //' notes.md
+          fi
+
           echo "" >> notes.md
           echo "### Changes" >> notes.md
           echo "" >> notes.md

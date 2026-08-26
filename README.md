@@ -76,7 +76,7 @@ victory — no DOSBox, no emulation layer, real 8-bit ray casting.
 
 ## Credits — where credit is due
 
-This project stands entirely on the shoulders of three bodies of work. **None of
+This project stands entirely on the shoulders of four bodies of work. **None of
 the underlying games or engines are mine**, and the commercial Corridor 7 assets
 are **not** included here.
 
@@ -111,8 +111,25 @@ software renderer, save system, and multi-game IWAD framework are the foundation
 everything here is bolted onto. ECWolf is licensed under the GPL; see
 [`docs/license-gpl.txt`](docs/license-gpl.txt) and [`docs/copyright`](docs/copyright).
 
+### The Android touch controls and launcher © Emile Belanger (Beloko Games)
+There is a playable Android build because **[Emile
+Belanger](https://beloko.com/)** wrote the touch-control library and the
+launcher that ECWolf's Android support is built on, and then licensed them
+generously: they are GPLv2, but `android-libs/TouchControls/License.txt` and
+`android-libs/launcher/License.txt` grant ECWolf *and products deriving from it*
+— which is this — the use of them under the LGPLv2.1. This port never had to
+ask, because that question had already been answered.
+
+What is here is their work with roughly 2,400 lines changed on top: the
+touch-control renderer ported from OpenGL ES 1.x to ES 3.0, buttons added for
+Corridor 7's own verbs, and a data importer, disc ripper and Vorbis encoder
+grafted into the launcher. **The bugs in those changes are mine, not theirs** —
+and the launcher's own text no longer names Beloko precisely because that would
+put their name on things they did not write.
+
 **This fork is a hobbyist preservation/compatibility effort and is not
-affiliated with or endorsed by Capstone, id Software, or the ECWolf project.**
+affiliated with or endorsed by Capstone, id Software, the ECWolf project, or
+Beloko Games.**
 
 ---
 
@@ -1148,6 +1165,10 @@ Full detail, including which specific values are reconstructed, lives in
 - The **engine** (this ECWolf fork) is distributed under the **GPL** — see
   [`docs/license-gpl.txt`](docs/license-gpl.txt), [`docs/license-id.txt`](docs/license-id.txt),
   and [`docs/copyright`](docs/copyright).
+- The **Android touch controls and launcher** (`android-libs/TouchControls/`,
+  `android-libs/launcher/`) are © 2014 Emile Belanger, used under the
+  **LGPLv2.1** grant those directories' `License.txt` files extend to ECWolf and
+  its derivatives. Modified here; see [Credits](#credits--where-credit-is-due).
 - **Corridor 7: Alien Invasion** and all of its data (maps, art, sound, music,
   the executable and its palette) remain the **property of their respective
   rights holders** and are **not** included, embedded, or redistributed here.

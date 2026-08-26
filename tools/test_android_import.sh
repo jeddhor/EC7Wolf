@@ -48,6 +48,7 @@ else # -F'\t': adb delimits with a tab, and a wireless serial can contain a
 [ -n "$serial" ] || { printf 'SKIP: no Android device attached\n'; exit 0; }
 
 adb() { "$ADB" -s "$serial" "$@"; }
+. "$here/android_install.sh"
 [ "$(adb get-state 2>/dev/null || true)" = "device" ] ||
 	{ printf 'SKIP: device %s is not ready\n' "$serial"; exit 0; }
 if adb shell dumpsys window 2>/dev/null | grep -q 'mDreamingLockscreen=true'; then
@@ -146,7 +147,7 @@ swipe_to=$((screen_h / 4))
 
 printf 'A phone with nothing on it\n'
 printf '  ..   %s (%s)\n' "$(adb shell getprop ro.product.model 2>/dev/null | tr -d '\r')" "$serial"
-adb install -r "$apk" >/dev/null 2>&1
+install_apk "$apk" || true
 adb shell pm clear "$pkg" >/dev/null 2>&1
 check "the app has no data at all" \
 	absent_on_phone "/storage/emulated/0/Android/data/$pkg/files/Corridor7/FULL/MAPTEMP.CO7"

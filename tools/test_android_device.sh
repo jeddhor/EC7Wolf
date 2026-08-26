@@ -54,6 +54,7 @@ fi
 [ -n "$serial" ] || { printf 'SKIP: no Android device attached\n'; exit 0; }
 
 adb() { "$ADB" -s "$serial" "$@"; }
+. "$here/android_install.sh"
 
 state=$(adb get-state 2>/dev/null || true)
 [ "$state" = "device" ] || { printf 'SKIP: device %s is %s\n' "$serial" "${state:-unreachable}"; exit 0; }
@@ -82,7 +83,8 @@ printf 'The phone\n'
 printf '  ..   %s, Android %s (%s)\n' "$model" "$release" "$serial"
 
 printf '\nInstalling\n'
-result=$(adb install -r "$apk" 2>&1 | tr -d '\r' | grep -E 'Success|Failure' | head -1)
+install_apk "$apk" || true
+result=$(printf '%s\n' "$install_output" | grep -E 'Success|Failure' | head -1)
 printf '  ..   %s\n' "${result:-no answer}"
 check "the phone accepted the APK" test "$result" = "Success"
 [ "$status" -eq 0 ] || { printf '\nFAIL: see above.\n'; exit 1; }

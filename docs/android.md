@@ -685,22 +685,54 @@ default and fails past a deliberately generous 33 ms ceiling -- the point is to
 catch a structural regression, not to police tuning on whatever machine the
 suite happens to run on.
 
-### M8 — Shipping
+### M8 — Shipping — **done**
 
-* A build script, and the suite extended to cover the Android build.
-* README section: what it needs, how to install it, where the data goes.
-* Honest limits recorded, including the API level and what that means for
-  distribution.
+`tools/build_android.sh` builds both ABIs into a signed APK; five gates cover
+Android and run from `tools/run_gates.sh` like everything else. The README has a
+route 7 that says what a device needs, how to install it, all three ways to get
+the game data in, where that data lives, what the controls do, what raising the
+resolution costs, how to build it, and what this port does not claim.
 
-*Exit:* the whole suite green with the Android gates in it.
+**Honest limits, recorded rather than glossed:**
+
+* **Gamepads are unverified.** The bindings exist and the launcher carries
+  Beloko's plumbing; nobody here has a pad. M5 claimed nothing about it and
+  neither does the README.
+* **Multiplayer on Android is untested.** Same engine, same UDP, the libraries
+  are in the APK -- and nothing exercises it, so that is where the claim stops.
+* **Deleting an imported archive is best-effort.** Android 11 and later refuse
+  to let an app delete a non-media file another app owns, whatever access it was
+  granted. The app says which happened instead of failing quietly.
+* **The system file picker cannot be driven by the test harness** on at least
+  one device. Both imports are gated through the intent route instead, which is
+  a road players take anyway.
+* **Debug-signed.** Fine for sideloading, and the only thing standing between
+  that and a release key is somebody deciding to have one.
+* **Play Protect interrupts the install.** An APK Google has never seen makes
+  the device ask to upload it for a security check, *in front of* the installer
+  -- so `adb install` blocks with no output until somebody looks at the tablet.
+  One gate run sat on a 19 MB install for fourteen minutes before anyone did.
+  `tools/android_install.sh` now answers it (with **Don't send**: a test run is
+  not a reason to upload a private build to Google) and gives up after five
+  minutes rather than stalling the suite. The README warns players about the
+  same prompt.
+
+*Exit:* met -- **43 passed, 0 failed, 0 skipped** on a Galaxy Tab S5e over
+wireless debugging, the five Android gates contributing 76 assertions
+(native 12, apk 26, device 12, controls 8, import 18).
 
 ---
 
 ## What is not in this plan
 
-* **Google Play.** A targetSdk this old could not be published, and raising it
-  far enough is a separate project involving scoped storage, permissions and
-  privacy declarations. Sideloading is the target.
+* **Google Play.** Not for the reason this plan first gave -- M6 put the
+  targetSdk at 36 and M2 moved everything to scoped storage, so the technical
+  barrier is gone. The remaining ones are that Play wants a developer account, a
+  review and a privacy policy for an app that collects nothing, and that
+  Corridor 7 is commercial software this project has no right to distribute --
+  so any listing would be an empty shell that refuses to run until the player
+  supplies their own copy. Sideloading is the honest model for a source port of
+  a game you already own.
 * **iOS.** Nothing in the tree suggests it, and nothing here would carry over.
 * **Multiplayer on Android.** It should work -- it is the same engine over UDP
   -- but it is not what any of the gates above test, and claiming it without
@@ -712,8 +744,8 @@ suite happens to run on.
 | Risk | Why it matters | What reduces it |
 | --- | --- | --- |
 | ~~The software renderer is too slow on a phone~~ | *Retired by M1.* The GL backend builds for GLES 3.0, so the phone's GPU does the work | -- |
-| Eleven-year-old Java against a 2025 SDK | The launcher may need more than repointing; `aapt` v1 is deprecated and could vanish from a future build-tools | It builds against what is on this machine, and the fallback is `aapt2`, which is present |
+| Eleven-year-old Java against a 2025 SDK | The launcher may need more than repointing; `aapt` v1 is deprecated and could vanish from a future build-tools | *Held so far.* It builds against build-tools 36 with `aapt` v1; the fallback is still `aapt2`, and the day v1 goes the manifest and resource steps are the only things that move |
 | The emulator is x86_64 and phones are arm64 | A gate that passes on the emulator says nothing about the device that matters | Both ABIs are built from M0; arm64-v8a is the one that is tested on hardware, and the badging gate checks both are packaged |
-| Scoped storage | The most likely place for this to become tedious | The engine takes its directory as an argument, so this is entirely a Java-side decision |
+| Scoped storage | The most likely place for this to become tedious | *It was.* Resolved in M2 and M4: app-specific storage needs no permission, and the importer exists precisely because Android 11 hid that directory from file managers |
 | ~~Nobody to test on real hardware~~ | *Retired before the work started.* A Galaxy S25 Ultra on Android 16 is attached over wireless debugging, so every milestone can end on the device it is meant for | -- |
 | Android 16 is the newest there is | The launcher was written for Android 5. Everything between then and now -- scoped storage, runtime permissions, background limits, install-time targetSdk floors -- lands at once | Better to find out on the device than to ship for an emulator two versions behind |

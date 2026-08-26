@@ -45,6 +45,7 @@ else # -F'\t': adb delimits with a tab, and a wireless serial can contain a
 	serial=$("$ADB" devices 2>/dev/null | awk -F'\t' '$2 == "device" { print $1 }' | head -1); fi
 [ -n "$serial" ] || { printf 'SKIP: no Android device attached\n'; exit 0; }
 adb() { "$ADB" -s "$serial" "$@"; }
+. "$here/android_install.sh"
 [ "$(adb get-state 2>/dev/null || true)" = "device" ] ||
 	{ printf 'SKIP: device %s is not ready\n' "$serial"; exit 0; }
 if adb shell dumpsys window 2>/dev/null | grep -q 'mDreamingLockscreen=true'; then
@@ -100,7 +101,7 @@ swipe_look() { adb shell input swipe "$(cell_x 43)" "$(cell_y 28)" "$(cell_x 49)
 
 printf 'The phone\n'
 printf '  ..   %s, %sx%s\n' "$(adb shell getprop ro.product.model 2>/dev/null | tr -d '\r')" "$W" "$H"
-adb install -r "$apk" >/dev/null 2>&1
+install_apk "$apk" || true
 
 printf '\nStarting a level with the state trace on\n'
 adb shell am force-stop "$pkg" >/dev/null 2>&1 || true

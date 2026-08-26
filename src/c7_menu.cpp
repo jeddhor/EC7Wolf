@@ -517,13 +517,21 @@ bool C7Menu_LineInput(const Menu *menu, MenuItem *item, FString &text,
 
 	LastASCII = key_None;
 	LastScan = sc_None;
+	IN_ClearTyped();	// whatever was typed before this field opened is not for it
+
+	// Ask SDL for text, which on a phone is what raises the on-screen
+	// keyboard. Desktop SDL has text input on from the start, so nothing here
+	// ever had to ask and nothing did -- and on Android the server address was
+	// a field you could select, and put the cursor in, and then not type into,
+	// because no keyboard ever appeared. It is scoped to the edit: leaving it
+	// on would keep the keyboard over the menu after the field was done with.
+	SDL_StartTextInput();
 
 	while(!done)
 	{
 		IN_ProcessEvents();
 
 		const ScanCode scan = LastScan;
-		const char typed = LastASCII;
 		LastScan = sc_None;
 		LastASCII = key_None;
 
@@ -540,11 +548,19 @@ bool C7Menu_LineInput(const Menu *menu, MenuItem *item, FString &text,
 					edited.Truncate(edited.Len() - 1);
 				break;
 			default:
-				// Anything printable. An address is ASCII, and refusing the
-				// rest here is cheaper than validating it later.
-				if(typed >= ' ' && typed < 127 && edited.Len() < maxLength)
-					edited += typed;
 				break;
+		}
+
+		// Every character typed since the last pass, in the order they were
+		// typed. Reading one per pass loses the rest of a burst, which is what
+		// an on-screen keyboard delivers: an address typed on a phone arrived
+		// as a few of its characters.
+		for(char typed = IN_DequeueTyped();typed != 0;typed = IN_DequeueTyped())
+		{
+			// Anything printable. An address is ASCII, and refusing the rest
+			// here is cheaper than validating it later.
+			if(typed >= ' ' && typed < 127 && edited.Len() < maxLength)
+				edited += typed;
 		}
 
 		// A caret that blinks, so it is obvious the field is being edited and
@@ -558,6 +574,8 @@ bool C7Menu_LineInput(const Menu *menu, MenuItem *item, FString &text,
 		VW_UpdateScreen();
 		SDL_Delay(10);
 	}
+
+	SDL_StopTextInput();
 
 	setValue(item, accepted ? edited : original);
 	if(accepted)

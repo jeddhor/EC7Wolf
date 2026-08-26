@@ -403,7 +403,18 @@ static bool DrawNetworkStatus(const Net::InitStatus &status)
 	US_Print(ConFont, statusStr, CR_WHITE);
 
 	VH_UpdateScreen();
-	return false;
+
+	// This used to return false and it did not matter, because the connect
+	// loops threw the answer away. It is the cancel signal now, so returning
+	// false here would abandon every --host and --join before the first
+	// packet. Escape is the only thing that gives up.
+	IN_ProcessEvents();
+	if(LastScan == sc_Escape || Keyboard[sc_Escape])
+	{
+		LastScan = sc_None;
+		return false;
+	}
+	return true;
 }
 
 static bool DrawStartupConsole(FString statusStr)
@@ -602,7 +613,11 @@ static void InitGame()
 //
 // Net game?
 //
-	Net::Init(DrawNetworkStatus);
+	// Giving up here leaves the mode back at single-player, so the game still
+	// starts -- just not as a netgame. Better than a splash screen with no way
+	// off it.
+	if(!Net::Init(DrawNetworkStatus))
+		Printf("Network game abandoned; starting single-player.\n");
 
 //
 // initialize the menusalcProjection

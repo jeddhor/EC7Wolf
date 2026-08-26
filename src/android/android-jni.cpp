@@ -366,6 +366,13 @@ void initControls(int width, int height,const char * graphics_path,const char *s
 		tcMenuMain->addControl(new touchcontrols::Button("left_arrow",touchcontrols::RectF(17,13,20,16),"arrow_left",SDL_SCANCODE_LEFT));
 		tcMenuMain->addControl(new touchcontrols::Button("right_arrow",touchcontrols::RectF(23,13,26,16),"arrow_right",SDL_SCANCODE_RIGHT));
 		tcMenuMain->addControl(new touchcontrols::Button("enter",touchcontrols::RectF(0,12,4,16),"enter",SDL_SCANCODE_RETURN));
+		// Escape, which every menu screen treats as "back". Without it the only
+		// way out of a screen was the system navigation bar, which on this
+		// tablet is hidden while the game is full screen -- so leaving a menu
+		// meant swiping the bar up first. It sits above Enter rather than beside
+		// the arrows: the two things a menu does are choose and go back, and they
+		// belong under the same thumb.
+		tcMenuMain->addControl(new touchcontrols::Button("back",touchcontrols::RectF(0,8,4,12),"back",SDL_SCANCODE_ESCAPE));
 		tcMenuMain->signal_button.connect(  sigc::ptr_fun(&menuButton) );
 
 		tcMenuMain->setAlpha(0.8);

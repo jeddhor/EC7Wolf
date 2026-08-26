@@ -325,6 +325,8 @@ bool ShadowingEnabled = false;
 extern "C" int hasHardwareKeyboard();
 #endif
 
+static void EnqueueTyped(char c);	// defined with the rest of the ring, below
+
 static void processEvent(SDL_Event *event)
 {
 	switch (event->type)
@@ -338,6 +340,15 @@ static void processEvent(SDL_Event *event)
 		case SDL_TEXTINPUT:
 		{
 			LastASCII = event->text.text[0];
+			// And keep every one of them, in order. text.text is a
+			// NUL-terminated UTF-8 string and may carry more than one
+			// character; the non-ASCII ones are dropped here because
+			// everything downstream is a char.
+			for(const char *p = event->text.text;*p != '\0';++p)
+			{
+				if((unsigned char)*p < 128)
+					EnqueueTyped(*p);
+			}
 			break;
 		}
 #endif
@@ -551,6 +562,34 @@ void IN_WaitAndProcessEvents()
 		processEvent(&event);
 	}
 	while(SDL_PollEvent(&event));
+}
+
+// A ring of typed characters. Small on purpose: it exists to survive one
+// event-pump's worth of a burst, not to buffer a paragraph.
+static char TypedRing[64];
+static unsigned int TypedHead = 0, TypedTail = 0;
+
+static void EnqueueTyped(char c)
+{
+	const unsigned int next = (TypedHead + 1) % (unsigned int)(sizeof(TypedRing));
+	if(next == TypedTail)
+		return;	// full: drop the newest rather than overwrite what is unread
+	TypedRing[TypedHead] = c;
+	TypedHead = next;
+}
+
+char IN_DequeueTyped()
+{
+	if(TypedTail == TypedHead)
+		return 0;
+	const char c = TypedRing[TypedTail];
+	TypedTail = (TypedTail + 1) % (unsigned int)(sizeof(TypedRing));
+	return c;
+}
+
+void IN_ClearTyped()
+{
+	TypedHead = TypedTail = 0;
 }
 
 void IN_ProcessEvents()

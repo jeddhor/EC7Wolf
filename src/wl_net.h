@@ -76,6 +76,9 @@ struct InitStatus
 	TArray<Peer> peers;	// hosts only; empty while joining
 };
 
+// Returns false to give up waiting. The connect loops poll this every frame
+// and honour it, so a player who changes their mind is not stuck holding a
+// socket open until they kill the process.
 typedef bool (*InitStatusCallback)(const InitStatus &);
 
 enum Mode
@@ -122,7 +125,8 @@ bool IsBlocked();
 void BlockPlaysim();
 void DebugKey(const struct DebugCmd &cmd);
 void EndGame();
-void Init(InitStatusCallback callback);
+// False when the player abandoned the wait; the caller must not start a game.
+bool Init(InitStatusCallback callback);
 void NewGame(int &difficulty, class FString &map, class FName (&playerClassNames)[MAXPLAYERS]);
 void PollControls();
 

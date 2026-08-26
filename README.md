@@ -896,6 +896,15 @@ the three verbs Corridor 7 has that Wolfenstein does not:
 | wireframe globe | Corridor 7's own **floor map** panel |
 | folded map | ECWolf's full-screen **automap** |
 
+In menus the overlay changes to arrows, **Enter**, and a **back arrow** that
+does what Escape does on a keyboard — including leaving the multiplayer waiting
+screen. Without it, backing out of a menu meant swiping up the system
+navigation bar first.
+
+Text fields — the multiplayer server address, save-game names — raise the
+on-screen keyboard when you open them. It covers the overlay while it is up;
+its own **Enter** accepts the field and puts it away.
+
 Every button can be moved or hidden: press the cog, then **Add/remove buttons**
 or drag them where your thumbs actually are. **Gamepads are wired up but
 untested** — see below.

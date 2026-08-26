@@ -20,6 +20,8 @@
 //			window
 //
 
+#include <SDL.h>
+
 #include "wl_def.h"
 #include "wl_menu.h"
 #include "wl_net.h"
@@ -395,6 +397,12 @@ bool US_LineInput(FFont *font, int x,int y,char *buf,const char *def,bool escok,
 	if(ingame)
 		Net::BlockPlaysim();
 
+	// The on-screen keyboard, on the platforms that have one. Desktop SDL
+	// leaves text input on permanently, so this was never needed and never
+	// written; on a phone it is the difference between a name field you can
+	// type into and one you cannot.
+	SDL_StartTextInput();
+
 	double clearx = x-1, cleary = y, clearw = maxwidth, clearh = font->GetHeight();
 	if(pa == MENU_NONE)
 	{
@@ -417,6 +425,7 @@ bool US_LineInput(FFont *font, int x,int y,char *buf,const char *def,bool escok,
 	lasttime = lastdirtime = lastdirmovetime = GetTimeCount();
 	lastbuttontime = lasttime + TICRATE / 4;	// 250 ms => first button press accepted after 500 ms
 	LastASCII = key_None;
+	IN_ClearTyped();
 	LastScan = sc_None;
 
 	int cursorWidth = font->GetCharWidth(font->GetCursor());
@@ -430,7 +439,11 @@ bool US_LineInput(FFont *font, int x,int y,char *buf,const char *def,bool escok,
 
 		sc = LastScan;
 		LastScan = sc_None;
-		c = LastASCII;
+		// From the queue rather than the single LastASCII slot: this loop takes
+		// one character a frame, which is fine as long as the ones it has not
+		// reached yet are still somewhere. In the slot they were not -- a burst
+		// overwrote itself and arrived as its last character.
+		c = IN_DequeueTyped();
 		LastASCII = key_None;
 
 		checkkey = true;
@@ -663,6 +676,7 @@ bool US_LineInput(FFont *font, int x,int y,char *buf,const char *def,bool escok,
 	}
 	VW_UpdateScreen();
 
+	SDL_StopTextInput();
 	IN_ClearKeysDown();
 	return(result);
 }

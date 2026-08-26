@@ -212,6 +212,18 @@ const char *IN_GetScanName(ScanCode);
 void IN_WaitAndProcessEvents();
 void IN_ProcessEvents();
 
+// Typed characters, in order, rather than only the last one to arrive.
+//
+// LastASCII is a single slot that every SDL_TEXTINPUT overwrites, and
+// IN_ProcessEvents drains the whole event queue before anyone looks at it -- so
+// a burst of characters arrives as one. Nobody noticed while the only text
+// entry was a person typing a save-game name on a physical keyboard. A phone's
+// on-screen keyboard delivers bursts: "10.1.0.55" arrived as "1.055".
+//
+// Returns 0 when nothing is queued.
+char IN_DequeueTyped();
+void IN_ClearTyped();
+
 int IN_MouseButtons (void);
 void IN_ReleaseMouse();
 void IN_GrabMouse();

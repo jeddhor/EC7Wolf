@@ -703,6 +703,55 @@ input delay keeps a match in sync and makes it several times faster, and a link
 that stalled answers neither question; a real regression still fails both
 attempts.
 
+### M8 — Getting back out — **done**
+
+Reported from play, and all one report: *once you are on the host screen you
+cannot leave it.* Escape did nothing on the desktop; the back button did
+nothing on a phone; and on a phone the address field could not be typed into
+either, so the only way out of a game nobody joined was to kill the process.
+
+**Nothing was reading the keyboard.** The connect loops live in the network
+code and called back into the menu only to *draw*. The return value of that
+callback was discarded at all eight call sites, and the drawing function never
+polled input -- so there was no path by which a keypress could have been
+noticed. Pressing Escape harder was never going to work. `InitStatusCallback`
+now means "keep waiting", the loops honour it, `Net::Init` returns whether a
+game was actually started, and the menu goes back to the setup screen with what
+the player typed still in it.
+
+Two things this turned up on the way:
+
+* `DrawNetworkStatus`, the command-line path's callback, **returned false**.
+  That was harmless while the answer was thrown away and would have abandoned
+  every `--host` and `--join` before the first packet the moment it was not.
+* The socket is closed on the way out. A player who gives up usually tries
+  again immediately, and a port still held by the abandoned attempt would meet
+  "address already in use" on the second go.
+
+**The keyboard never came up on Android** because nothing ever asked SDL for
+text. Desktop SDL leaves text input on permanently, so `SDL_StartTextInput`
+was never needed and never written; on Android it is what raises the on-screen
+keyboard. Both text fields ask for it now and stop when they are done, so the
+keyboard does not sit over the menu afterwards.
+
+That fix exposed a second fault underneath it. `LastASCII` is a single slot
+that every `SDL_TEXTINPUT` overwrites, and `IN_ProcessEvents` drains the whole
+event queue before the field reads it -- so a burst of characters arrives as
+one. A person typing on a physical keyboard never hit it; an on-screen keyboard
+does, and `10.1.0.55` arrived as `1.055`. Typed characters are queued now.
+
+**And there was no back button at all** in the Android menu overlay -- four
+arrows and Enter, nothing else -- so leaving any menu screen meant swiping up
+the system navigation bar first. There is one now, above Enter, drawn rather
+than lettered: the `esc.png` in the asset set is a picture of a keyboard key,
+which is the same thing the F1 map button was replaced for.
+
+*Exit:* `tools/test_multiplayer_cancel.sh` drives the menu the way a player
+does and fails against the un-fixed build. It covers the waiting screen only.
+The typing faults are verified on a device, because the desktop cannot
+reproduce them: `xdotool` with no delay still spreads its key events over
+several frames, so a check written for it passed against deliberately broken
+code -- and a check that cannot fail is worse than none.
 
 ---
 

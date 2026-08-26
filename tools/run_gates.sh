@@ -99,6 +99,7 @@ multiplayer_classes
 multiplayer_presentation
 multiplayer_hostile
 multiplayer_setup
+multiplayer_cancel
 gl_world
 gl_frame
 gl_live

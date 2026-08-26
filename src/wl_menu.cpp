@@ -464,12 +464,24 @@ static bool MultiplayerStatus(const Net::InitStatus &status)
 		++rowCount;
 	}
 
-	if(C7Menu_DrawWaiting(hosting ? "Hosting" : "Joining", detail, note,
+	if(!C7Menu_DrawWaiting(hosting ? "Hosting" : "Joining", detail, note,
 		status.seconds, rows, rowCount))
-		return true;
+	{
+		// Every other game keeps the box it has always had.
+		Message(detail.GetChars());
+	}
 
-	// Every other game keeps the box it has always had.
-	Message(detail.GetChars());
+	// Waiting is the one screen in the game with no way out of its own: the
+	// loop below belongs to the network code, so nothing was reading the
+	// keyboard and Escape did nothing. On a phone that is worse, because there
+	// is no keyboard to press and the back button reaches the same nothing.
+	// Read events here, where the wait is actually being drawn.
+	IN_ProcessEvents();
+	if(LastScan == sc_Escape || Keyboard[sc_Escape])
+	{
+		LastScan = sc_None;
+		return false;
+	}
 	return true;
 }
 
@@ -530,8 +542,11 @@ MENU_LISTENER(StartMultiplayer)
 	}
 
 	// Connecting blocks until everyone is present, drawing through the same
-	// callback the startup path uses.
-	Net::Init(MultiplayerStatus);
+	// callback the startup path uses -- unless the player gives up, in which
+	// case they land back on the setup screen with what they typed still in
+	// it, rather than in a game nobody joined.
+	if(!Net::Init(MultiplayerStatus))
+		return false;
 
 	// One map for everybody, and it is the host's. Net::NewGame exchanges the
 	// name and keeps the arbiter's, so a client deliberately names nothing

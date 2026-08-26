@@ -55,6 +55,9 @@ fi
 
 adb() { "$ADB" -s "$serial" "$@"; }
 . "$here/android_install.sh"
+# install_apk sets this. Declared here as well so it is obvious where the
+# value comes from, and so shellcheck does not read it as a typo.
+install_output=""
 
 state=$(adb get-state 2>/dev/null || true)
 [ "$state" = "device" ] || { printf 'SKIP: device %s is %s\n' "$serial" "${state:-unreachable}"; exit 0; }

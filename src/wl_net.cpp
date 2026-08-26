@@ -734,7 +734,7 @@ static bool ValidStartPacket(const StartPacket *data, int len)
 	return true;
 }
 
-static void StartHost(InitStatusCallback callback)
+static bool StartHost(InitStatusCallback callback)
 {
 	unsigned int waitpos = 0;
 	unsigned int nextclient = 1; // 0 is the host
@@ -757,7 +757,8 @@ static void StartHost(InitStatusCallback callback)
 	status.detail.Format("port %u", (unsigned)InitVars.port);
 	status.seconds = 0;
 	FillPeers(status, acked);
-	callback(status);
+	if(!callback(status))
+		return false;
 
 	const uint32_t hostStart = SDL_GetTicks();
 	uint32_t lastSpin = hostStart;
@@ -768,7 +769,8 @@ static void StartHost(InitStatusCallback callback)
 		// waiting screen that does not move.
 		status.seconds = (SDL_GetTicks() - hostStart)/1000;
 		FillPeers(status, acked);
-		callback(status);
+		if(!callback(status))
+			return false;
 
 		if(SDL_GetTicks() - lastSpin >= 400)
 		{
@@ -791,7 +793,8 @@ static void StartHost(InitStatusCallback callback)
 					Printf("[%d] New connection from %u.%u.%u.%u:%u!\n", nextclient, Packet->address.host&0xFF, (Packet->address.host&0xFF00)>>8, (Packet->address.host&0xFF0000)>>16, (Packet->address.host&0xFF000000)>>24, BigShort(Packet->address.port));
 					Client[nextclient++].address = Packet->address;
 					FillPeers(status, acked);
-					callback(status);
+					if(!callback(status))
+						return false;
 				}
 
 				Printf("   ");
@@ -849,7 +852,8 @@ static void StartHost(InitStatusCallback callback)
 
 		status.seconds = (SDL_GetTicks() - hostStart)/1000;
 		FillPeers(status, acked);
-		callback(status);
+		if(!callback(status))
+			return false;
 
 		SDL_Delay(16);
 		IN_ProcessEvents();
@@ -866,7 +870,8 @@ static void StartHost(InitStatusCallback callback)
 					acked[client] = true;
 					++nextclient;
 					FillPeers(status, acked);
-					callback(status);
+					if(!callback(status))
+						return false;
 				}
 			}
 		}
@@ -875,9 +880,10 @@ static void StartHost(InitStatusCallback callback)
 	free(startData);
 
 	Printf("All acked starting game!\n");
+	return true;
 }
 
-static void StartJoin(InitStatusCallback callback)
+static bool StartJoin(InitStatusCallback callback)
 {
 	unsigned int waitpos = 0;
 	if(!(Socket = SDLNet_UDP_Open(InitVars.port)))
@@ -905,14 +911,16 @@ static void StartJoin(InitStatusCallback callback)
 	status.phase = InitStatus::PHASE_Joining;
 	status.detail = IPaddressToString(address);
 	status.seconds = 0;
-	callback(status);
+	if(!callback(status))
+		return false;
 
 	const uint32_t joinStart = SDL_GetTicks();
 	uint32_t lastSpin = joinStart, lastRequest = 0;
 	for(;;)
 	{
 		status.seconds = (SDL_GetTicks() - joinStart)/1000;
-		callback(status);
+		if(!callback(status))
+			return false;
 
 		if(SDL_GetTicks() - lastSpin >= 400)
 		{
@@ -995,19 +1003,32 @@ static void StartJoin(InitStatusCallback callback)
 
 	// Send ACK and forget, if we're waiting for ticcmd and we get a start, we'll send another ack then.
 	SendAck<StartPacket>(address, 0xFFFFFFFF);
+	return true;
 }
 
 static void Shutdown()
 {
-	SDLNet_FreePacket(Packet);
-	SDLNet_UDP_Close(Socket);
+	// Registered with atterm and also called when a player abandons the wait,
+	// so this runs twice on that path. Freeing twice is a crash on the way out
+	// of an otherwise successful session, which is the worst possible time.
+	if(Packet != NULL)
+	{
+		SDLNet_FreePacket(Packet);
+		Packet = NULL;
+	}
+	if(Socket != NULL)
+	{
+		SDLNet_UDP_Close(Socket);
+		Socket = NULL;
+	}
 }
 
-// Returns true when network init finished
-void Init(InitStatusCallback callback)
+// False when the player gave up waiting, in which case nothing was started and
+// the caller must go back to where it came from rather than into a game.
+bool Init(InitStatusCallback callback)
 {
 	if(InitVars.mode == MODE_SinglePlayer)
-		return;
+		return true;
 
 	if(SDLNet_Init() < 0)
 	{
@@ -1017,10 +1038,21 @@ void Init(InitStatusCallback callback)
 	Packet = SDLNet_AllocPacket(1500);
 	atterm(Shutdown);
 
-	if(InitVars.mode == MODE_Host)
-		StartHost(callback);
-	else
-		StartJoin(callback);
+	const bool connected = (InitVars.mode == MODE_Host)
+		? StartHost(callback)
+		: StartJoin(callback);
+
+	if(!connected)
+	{
+		// Give the socket back rather than holding the port until the process
+		// ends: the player who just cancelled is quite likely to try again on
+		// the same port a moment later, and "address already in use" would be
+		// a baffling thing to meet on the second attempt.
+		Shutdown();
+		InitVars.mode = MODE_SinglePlayer;
+		ConsolePlayer = 0;
+	}
+	return connected;
 }
 
 bool IsArbiter()

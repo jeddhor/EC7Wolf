@@ -57,13 +57,29 @@ static void in_finishevent(void)
 ///////////////////////
 
 
-extern int SDL_SendKeyboardKey(Uint8 state, SDL_Scancode scancode);
-
+// Injects a key from the touch controls, and from the Java side generally.
+//
+// This called SDL_SendKeyboardKey, which is internal to SDL: it was declared
+// here by hand and resolved only because SDL used to be compiled into the
+// same binary. Built against SDL as a library it is an undefined symbol, and
+// the link fails at the very last step of the build.
+//
+// SDL_PushEvent is the public equivalent, with one difference: the internal
+// call also updates the state array behind SDL_GetKeyboardState, and this
+// does not. That costs nothing here -- the engine never reads it. id_in.cpp
+// keeps its own Keyboard[] and fills it from SDL_KEYDOWN and SDL_KEYUP,
+// which is exactly what arrives below.
 int PortableKeyEvent(int state, int code, int unicode){
-	if (state)
-		SDL_SendKeyboardKey(SDL_PRESSED, (SDL_Scancode)code);
-	else
-		SDL_SendKeyboardKey(SDL_RELEASED, (SDL_Scancode) code);
+	SDL_Event ev;
+	SDL_zero(ev);
+	ev.type = state ? SDL_KEYDOWN : SDL_KEYUP;
+	ev.key.timestamp = SDL_GetTicks();
+	ev.key.state = state ? SDL_PRESSED : SDL_RELEASED;
+	ev.key.repeat = 0;
+	ev.key.keysym.scancode = (SDL_Scancode)code;
+	ev.key.keysym.sym = SDL_GetKeyFromScancode((SDL_Scancode)code);
+	ev.key.keysym.mod = KMOD_NONE;
+	SDL_PushEvent(&ev);
 
 	return 0;
 }
@@ -78,6 +94,15 @@ void postCommand(const char * cmd)
 
 
 bool my_buttonstate[NUMBUTTONS];
+
+// A press that arrives and departs between two polls used to be lost entirely.
+//
+// Touch events are delivered on the event thread while the game samples the
+// buttons once a tic; a quick tap can begin and end inside one of those gaps,
+// and the simulation never sees it. On a keyboard nobody presses a key for four
+// milliseconds, so this never came up -- on a touchscreen it is how people
+// press things. Each press is held until it has been sampled at least once.
+static bool my_buttonlatch[NUMBUTTONS];
 
 static bool alwaysrun = false;
 
@@ -145,10 +170,28 @@ void PortableAction(int state, int action)
 		if (state)
 			alwaysrun = !alwaysrun;
 		break;
+
+	// The three verbs Corridor 7 has and Wolfenstein does not. The engine
+	// already binds them (wl_play.cpp): Visor Mode on bt_zoom, Drop Mine on
+	// bt_reload, Floor Map on bt_c7map -- so these go to the buttons rather
+	// than synthesising the keyboard presses those buttons happen to sit on.
+	case PORT_ACT_C7_VISOR:
+		key = bt_zoom;
+		break;
+	case PORT_ACT_C7_MINE:
+		key = bt_reload;
+		break;
+	case PORT_ACT_C7_FLOORMAP:
+		key = bt_c7map;
+		break;
 	}
 
 	if (key != -1)
+	{
 		my_buttonstate[key] = state;
+		if (state)
+			my_buttonlatch[key] = true;
+	}
 
 }
 
@@ -296,8 +339,11 @@ void pollAndroidControls()
 
 	for (int n=0;n<NUMBUTTONS;n++)
 	{
-		if (my_buttonstate[n])
+		if (my_buttonstate[n] || my_buttonlatch[n])
 			control[ConsolePlayer].buttonstate[n] = 1;
+		// Cleared only once it has been reported, so the shortest possible tap
+		// still lasts exactly one tic rather than none.
+		my_buttonlatch[n] = false;
 	}
 }
 

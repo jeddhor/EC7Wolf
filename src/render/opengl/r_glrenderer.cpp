@@ -12,7 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <epoxy/gl.h>
+#include "render/opengl/r_glcompat.h"
 
 #include "render/opengl/r_glrenderer.h"
 #include "render/opengl/r_gldevice.h"

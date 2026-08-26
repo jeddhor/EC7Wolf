@@ -1,7 +1,16 @@
-Thank you for downloading ECWolf.
+Thank you for installing EC7Wolf, a port of Corridor 7: Alien Invasion.
 
-Please copy your game data files (*.WL6, *.SOD, etc) to /sdcard/Beloko/Wolf3d/FULL/.
+EC7Wolf does not include the game itself. You need the data files from your own
+copy of Corridor 7: the ones named *.CO7, and CORR7CD.EXE, which is needed
+too because Corridor 7 keeps its palette inside its own executable.
 
-You can change the folder location in the OPTIONS tab.
+Put them on your phone as a folder or a zip file, then press IMPORT GAME DATA on
+the PLAY tab and point it at them. The files are copied into this app's own
+storage, so you only have to do it once.
 
-If you like this app please consider supporting Beloko Games on Google Play!
+Better still, point it at a folder holding the CD image itself -- a .cue and its
+.bin. EC7Wolf will take the disc apart for you and pull out the game, the three
+CD animations the installer leaves behind, and the soundtrack, which nothing
+else ever copies off the disc.
+
+The Android launcher is based on the work of Beloko Games.

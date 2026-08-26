@@ -1,7 +1,7 @@
 #ifndef __R_GLPALETTE_H__
 #define __R_GLPALETTE_H__
 
-#include <epoxy/gl.h>
+#include "render/opengl/r_glcompat.h"
 
 // ===========================================================================
 //

@@ -39,12 +39,6 @@
             android:layout_weight="1"
             android:text="About" />
 
-        <Button
-            android:id="@+id/about_rate_button"
-            android:layout_width="0dp"
-            android:layout_height="50dp"
-            android:layout_weight="1"
-            android:text="Rate Me!" />
     </LinearLayout>
 
     <Button

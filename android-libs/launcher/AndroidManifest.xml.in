@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from AndroidManifest.xml.in. The identity comes from
+     src/versiondefs.cmake so that it cannot drift from the rest of the
+     project; edit that, not the generated file. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="@APK_PACKAGE_NAME@"
+    android:versionCode="@ANDROID_VERSION_CODE@"
+    android:versionName="@VERSION_STRING@" >
+
+    <!-- minSdk 21 is the NDK's floor: r27 and later refuse to build for
+         anything older, and r30 is what this uses.
+
+         targetSdk is deliberately current rather than the lowest that will
+         install. Android has refused to install apps below a moving
+         targetSdkVersion floor since Android 14, so the old value of 22 was
+         not merely dated ; a modern phone rejects it outright. Targeting
+         something just above the floor would buy a migration to do again in a
+         year, and the usual reason to stay low is scoped storage, which does
+         not apply here: the game's files live in app-specific external
+         storage, which needs no permission on any version. -->
+    <uses-sdk
+        android:minSdkVersion="21"
+        android:targetSdkVersion="36" />
+
+    <!-- The renderer is GLES 3.0. Declared so the Play Store and the package
+         manager both know it, and so a device that cannot run it says so
+         rather than launching to a black screen. -->
+    <uses-feature android:glEsVersion="0x00030000" android:required="true" />
+
+    <!-- application
+        android:allowBackup="true"
+        android:icon="@drawable/ic_launcher"
+        android:label="@PRODUCT_NAME@"
+        android:theme="@style/AppTheme" >
+        <meta-data
+            android:name="com.google.android.gms.version"
+            android:value="@integer/google_play_services_version" />
+
+        <activity
+            android:name="com.beloko.idtech.cloudsave.GooglePlayServicesActivity"
+            android:label="@string/title_activity_google_play_services" >
+        </activity>
+    </application -->
+
+    <!-- INTERNET is multiplayer. ACCESS_WIFI_STATE is what the launcher uses
+         to show the address a host should be reached on.
+
+         WRITE_EXTERNAL_STORAGE is gone: at this target it grants nothing at
+         all, and the game data lives in app-specific external storage, which
+         is readable and writable without asking anybody. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <application
+        android:icon="@drawable/ic_launcher"
+        android:label="@PRODUCT_NAME@"
+        android:allowBackup="true"
+        android:hardwareAccelerated="true">
+        <activity
+            android:name="com.beloko.wolf3d.EntryActivity"
+            android:configChanges="orientation|keyboardHidden"
+            android:exported="true"
+            android:label="@PRODUCT_NAME@"
+            android:launchMode="singleInstance"
+            android:screenOrientation="sensorLandscape"
+            android:windowSoftInputMode="stateHidden" >
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Hand EC7Wolf an archive and it imports from it: a zip of the
+                 game files, or a zip holding the CD image itself. This is how
+                 a download from a browser or a tap in a file manager reaches
+                 the importer without going through a folder picker, and it is
+                 also the only way the import can be tested without driving
+                 somebody else's UI.
+
+                 Two filters because Android matches on the MIME type the
+                 provider reports, and a zip arrives as any of these depending
+                 on where it came from. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.SEND" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/zip" />
+            </intent-filter>
+        </activity>
+       
+          <activity
+            android:name="com.beloko.idtech.wolf3d.Game"
+            android:configChanges="orientation|keyboardHidden"
+            android:launchMode="singleTop"
+            android:process=":Game"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen" >
+        </activity>
+    </application>
+
+</manifest>

@@ -11,14 +11,14 @@
             android:id="@+id/textView1"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Beloko Folder"
+            android:text="Game Data Folder"
             android:textAppearance="?android:attr/textAppearanceLarge" />
 
         <TextView
             android:id="@+id/textView2"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="All Beloko Games are located here. The folders &apos;Quake/Quake2/Doom/&apos; etc should be UNDER here (Default is &apos;/sdcard/Beloko&apos;)."
+            android:text="Where your Corridor 7 files are kept. IMPORT GAME DATA on the PLAY tab copies them here for you. This is app-private storage, so it needs no permission and is removed when EC7Wolf is uninstalled."
             android:textAppearance="?android:attr/textAppearanceSmall" />
 
         <TextView
@@ -41,7 +41,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="right"
-                android:text="SDCard" />
+                android:text="Use SD Card" />
              
             <Button
                 android:id="@+id/reset_base_button"
@@ -50,12 +50,6 @@
                 android:layout_gravity="right"
                 android:text="Reset" />
 
-            <Button
-                android:id="@+id/choose_base_button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="right"
-                android:text="Choose" />
         </LinearLayout>
 
         <View
@@ -108,7 +102,7 @@
                 android:id="@+id/textView2"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Choose the location of the Quake (or any!) music files. Plays maximum of 11 mp3 files."
+                android:text="Where to look for replacement music files. Plays a maximum of 11 MP3s."
                 android:textAppearance="?android:attr/textAppearanceSmall" />
 
             <RelativeLayout
@@ -275,7 +269,7 @@
             android:id="@+id/textView2"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="If you are having trouble launching the game, we may request you to send a debug log. Try to launch the game, then press the button below."
+            android:text="If the game will not start, this saves a log of what happened. Try to launch the game first, then press the button: the file is written to your Downloads folder so you can attach it to a bug report."
             android:textAppearance="?android:attr/textAppearanceSmall" />
 
         <Button
@@ -283,7 +277,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_alignParentRight="true"
-            android:text="Email DEBUG log" />
+            android:text="Save Debug Log" />
     </LinearLayout>
 
 </ScrollView>

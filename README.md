@@ -76,7 +76,7 @@ victory — no DOSBox, no emulation layer, real 8-bit ray casting.
 
 ## Credits — where credit is due
 
-This project stands entirely on the shoulders of three bodies of work. **None of
+This project stands entirely on the shoulders of four bodies of work. **None of
 the underlying games or engines are mine**, and the commercial Corridor 7 assets
 are **not** included here.
 
@@ -111,8 +111,25 @@ software renderer, save system, and multi-game IWAD framework are the foundation
 everything here is bolted onto. ECWolf is licensed under the GPL; see
 [`docs/license-gpl.txt`](docs/license-gpl.txt) and [`docs/copyright`](docs/copyright).
 
+### The Android touch controls and launcher © Emile Belanger (Beloko Games)
+There is a playable Android build because **[Emile
+Belanger](https://beloko.com/)** wrote the touch-control library and the
+launcher that ECWolf's Android support is built on, and then licensed them
+generously: they are GPLv2, but `android-libs/TouchControls/License.txt` and
+`android-libs/launcher/License.txt` grant ECWolf *and products deriving from it*
+— which is this — the use of them under the LGPLv2.1. This port never had to
+ask, because that question had already been answered.
+
+What is here is their work with roughly 2,400 lines changed on top: the
+touch-control renderer ported from OpenGL ES 1.x to ES 3.0, buttons added for
+Corridor 7's own verbs, and a data importer, disc ripper and Vorbis encoder
+grafted into the launcher. **The bugs in those changes are mine, not theirs** —
+and the launcher's own text no longer names Beloko precisely because that would
+put their name on things they did not write.
+
 **This fork is a hobbyist preservation/compatibility effort and is not
-affiliated with or endorsed by Capstone, id Software, or the ECWolf project.**
+affiliated with or endorsed by Capstone, id Software, the ECWolf project, or
+Beloko Games.**
 
 ---
 
@@ -293,6 +310,7 @@ behavior for other games was preserved wherever possible; these are the deltas.
 | [`docs/renderer/`](docs/renderer/) | The renderer redesign, one document per phase — baseline and harness through the OpenGL cutover, hardening and optimization. |
 | [`docs/corridor7-video.md`](docs/corridor7-video.md) | The CD cinematics: what is on the disc, the FLIC format they are in, and how extraction and playback work. |
 | [`docs/multiplayer.md`](docs/multiplayer.md) | Network play, milestone by milestone: what the original had, what the map archive turned out to contain, what was reconstructed and from what evidence, and every wrong turn taken on the way. |
+| [`docs/android.md`](docs/android.md) | The Android port: every milestone, what each one cost, the measurements behind the performance defaults, and the traps — from the touch overlay's four silent failures to a file picker that ignores injected input. |
 | [`docs/ci.md`](docs/ci.md) | The gate suite and what CI can and cannot run. |
 
 ---
@@ -386,7 +404,7 @@ All three are described in full in [`docs/corridor7.md`](docs/corridor7.md).
 
 ## Installing and running
 
-There are six ways to end up with a working game. They differ only in how much
+There are seven ways to end up with a working game. They differ only in how much
 you do by hand and how much the installer does for you — **all of them need
 your own copy of Corridor 7**, which nothing here provides.
 
@@ -398,6 +416,7 @@ your own copy of Corridor 7**, which nothing here provides.
 | everything built from source, automatically | **[4 · The installer, compiling for you](#4--the-installer-compiling-for-you)** |
 | to compile it yourself, by hand | **[5 · Building by hand](#5--building-by-hand)** |
 | a binary that runs on any Linux, old or new | **[6 · The portable Docker build](#6--the-portable-docker-build)** |
+| to play it on an Android phone or tablet | **[7 · Android](#7--android)** |
 
 Every route ends at the same place: a folder holding `ec7wolf`, `ec7wolf.pk3`,
 your game data, and a launcher that keeps configuration and saved games beside
@@ -507,6 +526,7 @@ From the [releases page](https://github.com/jeddhor/EC7Wolf/releases):
 | `…-linux-x64-full.tar.gz`<br>`…-linux-arm64-full.tar.gz` | the engine and the installer | `./installer/ec7wolf-setup` |
 | `…-linux-x64.tar.gz`<br>`…-linux-arm64.tar.gz` | the engine | `./run-ec7wolf.sh` |
 | `…-installer.zip` | the installer as Python, no engine — see route 4 | `installer/ec7wolf-setup` |
+| `…-android.apk` | the engine, touch controls and data importer, `arm64-v8a` + `x86_64` | sideload it — see route 7 |
 | `…-source.tar.gz` | the complete source | see route 5 |
 
 Every archive carries an `INSTALL.txt` at the top saying what it holds and what
@@ -646,11 +666,29 @@ This produces `build/ec7wolf` and `build/ec7wolf.pk3`.
 
 1. Install **[CMake](https://cmake.org/)** and **Visual Studio** with the
    *Desktop development with C++* workload (or MSYS2/MinGW-w64).
-2. Obtain **SDL2**, **SDL2_mixer**, **SDL2_net**, zlib and libjpeg. `vcpkg`
-   makes this painless:
+2. Obtain **SDL2**, **SDL2_mixer**, **SDL2_net** and **libepoxy**. The repository
+   carries a `vcpkg.json`, so from the `ECWolf` directory:
    ```bat
-   vcpkg install sdl2 sdl2-mixer sdl2-net zlib libjpeg-turbo bzip2
+   cd ECWolf
+   vcpkg install
    ```
+   No package names: `vcpkg install` with no arguments reads the manifest. This
+   matters, because **the `vcpkg` that comes with Visual Studio only works this
+   way.** Naming packages on the command line is *classic mode*, and the copy on
+   a Developer PowerShell's PATH does not have it — it answers:
+
+   > error: Could not locate a manifest (vcpkg.json) above the current working
+   > directory. This vcpkg distribution does not have a classic mode instance.
+
+   which means "you are in the wrong directory, or you wanted the manifest".
+   Run it from `ECWolf`, where the manifest is.
+
+   If you have your own bootstrapped clone of vcpkg, classic mode still works
+   and the manifest is ignored:
+   ```bat
+   vcpkg install sdl2 sdl2-mixer sdl2-net libepoxy zlib bzip2 libjpeg-turbo
+   ```
+
    Or take upstream's *VC development* zips and pass `-DSDL2_DIR=…\cmake` and
    friends, which is what the installer does.
 3. Build **from a Developer PowerShell**, so `cl.exe` and Ninja are on the PATH:
@@ -661,8 +699,25 @@ This produces `build/ec7wolf` and `build/ec7wolf.pk3`.
    cmake --build build
    cmake --build build
    ```
+   With the manifest, CMake installs the dependencies itself at configure time,
+   so step 2 is optional — it is there so you can see the downloads happen
+   before a build that looks like it has hung.
+
+   The toolchain path is wherever your vcpkg lives. For the copy bundled with
+   Visual Studio, ask it:
+   ```bat
+   where vcpkg
+   ```
+   and use the `scripts\buildsystems\vcpkg.cmake` beside it.
 4. Put `ec7wolf.exe`, `ec7wolf.pk3` and the SDL and libepoxy **DLLs** together
    with your game data, then run it.
+
+> 🛠 **No libepoxy, no OpenGL — on Windows too.** This list used to leave it
+> out, which produced a build that worked and had quietly lost the hardware
+> renderer. CMake says so, once, in the configure output:
+> `ECWOLF_RENDERER_OPENGL requested but OpenGL/libepoxy not found`. If the game
+> reports the software renderer at startup and you expected otherwise, that
+> line is why.
 
 > ⚠️ **If CMake is older than your Visual Studio** it will not have a generator
 > for it — CMake 3.31 knows nothing of Visual Studio 2026 — and will quietly
@@ -711,6 +766,257 @@ tools/package_corridor7_release.sh ./release \
 
 > 🚫 **Never commit or redistribute a release folder** — it contains the
 > commercial Corridor 7 data.
+
+---
+
+### 7 · Android
+
+EC7Wolf runs on Android phones and tablets: the same engine and the same OpenGL
+renderer, with touch controls over the top. It is **sideloaded** — see
+[Why it is not on Google Play](#why-it-is-not-on-google-play) — and, like every
+other route here, it needs your own copy of Corridor 7.
+
+#### What your device needs
+
+| | |
+| --- | --- |
+| **Android version** | 5.0 Lollipop (API 21) or newer |
+| **Processor** | `arm64-v8a` (any phone or tablet since about 2015) or `x86_64` |
+| **Graphics** | OpenGL ES 3.0, which is everything with a 64-bit CPU |
+| **Free space** | ~120 MB installed — the app, then ~6 MB of game data, 26 MB of cinematics and 39 MB of soundtrack. Importing from a CD image wants ~350 MB free *while it runs* |
+
+Verified on a Galaxy S25 Ultra (Android 16, Adreno 830) and a Galaxy Tab S5e
+(Android 11, Adreno 615). The Tab S5e is a 2019 mid-range tablet and it runs at
+172 fps, so the bar is low.
+
+#### Installing the APK
+
+Take **`EC7Wolf-…-android.apk`** from the
+[latest release](https://github.com/jeddhor/EC7Wolf/releases) — it is built by
+the same workflow as the Windows and Linux downloads, carries both `arm64-v8a`
+and `x86_64`, and contains no game data. Or build it yourself, below. Then
+either:
+
+```sh
+adb install -r ec7wolf.apk
+```
+
+or copy it to the device and open it, allowing installation from your file
+manager when Android asks. The APK is signed with a **debug key**, which is fine
+for sideloading and means Android will warn you it is from an unknown developer.
+
+**Google Play Protect will interrupt this**, on the device and over `adb`
+alike: *"Send app for a security check? This app is unknown to Play Protect."*
+Choosing **Don't send** installs the app without uploading your build to Google,
+and is the answer this project's own test harness gives. Over `adb` the prompt
+appears on the tablet's screen while `adb install` sits there saying nothing —
+if an install seems to hang, look at the device.
+
+It installs as **EC7Wolf** (`org.ec7wolf.EC7Wolf`). It will not disturb ECWolf
+or anything else from Beloko Games — those are different apps with different
+identities, and this one deliberately does not install over them.
+
+#### Getting your game data onto it
+
+Three routes in, all of which end with the files copied into the app's own
+storage so you only do it once. **The fastest is the first.**
+
+**a. Hand it an archive — "open with EC7Wolf".** Put a `.zip` of your Corridor 7
+files on the device — download it, copy it over USB, whatever — then tap it in
+your file manager or in the browser's downloads and choose EC7Wolf. It imports
+and tells you what it found. This also works from a terminal:
+
+```sh
+adb push Corridor7.zip /sdcard/Download/
+# find the id the system gave it, then hand it over
+adb shell content query --uri content://media/external/downloads \
+    --projection _id:_display_name | grep Corridor7
+adb shell am start -a android.intent.action.VIEW -t application/zip \
+    -d content://media/external/downloads/<id> --grant-read-uri-permission \
+    -n org.ec7wolf.EC7Wolf/com.beloko.wolf3d.EntryActivity
+```
+
+**b. The picker.** On the PLAY tab press **IMPORT GAME DATA** and choose *From a
+zip file* or *From a folder or disc image*, then point it at your files.
+
+**c. Give it the CD itself.** Point either route at a `.cue` and its `.bin` — a
+folder holding both, or a zip of the pair — and EC7Wolf takes the disc apart for
+you: the game data, **the three CD cinematics the installer leaves behind**, and
+**the soundtrack, which nothing else ever copies off the disc**. That takes about
+half a minute on a 2019 tablet.
+
+Afterwards it offers to delete the archive it read from, because a CD image is a
+third of a gigabyte and there is no reason to keep it. Android does not always
+allow that — see [Limits](#android-limits-worth-knowing) — and it will tell you
+which happened.
+
+#### What it needs from your copy of the game
+
+The same files every other route needs, plus one that surprises people:
+
+```
+AUDIOHED.CO7  AUDIOT.CO7  MAPTEMP.CO7  VGADICT.CO7
+VGAHEAD.CO7   VGAGRAPH.CO7  GFXTILES.CO7  CORR7CD.EXE
+```
+
+**`CORR7CD.EXE` is required.** Corridor 7 keeps its palette inside its own
+executable, so without it the engine has no colours to draw with and refuses to
+start. `AUDIOMUS.CO7` is optional but wanted — it is the digitised speech and
+effects.
+
+Optional extras, picked up automatically when they are alongside the rest:
+`SEQONE.CO7`, `SEQTHREE.CO7` and `SEQFOUR.CO7` (the cinematics) and
+`track03.ogg`, `track05.ogg`, `track07.ogg`, `track09.ogg` (the soundtrack).
+
+#### Where everything lives
+
+```
+/sdcard/Android/data/org.ec7wolf.EC7Wolf/files/Corridor7/FULL/
+├── *.CO7, CORR7CD.EXE      your game data
+├── ec7wolf.pk3             shipped inside the APK, copied out on first run
+├── video/                  the CD cinematics
+├── cdaudio/                the CD soundtrack
+└── ec7wolf/                configuration and saved games
+```
+
+This is app-specific storage: it needs no permissions, and Android removes it
+when you uninstall. Since Android 11 it is also invisible to file managers,
+which is exactly why the importer exists rather than a "copy the files here"
+instruction.
+
+#### Controls
+
+Two sticks — left to move, right to look — plus fire, use, weapon cycling, and
+the three verbs Corridor 7 has that Wolfenstein does not:
+
+| Button | Does |
+| --- | --- |
+| binoculars | **Visor** — infrared and night vision, which is how the dark floors are played |
+| spiked sphere | **Drop mine** |
+| wireframe globe | Corridor 7's own **floor map** panel |
+| folded map | ECWolf's full-screen **automap** |
+
+Every button can be moved or hidden: press the cog, then **Add/remove buttons**
+or drag them where your thumbs actually are. **Gamepads are wired up but
+untested** — see below.
+
+#### Performance, and the one setting worth knowing
+
+Out of the box the game renders at 640×480 and the GPU scales it to your screen,
+which on a 2019 tablet is 172 fps. You can raise it, and the cost is steep,
+because Corridor 7 was drawn for 320×200:
+
+| Render resolution | Tab S5e (Adreno 615) |
+| --- | --- |
+| **640×480 (default)** | **172 fps** |
+| 1280×800 | 78 fps |
+| 1920×1200 | 38 fps |
+| 2560×1600 (native) | 26 fps |
+
+If it feels slow, this is why — the default is fine and the panel's native
+resolution is 64× the pixels the game was written for. The measurements and
+where the time goes are in [`docs/android.md`](docs/android.md).
+
+#### Building the APK yourself
+
+You need the Android SDK and an NDK. On this project's machine that is
+build-tools 36.x and NDK 30; the build takes the newest of each it finds rather
+than pinning a version.
+
+```sh
+export ANDROID_SDK_ROOT=$HOME/Android/Sdk     # if it is somewhere else
+tools/fetch_android_deps.sh                   # SDL, SDL_mixer, SDL_net, ogg, vorbis
+tools/build_android.sh                        # both ABIs -> builds/android-*/ec7wolf.apk
+tools/build_android.sh arm64-v8a              # or just one, for a faster edit cycle
+```
+
+Two things worth knowing before the first build:
+
+* It needs a **native build first**. Cross-compiling cannot run the tools it has
+  to run — `zipdir` builds the `.pk3` — so a host build exports them and the
+  Android configure imports that. The script handles it; the failure if
+  something goes wrong is `IMPORTFILE-NOTFOUND`, which does not mention any of
+  this.
+* A build with **one ABI produces a single-architecture APK**, which installs
+  and runs perfectly on your own device and is not shippable. The script says so
+  when you ask for one, and `test_android_apk.sh` fails on it.
+
+Signing uses a debug keystore generated at `builds/ec7wolf-debug.keystore` on
+first build. Set `ANDROID_KEYSTORE`, `ANDROID_KEYALIAS` and `ANDROID_KEYPASS` to
+use your own.
+
+**A signing key is not cosmetic on Android.** An APK signed with a different key
+will not install over one already on the device, and getting past that means
+uninstalling — which deletes the game data you imported, because Android removes
+an app's storage along with the app. The release workflow signs with a stable
+key when the repository has one (`ANDROID_KEYSTORE_BASE64`,
+`ANDROID_KEYSTORE_PASS`, `ANDROID_KEYSTORE_ALIAS` as secrets), and generates a
+throwaway otherwise — in which case the release notes say so.
+
+#### Testing it
+
+Five gates cover Android. Two of them — `android_native` and `android_apk` —
+only look at what was built, so they run anywhere, and CI runs `android_apk` on
+every release. The other three drive a real device over `adb` and skip cleanly
+when there is not one:
+
+```sh
+tools/run_gates.sh android
+```
+
+| Gate | Checks |
+| --- | --- |
+| `android_native` | the `.so` files build for both ABIs and have the right dependencies |
+| `android_apk` | packaging, both architectures, signing, identity, and the Vorbis encoder's JNI symbols |
+| `android_device` | it installs, starts, chooses the GL renderer, loads MAP01, and stays landscape |
+| `android_controls` | each control moves the thing it should, read from the game's own state |
+| `android_import` | a clean install imports from an archive and reaches MAP01 with cinematics and soundtrack |
+
+#### When it does not work
+
+| What you see | What it is |
+| --- | --- |
+| *"Can not find base game data"* on start | Almost always `CORR7CD.EXE`. It is not optional — the palette is inside it — and it is the one file people leave out, because no other Wolfenstein port wants an `.EXE` |
+| `adb install` never returns | Play Protect is asking a question on the device's screen. See [Installing the APK](#installing-the-apk) |
+| No music | `cdaudio/` is empty. The soundtrack exists only on the CD, so nothing but the disc-image route can produce it |
+| The intro plays silently, or not at all | `video/` is empty. The cinematics are also CD-only, and the installer that shipped with the game leaves them behind |
+| It imported, then the data was gone | Uninstalling removes app-specific storage, and so does *Clear data* in App info. Re-import; the app never touches your original archive unless you tell it to delete it |
+| It runs, but slowly | The render resolution. See [Performance](#performance-and-the-one-setting-worth-knowing) |
+| The controls do nothing | Report it. This is the failure mode M5 exists to prevent, and there is a gate that presses every button and reads the game's own state back |
+
+One failure has no message at all, so it is worth knowing: the palette is only
+read out of `CORR7CD.EXE` if that file is *exactly* 250,776 bytes and the 768
+bytes at `0x2FFC0` are all valid 6-bit DAC values. A different build of the
+executable satisfies every other check and simply yields no palette — so if the
+game runs but the colours are wrong, that is the reason, and it is a bug report
+worth making.
+
+#### Android limits worth knowing
+
+* **Gamepad support is unverified.** The bindings exist — pad buttons 2, 3 and 4
+  are Drop Mine, Visor and Floor Map — and the launcher carries Beloko's gamepad
+  plumbing, but nobody here has a pad to test with, so this claims nothing about
+  it.
+* **Multiplayer is untested on Android.** It is the same engine over UDP and the
+  libraries are in the APK, so it ought to work. Nothing tests it, so that is as
+  far as the claim goes.
+* **Deleting the archive after importing does not always work.** Android 11 and
+  later will not let an app delete a *non-media* file another app owns — a zip
+  your browser downloaded is exactly that — whatever access it was granted. The
+  app says so rather than failing quietly. Files you picked yourself, through
+  the app's own picker or a file manager's "open with", delete fine.
+* **The first-run import cannot be scripted through the file picker.** Not a
+  limit of the app, but worth knowing if you are automating: some devices ignore
+  injected input in the system picker entirely. The intent route above works
+  everywhere.
+
+#### Why it is not on Google Play
+
+Play requires review, a developer account, and a privacy policy for an app that
+collects nothing; and Corridor 7 is commercial software this project has no
+right to distribute, so any listing would be an empty shell that refuses to run
+until you supply your own copy. Sideloading is the honest distribution model for
+a source port of a game you already own.
 
 ---
 
@@ -1009,6 +1315,10 @@ Full detail, including which specific values are reconstructed, lives in
 - The **engine** (this ECWolf fork) is distributed under the **GPL** — see
   [`docs/license-gpl.txt`](docs/license-gpl.txt), [`docs/license-id.txt`](docs/license-id.txt),
   and [`docs/copyright`](docs/copyright).
+- The **Android touch controls and launcher** (`android-libs/TouchControls/`,
+  `android-libs/launcher/`) are © 2014 Emile Belanger, used under the
+  **LGPLv2.1** grant those directories' `License.txt` files extend to ECWolf and
+  its derivatives. Modified here; see [Credits](#credits--where-credit-is-due).
 - **Corridor 7: Alien Invasion** and all of its data (maps, art, sound, music,
   the executable and its palette) remain the **property of their respective
   rights holders** and are **not** included, embedded, or redistributed here.

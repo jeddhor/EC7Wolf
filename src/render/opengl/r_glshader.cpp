@@ -4,16 +4,43 @@
 //
 // ===========================================================================
 
-#include "render/opengl/r_glshader.h"
+#include <string.h>
+
 #include "wl_def.h"
 #include "zdoomsupport.h"
+#include "zstring.h"
+#include "render/opengl/r_glshader.h"
+#include "render/opengl/r_glcompat.h"
 
 namespace
 {
 	GLuint CompileStage(GLenum type, const char *src, const char *debugName)
 	{
+		// The preamble is this file's business rather than each shader's.
+		// Desktop and GLES disagree about the version directive and about
+		// whether the fragment stage must state its precision, and a shader
+		// carrying its own "#version 330 core" cannot compile on a phone.
+		//
+		// Any version line the caller left in is dropped: two of them is a
+		// compile error, and #version must be the first thing in the source.
+		const bool fragment = (type == GL_FRAGMENT_SHADER);
+		FString source = R_GLShaderPreamble(fragment);
+		const char *body = src;
+		while(*body)
+		{
+			const char *lineEnd = strchr(body, '\n');
+			const char *next = lineEnd ? lineEnd + 1 : body + strlen(body);
+			while(*body == ' ' || *body == '\t')
+				++body;
+			if(strncmp(body, "#version", 8) != 0)
+				break;
+			body = next;
+		}
+		source += body;
+
+		const char *sources[1] = { source.GetChars() };
 		GLuint shader = glCreateShader(type);
-		glShaderSource(shader, 1, &src, NULL);
+		glShaderSource(shader, 1, sources, NULL);
 		glCompileShader(shader);
 
 		GLint ok = GL_FALSE;

@@ -396,6 +396,7 @@ bool TouchControls::processPointer(int action, int pid, float x, float y)
 		}
 	}
 
+	return false;
 }
 
 void TouchControls::editorButtonPress(int state,int code)

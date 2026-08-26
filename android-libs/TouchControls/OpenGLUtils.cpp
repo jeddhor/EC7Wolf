@@ -97,12 +97,22 @@ int loadShader(int shaderType,const char * source) {
 		glCompileShader(shader);
 
 
-		GLint  length;
+		// Initialised, bounded, and terminated, none of which it was.
+		//
+		// If there is no current context these GL calls do nothing and length
+		// keeps whatever was on the stack. The old code then allocated that
+		// many bytes, asked for an info log that was never written, and passed
+		// the uninitialised buffer to a %s -- which walks memory until it
+		// falls off the end. That is what the crash in __vsnprintf_chk was:
+		// not libpng, not the texture, a log line about a shader.
+		GLint length = 0;
 
 		glGetShaderiv ( shader , GL_INFO_LOG_LENGTH , &length );
 
-		if ( length ) {
-			char* buffer  =  new char [ length ];
+		if ( length > 0 && length < 64*1024 ) {
+			char* buffer  =  new char [ length + 1 ];
+			buffer[0] = '\0';
+			buffer[length] = '\0';
 			glGetShaderInfoLog ( shader , length , NULL , buffer );
 			LOGTOUCH("shader = %s", buffer);
 			delete [] buffer;
@@ -181,6 +191,16 @@ static int mPositionTranslateLocColor;
 
 static int gles2InitDone = 0;
 
+// The context these shaders and textures belong to.
+//
+// Every GL name here -- the two programs, every button texture -- is only
+// meaningful inside one context, and on Android a context does not last for the
+// life of the process: it goes away with the surface. Reusing a program name
+// across contexts is how glUseProgram comes to return GL_INVALID_VALUE for a
+// program that linked perfectly, which then makes every uniform call
+// INVALID_OPERATION and draws nothing, silently.
+static EGLContext gles2Context = EGL_NO_CONTEXT;
+
 void initGLES2()
 {
 
@@ -209,7 +229,6 @@ void initGLES2()
 #ifdef USE_GLES2
 void drawRect(GLuint texture, float x, float y, GLRect &rect)
 {
-	//LOGTOUCH("drawRect");
 	glUseProgram(mProgramObject);
 
 	glVertexAttribPointer ( mPositionLoc, 3, GL_FLOAT,
@@ -358,7 +377,27 @@ void setGraphicsBasePath(std::string path)
 //in case same texture is wanted
 std::map <std::string, GLuint> tc_gl_textures;
 
-static int texNumber = 20000;
+// True when the context has been replaced since the shaders and textures were
+// made, so the caller knows the whole lot has to be built again. Everything is
+// dropped rather than deleted: the names belong to a context that is gone, and
+// deleting them in this one would be talking about somebody else's objects.
+bool GLES2ContextLost()
+{
+	return gles2InitDone && eglGetCurrentContext() != gles2Context;
+}
+
+void GLES2Forget()
+{
+	tc_gl_textures.clear();
+	gles2InitDone = 0;
+	gles2Context = EGL_NO_CONTEXT;
+}
+
+// Texture names come from the driver. They used to be counted up from 20000
+// and handed straight to glBindTexture, which OpenGL ES 2 tolerated. ES 3 does
+// not -- it is GL_INVALID_VALUE, and the overlay drew nothing at all -- and in
+// this engine the overlay shares its context with the renderer, so inventing
+// names risks colliding with the game's own textures either way.
 GLuint loadTextureFromPNG(std::string filename, int &width, int &height)
 {
 	LOGTOUCH("loadTextureFromPNG %s", filename.c_str());
@@ -370,8 +409,22 @@ GLuint loadTextureFromPNG(std::string filename, int &width, int &height)
     }
 
 #ifdef USE_GLES2
+	// Nothing here works without a current context, and the engine reaches
+	// this during start-up while SDL is still reporting "Surface is not
+	// ready". Loading is skipped rather than attempted: the texture is not in
+	// the cache, so the next draw asks for it again, by which time there is a
+	// context.
+	if (eglGetCurrentContext() == EGL_NO_CONTEXT)
+	{
+		LOGTOUCH("No GL context yet; deferring %s", filename.c_str());
+		return TEXTURE_LOAD_ERROR;
+	}
+
 	if (!gles2InitDone)
+	{
 		initGLES2();
+		gles2Context = eglGetCurrentContext();
+	}
 
 	gles2InitDone = 1;
 #endif
@@ -502,7 +555,16 @@ GLuint loadTextureFromPNG(std::string filename, int &width, int &height)
 	png_read_image(png_ptr, row_pointers);
 
 	//Now generate the OpenGL texture object
-	GLuint texture = texNumber++;
+	GLuint texture = 0;
+	glGenTextures(1, &texture);
+	if (texture == 0) {
+		png_destroy_read_struct(&png_ptr, &info_ptr, &end_info);
+		delete[] image_data;
+		delete[] row_pointers;
+		fclose(file);
+		LOGTOUCH_E("glGenTextures gave nothing for %s", full_file.c_str());
+		return TEXTURE_LOAD_ERROR;
+	}
 
 	glBindTexture(GL_TEXTURE_2D, texture);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA,

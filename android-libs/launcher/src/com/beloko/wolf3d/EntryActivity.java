@@ -1,11 +1,23 @@
 package com.beloko.wolf3d;
 
+import android.app.Activity;
 import android.app.ActionBar;
 import android.app.ActionBar.Tab;
 import android.app.Fragment;
 import android.app.FragmentTransaction;
+import android.app.AlertDialog;
+import android.app.ProgressDialog;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
-import android.support.v4.app.FragmentActivity;
+import android.util.Log;
+import android.widget.Toast;
+// Was android.support.v4.app.FragmentActivity. This class never used it:
+// every fragment here is a framework fragment (android.app.Fragment,
+// getFragmentManager), so FragmentActivity contributed nothing but a
+// dependency on a support library that Google deleted from the repository
+// the build looked for it in.
 import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MotionEvent;
@@ -13,11 +25,17 @@ import android.view.MotionEvent;
 import com.beloko.idtech.AppSettings;
 import com.beloko.idtech.GD;
 import com.beloko.idtech.GD.IDGame;
+import com.beloko.idtech.GameDataImport;
 import com.beloko.idtech.GamePadFragment;
+import com.beloko.idtech.ImportCleanup;
 import com.beloko.idtech.IntroDialog;
 import com.beloko.idtech.OptionsFragment;
 import com.beloko.idtech.R;
-public class EntryActivity extends FragmentActivity  {
+
+import java.io.File;
+public class EntryActivity extends Activity  {
+
+	private static final String LOG = "EntryActivity";
 
 
 	final static int LAUNCH_FRAG = 0;
@@ -43,7 +61,7 @@ public class EntryActivity extends FragmentActivity  {
 		final ActionBar actionBar = getActionBar();
 		actionBar.setNavigationMode(ActionBar.NAVIGATION_MODE_TABS);
 
-		AppSettings.setGame(IDGame.Wolf3d);
+		AppSettings.setGame(IDGame.Corridor7);
 		AppSettings.reloadSettings(getApplication());
 
 		actionBar.addTab(actionBar.newTab().setText("play").setTabListener(new TabListener<LaunchFragment>(this, "play", LaunchFragment.class)));
@@ -54,8 +72,10 @@ public class EntryActivity extends FragmentActivity  {
 
 		if (IntroDialog.showIntro(this))
 		{
-			IntroDialog.show(this,"ECWolf", R.raw.intro);
+			IntroDialog.show(this,"EC7Wolf", R.raw.intro);
 		}
+
+		handleImportIntent(getIntent());
 		/*else
 		{
 			if (AboutDialog.showAbout(this))
@@ -129,17 +149,17 @@ public class EntryActivity extends FragmentActivity  {
 	}
 
 	public static class TabListener<T extends Fragment> implements ActionBar.TabListener {
-		private final FragmentActivity mActivity;
+		private final Activity mActivity;
 		private final String mTag;
 		private final Class<T> mClass;
 		private final Bundle mArgs;
 		private Fragment mFragment;
 
-		public TabListener(FragmentActivity activity, String tag, Class<T> clz) {
+		public TabListener(Activity activity, String tag, Class<T> clz) {
 			this(activity, tag, clz, null);
 		}
 
-		public TabListener(FragmentActivity activity, String tag, Class<T> clz, Bundle args) {
+		public TabListener(Activity activity, String tag, Class<T> clz, Bundle args) {
 			mActivity = activity;
 			mTag = tag;
 			mClass = clz;
@@ -189,6 +209,133 @@ public class EntryActivity extends FragmentActivity  {
 		public void onTabReselected(Tab tab, FragmentTransaction ft) {
 			//Toast.makeText(mActivity, "Reselected!", Toast.LENGTH_SHORT).show();
 		}
+	}
+
+
+	@Override
+	protected void onNewIntent(Intent intent)
+	{
+		super.onNewIntent(intent);
+		setIntent(intent);
+		handleImportIntent(intent);
+	}
+
+	/**
+	 * Import from an archive somebody handed us.
+	 *
+	 * This is what makes "open with EC7Wolf" work from a file manager or a
+	 * browser's download, which is a friendlier road in than the folder picker
+	 * -- and the only one a test can drive, because it needs no UI at all.
+	 *
+	 * The archive may be a zip of the game files or a zip holding the CD image;
+	 * GameDataImport works out which.
+	 */
+	private void handleImportIntent(Intent intent)
+	{
+		if (intent == null)
+			return;
+
+		final String action = intent.getAction();
+		Uri uri = null;
+		if (Intent.ACTION_VIEW.equals(action))
+			uri = intent.getData();
+		else if (Intent.ACTION_SEND.equals(action))
+			uri = (Uri)intent.getParcelableExtra(Intent.EXTRA_STREAM);
+		if (uri == null)
+			return;
+
+		// Consumed, so that rotating the screen or coming back to the launcher
+		// does not import the same archive again.
+		intent.setAction(Intent.ACTION_MAIN);
+		intent.setData(null);
+
+		final Uri source = uri;
+		final File gameDir = new File(AppSettings.getQuakeFullDir());
+		final ProgressDialog progress = new ProgressDialog(this);
+		progress.setTitle("Importing game data");
+		progress.setMessage("Reading the archive...");
+		progress.setIndeterminate(true);
+		progress.setCancelable(false);
+		progress.show();
+
+		new Thread(new Runnable() {
+			public void run() {
+				String problem = null;
+				int copied = 0;
+				try
+				{
+					copied = GameDataImport.importFromZip(getContentResolver(), source,
+						gameDir, new GameDataImport.Listener() {
+							public void onProgress(final String what) {
+								runOnUiThread(new Runnable() {
+									public void run() { progress.setMessage(what); }
+								});
+							}
+						});
+				}
+				catch (Exception e)
+				{
+					Log.e(LOG, "import failed", e);
+					problem = e.getMessage();
+				}
+
+				final String failed = problem;
+				final int count = copied;
+				runOnUiThread(new Runnable() {
+					public void run() {
+						try { progress.dismiss(); } catch (Exception ignored) {}
+
+						// The PLAY tab refreshes itself when the activity
+						// resumes, and importing from an intent never pauses it
+						// -- so without this the launcher goes on saying the
+						// data is missing while it sits there imported.
+						final Fragment play = getFragmentManager().findFragmentByTag("play");
+						if (play instanceof LaunchFragment)
+							((LaunchFragment)play).refreshDataStatus();
+
+						final String missing = GameDataImport.missing(gameDir);
+						final String text = failed != null
+							? "Import failed: " + failed
+							: missing == null
+								? "Imported " + count + " files. Corridor 7 is ready to play."
+								: "That archive did not have everything in it. Still missing: " + missing;
+
+						final AlertDialog.Builder builder = new AlertDialog.Builder(EntryActivity.this)
+							.setTitle("Import Game Data");
+
+						// Offer to clear up after ourselves. The archive is not
+						// needed once its contents are in app storage, and a
+						// disc image is a third of a gigabyte sitting in
+						// Downloads. Only offered when the import worked --
+						// deleting the source after a failure would take away
+						// the thing somebody needs to try again with.
+						final long size = ImportCleanup.sizeOf(getContentResolver(), source);
+						final String name = ImportCleanup.displayName(getContentResolver(), source);
+						if (failed == null && missing == null && name != null)
+						{
+							builder.setMessage(text + "\n\nDelete " + name
+									+ (size > 0 ? " (" + (size >> 20) + " MB)" : "")
+									+ " now that it has been copied in?")
+								.setPositiveButton("Delete", new DialogInterface.OnClickListener() {
+									public void onClick(DialogInterface d, int which) {
+										final String said = ImportCleanup.describe(
+											ImportCleanup.delete(EntryActivity.this, source), name);
+										if (said != null)
+											Toast.makeText(EntryActivity.this, said,
+												Toast.LENGTH_LONG).show();
+									}
+								})
+								.setNegativeButton("Keep", null);
+						}
+						else
+						{
+							builder.setMessage(text).setPositiveButton("OK", null);
+						}
+						builder.show();
+					}
+				});
+			}
+		}).start();
 	}
 
 }

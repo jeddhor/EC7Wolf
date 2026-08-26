@@ -1,7 +1,7 @@
 #ifndef __R_GLSHADER_H__
 #define __R_GLSHADER_H__
 
-#include <epoxy/gl.h>
+#include "render/opengl/r_glcompat.h"
 
 // Shader helpers for the OpenGL backend (renderer redesign Phase 4).
 namespace GLShader

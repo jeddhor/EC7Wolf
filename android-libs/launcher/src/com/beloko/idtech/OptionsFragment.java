@@ -13,6 +13,19 @@ import android.app.Fragment;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.net.Uri;
+import android.content.ContentValues;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.MediaStore;
+import android.util.Log;
+import android.widget.Toast;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -65,7 +78,7 @@ public class OptionsFragment extends Fragment{
 		LinearLayout quakeExtra =  (LinearLayout)mainView.findViewById(R.id.quake_extra_layout);
 
 		if ((AppSettings.game == IDGame.Doom) || (AppSettings.game == IDGame.Quake3)|| (AppSettings.game == IDGame.RTCW)
-				|| (AppSettings.game == IDGame.Wolf3d)|| (AppSettings.game == IDGame.JK2)|| (AppSettings.game == IDGame.JK3)
+				|| (AppSettings.game == IDGame.Wolf3d) || (AppSettings.game == IDGame.Corridor7)|| (AppSettings.game == IDGame.JK2)|| (AppSettings.game == IDGame.JK3)
 				|| (AppSettings.game == IDGame.Hexen)|| (AppSettings.game == IDGame.Strife)|| (AppSettings.game == IDGame.Heretic)
 				|| (AppSettings.game == IDGame.Noah)) //If doom, hide the music and other options, now alos Q3!
 			quakeExtra.setVisibility(View.GONE);
@@ -96,26 +109,10 @@ public class OptionsFragment extends Fragment{
 		basePathTextView.setText(AppSettings.belokoBaseDir);
 		musicPathTextView.setText(AppSettings.musicBaseDir);
 
-		Button chooseDir = (Button)mainView.findViewById(R.id.choose_base_button);
-		chooseDir.setOnClickListener(new OnClickListener() {
-
-			@Override
-			public void onClick(View v) {
-				DirectoryChooserDialog directoryChooserDialog = 
-						new DirectoryChooserDialog(getActivity(), 
-								new DirectoryChooserDialog.ChosenDirectoryListener() 
-						{
-							@Override
-							public void onChosenDir(String chosenDir) 
-							{
-								updateBaseDir(chosenDir);
-							}
-						}); 
-
-				directoryChooserDialog.chooseDirectory(AppSettings.belokoBaseDir);
-			}
-		});
-
+		// There is no "choose a folder" button any more. It opened a browser
+		// over raw File paths, and since Android 11 an app cannot read those
+		// outside its own storage -- so it offered the player a choice that
+		// could only produce a game which then found no data.
 
 		Button resetDir = (Button)mainView.findViewById(R.id.reset_base_button);
 		resetDir.setOnClickListener(new OnClickListener() {
@@ -303,7 +300,7 @@ public class OptionsFragment extends Fragment{
 			@Override
 			public void onClick(View v) {
 
-				SendDebugEmail();
+				SaveDebugLog();
 
 			}
 		});
@@ -441,55 +438,63 @@ public class OptionsFragment extends Fragment{
 		errdialog.show();
 	}
 
-	private void SendDebugEmail()
+	/**
+	 * Write the log where the player can find it.
+	 *
+	 * This used to compose an email to admin@maniacsvault.net -- that is
+	 * upstream ECWolf's address, and a bug in this fork is not theirs to
+	 * receive. It also handed the mail app a file:// URI, which any app
+	 * targeting a modern SDK is not allowed to share and which throws
+	 * FileUriExposedException, so the button could not have worked either way.
+	 *
+	 * Downloads, through MediaStore, because app-private storage is invisible
+	 * to file managers since Android 11 and telling somebody a path they cannot
+	 * reach is not help.
+	 */
+	private void SaveDebugLog()
 	{
-		AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
-		builder.setMessage("Are you sure you want to email the debug log?\nIf yes, please give good information about the problem.")
-		.setCancelable(true)
-		.setPositiveButton("SEND EMAIL", new DialogInterface.OnClickListener() {
-			public void onClick(DialogInterface dialog, int id) {
-				// TODO Auto-generated method stub
-				PrintWriter printWriter = null;
-				try {
-					String filename = AppSettings.getBaseDir() + "/" +  AppSettings.game.toString() + "_logcat.txt";
-					printWriter = new PrintWriter(new FileWriter(filename),true);
+		String name = "ec7wolf-log-" +
+			new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date()) + ".txt";
+		String log = Utils.getLogCat();
+		String where;
 
-					String log = Utils.getLogCat();
-
-					printWriter.print(log);
-
-					printWriter.close();
-
-
-					final Intent emailIntent = new Intent( android.content.Intent.ACTION_SEND);
-					emailIntent.setType("plain/text");
-
-					emailIntent.putExtra(android.content.Intent.EXTRA_SUBJECT, AppSettings.game.toString() + "_" + GD.version + " Logging file");
-					emailIntent.putExtra(android.content.Intent.EXTRA_EMAIL,new String[]{"admin@maniacsvault.net"});
-
-					emailIntent.putExtra(android.content.Intent.EXTRA_TEXT,"Enter description of issue:  ");
-
-					Uri uri = Uri.parse("file://" + filename);
-					emailIntent.putExtra(Intent.EXTRA_STREAM, uri);
-
-					getActivity().startActivity(Intent.createChooser(emailIntent, "Send mail..."));
-
-				} catch (IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-
+		try
+		{
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+			{
+				ContentValues values = new ContentValues();
+				values.put(MediaStore.Downloads.DISPLAY_NAME, name);
+				values.put(MediaStore.Downloads.MIME_TYPE, "text/plain");
+				Uri uri = getActivity().getContentResolver().insert(
+					MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+				if (uri == null)
+					throw new IOException("could not create the file");
+				OutputStream out = getActivity().getContentResolver().openOutputStream(uri);
+				try { out.write(log.getBytes("UTF-8")); }
+				finally { out.close(); }
+				where = "Downloads/" + name;
 			}
-		});
-		builder.setNegativeButton("CANCEL", new DialogInterface.OnClickListener() {
-
-			@Override
-			public void onClick(DialogInterface dialog, int which) {
-				dialog.cancel();
+			else
+			{
+				File file = new File(AppSettings.getBaseDir(), name);
+				PrintWriter writer = new PrintWriter(new FileWriter(file), true);
+				try { writer.print(log); }
+				finally { writer.close(); }
+				where = file.getAbsolutePath();
 			}
-		});                                                   
-		AlertDialog alert = builder.create();
-		alert.show(); 
+		}
+		catch (Exception e)
+		{
+			Log.e(LOG, "could not save the log", e);
+			Toast.makeText(getActivity(), "Could not save the log: " + e.getMessage(),
+				Toast.LENGTH_LONG).show();
+			return;
+		}
 
+		new AlertDialog.Builder(getActivity())
+			.setTitle("Debug log saved")
+			.setMessage("Written to " + where + "\n\nAttach it to a bug report if you were asked for it.")
+			.setPositiveButton("OK", null)
+			.show();
 	}
 }

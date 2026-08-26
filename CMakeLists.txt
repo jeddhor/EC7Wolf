@@ -222,6 +222,7 @@ if(NOT TOOLS_ONLY)
 		add_subdirectory(android-libs/sigc++)
 		add_subdirectory(android-libs/TinyXML)
 		add_subdirectory(android-libs/TouchControls)
+		add_subdirectory(android-libs/c7rip)
 		add_subdirectory(android-libs/launcher)
 	endif()
 

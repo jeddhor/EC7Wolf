@@ -139,12 +139,14 @@ bool TouchJoy::processPointer(int action, int pid, float x, float y)
 		}
 		return false;
 	}
+	return false;
 }
 
 bool TouchJoy::initGL()
 {
 	int x,y;
 	glTex = loadTextureFromPNG(image,x,y);
+	return glTex != TEXTURE_LOAD_ERROR;
 }
 
 bool TouchJoy::drawGL(bool forEditor)
@@ -165,6 +167,7 @@ bool TouchJoy::drawGL(bool forEditor)
 	}
 
 	//LOGTOUCH("state = %d, counter = %d",doubleTapState,doubleTapCounter);
+	return true;
 }
 
 void TouchJoy::reset()

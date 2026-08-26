@@ -5,7 +5,7 @@
 // ===========================================================================
 
 #include <SDL.h>
-#include <epoxy/gl.h>
+#include "render/opengl/r_glcompat.h"
 
 #include "render/opengl/r_gldevice.h"
 #include "wl_def.h"
@@ -33,9 +33,18 @@ bool GLDevice::Create(int w, int h, bool fullscreen, bool hidden,
 		}
 	}
 
+	// GLES 3.0 on Android, desktop 3.3 core elsewhere. The two are the same
+	// renderer: everything this backend uses is in both, which is why there is
+	// a compatibility header rather than a second implementation.
+#ifdef __ANDROID__
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+#else
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+#endif
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
@@ -72,9 +81,16 @@ bool GLDevice::Create(int w, int h, bool fullscreen, bool hidden,
 
 	// libepoxy resolves entry points lazily; no explicit loader init needed.
 	// Sanity check that a core function is reachable.
-	if(epoxy_gl_version() < 33)
+	// Same test, different floor: GLES 3.0 carries every feature this backend
+	// asks for, and desktop needs 3.3 to have them all.
+#ifdef __ANDROID__
+	const int required = 30;
+#else
+	const int required = 33;
+#endif
+	if(epoxy_gl_version() < required)
 	{
-		Printf("GL: got version %d, need >= 3.3\n", epoxy_gl_version());
+		Printf("GL: got version %d, need >= %d\n", epoxy_gl_version(), required);
 		Destroy();
 		return false;
 	}

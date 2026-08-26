@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <string name="app_name">idtech</string>
+    <string name="app_name">EC7Wolf</string>
 
     <string-array name="double_tap_actions">
         <item>None</item>
@@ -25,8 +25,8 @@
     <string name="title_activity_google_play_services">GooglePlayServicesActivity</string>
 
      <!-- Simple strings. -->
-    <string name="quake_activity">ECWolf</string>
+    <string name="quake_activity">EC7Wolf</string>
     
-    <string name="title_activity_entry">ECWolf</string>
+    <string name="title_activity_entry">EC7Wolf</string>
 
 </resources>

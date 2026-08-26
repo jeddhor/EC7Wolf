@@ -169,6 +169,12 @@ namespace
 	// Corridor 7 because its Tab modifier is the floor map.
 	long     g_exitLevelTic   = -1;
 	bool     g_exitLevelDone  = false;
+	// --capture-verbs: report the state each of Corridor 7's verbs acts on,
+	// whenever it changes. This is an observation, not an override: it exists so
+	// a test that presses buttons -- a touchscreen, a gamepad -- can assert that
+	// the press reached the simulation, which a screenshot cannot do on a screen
+	// where the textures animate on their own.
+	bool     g_verbs          = false;
 	bool     g_haveVisorMode  = false;   // --capture-visormode: force the C7 visor
 	int      g_visorMode      = 0;       // 0 off, 1 night vision, 2 infrared, 3 shock
 
@@ -574,6 +580,11 @@ void ParseArgs(int argc, char **argv)
 		else if(strcmp(arg, "--capture-c7map") == 0)
 		{
 			g_c7Map = true;
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-verbs") == 0)
+		{
+			g_verbs = true;
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-floorplan") == 0)
@@ -1075,6 +1086,47 @@ void ApplyPaletteOverride()
 	V_ForceBlend(g_blendR, g_blendG, g_blendB, g_blendA);
 }
 
+// Printed only when something moves, so a run of any length stays readable and
+// the absence of a line is itself the assertion that nothing happened.
+static void TraceVerbs()
+{
+	if(!g_verbs)
+		return;
+
+	player_t &player = players[ConsolePlayer];
+	AActor *pawn = player.mo;
+
+	int visor = 0, mines = 0, ammo = 0, health = 0;
+	if(pawn)
+	{
+		if(AInventory *mode = pawn->FindInventory(ClassDef::FindClass("C7VisorMode")))
+			visor = mode->amount;
+		if(AInventory *m = pawn->FindInventory(ClassDef::FindClass("C7Mines")))
+			mines = m->amount;
+		health = player.health;
+	}
+	if(player.ReadyWeapon && player.ReadyWeapon->ammo[AWeapon::PrimaryFire])
+		ammo = player.ReadyWeapon->ammo[AWeapon::PrimaryFire]->amount;
+
+	const int map = C7Map_Active() ? 1 : 0;
+	const int angle = pawn ? (int)(pawn->angle >> 24) : 0;
+	const int x = pawn ? (int)(pawn->x >> 10) : 0;
+	const int y = pawn ? (int)(pawn->y >> 10) : 0;
+
+	static bool first = true;
+	static int lastVisor, lastMines, lastAmmo, lastHealth, lastMap, lastAngle, lastX, lastY;
+	if(first || visor != lastVisor || mines != lastMines || ammo != lastAmmo ||
+		health != lastHealth || map != lastMap || angle != lastAngle ||
+		x != lastX || y != lastY)
+	{
+		Printf("verbs tic=%lu visor=%d mines=%d map=%d ammo=%d health=%d x=%d y=%d angle=%d\n",
+			(unsigned long)g_ticCount, visor, mines, map, ammo, health, x, y, angle);
+		first = false;
+		lastVisor = visor; lastMines = mines; lastAmmo = ammo; lastHealth = health;
+		lastMap = map; lastAngle = angle; lastX = x; lastY = y;
+	}
+}
+
 void PerTic()
 {
 	if(!g_armed)
@@ -1090,6 +1142,7 @@ void PerTic()
 
 	TraceActors();
 	TracePlayers();
+	TraceVerbs();
 
 	// A tic-based quit keeps the determinism gate reproducible under the
 	// current wall-clock frame pacing, where the tic-per-frame ratio varies.

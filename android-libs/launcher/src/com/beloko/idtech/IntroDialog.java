@@ -16,10 +16,14 @@ public class IntroDialog {
 	public static void show(final Context ctx,String title,int textid)
 	{
 		final Dialog dialog = new Dialog(ctx);
+		DialogStyle.noTitleBar(dialog);
 		dialog.setContentView(R.layout.intro);
-		dialog.setTitle(title);
 		dialog.setCancelable(true);
-		//there are a lot of settings, for dialog, check them all out!
+		DialogStyle.frame(dialog, ctx);
+
+		final TextView heading = (TextView) dialog.findViewById(R.id.intro_title);
+		if (heading != null)
+			heading.setText(title);
 
 		//set up text
 		final TextView text = (TextView) dialog.findViewById(R.id.textView1);

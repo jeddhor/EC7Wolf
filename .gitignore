@@ -10,3 +10,11 @@ __pycache__/
 # PyInstaller output from installer/windows/build_setup.py
 /dist/
 /dist-win/
+
+# Fetched by tools/fetch_android_deps.sh; see docs/android.md.
+deps/SDL/
+deps/SDL_mixer/
+deps/SDL_net/
+deps/ogg/
+deps/vorbis/
+builds/ec7wolf-debug.keystore

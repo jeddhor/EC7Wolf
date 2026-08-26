@@ -16,11 +16,25 @@ add_library(touchcontrols SHARED
     WheelSelect.cpp
 )
 
-# Add -DUSE_GLES2 for OpenGLES 2
-target_compile_definitions(touchcontrols PRIVATE -DANDROID_NDK)
+# USE_GLES2 selects the shader path, and it is not optional here.
+#
+# Without it this library uses the OpenGL ES 1.x fixed-function pipeline --
+# glVertexPointer, glTranslatef, glEnable(GL_TEXTURE_2D) -- through
+# libGLESv1_CM. The engine's renderer creates an ES 3.0 context, and ES 3.0 is
+# backward compatible with ES 2.0 but not with ES 1.x: those entry points do
+# not exist in it. The result was a segmentation fault inside the first texture
+# load, which reads as a bug in the PNG loader and is nothing of the kind.
+target_compile_definitions(touchcontrols PRIVATE -DANDROID_NDK -DUSE_GLES2)
 
 target_include_directories(touchcontrols PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" "${LIBPNG_INCLUDE_DIR}")
 message("->${CMAKE_CURRENT_SOURCE_DIR} ->${LIBPNG_INCLUDE_DIR}")
 
-target_link_libraries(touchcontrols PUBLIC EGL GLESv1_CM log sigc++ TinyXML ${LIBPNG_LIBRARY})
+target_link_libraries(touchcontrols PUBLIC EGL GLESv2 log sigc++ TinyXML ${LIBPNG_LIBRARY})
  
+
+# A non-void function that falls off its end is undefined behaviour, and clang
+# compiles it to a trap. In this library that pattern was in thirteen places,
+# including every control's initGL, so building the touch overlay at all
+# crashed the moment the first control was created -- with a backtrace pointing
+# at _Unwind_Resume and the allocator, which is nowhere near the cause.
+target_compile_options(touchcontrols PRIVATE -Werror=return-type)

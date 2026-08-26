@@ -135,6 +135,10 @@
 #define LOOK_MODE_ABSOLUTE 1
 #define LOOK_MODE_JOYSTICK 2
 
-
-
-
+// Corridor 7's own verbs. They are given codes of their own rather than reusing
+// the RTCW ones because PORT_ACT_RELOAD is intercepted before it is dispatched
+// (it doubles as the precision-aim modifier), and there has never been an
+// action for the floor map at all.
+#define PORT_ACT_C7_VISOR     200
+#define PORT_ACT_C7_MINE      201
+#define PORT_ACT_C7_FLOORMAP  202

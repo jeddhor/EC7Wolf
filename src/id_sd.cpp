@@ -27,6 +27,12 @@
 //                      NeedsMusic - load music?
 //
 #include "wl_def.h"
+#ifdef _WIN32
+#include <direct.h>
+#define getcwd _getcwd
+#else
+#include <unistd.h>
+#endif
 #include <SDL_mixer.h>
 #include "w_wad.h"
 #include "zstring.h"
@@ -1614,10 +1620,37 @@ bool SD_StartMusicFile(const char *path)
 	musicFinished();
 	SDL_UnlockMutex(audioMutex);
 
-	music = Mix_LoadMUS(path);
+	// Absolute, always.
+	//
+	// Mix_LoadMUS goes through SDL_RWFromFile, and on Android a path that does
+	// not begin with '/' is not a filesystem path at all -- SDL hands it to the
+	// asset manager and looks inside the APK. The CD soundtrack lives beside the
+	// game data, which the engine reaches through a relative path, so every
+	// track failed to open with "Couldn't open './cdaudio/trackNN.ogg'" while
+	// the file sat there and the engine's own File class could see it perfectly
+	// well. Resolving here rather than at the call site because any future
+	// caller has the same problem.
+	FString resolved(path);
+	if (path[0] != '/'
+#ifdef _WIN32
+		&& !(path[0] != '\0' && path[1] == ':')
+#endif
+		)
+	{
+		char cwd[1024];
+		if (getcwd(cwd, sizeof(cwd)) != NULL)
+		{
+			const char *rel = path;
+			if (rel[0] == '.' && (rel[1] == '/' || rel[1] == '\\'))
+				rel += 2;
+			resolved.Format("%s/%s", cwd, rel);
+		}
+	}
+
+	music = Mix_LoadMUS(resolved);
 	if (music == NULL)
 	{
-		Printf("Unable to load music file %s: %s\n", path, Mix_GetError());
+		Printf("Unable to load music file %s: %s\n", resolved.GetChars(), Mix_GetError());
 		return false;
 	}
 

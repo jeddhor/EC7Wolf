@@ -28,6 +28,7 @@
 #include "wl_draw.h"
 #include "wl_game.h"
 #include "wl_net.h"
+#include "net_watchdog.h"
 #include "c7_menu.h"
 #include "wl_play.h"
 #include "wl_text.h"
@@ -547,6 +548,9 @@ MENU_LISTENER(StartMultiplayer)
 	// it, rather than in a game nobody joined.
 	if(!Net::Init(MultiplayerStatus))
 		return false;
+
+	// From here on a stall is a netgame stall, and worth being able to see.
+	NetWatch_Start();
 
 	// One map for everybody, and it is the host's. Net::NewGame exchanges the
 	// name and keeps the arbiter's, so a client deliberately names nothing

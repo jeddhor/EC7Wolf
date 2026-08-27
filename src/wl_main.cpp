@@ -48,6 +48,7 @@
 #include "wl_game.h"
 #include "wl_loadsave.h"
 #include "wl_net.h"
+#include "net_watchdog.h"
 #include "dobject.h"
 #include "colormatcher.h"
 #include "version.h"
@@ -618,6 +619,7 @@ static void InitGame()
 	// off it.
 	if(!Net::Init(DrawNetworkStatus))
 		Printf("Network game abandoned; starting single-player.\n");
+	NetWatch_Start();
 
 //
 // initialize the menusalcProjection
@@ -1234,6 +1236,12 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 			if(++i < argc)
 				Net::InitVars.port = atoi(argv[i]);
 		}
+		else IFARG("--netwatchdog")
+		{
+			// Says, every couple of seconds, which loop the game is in while
+			// the playsim is not advancing. For chasing a netgame that stops.
+			netwatchdog = true;
+		}
 		else IFARG("--net-delay")
 		{
 			// Tics of input delay; see docs/multiplayer.md. The setup menu
@@ -1363,6 +1371,7 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 			"                        (given in bytes, default: 2048 / (44100 / samplerate))\n"
 			" --host <number>        Sets up a network game with the given number of players.\n"
 			" --net-delay <tics>     Input delay for network play (0-32)\n"
+			" --netwatchdog          Report which loop a stalled netgame is in\n"
 			" --join <address>       Joins a network game coordinated by the given host.\n"
 			" --port <number>        Port number to use for network communications.\n"
 			" --battle               Player vs. player battle\n"

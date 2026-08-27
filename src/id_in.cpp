@@ -19,6 +19,7 @@
 
 
 #include "wl_def.h"
+#include "net_watchdog.h"
 #include "c_cvars.h"
 #include "id_sd.h"
 #include "id_in.h"
@@ -932,6 +933,7 @@ void IN_Ack (AckType type)
 
 	do
 	{
+		NetWatch("waiting for a keypress (IN_Ack)");
 		IN_WaitAndProcessEvents();
 	}
 	while(!IN_CheckAck ());
@@ -954,6 +956,7 @@ bool IN_UserInput(longword delay, AckType type)
 	IN_StartAck (type);
 	do
 	{
+		NetWatch("waiting for a keypress (IN_UserInput)");
 		IN_ProcessEvents();
 		if (IN_CheckAck())
 			return true;

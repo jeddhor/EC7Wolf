@@ -45,6 +45,7 @@
 #include "wl_menu.h"
 #include "wl_play.h"
 #include "wl_net.h"
+#include "net_watchdog.h"
 #include "m_swap.h"
 #include "m_random.h"
 #include "doomerrors.h"
@@ -500,6 +501,7 @@ static void ExchangePacket(T (&packets)[MAXPLAYERS])
 	unsigned int stuckFor = 0;
 	while(numAcked != InitVars.numPlayers || numReceived != InitVars.numPlayers)
 	{
+		NetWatch("net: exchanging a tic");
 		if(++stuckFor % 3000 == 0)
 		{
 			FString missing;
@@ -620,6 +622,7 @@ static void SendReliablePacket(T &packet)
 	bool waiting = false;
 	while(numAcked != InitVars.numPlayers)
 	{
+		NetWatch("net: waiting for an ack");
 		if(resend == 0)
 		{
 			for(unsigned int i = 0;i < InitVars.numPlayers;++i)
@@ -1347,6 +1350,7 @@ static void ExchangeDelayedTicCmds(TicCmdPacket (&packets)[MAXPLAYERS])
 	unsigned int stuckFor = 0;
 	for(;;)
 	{
+		NetWatch("net: assembling a delayed tic");
 		if(++stuckFor % 3000 == 0)
 		{
 			FString missing;

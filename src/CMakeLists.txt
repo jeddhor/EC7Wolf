@@ -161,6 +161,7 @@ initial_sources(
 	wl_loadsave.cpp
 	wl_main.cpp
 	wl_menu.cpp
+	net_watchdog.cpp
 	wl_net.cpp
 	wl_parallax.cpp
 	wl_play.cpp

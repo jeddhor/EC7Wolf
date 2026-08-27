@@ -29,6 +29,7 @@
 #include "wl_game.h"
 #include "wl_inter.h"
 #include "wl_net.h"
+#include "net_watchdog.h"
 #include "c7_automap.h"
 #include "c7_scoreboard.h"
 #include "c7_cdaudio.h"
@@ -1457,6 +1458,7 @@ void PlayLoop (void)
 
 	do
 	{
+		NetWatch("playing");
 		ProcessEvents();
 
 //

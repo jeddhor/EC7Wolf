@@ -752,6 +752,44 @@ The typing faults are verified on a device, because the desktop cannot
 reproduce them: `xdotool` with no delay still spreads its key events over
 several frames, so a check written for it passed against deliberately broken
 code -- and a check that cannot fail is worse than none.
+### Finding a netgame that stops
+
+A netgame that freezes used to say almost nothing. The waits announce
+themselves -- `Waiting 3s for tic 225 from player 2` -- but that names only
+the machine that went quiet, never what the quiet one is doing, and it goes to
+stdout, which a game launched from a desktop icon does not have.
+
+Chasing one of these by hand cost an afternoon and did not find it. What the
+evidence did establish, from a frozen tablet, was worth writing down:
+
+* the process was at **96.8% CPU** -- spinning, not blocked;
+* its UDP socket had **230,400 bytes unread and 120,249 drops** -- it was
+  being sent to and was not reading.
+
+That last one narrows things more than it looks. Every network wait in this
+engine -- `ExchangePacket`, `ExchangeDelayedTicCmds`, `SendReliablePacket`,
+`CheckAck` -- drains the socket on every pass. A receive queue that fills means
+the stuck machine is in **none** of them: it left the game loop and is spinning
+somewhere that does no networking at all, which is most of the engine.
+
+So `--netwatchdog` exists. Loops that can run long name themselves through
+`NetWatch()`, and a thread reports the current one every two seconds for as
+long as the playsim is not advancing:
+
+```
+NETWATCH: playsim has not advanced for 52s -- in 'net: exchanging a tic', which is spinning (tic=0)
+NETWATCH: playsim has not advanced for 52s -- in 'in a menu', which is spinning (tic=0)
+```
+
+Those two lines are one deadlock, read from both ends: a host waiting for a tic
+from a player who joined and then sat in the menus, which is a real fault and
+was found by turning this on. `spinning` and `stuck` are distinguished because
+they want different answers -- a loop that will not exit is not a loop that has
+stopped being run.
+
+It is off unless asked for, costs a string assignment and an increment per
+iteration when on, and goes through `Printf`, so on Android it lands in logcat
+and the argument goes in the launcher's Args box like any other.
 
 ---
 

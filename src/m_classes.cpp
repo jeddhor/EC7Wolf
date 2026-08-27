@@ -3,6 +3,7 @@
 #include "c7_menu.h"
 #include "id_ca.h"
 #include "wl_def.h"
+#include "net_watchdog.h"
 #include "wl_menu.h"
 #include "wl_play.h"
 #include "id_sd.h"
@@ -979,6 +980,7 @@ int Menu::handle()
 
 	do
 	{
+		NetWatch("in a menu");
 		//
 		// CHANGE GUN SHAPE
 		//

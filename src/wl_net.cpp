@@ -322,6 +322,80 @@ static int FindClient(IPaddress address)
 	return -1;
 }
 
+// A peer silent for this long is treated as gone. Long enough that a hitch, a
+// level load on a slow phone or a moment of bad wifi does not end the match;
+// short enough that nobody sits in front of a frozen screen wondering whether
+// waiting is going to help. It was infinite before, which is the wrong answer
+// to every one of those.
+#define NET_PEER_TIMEOUT_MS 15000
+
+static FString AbortReason;
+
+bool Abandoned()
+{
+	return !AbortReason.IsEmpty();
+}
+
+const char *AbandonedReason()
+{
+	return AbortReason.GetChars();
+}
+
+void ClearAbandoned()
+{
+	AbortReason = "";
+}
+
+// Writes off whoever has gone quiet and takes this machine out of the game.
+//
+// Dropping one player and playing on is the thing that cannot be done safely:
+// every machine would have to drop them in the same tic or the simulations
+// diverge. Ending the match needs no such agreement -- everyone still here is
+// waiting on the same missing player and will reach the same conclusion within
+// a second of each other -- so that is what happens.
+static void Abandon(const bool have[MAXPLAYERS])
+{
+	FString missing;
+	for(unsigned int i = 0;i < InitVars.numPlayers;++i)
+	{
+		if(i == (unsigned)ConsolePlayer || (have != NULL && have[i]))
+			continue;
+		if(!missing.IsEmpty())
+			missing += ", ";
+		missing.AppendFormat("Player %u", i + 1);
+	}
+	if(missing.IsEmpty())
+		missing = "The other player";
+
+	AbortReason.Format("%s left the game.", missing.GetChars());
+	Printf("%s Ending the match.\n", AbortReason.GetChars());
+
+	// Say goodbye without waiting to be thanked for it. A reliable send here
+	// would be one more thing to hang on, and the far end is working out the
+	// same thing about us at the same moment.
+	if(Socket != NULL)
+	{
+		EndGamePacket bye;
+		bye.type = EndGamePacket::Type;
+		bye.TimeCount = gamestate.TimeCount;
+		bye.ByteSwap();
+		UDPpacket out = { -1, (Uint8*)&bye, sizeof(bye), sizeof(bye), 0 };
+		for(unsigned int i = 0;i < InitVars.numPlayers;++i)
+		{
+			if(i == (unsigned)ConsolePlayer)
+				continue;
+			out.address = Client[i].address;
+			for(int n = 0;n < 3;++n)
+				SDLNet_UDP_Send(Socket, -1, &out);
+		}
+	}
+
+	// Back to single player before anything else can start a fresh wait on a
+	// socket nobody is answering.
+	InitVars.mode = MODE_SinglePlayer;
+	playstate = ex_abort;
+}
+
 static void DoEndGame()
 {
 	playstate = ex_died;
@@ -499,9 +573,15 @@ static void ExchangePacket(T (&packets)[MAXPLAYERS])
 	// matter, because they fail for different reasons -- a missing ack means
 	// our packet is not arriving, a missing packet means theirs is not.
 	unsigned int stuckFor = 0;
+	const uint32_t waitBegan = SDL_GetTicks();
 	while(numAcked != InitVars.numPlayers || numReceived != InitVars.numPlayers)
 	{
 		NetWatch("net: exchanging a tic");
+		if(SDL_GetTicks() - waitBegan > NET_PEER_TIMEOUT_MS)
+		{
+			Abandon(received);
+			return;
+		}
 		if(++stuckFor % 3000 == 0)
 		{
 			FString missing;
@@ -620,9 +700,15 @@ static void SendReliablePacket(T &packet)
 	// resend our packet in case it got lost.
 	unsigned int resend = 0;
 	bool waiting = false;
+	const uint32_t waitBegan = SDL_GetTicks();
 	while(numAcked != InitVars.numPlayers)
 	{
 		NetWatch("net: waiting for an ack");
+		if(SDL_GetTicks() - waitBegan > NET_PEER_TIMEOUT_MS)
+		{
+			Abandon(acked);
+			return;
+		}
 		if(resend == 0)
 		{
 			for(unsigned int i = 0;i < InitVars.numPlayers;++i)
@@ -1348,9 +1434,15 @@ static void ExchangeDelayedTicCmds(TicCmdPacket (&packets)[MAXPLAYERS])
 	// take in the same tic or they diverge -- but a game that has stopped
 	// should at least say what it has stopped on.
 	unsigned int stuckFor = 0;
+	const uint32_t waitBegan = SDL_GetTicks();
 	for(;;)
 	{
 		NetWatch("net: assembling a delayed tic");
+		if(SDL_GetTicks() - waitBegan > NET_PEER_TIMEOUT_MS)
+		{
+			Abandon(have);
+			return;
+		}
 		if(++stuckFor % 3000 == 0)
 		{
 			FString missing;
@@ -1429,7 +1521,21 @@ void PollControls()
 	ticcmdData.controlstrafe = control[ConsolePlayer].controlstrafe;
 	assert(sizeof(control[ConsolePlayer].buttonstate) == sizeof(ticcmdData.buttonstate));
 	memcpy(ticcmdData.buttonstate, control[ConsolePlayer].buttonstate, sizeof(control[ConsolePlayer].buttonstate));
-	memcpy(ticcmdData.buttonheld, control[ConsolePlayer].buttonheld, sizeof(control[ConsolePlayer].buttonheld));
+
+	// buttonheld is "the same button, last tic", and it is what stops a held
+	// button counting as a fresh press over and over. It cannot be read from
+	// control[] here: with input delay, ::PollControls below overwrites the
+	// local player's buttonstate with a command from ticDelay tics ago, and
+	// wl_play's PollControls then derives buttonheld from *that*. So for the
+	// whole width of the delay window, every tic of a genuine hold looked like
+	// a new press -- one tap of the visor cycled it eleven times, which is the
+	// palette lurching through night vision and infrared and back.
+	//
+	// The edge has to be measured against the raw input of the previous tic,
+	// which is exactly what was sent last time, so keep that instead.
+	static byte lastSentButtons[NUMBUTTONS] = { 0 };
+	memcpy(ticcmdData.buttonheld, lastSentButtons, sizeof(ticcmdData.buttonheld));
+	memcpy(lastSentButtons, ticcmdData.buttonstate, sizeof(lastSentButtons));
 
 	if(InitVars.ticDelay == 0)
 	{

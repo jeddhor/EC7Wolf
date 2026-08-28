@@ -790,6 +790,58 @@ stopped being run.
 It is off unless asked for, costs a string assignment and an increment per
 iteration when on, and goes through `Printf`, so on Android it lands in logcat
 and the argument goes in the launcher's Args box like any other.
+### A held button counted as a new press, once per tic
+
+Reported as the visor: one tap of Enter, or of the visor button on a phone,
+and the palette lurched through night vision and infrared and back -- as if
+the key were being hit over and over. It was.
+
+`buttonheld` is "the same button, last tic", and every edge-triggered verb in
+the game reads it: the visor, the floor map, the automap, pause. wl_play's
+`PollControls` maintains it the obvious way, by copying buttonstate before
+rebuilding it from input -- but with input delay, `Net::PollControls` has by
+then overwritten the local player's buttonstate with a command from ticDelay
+tics ago. So the value being copied was not what the player had pressed last
+tic; it was what they had pressed eleven tics ago, which for the whole width
+of the delay window is "nothing". Every tic of a genuine hold looked like a
+fresh press.
+
+Single player never saw it, because there is no delay window there.
+
+The edge is now measured against the raw input actually sent last tic, which
+the network path already has to hand. Measured with `--capture-verbs`: a 400ms
+hold of the visor key, about twenty-eight tics, advances the visor exactly
+once.
+
+### A player who vanishes ends the match, instead of stopping it
+
+Every wait here was infinite. Lose a peer -- host closes the window, phone
+drops off wifi, process killed -- and the survivors sat drawing their last
+frame with no message and no way out, which is what "both games froze" turned
+out to mean more than once.
+
+A peer silent for fifteen seconds is now written off:
+
+```
+NETWATCH: playsim has not advanced for 14s -- in 'net: assembling a delayed tic', which is spinning
+Player 1 left the game. Ending the match.
+```
+
+and the player is told so on screen before being returned to the menu, on a
+timer rather than a keypress, because the machine most likely to be reading it
+is a phone with no keyboard.
+
+Dropping one player and playing on is the thing that cannot be done safely:
+every machine would have to drop them in the same tic or the simulations
+diverge. Ending the match needs no such agreement -- everyone still present is
+waiting on the same missing player and reaches the same conclusion within a
+second or so -- so that is what happens. The goodbye packet is sent three times
+and not waited on, because a reliable send there would be one more thing to
+hang on.
+
+Fifteen seconds is long enough to survive a hitch, a level load on a slow
+phone, or a moment of bad wifi, and short enough that nobody sits in front of a
+frozen screen wondering whether waiting will help.
 
 ---
 

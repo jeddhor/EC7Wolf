@@ -847,6 +847,19 @@ restartgame:
 
 		PlayLoop ();
 
+		// A netgame that ended because somebody vanished says so, rather than
+		// dropping the player back at the menu with no explanation -- or, as it
+		// did before there was a timeout at all, not dropping them anywhere.
+		// Timed, because the one machine guaranteed to be reading this is a
+		// phone with no keyboard.
+		if(Net::Abandoned())
+		{
+			Message(Net::AbandonedReason());
+			IN_UserInput(4*TICRATE, ACK_Local);
+			Net::ClearAbandoned();
+			VW_FadeOut();
+		}
+
 		if(playstate == ex_victorious)
 		{
 			if(gameinfo.VictoryPic.IsNotEmpty())

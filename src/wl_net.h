@@ -120,6 +120,12 @@ struct NetInit
 
 extern NetInit InitVars;
 
+// True once a peer has been written off and the match ended for that reason;
+// the string says who, for showing to the player.
+bool Abandoned();
+const char *AbandonedReason();
+void ClearAbandoned();
+
 bool IsArbiter();
 bool IsBlocked();
 void BlockPlaysim();

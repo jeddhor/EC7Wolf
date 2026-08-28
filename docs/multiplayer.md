@@ -842,6 +842,42 @@ hang on.
 Fifteen seconds is long enough to survive a hitch, a level load on a slow
 phone, or a moment of bad wifi, and short enough that nobody sits in front of a
 frozen screen wondering whether waiting will help.
+### Watching the other player: tools/make_corridor7_mp_lab.py
+
+Everything about a player that only the *other* machines can see -- the walk
+cycle, the sprite rotations, how tall the thing looks -- is untestable on a
+released arena, because the arenas are the one place deliberately built to keep
+players apart. `GenerateDeathmatchStarts` spawns each player at the open tile
+farthest from everyone else, so the two of them begin at opposite ends and a
+tester spends their time navigating.
+
+The lab is an east-west corridor with one player start at the west end. Played
+*cooperative* rather than battle -- the deathmatch spawner being the thing
+avoided -- both players begin on the same tile facing the same way, so one can
+walk east while the other stands still and watches it recede, centred and in
+the open.
+
+A square room was tried first and is worse: every wall of an empty room looks
+identical, so a screenshot cannot tell you which way you are facing and finding
+the other player means sweeping blindly and hoping. Two attempts were wasted
+on that before the corridor.
+
+`--capture-players` now prints each pawn's sprite and frame letter as well as
+its position, which is what actually settled the walk cycle. Squinting at a
+figure thirty pixels tall is not evidence; `MARN A` for two thousand tics is.
+
+### The walk cycle ran at half the speed the player moves
+
+Reported as "the characters look like they're sliding along the floor, not
+walking". The animation was playing -- the trace shows a clean
+A-B-C-D-E-A-B-C while walking and a return to A on stopping -- but at twelve
+tics a frame, a sixty-tic stride.
+
+Durations in these definitions are 35Hz tics and the engine runs at 70, so the
+`6` copied from the aliens meant twelve. That is fine for an alien; a player
+covers ground several times faster, and the legs could not keep up with the
+movement, which is exactly what sliding looks like. Halved to `3` -- six tics a
+frame, a thirty-tic stride -- and confirmed from the trace.
 
 ---
 

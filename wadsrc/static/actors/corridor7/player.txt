@@ -82,7 +82,14 @@ actor C7Player : PlayerPawn
 			MARN A -1
 			stop
 		See:
-			MARN ABCDE 6
+			// Three, not six. Durations here are in 35Hz tics and the engine
+			// runs at 70, so this is six tics a frame and a thirty-tic stride.
+			// At six it was a sixty-tic stride, and a player covers ground far
+			// faster than the aliens these numbers were copied from: the legs
+			// could not keep up with the movement and the marine appeared to
+			// slide along the floor rather than walk. Measured from
+			// --capture-players, which prints the sprite frame each tic.
+			MARN ABCDE 3
 			loop
 		Missile:
 			MARN NOP 6 bright
@@ -142,7 +149,9 @@ actor C7AlienPlayer : C7Player
 			EITK A -1
 			stop
 		See:
-			EITK ABCD 6
+			// As the marine above: halved so the stride matches how fast a
+			// player actually moves.
+			EITK ABCD 3
 			loop
 		Missile:
 			C634 A 3

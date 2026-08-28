@@ -239,7 +239,21 @@ namespace
 		{
 			if(players[i].mo == NULL)
 				continue;
-			fprintf(g_playerFile, "%lu %u %d %d %u %d %d %u %d %s %d %d\n",
+			// The sprite and frame letter matter for the one thing about a
+			// player that only the other machines can see: whether the walk
+			// cycle is running. Standing in front of another player and
+			// squinting is a poor instrument -- the sprite is thirty pixels
+			// tall at any sensible distance -- and this says MARN A or MARN C
+			// outright.
+			char sprite[5] = "----";
+			char frameLetter = '-';
+			if(players[i].mo->state != NULL)
+			{
+				memcpy(sprite, players[i].mo->state->sprite, 4);
+				sprite[4] = '\0';
+				frameLetter = (char)('A' + players[i].mo->state->frame);
+			}
+			fprintf(g_playerFile, "%lu %u %d %d %u %d %d %u %d %s %d %d %s %c\n",
 				(unsigned long)g_ticCount, i,
 				players[i].mo->tilex, players[i].mo->tiley,
 				(unsigned)(players[i].mo->angle/ANGLE_1),
@@ -248,7 +262,8 @@ namespace
 				(unsigned)Net::PlayerTeam(i),
 				Net::TeamFrags(Net::PlayerTeam(i)),
 				players[i].mo->GetClass()->GetName().GetChars(),
-				players[i].mo->x, players[i].mo->y);
+				players[i].mo->x, players[i].mo->y,
+				sprite, frameLetter);
 		}
 	}
 

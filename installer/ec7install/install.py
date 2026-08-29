@@ -128,6 +128,34 @@ class Staging:
     def files(self) -> list[str]:
         return sorted(set(self._files))
 
+    def adopt(self, relative: str, reporter: Reporter) -> bool:
+        """Take one file from the install being replaced, if it is sound.
+
+        Used for the CD media. Ripping the soundtrack is the longest step after
+        the compile and pulling the cinematics off a disc image is not quick
+        either, and both produce byte-for-byte the same files every time --
+        so upgrading from one beta to the next spent minutes redoing work whose
+        result was already sitting in the folder.
+
+        Unlike carry_over this runs *before* the work it is meant to avoid,
+        which is the whole point, and it is a copy rather than a move: the old
+        install stays intact until commit, so a failure costs nothing.
+        """
+        source = self.destination / relative
+        target = self.path / relative
+        if target.exists() or not source.is_file():
+            return False
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+        except OSError as error:
+            # Not fatal: the worst case is that the file gets made again, which
+            # is exactly what would have happened without this.
+            reporter.detail(f"could not reuse {relative}: {error}")
+            return False
+        self.note(relative)
+        return True
+
     def carry_over(self, reporter: Reporter) -> list[str]:
         """Bring the player's own files forward from an install being replaced.
 

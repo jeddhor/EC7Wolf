@@ -25,6 +25,17 @@ class Problem:
         return f"{self.path}: {self.message}"
 
 
+def flic_problem(path: Path) -> str | None:
+    """None if this is a playable cinematic, else why not.
+
+    Public because the installer checks a cinematic before reusing one from an
+    install it is replacing, and that has to be the same test the verifier
+    applies afterwards -- otherwise a file could be adopted here and condemned
+    twenty seconds later.
+    """
+    return _check_flic(path)
+
+
 def _check_flic(path: Path) -> str | None:
     """None if this is a playable cinematic, else why not."""
     try:

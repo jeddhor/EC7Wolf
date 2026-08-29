@@ -905,8 +905,6 @@ static void DemoLoop()
 	if (!param_nowait && (IWad::GetGame().Flags & IWad::REGISTERED))
 		NonShareware();
 
-	StartCPMusic(gameinfo.TitleMusic);
-
 	if (!param_nowait)
 		PG13 ();
 
@@ -925,6 +923,13 @@ static void DemoLoop()
 			C7Flic_Play("SEQONE");
 			C7Flic_Play("SEQTHREE");
 		}
+
+		// After the cinematics, not before them. The title theme is a
+		// minute and six seconds of music for the title and credit pages;
+		// starting it here used to mean it played under the Capstone logo
+		// and the story cinematic, over their own dialogue, from the moment
+		// the game opened.
+		StartCPMusic(gameinfo.TitleMusic);
 
 		while(!param_nowait && ShowIntermission(demoLoop, true))
 		{
@@ -954,10 +959,13 @@ static void DemoLoop()
 			if(GameLoop ())
 				gotoMenu = true;
 
-			if(!param_nowait && !gotoMenu)
-			{
-				StartCPMusic(gameinfo.TitleMusic);
-			}
+			// The floor's song does not follow the player out of the game.
+			// StopMusic deliberately leaves the disc alone -- it has to, or
+			// opening the control panel would restart the soundtrack every
+			// time -- so leaving the game is the one place that has to say so
+			// outright. Without this the level's track played on underneath
+			// the menu, and then underneath the next game's.
+			C7CD::Stop();
 		}
 	}
 }

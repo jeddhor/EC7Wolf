@@ -512,6 +512,15 @@ Point the installer at the same folder and it offers two things: **reinstall**
 There is deliberately no separate "upgrade" or "repair" — this installer always
 writes everything, so those would be the same action under three names.
 
+**It does not rip the CD twice.** The soundtrack and the cinematics come off
+the disc identically every time, so a reinstall keeps the copies already in the
+folder and spends its time on the engine instead — seconds rather than minutes.
+Each file is checked before it is trusted, with the same tests the installer
+applies at the end, so a truncated one from an interrupted run is made again
+rather than carried forward. `--refresh-media` does them over regardless, for
+the case that check cannot see: media that is intact but came from the wrong
+disc.
+
 ---
 
 ### 2 · Precompiled binaries

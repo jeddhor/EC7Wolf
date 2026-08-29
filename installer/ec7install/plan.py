@@ -60,7 +60,7 @@ class InstallPlan:
     def __init__(self, repo_root: Path, source, destination: Path,
                  with_music: bool = True, with_video: bool = True,
                  menu_shortcut: bool = True, desktop_shortcut: bool = True,
-                 classic_controls: bool = False,
+                 classic_controls: bool = False, refresh_media: bool = False,
                  build_dir: Path | None = None, engine: build.Engine | None = None,
                  jobs: int | None = None):
         self.repo_root = Path(repo_root)
@@ -71,6 +71,10 @@ class InstallPlan:
         self.menu_shortcut = menu_shortcut
         self.desktop_shortcut = desktop_shortcut
         self.classic_controls = classic_controls
+        # Rip and extract even when the folder already holds good copies. For
+        # the case the reuse cannot detect: media that is intact but wrong,
+        # such as a soundtrack ripped from a different pressing.
+        self.refresh_media = refresh_media
         self.build_dir = Path(build_dir) if build_dir else \
             self.destination.parent / ".ec7wolf-build"
         # Encoded music, kept only while it is worth keeping: a failed or
@@ -83,6 +87,53 @@ class InstallPlan:
         self.jobs = jobs
 
     # -- planning ----------------------------------------------------------
+
+    def _reuse_media(self, staging, reporter) -> tuple[set[str], set[str]]:
+        """Adopt the CD media an existing install already holds.
+
+        Returns the relative paths taken, so the steps that would otherwise
+        produce them can skip the ones already in hand.
+
+        Each file is checked before it is trusted, with the same tests the
+        verifier applies afterwards -- a cinematic has to have a FLIC header
+        that agrees with its size, a track has to be big enough to be music.
+        A truncated file from an interrupted run is worth less than nothing:
+        it would be adopted, pass through the install, and fail at the point
+        where the player pressed New Mission.
+        """
+        video: set[str] = set()
+        music: set[str] = set()
+        if self.refresh_media or not self.destination.is_dir():
+            return video, music
+
+        if self.with_video:
+            for name in install.CINEMATICS:
+                existing = self.destination / "video" / name
+                if not existing.is_file() or verify.flic_problem(existing):
+                    continue
+                if staging.adopt(f"video/{name}", reporter):
+                    video.add(f"video/{name}")
+
+        if self.with_music:
+            source_dir = self.destination / "cdaudio"
+            if source_dir.is_dir():
+                for existing in sorted(source_dir.glob("track*.ogg")):
+                    # The same floor the verifier uses: anything smaller than
+                    # this is a stub, not a song.
+                    if existing.stat().st_size < 4096:
+                        continue
+                    if staging.adopt(f"cdaudio/{existing.name}", reporter):
+                        music.add(f"cdaudio/{existing.name}")
+
+        if video or music:
+            parts = []
+            if video:
+                parts.append(f"{len(video)} cinematic(s)")
+            if music:
+                parts.append(f"{len(music)} soundtrack file(s)")
+            reporter.step("Keeping the CD media already installed",
+                          ", ".join(parts))
+        return video, music
 
     def steps(self) -> list[str]:
         names = []
@@ -170,12 +221,22 @@ class InstallPlan:
             reporter.progress(done / total)
 
             # --- the cinematics
+            # Anything the folder being replaced already has, and that is
+            # still good, is taken rather than made again. Both of these come
+            # off the disc identically every time, so on an upgrade this turns
+            # the two slowest steps after the compile into a file copy.
+            reused_video, reused_music = self._reuse_media(staging, reporter)
+
             if self.with_video:
                 reporter.step("Extracting the cinematics")
                 available = self.source.list()
                 found = 0
                 for index, name in enumerate(install.CINEMATICS):
                     reporter.check_cancelled()
+                    if f"video/{name}" in reused_video:
+                        found += 1
+                        scoped("video").progress((index + 1) / len(install.CINEMATICS))
+                        continue
                     if name not in available:
                         reporter.warn(
                             f"{name} is not on this source; the cinematics only "

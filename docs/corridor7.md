@@ -461,3 +461,55 @@ on two released maps and has no observed runtime effect. Original demos,
 network protocol, multiplayer rules, and other executable editions are
 deferred. Support is limited to the supplied 250,776-byte CD/Steam executable
 family.
+
+## The songs outside a level
+
+Level music comes from the exact 36-entry schedule at `4557:0bd0`, and has
+since that table was read out of the executable. Everything *else* -- the
+title pages, the menu, the intermission, the high-score page -- pointed at
+`C7MUS00`, all five of them, which is a placeholder rather than a finding.
+
+The archive holds thirty-four songs. Measured out of AUDIOT by summing the
+IMF delays at 700Hz:
+
+| lump | seconds |
+| --- | --- |
+| C7MUS00 | 65.8 |
+| C7MUS19 | 16.5 |
+| C7MUS21 | 13.7 |
+| C7MUS03 | 21.9 |
+| (thirty others) | 30 – 173 |
+
+C7MUS00 at 65.8 seconds is the minute-and-six title theme, and C7MUS19 at
+16.5 is the seventeen-second menu loop -- the only song anywhere near that
+length. The menu now plays it.
+
+The title theme also started too early: before the Capstone logo and the story
+cinematic rather than after them, so it played over their own dialogue from the
+moment the game opened. It begins with the title pages now, which is what a
+minute of music for a credits loop is for.
+
+**Intermission, victory and high-score music are still `C7MUS00`.** Not because
+that is right but because nothing has been measured that says otherwise, and a
+guess dressed as a finding is worse than a placeholder that is known to be one.
+
+### On a CD there is no menu music, and that is correct
+
+The song-start routine at `19f8:2769` has its whole body wrapped in
+`if(cd_present == 0)`. With a disc in the drive the title, menu, intermission
+and high-score songs simply do not play -- the routine returns immediately. The
+CDPlay table has five entries, one zeroed and four real ones, and those four
+are the in-game songs on physical tracks 3, 5, 7 and 9.
+
+So silence in the menu under CD audio is the original's behaviour, not a gap.
+The short even-numbered tracks between the songs (six to eight seconds, track 2
+among them) are lead-ins to the song that follows, not menu music.
+
+### The floor's song does not follow you out
+
+`StopMusic` deliberately leaves the disc playing: the soundtrack runs straight
+through a floor change, the control panel and the pause key, and stopping it
+there would restart the playlist every time somebody opened a menu. Leaving the
+game entirely is the one place that has to say so outright, and did not -- so a
+level's track played on underneath the menu, and then underneath the next
+game's.

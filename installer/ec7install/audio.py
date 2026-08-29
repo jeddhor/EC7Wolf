@@ -71,6 +71,15 @@ def rip(source, destination: Path, reporter: Reporter,
             name = f"track{track.number:02d}.ogg"
             out = destination / name
 
+            # Already here -- adopted from the install being replaced, most
+            # likely. Encoding it again would produce the same bytes and cost
+            # the better part of a minute.
+            if out.is_file() and out.stat().st_size >= 4096:
+                reporter.detail(f"track {track.number:02d}: already installed")
+                written.append(out)
+                reporter.progress((index + 1) / len(wanted))
+                continue
+
             kept = cache / name if cache is not None else None
             if kept is not None and kept.is_file() and kept.stat().st_size > 0:
                 reporter.detail(f"track {track.number:02d}: already encoded")

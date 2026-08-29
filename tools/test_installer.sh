@@ -179,6 +179,62 @@ grep -q "Cinematics: 3 of 3" "$run_log" || {
 }
 printf '  the installed game starts, and finds its music and cinematics\n'
 
+# --- installing again over the top does not redo the CD media ---------------
+#
+# Ripping the soundtrack is the longest step after the compile, and it and the
+# cinematics come off the disc identically every time -- so upgrading from one
+# beta to the next used to spend minutes reproducing files already in the
+# folder. Timed rather than read off a log line: the point is the work not
+# happening, and a message can be printed by a step that goes on to do the work
+# regardless.
+#
+# The cache is removed first, because the cache already made a *second* attempt
+# quick. What is being tested is the install itself being the source, which is
+# the case a player upgrading actually has.
+rm -rf "$work"/.ec7wolf-cache "$destination/../.ec7wolf-cache"
+tracks_before=$(cd "$destination/cdaudio" && ls -l track*.ogg | awk '{print $5,$9}' | sort)
+began=$(date +%s)
+HOME="$fake_home" "$installer" --source "$disc" --dest "$destination" \
+	--log "$work/again.log" >"$work/again.txt" 2>&1 || {
+	printf 'FAIL: installing again over the top failed\n' >&2
+	tail -30 "$work/again.txt" >&2
+	exit 1
+}
+elapsed=$(( $(date +%s) - began ))
+[ "$elapsed" -lt 20 ] || {
+	printf 'FAIL: the second install took %ss; the media was made again\n' "$elapsed" >&2
+	exit 1
+}
+tracks_after=$(cd "$destination/cdaudio" && ls -l track*.ogg | awk '{print $5,$9}' | sort)
+[ "$tracks_before" = "$tracks_after" ] || {
+	printf 'FAIL: the soundtrack changed across a reinstall\n' >&2
+	exit 1
+}
+[ -f "$destination/video/SEQFOUR.CO7" ] || {
+	printf 'FAIL: the cinematics did not survive the reinstall\n' >&2
+	exit 1
+}
+printf '  installing again took %ss and kept the CD media\n' "$elapsed"
+
+# Damaged media must be made again rather than adopted: it would pass through
+# the install and fail in front of the player at New Mission.
+printf 'rubbish' > "$destination/video/SEQONE.CO7"
+printf 'x' > "$destination/cdaudio/track03.ogg"
+HOME="$fake_home" "$installer" --source "$disc" --dest "$destination" \
+	--log "$work/repair.log" >"$work/repair.txt" 2>&1 || {
+	printf 'FAIL: the repairing install failed\n' >&2
+	tail -30 "$work/repair.txt" >&2
+	exit 1
+}
+seq_size=$(stat -c %s "$destination/video/SEQONE.CO7")
+trk_size=$(stat -c %s "$destination/cdaudio/track03.ogg")
+[ "$seq_size" -gt 4096 ] && [ "$trk_size" -gt 4096 ] || {
+	printf 'FAIL: damaged media was adopted (SEQONE %s, track03 %s)\n' \
+		"$seq_size" "$trk_size" >&2
+	exit 1
+}
+printf '  damaged media was made again, not adopted\n'
+
 # Shortcuts went into the throwaway home, and the uninstaller takes back
 # everything it made.
 shortcuts=$(find "$fake_home" -name "*.desktop" | wc -l | tr -d ' ')

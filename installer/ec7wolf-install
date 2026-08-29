@@ -61,6 +61,10 @@ def main() -> int:
                         help="skip ripping the CD soundtrack")
     parser.add_argument("--no-video", action="store_true",
                         help="skip extracting the cinematics")
+    parser.add_argument("--refresh-media", action="store_true",
+                        help="rip the soundtrack and extract the cinematics "
+                             "again even if the folder being replaced already "
+                             "has good copies")
     parser.add_argument("--classic-controls", action="store_true",
                         help="set up the original's controls (arrows to move, "
                              "Space to use) instead of the modern default "
@@ -132,7 +136,8 @@ def main() -> int:
                 with_music=not args.no_music, with_video=not args.no_video,
                 menu_shortcut=not args.no_menu_shortcut,
                 desktop_shortcut=not args.no_desktop_shortcut,
-            classic_controls=args.classic_controls,
+                classic_controls=args.classic_controls,
+                refresh_media=args.refresh_media,
                 build_dir=args.build_dir, engine=engine, jobs=args.jobs)
 
             problem = job.check_space()

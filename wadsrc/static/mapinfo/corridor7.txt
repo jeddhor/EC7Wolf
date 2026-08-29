@@ -10,7 +10,13 @@ gameinfo
 	titlepage = "C7G0005"
 	titletime = 6
 	titlemusic = "C7MUS00"
-	menumusic = "C7MUS00"
+	// C7MUS19, not the title theme. The archive holds thirty-four songs
+	// and every one of these entries pointed at the first of them, so
+	// the menu, the title pages and the intermission all played the
+	// same piece. Measured out of AUDIOT: C7MUS00 runs 65.8s and
+	// C7MUS19 runs 16.5s -- the minute-and-six title theme and the
+	// seventeen-second menu loop the game is remembered as having.
+	menumusic = "C7MUS19"
 	intermissionmusic = "C7MUS00"
 	victorymusic = "C7MUS00"
 	scoresmusic = "C7MUS00"

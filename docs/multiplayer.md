@@ -878,6 +878,34 @@ Durations in these definitions are 35Hz tics and the engine runs at 70, so the
 covers ground several times faster, and the legs could not keep up with the
 movement, which is exactly what sliding looks like. Halved to `3` -- six tics a
 frame, a thirty-tic stride -- and confirmed from the trace.
+### The marine is not too tall (measured)
+
+Reported as looking too tall next to the aliens. He is not: measured out of
+GFXTILES, the marine occupies **56 of the 64 rows** in his cell, which is the
+exact median of all 858 sprites in the game and **shorter than most aliens**.
+
+| actor | rows used |
+| --- | --- |
+| Semaj | 10 |
+| Probe Eye | 22 |
+| Nerraw | 31 |
+| Rodex | 43 |
+| Eitak | 52 |
+| **marine** | **56** |
+| Bandor | 56 |
+| Tebazile | 59 |
+| Ttocs | 61 |
+| Eniram, Solrac, Tymok | 62 |
+| Organic Eye, Tenaj, Otrebor, Eniram Boss, Mechanoid | 64 |
+
+He is the same height as the Bandor to the row, and eight rows shorter than the
+five that fill their cells. The comparison that prompted the report was with
+Doom, whose player sprite is drawn much smaller against a taller world; against
+Corridor 7's own cast he is unremarkable.
+
+Worth keeping because it cost a measurement to settle and would otherwise be
+re-litigated on sight. The numbers come from decoding the sprite cells with
+`tools/c7assets.py`'s decoder and counting rows with any opaque pixel.
 
 ---
 

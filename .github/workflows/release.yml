@@ -285,9 +285,10 @@ jobs:
           it needs nothing installed, and it takes the game's data, soundtrack
           and cinematics off your CD for you.
 
-          **On Linux, take `…-linux-x64-full.tar.gz`** (or `-arm64-` on a
-          Raspberry Pi or other aarch64 machine). It has the engine and the
-          installer together.
+          **On Linux, take `…-linux-x64-full.tar.gz`.** It has the engine and
+          the installer together. Take **`-arm64-`** instead on aarch64: a
+          Raspberry Pi, an Odroid, or a Linux handheld such as a Retroid Pocket
+          running Rocknix. Those builds are native, not emulated.
 
           **On Android, take `…-android.apk`.** Sideload it, then hand it a zip
           of your game files — or the CD image itself, which is the only way to

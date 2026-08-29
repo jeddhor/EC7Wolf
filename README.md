@@ -516,7 +516,10 @@ writes everything, so those would be the same action under three names.
 
 ### 2 · Precompiled binaries
 
-From the [releases page](https://github.com/jeddhor/EC7Wolf/releases):
+From the [releases page](https://github.com/jeddhor/EC7Wolf/releases). The
+**arm64** builds are native, not emulated, and are the ones for a Raspberry Pi
+or a Linux handheld — a Retroid Pocket running Rocknix, an Odroid, anything
+aarch64 with a GPU that can manage OpenGL:
 
 | Artifact | What is inside | What to run |
 | --- | --- | --- |
@@ -896,10 +899,11 @@ the three verbs Corridor 7 has that Wolfenstein does not:
 | wireframe globe | Corridor 7's own **floor map** panel |
 | folded map | ECWolf's full-screen **automap** |
 
-In menus the overlay changes to arrows, **Enter**, and a **back arrow** that
-does what Escape does on a keyboard — including leaving the multiplayer waiting
-screen. Without it, backing out of a menu meant swiping up the system
-navigation bar first.
+There is an **ESC** key in the top-left corner during play, and the menu overlay
+is a keyboard: four arrows, **Enter**, and the same **ESC**. It does what Escape
+does — opens the menu in game, goes back in menus, and leaves the multiplayer
+waiting screen. Without it, reaching the menu meant swiping up the system
+navigation bar first, which is hidden while the game is full screen.
 
 Text fields — the multiplayer server address, save-game names — raise the
 on-screen keyboard when you open them. It covers the overlay while it is up;
@@ -1148,6 +1152,18 @@ travels to everyone when the match starts — including the connection setting,
 which has to be the same on every machine or the two sides disagree about which
 tic a keypress belongs to.
 
+### Playing across machines that are nothing like each other
+
+A match is the same engine on both ends and the platforms mix freely: a desktop
+hosting and a phone or tablet joining is the pairing this was developed
+against, and Linux, Windows and Android all speak the same protocol. Both sides
+must be on the same version, because what travels between them is input rather
+than state — the two machines run the same simulation from the same commands
+and would drift apart if they disagreed about the rules.
+
+The touch overlay reaches everything a match needs: the on-screen keyboard for
+typing an address, and the ESC key for the waiting screen and the menu.
+
 ### Hosting, and the part your router is involved in
 
 The host listens on **UDP port 5029** by default. Everyone else connects *out*
@@ -1245,15 +1261,35 @@ Two rough edges, measured rather than guessed at:
   packet loss about half of connections do not complete. If a match will not
   start, try again — and if it keeps failing, the game now prints which player
   it is waiting on and whether it is waiting to be heard or to hear.
-* **A player who quits mid-match freezes the others.** They are waiting for a
-  tic that is never coming. It says so, every few seconds, naming the player.
-  Nobody is dropped automatically, because every remaining machine would have
-  to drop them in the same tic or the games diverge — which is a worse failure
-  than waiting.
+* **A player who quits takes about fifteen seconds to notice.** Someone who
+  closes the window, loses wifi or has their phone put them to sleep is not
+  distinguishable, at first, from someone whose connection hiccuped. After
+  fifteen seconds of complete silence the match ends, everyone still present is
+  told who left, and they go back to the menu. Nobody is dropped and play
+  continued, because every remaining machine would have to drop them on the
+  same tic or the simulations diverge; ending the match needs no such
+  agreement.
 
 Neither affects a match already running on a decent connection.
 [`docs/multiplayer.md`](docs/multiplayer.md) has the measurements, and the
 record of one attempted fix that made the first of these four times worse.
+
+### When a game stops and you want to know why
+
+`--netwatchdog` prints, every two seconds that the simulation is not advancing,
+which loop the game is in and whether that loop is spinning or has stopped
+being run:
+
+```
+NETWATCH: playsim has not advanced for 14s -- in 'net: assembling a delayed tic', which is spinning
+Player 1 left the game. Ending the match.
+```
+
+It is off unless asked for. On Android it goes in the launcher's **Args** box
+like any other argument and comes out in `adb logcat -s ECWolf:I`. It exists
+because a frozen netgame used to say nothing about which of the two machines
+had stopped, and reading that out of a pegged CPU and a full socket buffer took
+an afternoon.
 
 ---
 

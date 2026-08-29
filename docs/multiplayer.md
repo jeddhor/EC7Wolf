@@ -827,7 +827,7 @@ NETWATCH: playsim has not advanced for 14s -- in 'net: assembling a delayed tic'
 Player 1 left the game. Ending the match.
 ```
 
-and the player is told so on screen before being returned to the menu, on a
+and the player is told so on screen before leaving the level, on a
 timer rather than a keypress, because the machine most likely to be reading it
 is a phone with no keyboard.
 
@@ -839,9 +839,30 @@ second or so -- so that is what happens. The goodbye packet is sent three times
 and not waited on, because a reliable send there would be one more thing to
 hang on.
 
-Fifteen seconds is long enough to survive a hitch, a level load on a slow
-phone, or a moment of bad wifi, and short enough that nobody sits in front of a
-frozen screen wondering whether waiting will help.
+**Silent means silent.** The first rule tried was "has not sent the tic I am
+waiting for in fifteen seconds", and it is wrong twice over: a peer still
+loading a level is alive and talking, and a peer that has fallen behind is alive
+and talking. It cost a suite run -- a host merely slow to start was written off
+by a client that had connected and begun exchanging tics before it, and the
+gate then waited twenty-eight minutes on a game that had returned to its title
+screen. The rule is now "has sent nothing whatever", tracked per player from
+every packet that arrives.
+
+Fifteen seconds of that is long enough to survive a hitch, a level load on a
+slow phone, or a moment of bad wifi, and short enough that nobody sits in front
+of a frozen screen wondering whether waiting will help.
+
+A run under `--capture-*` quits instead of returning to the title: it was
+started for one netgame, that netgame is over, and a title screen it will never
+leave is not a state a harness can finish from.
+
+Leaving the level took a second attempt. Setting `playstate = ex_abort` is not
+enough: `GameLoop`'s switch has no case for it, so it fell to the `default:` and
+the `while (1)` took the loop straight back into `PlayLoop` on the same map. The
+player was told their opponent had gone and then left wandering the arena alone
+-- and without a weapon, because re-entering the loop without a fresh setup does
+not restore the psprite. The return is now taken where the message is shown,
+which is what every other way out of a finished game does.
 ### Watching the other player: tools/make_corridor7_mp_lab.py
 
 Everything about a player that only the *other* machines can see -- the walk
@@ -906,6 +927,29 @@ Corridor 7's own cast he is unremarkable.
 Worth keeping because it cost a measurement to settle and would otherwise be
 re-litigated on sight. The numbers come from decoding the sprite cells with
 `tools/c7assets.py`'s decoder and counting rows with any opaque pixel.
+### An ESC key that matches the keyboard it sits on
+
+The Android overlay's menu controls are photographs of keyboard keys -- four
+arrows and an Enter, bevelled and shadowed. The way out was a flat circular
+arrow badge, which read as belonging to a different program.
+
+`esc.png` is in the asset set and is Beloko's, but it belongs to another of
+their sets: a solid white rounded square, no bevel, no shadow. Dropped in
+beside the arrows it looked exactly as out of place as the badge had. So
+`esc_key.png` is the arrow keycap with its triangle removed -- the middle of
+the cap rebuilt by interpolating across it from the columns either side, which
+keeps the bevel and leaves no ghost -- and ESC set in the condensed bold taken
+from ENTER.
+
+The lettering is **darker than ENTER's**, and that is deliberate. Matched to
+ENTER's exact ink it came out invisible on the tablet: that cap is brighter and
+more opaque, and a solid triangle carries at a weight thin strokes do not. It
+shipped blank once before this was noticed.
+
+The same key is in the top-left corner during play, left of the two maps and
+the same two-by-two as they are, on `PORT_ACT_C7_ESCAPE` -> `bt_esc`. Reaching
+the menu previously meant swiping up the system navigation bar, which is hidden
+while the game is full screen.
 
 ---
 

@@ -142,3 +142,7 @@
 #define PORT_ACT_C7_VISOR     200
 #define PORT_ACT_C7_MINE      201
 #define PORT_ACT_C7_FLOORMAP  202
+// Opens the menu, the same as Escape on a keyboard. A code of its own rather
+// than a raw scancode because the game overlay dispatches through
+// PortableAction, which speaks in these and not in SDL scancodes.
+#define PORT_ACT_C7_ESCAPE    203

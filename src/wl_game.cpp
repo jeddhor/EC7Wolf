@@ -30,6 +30,7 @@
 #include "c7_scoreboard.h"
 #include "wl_draw.h"
 #include "wl_net.h"
+#include "r_capture.h"
 #include "wl_play.h"
 #include "wl_game.h"
 #include "wl_iwad.h"
@@ -847,17 +848,36 @@ restartgame:
 
 		PlayLoop ();
 
-		// A netgame that ended because somebody vanished says so, rather than
-		// dropping the player back at the menu with no explanation -- or, as it
-		// did before there was a timeout at all, not dropping them anywhere.
-		// Timed, because the one machine guaranteed to be reading this is a
-		// phone with no keyboard.
+		// A netgame that ended because somebody vanished says so and then
+		// leaves, rather than dropping the player back at the menu with no
+		// explanation -- or, as the first attempt at this did, leaving them
+		// wandering the arena alone. playstate was set to ex_abort, which the
+		// switch below has no case for, so it fell to the default and the loop
+		// went straight back round into PlayLoop on the same level: still in
+		// MAP51, now with no other player and no weapon, because re-entering
+		// the loop without a fresh setup does not restore the psprite.
+		//
+		// So the return is taken here, which is what every other way out of a
+		// finished game does. The message is timed rather than waiting on a
+		// key, because the machine most likely to be reading it is a phone
+		// with no keyboard.
 		if(Net::Abandoned())
 		{
 			Message(Net::AbandonedReason());
 			IN_UserInput(4*TICRATE, ACK_Local);
 			Net::ClearAbandoned();
 			VW_FadeOut();
+			if(screenHeight % 200 != 0)
+				VL_ClearScreen(0);
+			StopMusic();
+			ingame = false;
+			// A scripted run has nowhere to go back to: it was started for one
+			// netgame, that netgame is over, and a title screen it will never
+			// leave is not a state a harness can finish from. It waited on one
+			// for twenty-eight minutes before this line existed.
+			if(Capture::Active())
+				Quit();
+			return false;
 		}
 
 		if(playstate == ex_victorious)

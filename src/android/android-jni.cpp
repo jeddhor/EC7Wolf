@@ -372,7 +372,18 @@ void initControls(int width, int height,const char * graphics_path,const char *s
 		// meant swiping the bar up first. It sits above Enter rather than beside
 		// the arrows: the two things a menu does are choose and go back, and they
 		// belong under the same thumb.
-		tcMenuMain->addControl(new touchcontrols::Button("back",touchcontrols::RectF(0,8,4,12),"back",SDL_SCANCODE_ESCAPE));
+		//
+		// A key, not a drawn arrow: this overlay is a keyboard -- four arrow
+		// keys and an Enter key -- and a flat circular glyph in the middle of
+		// it looked like it came from somewhere else.
+		//
+		// esc_key.png, not the esc.png in the same folder. That one is Beloko's
+		// but belongs to a different set: a solid white rounded square with no
+		// bevel and no shadow, which next to these reads as flat and drawn
+		// rather than photographed. esc_key.png is the arrow keycap with its
+		// triangle removed and ESC set in the lettering sampled from ENTER, so
+		// the five of them are one keyboard.
+		tcMenuMain->addControl(new touchcontrols::Button("back",touchcontrols::RectF(0,8,4,12),"esc_key",SDL_SCANCODE_ESCAPE));
 		tcMenuMain->signal_button.connect(  sigc::ptr_fun(&menuButton) );
 
 		tcMenuMain->setAlpha(0.8);
@@ -396,6 +407,10 @@ void initControls(int width, int height,const char * graphics_path,const char *s
 		// holding a tablet nothing at all.
 		tcGameMain->addControl(new touchcontrols::Button("floor_map",touchcontrols::RectF(4,0,6,2),"map",PORT_ACT_C7_FLOORMAP));
 		tcGameMain->addControl(new touchcontrols::Button("map",touchcontrols::RectF(2,0,4,2),"foldmap",PORT_ACT_MAP));
+		// The way out, in the free corner left of the two maps and the same
+		// two-by-two as they are. Reaching the menu used to mean swiping up the
+		// system navigation bar, which is hidden while the game is full screen.
+		tcGameMain->addControl(new touchcontrols::Button("escape",touchcontrols::RectF(0,0,2,2),"esc_key",PORT_ACT_C7_ESCAPE));
 		tcGameMain->addControl(new touchcontrols::Button("run",touchcontrols::RectF(7,0,9,2),"run",PORT_ACT_ALWAYS_RUN));
 		tcGameMain->addControl(new touchcontrols::Button("keyboard",touchcontrols::RectF(9,0,11,2),"keyboard",KEY_SHOW_KBRD,false,true));
 

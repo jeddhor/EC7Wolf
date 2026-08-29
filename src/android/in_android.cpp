@@ -181,6 +181,9 @@ void PortableAction(int state, int action)
 	case PORT_ACT_C7_MINE:
 		key = bt_reload;
 		break;
+	case PORT_ACT_C7_ESCAPE:
+		key = bt_esc;
+		break;
 	case PORT_ACT_C7_FLOORMAP:
 		key = bt_c7map;
 		break;

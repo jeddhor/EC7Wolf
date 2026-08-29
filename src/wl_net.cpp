@@ -329,6 +329,43 @@ static int FindClient(IPaddress address)
 // to every one of those.
 #define NET_PEER_TIMEOUT_MS 15000
 
+// When each player was last heard from at all -- any packet, not the one being
+// waited for. The first rule tried was "has not sent the tic I need for
+// fifteen seconds", which is wrong twice over: a peer still loading a level is
+// alive and talking, and a peer that has fallen behind is alive and talking.
+// It cost a suite run, where a host that was merely slow to start was written
+// off by a client that had connected and begun exchanging tics before it.
+static uint32_t LastHeard[MAXPLAYERS];
+
+static void NoteHeardFromAll()
+{
+	const uint32_t now = SDL_GetTicks();
+	for(unsigned int i = 0;i < MAXPLAYERS;++i)
+		LastHeard[i] = now;
+}
+
+static void NoteHeardFrom(const IPaddress &address)
+{
+	const int client = FindClient(address);
+	if(client >= 0)
+		LastHeard[client] = SDL_GetTicks();
+}
+
+// True when someone still being waited on has said nothing whatever for the
+// timeout. Anyone we are no longer waiting on is not our problem.
+static bool PeerHasGoneQuiet(const bool have[MAXPLAYERS])
+{
+	const uint32_t now = SDL_GetTicks();
+	for(unsigned int i = 0;i < InitVars.numPlayers;++i)
+	{
+		if(i == (unsigned)ConsolePlayer || (have != NULL && have[i]))
+			continue;
+		if(now - LastHeard[i] > NET_PEER_TIMEOUT_MS)
+			return true;
+	}
+	return false;
+}
+
 static FString AbortReason;
 
 bool Abandoned()
@@ -573,11 +610,10 @@ static void ExchangePacket(T (&packets)[MAXPLAYERS])
 	// matter, because they fail for different reasons -- a missing ack means
 	// our packet is not arriving, a missing packet means theirs is not.
 	unsigned int stuckFor = 0;
-	const uint32_t waitBegan = SDL_GetTicks();
 	while(numAcked != InitVars.numPlayers || numReceived != InitVars.numPlayers)
 	{
 		NetWatch("net: exchanging a tic");
-		if(SDL_GetTicks() - waitBegan > NET_PEER_TIMEOUT_MS)
+		if(PeerHasGoneQuiet(received))
 		{
 			Abandon(received);
 			return;
@@ -627,6 +663,7 @@ static void ExchangePacket(T (&packets)[MAXPLAYERS])
 
 		while(SDLNet_UDP_Recv(Socket, Packet))
 		{
+			NoteHeardFrom(Packet->address);
 			if(CheckPacketType<T>(Packet))
 			{
 				int client = FindClient(Packet->address);
@@ -700,11 +737,10 @@ static void SendReliablePacket(T &packet)
 	// resend our packet in case it got lost.
 	unsigned int resend = 0;
 	bool waiting = false;
-	const uint32_t waitBegan = SDL_GetTicks();
 	while(numAcked != InitVars.numPlayers)
 	{
 		NetWatch("net: waiting for an ack");
-		if(SDL_GetTicks() - waitBegan > NET_PEER_TIMEOUT_MS)
+		if(PeerHasGoneQuiet(acked))
 		{
 			Abandon(acked);
 			return;
@@ -739,6 +775,7 @@ static void SendReliablePacket(T &packet)
 
 		while(SDLNet_UDP_Recv(Socket, Packet))
 		{
+			NoteHeardFrom(Packet->address);
 			if(CheckPacketType<AckPacket>(Packet))
 			{
 				const AckPacket *data = reinterpret_cast<AckPacket *>(Packet->data);
@@ -1131,7 +1168,13 @@ bool Init(InitStatusCallback callback)
 		? StartHost(callback)
 		: StartJoin(callback);
 
-	if(!connected)
+	if(connected)
+	{
+		// Nobody has been silent yet: the clocks start when the game does, not
+		// at zero, or the first wait would write everyone off immediately.
+		NoteHeardFromAll();
+	}
+	else
 	{
 		// Give the socket back rather than holding the port until the process
 		// ends: the player who just cancelled is quite likely to try again on
@@ -1434,11 +1477,10 @@ static void ExchangeDelayedTicCmds(TicCmdPacket (&packets)[MAXPLAYERS])
 	// take in the same tic or they diverge -- but a game that has stopped
 	// should at least say what it has stopped on.
 	unsigned int stuckFor = 0;
-	const uint32_t waitBegan = SDL_GetTicks();
 	for(;;)
 	{
 		NetWatch("net: assembling a delayed tic");
-		if(SDL_GetTicks() - waitBegan > NET_PEER_TIMEOUT_MS)
+		if(PeerHasGoneQuiet(have))
 		{
 			Abandon(have);
 			return;
@@ -1457,6 +1499,7 @@ static void ExchangeDelayedTicCmds(TicCmdPacket (&packets)[MAXPLAYERS])
 
 		while(SDLNet_UDP_Recv(Socket, Packet))
 		{
+			NoteHeardFrom(Packet->address);
 			if(CheckPacketType<TicCmdPacket>(Packet))
 			{
 				int client = FindClient(Packet->address);

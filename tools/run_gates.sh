@@ -71,7 +71,7 @@ done
 # gl_selftest is here rather than below because --gltest is handled before the
 # IWAD is opened: it needs no game data, and it is the only thing that proves the
 # shaders actually compile on the runner's driver. A broken shader still links.
-data_free_gates='definitions names ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
+data_free_gates='definitions names ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3 ec7edit_e4 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
 
 data_gates='
 corridor7
@@ -248,6 +248,11 @@ for g in $data_free_gates; do
 			# provenance, link containment.
 			run_gate "$g" "ec7edit E0 foundation" \
 				"$here/test_ec7edit_e0.sh" ;;
+		ec7edit_e4)
+			# Real Qt widgets on the offscreen platform: no display, no game
+			# data. Skips where PySide6 is not installed.
+			run_gate "$g" "ec7edit E4 shell" \
+				"$here/test_ec7edit_e4.sh" ;;
 		ec7edit_e3)
 			# Data-free: ten thousand modelled operations and eleven injected
 			# save failures, neither of which needs a display or the game.

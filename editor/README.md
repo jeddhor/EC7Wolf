@@ -8,12 +8,16 @@ directory holds the implementation as it arrives.
 
 ## State
 
-**Milestone E3 — the document model.** There is no GUI yet, but everything a
-GUI needs is here and driveable from a shell: read and write Corridor 7's map
-archive, decode the artwork, know that plane-1 word 108 is an Alioprobe facing
-east, hold a project with undo and redo, save it so that a crash mid-write
-loses nothing, and export a map the running game loads in place of a stock
-one.
+**Milestone E4 — the application.** EC7Edit now starts, finds your copy of
+Corridor 7, and shows you its maps with a palette of named, pictured things.
+The canvas draws but does not paint yet; E5 makes it editable.
+
+```console
+$ editor/ec7edit
+```
+
+First run asks for three paths — the engine, your game data, and somewhere to
+keep projects — and answers with a checklist rather than a verdict.
 
 Shown against a generated archive rather than a retail one, since the map
 names in the shipped file are not this project's to publish:
@@ -49,21 +53,26 @@ archive without refusing to open it.
 
 | Path | What it is |
 | --- | --- |
-| [`ec7edit_core/`](ec7edit_core/) | The Qt-free half: codecs, path safety, CLI. The GUI will depend on this; it will never depend on the GUI |
+| [`ec7edit`](ec7edit) | Run it from a checkout, without installing |
+| [`ec7edit_core/`](ec7edit_core/) | The Qt-free half: codecs, catalogue, document, path safety, CLI. The GUI depends on this; it never depends on the GUI |
+| [`ec7edit_gui/`](ec7edit_gui/) | The Qt layer: window, canvas, palette, first-run setup, background workers |
 | [`docs/native-formats.md`](docs/native-formats.md) | The byte layouts as implemented, checked against the engine that loads them |
 | [`docs/e0-evidence-ledger.md`](docs/e0-evidence-ledger.md) | E0: contracts traced to source, with grades |
 | [`docs/e1-evidence-ledger.md`](docs/e1-evidence-ledger.md) | E1: what the codec proved, and what it found |
 | [`docs/e2-evidence-ledger.md`](docs/e2-evidence-ledger.md) | E2: decoder equivalence, and three things the catalogue found in the data |
 | [`docs/e3-evidence-ledger.md`](docs/e3-evidence-ledger.md) | E3: the modelled 10 000 operations, the eleven injected save failures, and two defects they found |
+| [`docs/e4-evidence-ledger.md`](docs/e4-evidence-ledger.md) | E4: the measured packaging decision, and why the engine is not run until you ask |
 | [`scripts/make_fixtures.py`](scripts/make_fixtures.py) | Generates the synthetic corpus, including eleven malformed inputs |
 | [`scripts/audit_links.py`](scripts/audit_links.py) | Fails on a Markdown link that escapes the git root or points at an untracked file |
 | [`resources/editor_catalog.json`](resources/) | The generated catalogue: 457 entries joining raw map words to names, sprites and placement rules |
 | [`scripts/generate_catalog.py`](scripts/generate_catalog.py) | Rebuilds it from the engine's translation and actors; `verify` is a gate |
 | [`scripts/build_c7assets.py`](scripts/build_c7assets.py) | Builds `tools/c7assets.py` by inlining the decoders, so there is only one copy of them |
 | [`tests/unit/`](tests/unit/) | 382 tests, plain `unittest`, no runner dependency |
+| [`tests/gui/`](tests/gui/) | 54 more, real Qt widgets on the offscreen platform |
 
-Run it all with `tools/run_gates.sh ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3`,
-or add `ec7edit_override ec7edit_assets` where the game data is present.
+Run it all with
+`tools/run_gates.sh ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3 ec7edit_e4`, or
+add `ec7edit_override ec7edit_assets` where the game data is present.
 
 ## Two things worth knowing
 
@@ -90,6 +99,16 @@ CPython **3.12** is the reference; 3.10 is the floor, matching the repository's
 other tools. If your system Python is newer, the gate finds a 3.12 through
 `uv python install 3.12` and says which interpreter it actually used.
 
+The GUI needs PySide6. Set up the local runtime once:
+
+```console
+$ uv venv --python 3.12 editor/.venv
+$ uv pip install --python editor/.venv/bin/python PySide6
+```
+
+The GUI gate finds that venv on its own and skips cleanly when there isn't
+one, so the codec gates still run on a machine with no Qt.
+
 The core has no third-party dependencies at all — everything it needs to read
 and write these formats is in the standard library, which is what lets the
 codec tests run on a CI machine with no display and no right to the game data.
@@ -97,5 +116,5 @@ PySide6 arrives with the GUI, as an optional extra.
 
 ## Next
 
-E4 puts a Qt shell around it — the window, the first-run discovery of your game
-data, and the project browser — and E5 makes the canvas editable.
+E5 makes the canvas editable: brushes, placement, selection, and a Test command
+that launches the map you are looking at.

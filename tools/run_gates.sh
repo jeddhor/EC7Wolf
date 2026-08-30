@@ -71,7 +71,7 @@ done
 # gl_selftest is here rather than below because --gltest is handled before the
 # IWAD is opened: it needs no game data, and it is the only thing that proves the
 # shaders actually compile on the runner's driver. A broken shader still links.
-data_free_gates='definitions names android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
+data_free_gates='definitions names ec7edit_e0 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
 
 data_gates='
 corridor7
@@ -240,6 +240,12 @@ for g in $data_free_gates; do
 			else
 				run_gate "$g" "installer" "$here/test_installer.sh" "$build_dir"
 			fi ;;
+		ec7edit_e0)
+			# Data-free by design: no Corridor 7 data, no engine build, no
+			# display. The editor's E0 foundation -- synthetic fixtures,
+			# provenance, link containment.
+			run_gate "$g" "ec7edit E0 foundation" \
+				"$here/test_ec7edit_e0.sh" ;;
 		android_native)
 			# Needs an NDK, not the game data, so it lives with the data-free
 			# gates; it skips itself where there is no SDK, which is every

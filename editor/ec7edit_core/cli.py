@@ -23,9 +23,11 @@ from pathlib import Path
 
 from . import __version__
 from .archive import Archive, MAX_MAPS, read_archive
+from .document import MapDocument, ProjectDocument, SourceReference, utc_now
 from .errors import DiagnosticLog, Ec7EditError, Severity
-from .paths import OutputGuard, SourceIdentity, atomic_write, digest_bytes
+from .paths import OutputGuard, SourceIdentity, atomic_write, digest_bytes, digest_file
 from .planes import PLANE_COUNT
+from .project import PROJECT_SUFFIX, load_project, new_project, save_project, serialize
 from .wad import build_preview_wad, read_preview_wad
 
 EXIT_OK = 0
@@ -173,6 +175,121 @@ def command_preview(args) -> int:
     return EXIT_OK
 
 
+# ---------------------------------------------------------------------------
+# Projects
+# ---------------------------------------------------------------------------
+
+
+def command_project_new(args) -> int:
+    project = new_project(args.name, author=args.author)
+    save_project(project, args.output)
+    print(f"{args.output}: new project {project.name!r} ({project.uuid})")
+    return EXIT_OK
+
+
+def command_project_inspect(args) -> int:
+    project = load_project(args.project)
+    if args.json:
+        json.dump(
+            {
+                "uuid": project.uuid,
+                "name": project.name,
+                "author": project.author,
+                "schema_version": project.schema_version,
+                "maps": [
+                    {
+                        "uuid": document.uuid,
+                        "slot": document.slot,
+                        "lump": document.lump_name,
+                        "name": document.name,
+                        "width": document.width,
+                        "height": document.height,
+                        "source_sha256": document.source.sha256 if document.source else "",
+                    }
+                    for document in project.maps
+                ],
+            },
+            sys.stdout,
+            indent=2,
+        )
+        print()
+        return EXIT_OK
+
+    print(f"{args.project}: {project.name!r} by {project.author or 'nobody'}, "
+          f"{len(project)} map(s), schema {project.schema_version}")
+    for document in project.maps:
+        origin = ""
+        if document.source and document.source.sha256:
+            origin = f"  from map {document.source.map_number} of " \
+                     f"{document.source.sha256[:12]}"
+        print(f"  {document.lump_name}  {document.width:3d}x{document.height:<3d}  "
+              f"{document.name:<16}{origin}")
+    return EXIT_OK
+
+
+def command_project_import(args) -> int:
+    """Copy a map out of a native archive into a project. The archive is read only."""
+    source = Path(args.archive)
+    identity = SourceIdentity.probe(source)
+    archive = read_archive(source)
+
+    project = load_project(args.project) if args.project.exists() else new_project(args.name)
+    reference = SourceReference(
+        display_path=str(source),
+        sha256=identity.digest,
+        map_number=args.map,
+        imported_at=utc_now(),
+    )
+    record = archive.by_number(args.map)
+    document = MapDocument.from_record(record, source=reference)
+    if args.slot:
+        from dataclasses import replace
+
+        document = replace(document, slot=args.slot)
+
+    project = project.added(document)
+    guard = OutputGuard.for_source(source, extra_roots=args.protect)
+    guard.check(args.project)
+    save_project(project, args.project)
+    identity.verify_unchanged()
+
+    print(f"{args.project}: imported map {args.map} {record.name.text!r} "
+          f"as {document.lump_name} ({len(project)} map(s))")
+    print(f"  source {identity.resolved} unchanged ({identity.digest[:16]})")
+    return EXIT_OK
+
+
+def command_project_export(args) -> int:
+    """Export a project's maps as a preview WAD the engine can load."""
+    project = load_project(args.project)
+    if not project.maps:
+        print("the project has no maps to export", file=sys.stderr)
+        return EXIT_USAGE
+
+    chosen = project.maps
+    if args.map_uuid:
+        chosen = tuple(d for d in project.maps if d.uuid in args.map_uuid)
+        missing = set(args.map_uuid) - {d.uuid for d in chosen}
+        if missing:
+            print(f"no map with id {', '.join(sorted(missing))}", file=sys.stderr)
+            return EXIT_USAGE
+
+    pairs = [(document.lump_name, document.to_record()) for document in chosen]
+    blob = build_preview_wad(pairs)
+    reread = read_preview_wad(blob)
+    if len(reread) != len(pairs):
+        print("internal error: the export did not survive readback", file=sys.stderr)
+        return EXIT_ERROR
+
+    guard = OutputGuard(protected_roots=tuple(args.protect))
+    written = atomic_write(args.output, blob, guard=guard)
+    print(f"{written}: {len(pairs)} map(s), {len(blob)} bytes, "
+          f"sha256 {digest_bytes(blob)[:16]}")
+    for marker, record in pairs:
+        print(f"  {marker}  {record.name.text!r} {record.planes.width}x{record.planes.height}")
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ec7edit",
@@ -211,6 +328,39 @@ def build_parser() -> argparse.ArgumentParser:
         help="additional directory the output must not land in; repeatable",
     )
     preview.set_defaults(handler=command_preview)
+
+    project_new = verbs.add_parser("project-new", help="create an empty project")
+    project_new.add_argument("--output", type=Path, required=True)
+    project_new.add_argument("--name", default="Untitled")
+    project_new.add_argument("--author", default="")
+    project_new.set_defaults(handler=command_project_new)
+
+    project_inspect = verbs.add_parser("project-inspect", help="list a project's maps")
+    project_inspect.add_argument("project", type=Path)
+    project_inspect.add_argument("--json", action="store_true")
+    project_inspect.set_defaults(handler=command_project_inspect)
+
+    project_import = verbs.add_parser(
+        "project-import", help="copy a map from a native archive into a project"
+    )
+    project_import.add_argument("archive", type=Path)
+    project_import.add_argument("--project", type=Path, required=True)
+    project_import.add_argument("--map", type=int, required=True, metavar="N")
+    project_import.add_argument("--slot", type=int, metavar="N",
+                                help="target MAPxx slot; defaults to the source's")
+    project_import.add_argument("--name", default="Imported",
+                                help="project name, when creating a new one")
+    project_import.add_argument("--protect", type=Path, action="append", default=[])
+    project_import.set_defaults(handler=command_project_import)
+
+    project_export = verbs.add_parser(
+        "project-export", help="export a project's maps as a preview WAD"
+    )
+    project_export.add_argument("project", type=Path)
+    project_export.add_argument("--output", type=Path, required=True)
+    project_export.add_argument("--map-uuid", action="append", default=[], metavar="ID")
+    project_export.add_argument("--protect", type=Path, action="append", default=[])
+    project_export.set_defaults(handler=command_project_export)
     return parser
 
 

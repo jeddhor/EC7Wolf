@@ -56,6 +56,20 @@ def same_file(left: Path, right: Path) -> bool:
         return canonical(left) == canonical(right)
 
 
+#: What a Corridor 7 data directory holds. `.CO7` is the game's own extension
+#: and `CORR7CD.EXE` is a required file, so either is a strong signal -- and
+#: neither appears by accident in a directory of the user's own work.
+GAME_DATA_MARKERS = ("*.CO7", "*.co7", "CORR7CD.EXE", "corr7cd.exe")
+
+
+def looks_like_game_data(directory: Path | str) -> bool:
+    """True when this directory appears to hold the user's copy of the game."""
+    directory = Path(directory)
+    if not directory.is_dir():
+        return False
+    return any(next(directory.glob(pattern), None) is not None for pattern in GAME_DATA_MARKERS)
+
+
 @dataclass(frozen=True)
 class SourceIdentity:
     """What was true about a source file when it was imported."""
@@ -112,12 +126,24 @@ class OutputGuard:
 
     @classmethod
     def for_source(cls, source: Path | str, *, extra_roots=()) -> "OutputGuard":
-        """The usual case: protect the source file and the directory holding it."""
+        """Protect the source, and its directory when that is game data.
+
+        The source file itself is always protected, however it is spelled. Its
+        *directory* is protected only when it looks like a Corridor 7 data
+        directory, because that is where the accident actually lives: an export
+        that lands beside MAPTEMP.CO7 is one typo away from being MAPTEMP.CO7.
+
+        Protecting every source's parent unconditionally was the first version
+        of this, and it was wrong -- it refused to write a project file into
+        the user's own working directory just because a scratch archive
+        happened to be there too. Callers who want a directory protected for
+        another reason pass it in `extra_roots`.
+        """
         resolved = canonical(source)
-        return cls(
-            protected_roots=tuple(canonical(root) for root in extra_roots) + (resolved.parent,),
-            protected_files=(resolved,),
-        )
+        roots = tuple(canonical(root) for root in extra_roots)
+        if looks_like_game_data(resolved.parent):
+            roots += (resolved.parent,)
+        return cls(protected_roots=roots, protected_files=(resolved,))
 
     def check(self, output: Path | str) -> Path:
         """Canonicalise an output path, or refuse it. Returns the safe path."""

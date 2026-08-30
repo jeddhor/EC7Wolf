@@ -208,6 +208,87 @@ class Preview(Fixture):
         self.assertFalse(target.exists())
 
 
+class Projects(Fixture):
+    """The headless path a GUI will later drive: import, inspect, export."""
+
+    def project(self) -> Path:
+        return self.work / "demo.ec7project"
+
+    def test_new_project(self):
+        code, out, _ = run("project-new", "--output", str(self.project()), "--name", "Demo")
+        self.assertEqual(code, EXIT_OK)
+        self.assertTrue(self.project().exists())
+        self.assertIn("Demo", out)
+
+    def test_import_creates_a_project(self):
+        code, out, _ = run("project-import", str(self.archive),
+                           "--project", str(self.project()), "--map", "2")
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("SECOND", out)
+        self.assertIn("unchanged", out)
+
+    def test_import_preserves_the_planes(self):
+        run("project-import", str(self.archive), "--project", str(self.project()), "--map", "2")
+        code, out, _ = run("project-inspect", str(self.project()), "--json")
+        report = json.loads(out)
+        self.assertEqual(report["maps"][0]["name"], "SECOND")
+        self.assertEqual(report["maps"][0]["lump"], "MAP02")
+
+    def test_import_records_the_source_digest(self):
+        run("project-import", str(self.archive), "--project", str(self.project()), "--map", "1")
+        report = json.loads(run("project-inspect", str(self.project()), "--json")[1])
+        self.assertEqual(len(report["maps"][0]["source_sha256"]), 64)
+
+    def test_import_can_retarget_the_slot(self):
+        run("project-import", str(self.archive), "--project", str(self.project()),
+            "--map", "3", "--slot", "1")
+        report = json.loads(run("project-inspect", str(self.project()), "--json")[1])
+        self.assertEqual(report["maps"][0]["lump"], "MAP01")
+
+    def test_two_imports_accumulate(self):
+        run("project-import", str(self.archive), "--project", str(self.project()), "--map", "1")
+        run("project-import", str(self.archive), "--project", str(self.project()), "--map", "2")
+        report = json.loads(run("project-inspect", str(self.project()), "--json")[1])
+        self.assertEqual(len(report["maps"]), 2)
+
+    def test_import_refuses_to_write_beside_the_source(self):
+        code, _, err = run("project-import", str(self.archive),
+                           "--project", str(self.data / "sneaky.ec7project"), "--map", "1")
+        self.assertEqual(code, EXIT_ERROR)
+        self.assertIn("C7E-EXPORT-001", err)
+
+    def test_export_produces_a_loadable_preview(self):
+        run("project-import", str(self.archive), "--project", str(self.project()), "--map", "1")
+        run("project-import", str(self.archive), "--project", str(self.project()),
+            "--map", "2", "--slot", "2")
+        target = self.work / "preview.wad"
+        code, out, _ = run("project-export", str(self.project()), "--output", str(target))
+        self.assertEqual(code, EXIT_OK)
+        pairs = read_preview_wad(target.read_bytes())
+        self.assertEqual([m for m, _ in pairs], ["MAP01", "MAP02"])
+
+    def test_the_exported_words_are_the_projects_words(self):
+        run("project-import", str(self.archive), "--project", str(self.project()), "--map", "2")
+        target = self.work / "preview.wad"
+        run("project-export", str(self.project()), "--output", str(target))
+        _, record = read_preview_wad(target.read_bytes())[0]
+        self.assertEqual(record.planes.planes, self.records[1].planes.planes)
+        self.assertEqual(record.name.raw, self.records[1].name.raw)
+
+    def test_export_of_an_empty_project_is_a_usage_error(self):
+        run("project-new", "--output", str(self.project()))
+        code, _, _ = run("project-export", str(self.project()),
+                         "--output", str(self.work / "x.wad"))
+        self.assertEqual(code, EXIT_USAGE)
+
+    def test_inspecting_a_broken_project_fails_cleanly(self):
+        broken = self.work / "broken.ec7project"
+        broken.write_text("{\"schema_version\": 99}", encoding="utf-8")
+        code, _, err = run("project-inspect", str(broken))
+        self.assertEqual(code, EXIT_ERROR)
+        self.assertIn("C7E-SCHEMA", err)
+
+
 class Usage(unittest.TestCase):
     def test_no_verb_is_a_usage_error(self):
         with self.assertRaises(SystemExit) as caught:

@@ -8,11 +8,12 @@ directory holds the implementation as it arrives.
 
 ## State
 
-**Milestone E2 — decoders and the semantic catalogue.** There is no GUI yet.
-What works is everything underneath one: reading and writing Corridor 7's map
-archive, exporting a map the running game will load in place of a stock one,
-decoding the artwork, and knowing that plane-1 word 108 is an Alioprobe facing
-east.
+**Milestone E3 — the document model.** There is no GUI yet, but everything a
+GUI needs is here and driveable from a shell: read and write Corridor 7's map
+archive, decode the artwork, know that plane-1 word 108 is an Alioprobe facing
+east, hold a project with undo and redo, save it so that a crash mid-write
+loses nothing, and export a map the running game loads in place of a stock
+one.
 
 Shown against a generated archive rather than a retail one, since the map
 names in the shipped file are not this project's to publish:
@@ -33,6 +34,14 @@ $ ec7edit convert-to-preview-wad synthetic.c7map --map 3 --slot MAP01 \
 $ ec7wolf --data CO7 --tedlevel MAP01 --file ~/work/preview.wad
 ```
 
+Projects work end to end too — import a map, edit it, save, export:
+
+```console
+$ ec7edit project-import synthetic.c7map --project ~/work/demo.ec7project --map 2
+$ ec7edit project-inspect ~/work/demo.ec7project
+$ ec7edit project-export  ~/work/demo.ec7project --output ~/work/preview.wad
+```
+
 There is also `ec7edit validate`, which reports what is noncanonical about an
 archive without refusing to open it.
 
@@ -45,15 +54,16 @@ archive without refusing to open it.
 | [`docs/e0-evidence-ledger.md`](docs/e0-evidence-ledger.md) | E0: contracts traced to source, with grades |
 | [`docs/e1-evidence-ledger.md`](docs/e1-evidence-ledger.md) | E1: what the codec proved, and what it found |
 | [`docs/e2-evidence-ledger.md`](docs/e2-evidence-ledger.md) | E2: decoder equivalence, and three things the catalogue found in the data |
+| [`docs/e3-evidence-ledger.md`](docs/e3-evidence-ledger.md) | E3: the modelled 10 000 operations, the eleven injected save failures, and two defects they found |
 | [`scripts/make_fixtures.py`](scripts/make_fixtures.py) | Generates the synthetic corpus, including eleven malformed inputs |
 | [`scripts/audit_links.py`](scripts/audit_links.py) | Fails on a Markdown link that escapes the git root or points at an untracked file |
 | [`resources/editor_catalog.json`](resources/) | The generated catalogue: 457 entries joining raw map words to names, sprites and placement rules |
 | [`scripts/generate_catalog.py`](scripts/generate_catalog.py) | Rebuilds it from the engine's translation and actors; `verify` is a gate |
 | [`scripts/build_c7assets.py`](scripts/build_c7assets.py) | Builds `tools/c7assets.py` by inlining the decoders, so there is only one copy of them |
-| [`tests/unit/`](tests/unit/) | 242 tests, plain `unittest`, no runner dependency |
+| [`tests/unit/`](tests/unit/) | 382 tests, plain `unittest`, no runner dependency |
 
-Run it all with `tools/run_gates.sh ec7edit_e0 ec7edit_e1 ec7edit_e2`, or add
-`ec7edit_override ec7edit_assets` where the game data is present.
+Run it all with `tools/run_gates.sh ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3`,
+or add `ec7edit_override ec7edit_assets` where the game data is present.
 
 ## Two things worth knowing
 
@@ -87,5 +97,5 @@ PySide6 arrives with the GUI, as an optional extra.
 
 ## Next
 
-E3 adds the document model: undo, transactions, the project schema, atomic save
-and crash recovery — still headless, still testable without a display.
+E4 puts a Qt shell around it — the window, the first-run discovery of your game
+data, and the project browser — and E5 makes the canvas editable.

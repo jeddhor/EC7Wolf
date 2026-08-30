@@ -126,14 +126,21 @@ check "two exports are byte-identical" cmp -s "$work/preview.wad" "$work/preview
 
 printf '\nThe source is never written\n'
 sourcedir=$(dirname "$archive")
-check "exporting beside the source is refused" \
-	sh -c '! "'"$python"'" -m ec7edit_core convert-to-preview-wad "'"$archive"'" \
-		--map 1 --output "'"$sourcedir"'/beside.wad"'
 check "exporting onto the source is refused" \
 	sh -c '! "'"$python"'" -m ec7edit_core convert-to-preview-wad "'"$archive"'" \
 		--map 1 --output "'"$archive"'"'
-check "no output was left in the source directory" \
-	sh -c '[ ! -e "'"$sourcedir"'/beside.wad" ]'
+check "an explicitly protected directory is refused" \
+	sh -c '! "'"$python"'" -m ec7edit_core convert-to-preview-wad "'"$archive"'" \
+		--map 1 --protect "'"$sourcedir"'" --output "'"$sourcedir"'/beside.wad"'
+# A directory holding .CO7 files is game data, and is protected without being
+# asked for: an export landing beside MAPTEMP.CO7 is one typo from being it.
+mkdir -p "$work/gamedata"
+cp "$archive" "$work/gamedata/MAPTEMP.CO7"
+check "a game-data directory is protected automatically" \
+	sh -c '! "'"$python"'" -m ec7edit_core convert-to-preview-wad \
+		"'"$work"'/gamedata/MAPTEMP.CO7" --map 1 --output "'"$work"'/gamedata/beside.wad"'
+check "no output was left in either directory" \
+	sh -c '[ ! -e "'"$sourcedir"'/beside.wad" ] && [ ! -e "'"$work"'/gamedata/beside.wad" ]'
 
 printf '\nThe lab tools run from a clean clone\n'
 # Both imported a module that was never in the repository. E1 moved them onto

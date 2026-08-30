@@ -71,7 +71,8 @@ class RefusesToWriteTheSource(Fixture):
         os.link(self.source, link)
         self.assertRefused(link, "C7E-SOURCE-002")
 
-    def test_anything_in_the_sources_directory(self):
+    def test_anything_in_a_game_data_directory(self):
+        # The fixture's source is MAPTEMP.CO7, so its directory is game data.
         self.assertRefused(self.data / "new.wad", "C7E-EXPORT-001")
 
     def test_a_subdirectory_of_a_protected_root(self):
@@ -81,6 +82,38 @@ class RefusesToWriteTheSource(Fixture):
         link = self.work / "shortcut"
         link.symlink_to(self.data)
         self.assertRefused(link / "new.wad", "C7E-EXPORT-001")
+
+    def test_a_directory_that_is_not_game_data_is_writable(self):
+        # Protecting every source's parent was the first version of this rule,
+        # and it refused to write a project into the user's own directory
+        # because a scratch archive happened to be there too.
+        scratch = self.work / "scratch"
+        scratch.mkdir()
+        source = scratch / "notes.c7map"
+        source.write_bytes(b"synthetic")
+        guard = OutputGuard.for_source(source)
+        self.assertEqual(guard.check(scratch / "project.ec7project"),
+                         canonical(scratch / "project.ec7project"))
+        # The source itself is still protected, however it is spelled.
+        with self.assertRaises(ExportError):
+            guard.check(scratch / "." / "notes.c7map")
+
+    def test_game_data_is_recognised_by_its_own_files(self):
+        from ec7edit_core.paths import looks_like_game_data
+
+        plain = self.work / "plain"
+        plain.mkdir()
+        self.assertFalse(looks_like_game_data(plain))
+        (plain / "VGAGRAPH.CO7").write_bytes(b"x")
+        self.assertTrue(looks_like_game_data(plain))
+
+    def test_the_executable_alone_is_enough(self):
+        from ec7edit_core.paths import looks_like_game_data
+
+        directory = self.work / "exe-only"
+        directory.mkdir()
+        (directory / "CORR7CD.EXE").write_bytes(b"x")
+        self.assertTrue(looks_like_game_data(directory))
 
     def test_an_extra_protected_root(self):
         guard = OutputGuard.for_source(self.source, extra_roots=[self.work])

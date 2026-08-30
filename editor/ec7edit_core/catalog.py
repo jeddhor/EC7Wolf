@@ -262,7 +262,12 @@ def _trigger_entries(xlat: Xlat, curation: Curation) -> list[CatalogEntry]:
                     value=value,
                     values=(value,),
                     texture=xlat.tiles[value].texture if value in xlat.tiles else "",
-                    placement="wall" if plane == 0 else "floor",
+                    # Corridor 7's plane-1 triggers all configure the wall cell
+                    # they sit in -- a pushwall slides a wall, a disintegrating
+                    # wall opens one. Calling them floor placements made the
+                    # validator report five errors on every shipped map, which
+                    # is how this was found.
+                    placement="wall",
                     blocking=None,
                     evidence=f"xlat/corridor7.txt {trigger.section} trigger {value}",
                     test_vector=f"special-{plane}-{value:03d}",

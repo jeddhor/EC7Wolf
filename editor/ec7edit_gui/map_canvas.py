@@ -265,13 +265,13 @@ class MapCanvas(QWidget):
                     self.update(self.cell_rect(*stale).adjusted(-2, -2, 2, 2))
             self.hovered.emit(*cell)
         if self._button != Qt.NoButton and cell != (-1, -1):
-            self.dragged.emit(cell[0], cell[1], int(self._button))
+            self.dragged.emit(cell[0], cell[1], self._button.value)
 
     def mousePressEvent(self, event) -> None:
         cell = self.cell_at(event.position().toPoint())
         self._button = event.button()
         if cell != (-1, -1):
-            self.pressed.emit(cell[0], cell[1], int(event.button()))
+            self.pressed.emit(cell[0], cell[1], event.button().value)
 
     def mouseReleaseEvent(self, event) -> None:
         self._button = Qt.NoButton

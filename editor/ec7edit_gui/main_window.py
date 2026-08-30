@@ -18,8 +18,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDockWidget,
     QFileDialog,
     QLabel,
@@ -40,6 +41,8 @@ from ec7edit_core.archive import read_archive
 from ec7edit_core.catalog import Catalog, load_catalog
 from ec7edit_core.commands import History
 from ec7edit_core.discovery import Profile, data_fingerprint
+from ec7edit_core.engine_runner import build_launch_plan
+from ec7edit_core.validation import summarise, validate_map
 from ec7edit_core.document import MapDocument, ProjectDocument, SourceReference, utc_now
 from ec7edit_core.errors import Ec7EditError
 from ec7edit_core.paths import SourceIdentity
@@ -52,10 +55,12 @@ from ec7edit_core.project import (
     save_project,
 )
 
+from .inspector import Inspector
 from .map_canvas import MapCanvas
 from .palette_models import CatalogFilter, CatalogModel, EntryRole
 from .settings import Settings
 from .thumbnails import AssetSource, ThumbnailFactory
+from .tools import Tool, ToolController
 from .workers import WorkerPool
 
 CATALOG_PATH = Path(__file__).resolve().parents[1] / "resources" / "editor_catalog.json"
@@ -110,7 +115,13 @@ class MainWindow(QMainWindow):
         self.thumbnails = ThumbnailFactory()
         self.recovery = RecoveryStore(Path.home() / ".local" / "share" / "ec7edit" / "recovery")
 
+        self.tools = ToolController(self)
+        self.tools.command_ready.connect(self.run_command)
+        self.tools.picked.connect(self._on_picked)
+        self.tools.message.connect(lambda text: self.statusBar().showMessage(text, 3000))
+
         self._build_menus()
+        self._build_tools()
         self._build_docks()
         self._build_central()
         self.setStatusBar(QStatusBar(self))
@@ -175,9 +186,17 @@ class MainWindow(QMainWindow):
         view_menu.addSeparator()
         view_menu.addAction(self.action_reset_layout)
 
-        tools_menu = self.menuBar().addMenu("&Tools")
+        self.tools_menu = self.menuBar().addMenu("&Tools")
+        self.action_test = self._action(
+            "&Test in EC7Wolf", self.playtest, "F5",
+            tip="Export the open map and launch the engine on it",
+        )
+        self.action_validate = self._action("&Check this map", self.validate, "F8")
         self.action_setup = self._action("&Setup…", self.run_setup, tip="Engine, data, workspace")
-        tools_menu.addAction(self.action_setup)
+        self.tools_menu.addAction(self.action_test)
+        self.tools_menu.addAction(self.action_validate)
+        self.tools_menu.addSeparator()
+        self.tools_menu.addAction(self.action_setup)
 
         help_menu = self.menuBar().addMenu("&Help")
         help_menu.addAction(self._action("&About EC7Edit", self.about))
@@ -186,8 +205,41 @@ class MainWindow(QMainWindow):
         bar.setObjectName("main-toolbar")
         bar.setMovable(True)
         for action in (self.action_new, self.action_open, self.action_save,
-                       self.action_export, self.action_undo, self.action_redo):
+                       self.action_export, self.action_undo, self.action_redo,
+                       self.action_test):
             bar.addAction(action)
+
+    def _build_tools(self) -> None:
+        """One exclusive action per tool, with its single-key shortcut."""
+        bar = self.addToolBar("Tools")
+        bar.setObjectName("tools-toolbar")
+        group = QActionGroup(self)
+        group.setExclusive(True)
+        self.tool_actions: dict[Tool, QAction] = {}
+        for tool in Tool:
+            action = QAction(tool.label, self)
+            action.setCheckable(True)
+            action.setObjectName(f"tool-{tool.value}")
+            action.setShortcut(QKeySequence(tool.shortcut))
+            action.setStatusTip(f"{tool.label} ({tool.shortcut})")
+            action.triggered.connect(lambda _checked, chosen=tool: self.select_tool(chosen))
+            group.addAction(action)
+            bar.addAction(action)
+            self.tool_actions[tool] = action
+        self.tool_actions[Tool.BRUSH].setChecked(True)
+
+        self.filled_box = QCheckBox("Filled", self)
+        self.filled_box.setAccessibleName("Filled rectangle")
+        self.filled_box.toggled.connect(
+            lambda checked: setattr(self.tools, "filled_rectangle", checked)
+        )
+        bar.addWidget(self.filled_box)
+
+    def select_tool(self, tool: Tool) -> None:
+        self.tools.set_tool(tool)
+        action = self.tool_actions.get(tool)
+        if action is not None and not action.isChecked():
+            action.setChecked(True)
 
     def _build_docks(self) -> None:
         self.map_list = QListWidget(self)
@@ -239,8 +291,17 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, palette_dock)
         self.palette_dock = palette_dock
 
+        self.inspector = Inspector(self.catalog, self)
+        self.inspector.change_requested.connect(self._on_inspector_change)
+        inspector_dock = QDockWidget("Inspector", self)
+        inspector_dock.setObjectName("inspector-dock")
+        inspector_dock.setWidget(self.inspector)
+        self.addDockWidget(Qt.RightDockWidgetArea, inspector_dock)
+        self.inspector_dock = inspector_dock
+
         self.problems = QListWidget(self)
         self.problems.setAccessibleName("Problems")
+        self.problems.itemActivated.connect(self._on_problem_activated)
         problems_dock = QDockWidget("Problems", self)
         problems_dock.setObjectName("problems-dock")
         problems_dock.setWidget(self.problems)
@@ -419,6 +480,9 @@ class MainWindow(QMainWindow):
         document = self.project.map_by_uuid(uuid)
         tab = MapTab(document, self.catalog, self)
         tab.canvas.hovered.connect(self._on_hover)
+        tab.canvas.pressed.connect(self._on_press)
+        tab.canvas.dragged.connect(self.tools.drag)
+        tab.canvas.released.connect(self.tools.release)
         index = self.tabs.addTab(tab, f"{document.lump_name} {document.name}")
         self.tabs.setCurrentIndex(index)
         self._apply_wall_colours()
@@ -433,7 +497,47 @@ class MainWindow(QMainWindow):
         self.tabs.removeTab(index)
 
     def _on_tab_changed(self, index: int) -> None:
+        tab = self.current_tab
+        if tab is not None:
+            self.tools.set_document(self.project.map_by_uuid(tab.map_uuid))
         self._refresh_title()
+
+    def _on_press(self, x: int, y: int, button: int) -> None:
+        tab = self.current_tab
+        if tab is None:
+            return
+        document = self.project.map_by_uuid(tab.map_uuid)
+        self.tools.set_document(document)
+        self.tools.press(x, y, button)
+        self.inspector.show_cell(self.project.map_by_uuid(tab.map_uuid), x, y)
+
+    def _on_picked(self, plane: int, value: int) -> None:
+        """The eyedropper selects the catalogue entry it found."""
+        if self.catalog is None:
+            return
+        entry = self.catalog.for_value(plane, value)
+        if entry is None:
+            return
+        self.selected_entry = entry
+        self.tools.set_entry(entry)
+        self.selection_label.setText(f"<b>{entry.name}</b> — raw {entry.value}")
+
+    def _on_inspector_change(self, plane: int, x: int, y: int, value: int) -> None:
+        tab = self.current_tab
+        if tab is None:
+            return
+        document = self.project.map_by_uuid(tab.map_uuid)
+        from ec7edit_core.commands import write_words
+
+        self.run_command(write_words(document, [(plane, x, y, value)], label="Change property"))
+        self.inspector.show_cell(self.project.map_by_uuid(tab.map_uuid), x, y)
+
+    def _on_problem_activated(self, item) -> None:
+        """Jump the inspector to the cell a diagnostic names."""
+        cell = item.data(Qt.UserRole)
+        tab = self.current_tab
+        if cell and tab is not None:
+            self.inspector.show_cell(self.project.map_by_uuid(tab.map_uuid), *cell)
 
     def _on_map_selected(self, row: int) -> None:
         if 0 <= row < len(self.project.maps):
@@ -467,6 +571,9 @@ class MainWindow(QMainWindow):
         if entry is None:
             return
         self.selected_entry = entry
+        self.tools.set_entry(entry)
+        if self.tools.tool in (Tool.POINTER, Tool.EYEDROPPER):
+            self.select_tool(Tool.BRUSH)
         self.selection_label.setText(
             f"<b>{entry.name}</b> — raw {entry.value} on plane {entry.plane}"
             + (f"<br>{entry.description}" if entry.description else "")
@@ -494,6 +601,7 @@ class MainWindow(QMainWindow):
         for dock, area in (
             (self.maps_dock, Qt.LeftDockWidgetArea),
             (self.palette_dock, Qt.RightDockWidgetArea),
+            (self.inspector_dock, Qt.RightDockWidgetArea),
             (self.problems_dock, Qt.BottomDockWidgetArea),
         ):
             dock.setFloating(False)
@@ -509,6 +617,11 @@ class MainWindow(QMainWindow):
         self.project = self.history.do(self.project, command)
         self.pool.set_revision(self.project.revision)
         self._sync_canvases()
+        tab = self.current_tab
+        if tab is not None:
+            # The controller holds a snapshot, and an immutable document means
+            # the old one would keep reporting the words from before this edit.
+            self.tools.set_document(self.project.map_by_uuid(tab.map_uuid))
         self._refresh_title()
         self.project_changed.emit()
 
@@ -521,6 +634,76 @@ class MainWindow(QMainWindow):
         self.project = self.history.redo(self.project)
         self._sync_canvases()
         self._refresh()
+
+    # -- validation and playtest -------------------------------------------
+
+    def validate(self) -> list:
+        """Check the open map and fill the Problems panel."""
+        tab = self.current_tab
+        self.problems.clear()
+        if tab is None or self.catalog is None:
+            return []
+        document = self.project.map_by_uuid(tab.map_uuid)
+        problems = validate_map(document, self.catalog)
+        for problem in problems:
+            item = QListWidgetItem(f"{problem.severity.name.lower()}: {problem.message}"
+                                   + (f"  [{problem.where}]" if problem.where else ""))
+            item.setToolTip(problem.code)
+            if problem.where.startswith("cell ("):
+                numbers = problem.where[6:-1].split(",")
+                item.setData(Qt.UserRole, (int(numbers[0]), int(numbers[1])))
+            self.problems.addItem(item)
+        self.statusBar().showMessage(summarise(problems), 6000)
+        return problems
+
+    def playtest(self) -> bool:
+        """Export the open map and start the engine on it.
+
+        Exports to the workspace, never beside the game data: the export is a
+        file this editor wrote, and it has no business landing among files it
+        must not touch.
+        """
+        tab = self.current_tab
+        if tab is None:
+            self._error("Nothing to test", "Open a map first.")
+            return False
+        profile = self.settings.profile
+        if not profile.engine_path or not profile.data_dir:
+            self._error("No engine configured",
+                        "Tools -> Setup, and choose an EC7Wolf executable and your game data.")
+            return False
+
+        document = self.project.map_by_uuid(tab.map_uuid)
+        workspace = Path(profile.workspace_dir or Path.home()) / ".ec7edit-playtest"
+        target = workspace / f"{document.lump_name.lower()}-preview.wad"
+
+        from ec7edit_core.paths import OutputGuard, atomic_write
+        from ec7edit_core.wad import build_preview_wad
+
+        try:
+            blob = build_preview_wad([(document.lump_name, document.to_record())])
+            guard = OutputGuard(protected_roots=(Path(profile.data_dir),))
+            atomic_write(target, blob, guard=guard)
+            plan = build_launch_plan(
+                executable=profile.engine_path,
+                data_dir=profile.data_dir,
+                preview_wad=target,
+                marker=document.lump_name,
+            )
+        except (OSError, Ec7EditError) as error:
+            self._error("Could not start a playtest", str(error))
+            return False
+
+        self._note_problem(f"Playtest: {plan.described()}")
+        import subprocess
+
+        try:
+            subprocess.Popen(plan.argv, cwd=str(plan.cwd))
+        except OSError as error:
+            self._error("The engine did not start", str(error))
+            return False
+        self.statusBar().showMessage(f"Testing {document.lump_name} in EC7Wolf", 6000)
+        return True
 
     def _sync_canvases(self) -> None:
         for index in range(self.tabs.count()):

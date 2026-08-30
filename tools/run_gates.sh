@@ -71,7 +71,7 @@ done
 # gl_selftest is here rather than below because --gltest is handled before the
 # IWAD is opened: it needs no game data, and it is the only thing that proves the
 # shaders actually compile on the runner's driver. A broken shader still links.
-data_free_gates='definitions names ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3 ec7edit_e4 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
+data_free_gates='definitions names ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3 ec7edit_e4 ec7edit_e5 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
 
 data_gates='
 corridor7
@@ -92,6 +92,7 @@ corridor7_upscale
 corridor7_controls
 ec7edit_override
 ec7edit_assets
+ec7edit_slice
 multiplayer_loopback
 multiplayer_latency
 multiplayer_menu
@@ -248,6 +249,11 @@ for g in $data_free_gates; do
 			# provenance, link containment.
 			run_gate "$g" "ec7edit E0 foundation" \
 				"$here/test_ec7edit_e0.sh" ;;
+		ec7edit_e5)
+			# Data-free: tool geometry with no Qt, plus the tools driven
+			# through the real window on the offscreen platform.
+			run_gate "$g" "ec7edit E5 editing" \
+				"$here/test_ec7edit_e5.sh" ;;
 		ec7edit_e4)
 			# Real Qt widgets on the offscreen platform: no display, no game
 			# data. Skips where PySide6 is not installed.
@@ -285,6 +291,11 @@ for g in $data_free_gates; do
 			# one gate that skips on the self-hosted runner too.
 			run_gate "$g" "android device" \
 				"$here/test_android_device.sh" ;;
+		ec7edit_slice)
+			# E5's exit gate: edit a real map through the real window, export
+			# it, and watch EC7Wolf spawn the player where the edit put them.
+			run_gate "$g" "ec7edit editing slice" \
+				"$here/test_ec7edit_slice.sh" "$build_dir" "$data_dir" ;;
 		ec7edit_assets)
 			# Decodes the real artwork and checks the catalogue against the
 			# shipped maps. Reports counts and a digest, never retail bytes.

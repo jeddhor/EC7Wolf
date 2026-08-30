@@ -254,10 +254,16 @@ class MainWindow(QMainWindow):
             self.tool_actions[tool] = action
         self.tool_actions[Tool.BRUSH].setChecked(True)
 
+        # Only a structure with a footprint that actually has an orientation can
+        # be turned. Every wall unit is a single word usable from whichever side
+        # has floor, so none of them do -- and a button that can never do
+        # anything is worse than no button. It reappears on its own if a
+        # multi-cell structure is ever added.
         self.action_rotate = self._action(
             "&Turn structure", self.tools.rotate_prefab, "Ctrl+R",
             tip="Turn the selected structure a quarter turn clockwise",
         )
+        self.action_rotate.setVisible(False)
         bar.addAction(self.action_rotate)
 
         self.filled_box = QCheckBox("Filled", self)
@@ -356,7 +362,7 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, palette_dock)
         self.palette_dock = palette_dock
 
-        self.inspector = Inspector(self.catalog, self)
+        self.inspector = Inspector(self.catalog, self.thumbnails, self)
         self.inspector.change_requested.connect(self._on_inspector_change)
         inspector_dock = QDockWidget("Inspector", self)
         inspector_dock.setObjectName("inspector-dock")
@@ -830,6 +836,7 @@ class MainWindow(QMainWindow):
             return
         self.tools.cancel_pending()
         self.tools.set_prefab(prefab)
+        self.action_rotate.setVisible(prefab.rotatable)
         self.select_tool(Tool.PREFAB)
         needs = "; ".join(check.why for check in prefab.preconditions) or "nothing in particular"
         self.selection_label.setText(
@@ -862,6 +869,7 @@ class MainWindow(QMainWindow):
         # thing -- with the palette showing the new one as selected.
         self.tools.set_prefab(None)
         self.tools.cancel_pending()
+        self.action_rotate.setVisible(False)
         if self.tools.tool in self._ARMED_TOOLS:
             self.select_tool(Tool.BRUSH)
 

@@ -23,13 +23,24 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QVBoxLayout,
     QWidget,
 )
 
+from ec7edit_core.assets import AssetError
 from ec7edit_core.catalog import Catalog, CatalogEntry
 from ec7edit_core.document import MapDocument
+
+#: The preview is deliberately larger than the palette's tiles. A 64x64 wall
+#: page at 64 pixels is a swatch you pick from; at 128 it is something you can
+#: actually read, which is the difference between "that is the grey one" and
+#: "that is the one with the vent".
+PREVIEW_SIZE = 128
+#: The other plane's artwork, shown beside it. A cell often holds both a wall
+#: and something standing on it, and the heading can only name one of them.
+SECONDARY_SIZE = 64
 
 
 class Inspector(QWidget):
@@ -38,12 +49,22 @@ class Inspector(QWidget):
     #: (plane, x, y, value) -- one raw write the window should turn into a command.
     change_requested = Signal(int, int, int, int)
 
-    def __init__(self, catalog: Catalog | None = None, parent=None) -> None:
+    def __init__(self, catalog: Catalog | None = None, thumbnails=None, parent=None) -> None:
         super().__init__(parent)
         self.catalog = catalog
+        self.thumbnails = thumbnails
         self.document: MapDocument | None = None
         self.cell: tuple[int, int] | None = None
         self._loading = False
+
+        self.preview = QLabel(self)
+        self.preview.setAccessibleName("Selected artwork")
+        self.preview.setAlignment(Qt.AlignCenter)
+        self.preview.setMinimumHeight(PREVIEW_SIZE)
+        self.secondary = QLabel(self)
+        self.secondary.setAccessibleName("Artwork under it")
+        self.secondary.setAlignment(Qt.AlignCenter)
+        self.secondary.setVisible(False)
 
         self.heading = QLabel("Nothing selected", self)
         self.heading.setWordWrap(True)
@@ -71,7 +92,14 @@ class Inspector(QWidget):
         form.addRow("Movement", self.movement)
         form.addRow("Difficulty", self.rank)
 
+        art = QHBoxLayout()
+        art.addStretch(1)
+        art.addWidget(self.preview)
+        art.addWidget(self.secondary)
+        art.addStretch(1)
+
         layout = QVBoxLayout(self)
+        layout.addLayout(art)
         layout.addWidget(self.heading)
         layout.addWidget(self.raw)
         layout.addLayout(form)
@@ -80,6 +108,49 @@ class Inspector(QWidget):
 
     def set_catalog(self, catalog: Catalog | None) -> None:
         self.catalog = catalog
+
+    # -- artwork ----------------------------------------------------------
+
+    def _pixmap_for(self, entry: CatalogEntry | None, size: int):
+        """The entry's artwork at `size`, or a labelled placeholder, or None.
+
+        Nearest-neighbour, always: these are 64x64 pages of hand-placed pixels,
+        and smoothing them turns the thing being identified into a smear.
+        """
+        if entry is None or self.thumbnails is None:
+            return None
+        cached = self.thumbnails.cached(entry, size)
+        if cached is not None:
+            return cached
+        if not self.thumbnails.available:
+            return None
+        from PySide6.QtGui import QPixmap
+
+        try:
+            pixels, edge, alpha = self.thumbnails.pixels_for(entry)
+        except AssetError:
+            return self.thumbnails.store(entry, size, self.thumbnails.placeholder(entry, size))
+        image = self.thumbnails.image_from(pixels, edge, alpha)
+        pixmap = QPixmap.fromImage(image).scaled(
+            size, size, Qt.KeepAspectRatio, Qt.FastTransformation
+        )
+        return self.thumbnails.store(entry, size, pixmap)
+
+    def _show_artwork(self, primary: CatalogEntry | None,
+                      secondary: CatalogEntry | None) -> None:
+        pixmap = self._pixmap_for(primary, PREVIEW_SIZE)
+        if pixmap is None:
+            self.preview.clear()
+            self.preview.setText("no artwork" if primary is not None else "")
+        else:
+            self.preview.setPixmap(pixmap)
+        self.preview.setToolTip(primary.name if primary is not None else "")
+
+        under = self._pixmap_for(secondary, SECONDARY_SIZE) if secondary is not None else None
+        self.secondary.setVisible(under is not None)
+        if under is not None:
+            self.secondary.setPixmap(under)
+            self.secondary.setToolTip(f"under it: {secondary.name}")
 
     def _set_enabled(self, enabled: bool) -> None:
         for widget in (self.direction, self.movement, self.rank):
@@ -100,6 +171,7 @@ class Inspector(QWidget):
         if self.document is None or self.cell is None:
             self.heading.setText("Nothing selected")
             self.raw.setText("")
+            self._show_artwork(None, None)
             self._set_enabled(False)
             return
 
@@ -111,12 +183,21 @@ class Inspector(QWidget):
         )
 
         entry = self._entry_for(words)
+        # A cell holds up to two things worth looking at: what is standing here
+        # and what it is standing on. The heading can only name the one the
+        # controls act on, so the other gets the small tile beside it.
+        under = self.catalog.for_value(0, words[0]) if (self.catalog and words[0]) else None
+        if under is entry:
+            under = None
+
         if entry is None:
             self.heading.setText("Empty floor" if not words[0] else f"Unknown word {words[0]}")
+            self._show_artwork(None, None)
             self._set_enabled(False)
             return
 
         self.heading.setText(f"<b>{entry.name}</b><br>{entry.description or entry.actor}")
+        self._show_artwork(entry, under)
         self._populate(entry, words[1])
 
     def _entry_for(self, words) -> CatalogEntry | None:

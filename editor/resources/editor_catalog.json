@@ -5324,18 +5324,18 @@
     {
       "aliases": [
         "door",
-        "red",
+        "blue",
         "locked",
         "Door_Open",
         "C7W0254"
       ],
       "category": "specials",
-      "description": "Needs the RED access card.",
+      "description": "Needs the BLUE access card.",
       "evidence": "xlat/corridor7.txt tiles trigger 252",
       "grade": "A",
       "key": "special.0.252",
       "minskill": 0,
-      "name": "Door (RED lock)",
+      "name": "Door (BLUE lock)",
       "placement": "wall",
       "plane": 0,
       "rank": 252,
@@ -5351,18 +5351,18 @@
     {
       "aliases": [
         "door",
-        "blue",
+        "red",
         "locked",
         "Door_Open",
         "C7W0254"
       ],
       "category": "specials",
-      "description": "Needs the BLUE access card.",
+      "description": "Needs the RED access card.",
       "evidence": "xlat/corridor7.txt tiles trigger 253",
       "grade": "A",
       "key": "special.0.253",
       "minskill": 0,
-      "name": "Door (BLUE lock)",
+      "name": "Door (RED lock)",
       "placement": "wall",
       "plane": 0,
       "rank": 253,

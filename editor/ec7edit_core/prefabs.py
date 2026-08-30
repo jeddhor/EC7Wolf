@@ -71,7 +71,8 @@ class Precondition:
 
     dx: int
     dy: int
-    #: "floor", "wall", "any", or "empty" (nothing on plane 1).
+    #: "floor", "wall", "any", "empty" (nothing on plane 1), or "reachable"
+    #: (at least one orthogonal neighbour is floor).
     requires: str
     why: str
 
@@ -88,6 +89,13 @@ class Precondition:
             return is_wall(plane0)
         if self.requires == "empty":
             return plane1 in (0, EMPTY_OBJECT)
+        if self.requires == "reachable":
+            for nx, ny in ((cx, cy - 1), (cx + 1, cy), (cx, cy + 1), (cx - 1, cy)):
+                if not (0 <= nx < document.width and 0 <= ny < document.height):
+                    continue
+                if is_floor(document.planes.planes[0][linear_index(nx, ny, document.width)]):
+                    return True
+            return False
         return True
 
     def rotated(self, quarter_turns: int) -> "Precondition":
@@ -269,9 +277,9 @@ def _terminal(key, name, value, description, evidence) -> Prefab:
     return Prefab(
         key=key, name=name, description=description, category="specials",
         writes=(Write(0, 0, 0, value),),
-        preconditions=(Precondition(0, 1, "floor", "floor in front of it to reach it from"),),
+        preconditions=(Precondition(0, 0, "reachable", "floor beside it to reach it from"),),
         erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
-        rotatable=True, evidence=evidence,
+        evidence=evidence,
     )
 
 
@@ -342,23 +350,29 @@ PREFABS: tuple[Prefab, ...] = (
         notes="Axis is inferred, never stored. See rules.door_axis.",
     ),
     Prefab(
-        key="prefab.door.red",
-        name="Door (RED lock)",
-        description="Needs the RED access card, which a terminal grants rather than "
-                    "the floor holding one.",
+        key="prefab.door.blue",
+        name="Door (BLUE lock)",
+        description="Needs the BLUE access card, which a terminal grants rather "
+                    "than the floor holding one.",
         category="specials",
         writes=(Write(0, 0, 0, 252),),
         erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
-        evidence="xlat/corridor7.txt tiles trigger 252, arg3 = 1",
+        evidence="xlat/corridor7.txt tiles trigger 252, arg3 = 1; lockdefs.txt "
+                 "Lock 1 Corridor7 is C7Static002, 'BLUE Access Required'",
+        notes="Lock 1 is the blue card and lock 2 is the red one, which is the "
+              "opposite of the order the two words appear in. Both doors were "
+              "labelled with the other colour here until a lab map proved a "
+              "player carrying C7Static002 opens 252.",
     ),
     Prefab(
-        key="prefab.door.blue",
-        name="Door (BLUE lock)",
-        description="Needs the BLUE access card.",
+        key="prefab.door.red",
+        name="Door (RED lock)",
+        description="Needs the RED access card.",
         category="specials",
         writes=(Write(0, 0, 0, 253),),
         erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
-        evidence="xlat/corridor7.txt tiles trigger 253, arg3 = 2",
+        evidence="xlat/corridor7.txt tiles trigger 253, arg3 = 2; lockdefs.txt "
+                 "Lock 2 Corridor7 is C7Static001, 'RED Access Required'",
     ),
     Prefab(
         key="prefab.elevator",
@@ -368,10 +382,9 @@ PREFABS: tuple[Prefab, ...] = (
         category="specials",
         writes=(Write(0, 0, 0, 63),),
         preconditions=(
-            Precondition(0, 1, "floor", "floor in front of it to stand on"),
+            Precondition(0, 0, "reachable", "floor beside it to stand on"),
         ),
         erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
-        rotatable=True,
         evidence="xlat/corridor7.txt tiles trigger 63, Exit_Normal arg0 = 1",
         notes="arg1 = 64 is the lit panel the engine swaps in on use.",
     ),
@@ -403,10 +416,9 @@ PREFABS: tuple[Prefab, ...] = (
         category="specials",
         writes=(Write(0, 0, 0, 85),),
         preconditions=(
-            Precondition(0, 1, "floor", "floor in front of it to stand in"),
+            Precondition(0, 0, "reachable", "floor beside it to stand in"),
         ),
         erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
-        rotatable=True,
         evidence="xlat/corridor7.txt tiles trigger 85, C7_Dispenser arg0 = 1",
         notes="The engine drives the aperture from the player's own tic; the map "
               "only needs the one wall.",
@@ -417,9 +429,8 @@ PREFABS: tuple[Prefab, ...] = (
         description="The wall unit that refills standard rounds.",
         category="specials",
         writes=(Write(0, 0, 0, 111),),
-        preconditions=(Precondition(0, 1, "floor", "floor in front of it"),),
+        preconditions=(Precondition(0, 0, "reachable", "floor beside it"),),
         erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
-        rotatable=True,
         evidence="xlat/corridor7.txt tiles trigger 111, C7_Dispenser arg0 = 2",
     ),
     Prefab(
@@ -429,9 +440,8 @@ PREFABS: tuple[Prefab, ...] = (
                     "battery to pick up; this is how the visor is recharged.",
         category="specials",
         writes=(Write(0, 0, 0, 110),),
-        preconditions=(Precondition(0, 1, "floor", "floor in front of it"),),
+        preconditions=(Precondition(0, 0, "reachable", "floor beside it"),),
         erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
-        rotatable=True,
         evidence="xlat/corridor7.txt tiles trigger 110, C7_Dispenser arg0 = 3",
     ),
     _wall_marker(
@@ -457,9 +467,8 @@ PREFABS: tuple[Prefab, ...] = (
                     "use for it directly.",
         category="specials",
         writes=(Write(0, 0, 0, 88),),
-        preconditions=(Precondition(0, 1, "floor", "floor in front of it to stand in"),),
+        preconditions=(Precondition(0, 0, "reachable", "floor beside it to stand in"),),
         erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
-        rotatable=True,
         evidence="xlat/corridor7.txt tiles trigger 88, C7_Dispenser arg0 = 1",
     ),
     Prefab(

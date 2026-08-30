@@ -78,6 +78,7 @@ corridor7
 corridor7_determinism
 corridor7_ai
 corridor7_automap_doorway
+corridor7_door_jam
 corridor7_cdaudio
 corridor7_floorplan_reveal
 corridor7_invulnerability

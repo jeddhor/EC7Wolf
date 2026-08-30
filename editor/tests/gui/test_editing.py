@@ -37,6 +37,7 @@ from ec7edit_core.planes import MapPlanes, linear_index
 from ec7edit_gui.application import build_application
 from ec7edit_gui.main_window import MainWindow
 from ec7edit_gui.settings import Settings
+from ec7edit_gui.inspector import PREVIEW_SIZE, SECONDARY_SIZE
 from ec7edit_gui.tools import EMPTY_OBJECT, Tool
 
 CATALOG = load_catalog(EDITOR / "resources" / "editor_catalog.json")
@@ -308,6 +309,76 @@ class Selection(Base):
         self.assertEqual(self.document.planes.planes, before)
 
 
+class StubAssets:
+    """An AssetSource-shaped stand-in: flat colour pages, no game data.
+
+    The preview path is decode -> QImage -> scale -> cache, and all of that is
+    the editor's own code. What it must not need is a copy of Corridor 7.
+    """
+
+    fingerprint = "stub"
+
+    def wall(self, page):
+        return bytes([page % 256, 40, 90] * (64 * 64))
+
+    def sprite(self, page):
+        return bytes([200, page % 256, 30, 255] * (64 * 64))
+
+
+class InspectorPreview(Base):
+    def place_alioprobe(self, x=4, y=4):
+        self.choose("thing.c7organiceye.stand.skill1")
+        self.stroke(Tool.BRUSH, [(x, y)])
+        self.window.inspector.show_cell(self.document, x, y)
+
+    def with_assets(self):
+        self.window.thumbnails.source = StubAssets()
+        self.window.thumbnails.clear()
+
+    def test_without_game_data_it_says_so(self):
+        # No copy of the game means no artwork, which is a thing to say rather
+        # than an empty box or a traceback.
+        self.place_alioprobe()
+        self.assertTrue(self.window.inspector.preview.pixmap().isNull())
+        self.assertEqual(self.window.inspector.preview.text(), "no artwork")
+
+    def test_it_shows_the_artwork_larger_than_the_palette_does(self):
+        self.with_assets()
+        self.place_alioprobe()
+        pixmap = self.window.inspector.preview.pixmap()
+        self.assertFalse(pixmap.isNull())
+        self.assertEqual(pixmap.width(), PREVIEW_SIZE)
+
+    def place_pushwall(self, x=4, y=4):
+        # A pushwall is a plane-1 marker over a plane-0 wall: one cell, two
+        # things, and the heading can only name one of them.
+        from ec7edit_core.prefabs import by_key
+
+        self.window.tools.set_prefab(by_key("prefab.pushwall.secret"))
+        self.stroke(Tool.PREFAB, [(x, y)])
+        self.window.inspector.show_cell(self.document, x, y)
+
+    def test_the_wall_underneath_gets_its_own_tile(self):
+        self.with_assets()
+        self.place_pushwall()
+        self.assertFalse(self.window.inspector.secondary.isHidden())
+        self.assertEqual(self.window.inspector.secondary.pixmap().width(), SECONDARY_SIZE)
+
+    def test_a_plain_wall_has_only_the_one_tile(self):
+        self.with_assets()
+        self.choose(WALL_ENTRY)
+        self.stroke(Tool.BRUSH, [(4, 4)])
+        self.window.inspector.show_cell(self.document, 4, 4)
+        self.assertTrue(self.window.inspector.secondary.isHidden())
+
+    def test_deselecting_clears_it(self):
+        self.with_assets()
+        self.place_alioprobe()
+        self.window.inspector.show_cell(None, -1, -1)
+        self.assertTrue(self.window.inspector.preview.pixmap().isNull())
+        self.assertTrue(self.window.inspector.secondary.isHidden())
+
+
 class InspectorPanel(Base):
     def place_alioprobe(self, x=4, y=4):
         self.choose("thing.c7organiceye.stand.skill1")
@@ -447,16 +518,26 @@ class Structures(Base):
         self.place(4, 0)          # top wall, floor at (4,1)
         self.assertEqual(self.document.cell(0, 4, 0), 85)
 
-    def test_turning_a_structure_moves_what_it_needs(self):
-        # In the left wall, the floor is to the east, not the south.
+    def test_a_wall_unit_goes_in_any_wall_of_the_room(self):
+        # A wall unit has no facing: the tile paints the same texture on all
+        # four sides and its trigger names no side, so every wall of the room
+        # takes one. Requiring floor to the south made three walls in four
+        # refuse it, and there was no way to say which way it faced because
+        # there is no such thing to say.
+        for key, word, (x, y) in (("prefab.dispenser.ammo", 111, (0, 4)),
+                                  ("prefab.terminal.blue", 11, (9, 4)),
+                                  ("prefab.terminal.red", 9, (4, 9)),
+                                  ("prefab.elevator", 63, (4, 0))):
+            with self.subTest(key=key):
+                self.choose_prefab(key)
+                self.place(x, y)
+                self.assertEqual(self.document.cell(0, x, y), word)
+
+    def test_nothing_offers_a_turn(self):
+        # The toolbar button hides itself while no structure has an
+        # orientation, rather than sitting there doing nothing.
         self.choose_prefab("prefab.dispenser.ammo")
-        self.place(0, 4)
-        self.assertNotEqual(self.document.cell(0, 0, 4), 111, "should have been refused")
-        self.window.tools.rotate_prefab()
-        self.window.tools.rotate_prefab()
-        self.window.tools.rotate_prefab()
-        self.place(0, 4)
-        self.assertEqual(self.document.cell(0, 0, 4), 111)
+        self.assertFalse(self.window.action_rotate.isVisible())
 
     def test_the_structures_tab_lists_them(self):
         from ec7edit_core.prefabs import PREFABS

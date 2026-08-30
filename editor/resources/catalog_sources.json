@@ -495,20 +495,20 @@
     "0:252": {
       "aliases": [
         "door",
-        "red",
-        "locked"
-      ],
-      "description": "Needs the RED access card.",
-      "name": "Door (RED lock)"
-    },
-    "0:253": {
-      "aliases": [
-        "door",
         "blue",
         "locked"
       ],
       "description": "Needs the BLUE access card.",
       "name": "Door (BLUE lock)"
+    },
+    "0:253": {
+      "aliases": [
+        "door",
+        "red",
+        "locked"
+      ],
+      "description": "Needs the RED access card.",
+      "name": "Door (RED lock)"
     },
     "0:254": {
       "aliases": [

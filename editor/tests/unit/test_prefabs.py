@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 EDITOR = Path(__file__).resolve().parents[2]
@@ -31,6 +32,7 @@ from ec7edit_core.prefabs import (
     EMPTY_OBJECT,
     PREFABS,
     TRANSPORTER_CHANNELS,
+    Precondition,
     Prefab,
     Write,
     by_key,
@@ -199,7 +201,7 @@ class Placement(unittest.TestCase):
 
 
 class Preconditions(unittest.TestCase):
-    def test_a_dispenser_needs_floor_in_front(self):
+    def test_a_dispenser_needs_floor_beside_it(self):
         # Solid all round: nowhere to stand.
         document = build(["###", "###", "###"])
         problems = by_key("prefab.dispenser.health").check(document, 1, 0)
@@ -209,9 +211,24 @@ class Preconditions(unittest.TestCase):
         document = build(["###", "#.#", "###"])
         self.assertEqual(by_key("prefab.dispenser.health").check(document, 1, 0), [])
 
+    def test_any_side_will_do(self):
+        # The tile paints the same texture on all four faces and the trigger
+        # names no side, so a wall unit is usable from whichever neighbour is
+        # floor. Requiring one particular side made three walls in four
+        # unusable for no reason the engine shares.
+        for unit in ("prefab.dispenser.health", "prefab.dispenser.ammo",
+                     "prefab.dispenser.visor", "prefab.terminal.blue",
+                     "prefab.terminal.red", "prefab.elevator"):
+            for rows, x, y, side in ((["###", "#.#", "###"], 1, 0, "south"),
+                                     (["###", "#.#", "###"], 1, 2, "north"),
+                                     (["###", "#.#", "###"], 0, 1, "east"),
+                                     (["###", "#.#", "###"], 2, 1, "west")):
+                with self.subTest(unit=unit, side=side):
+                    self.assertEqual(by_key(unit).check(build(rows), x, y), [])
+
     def test_it_does_not_fit_off_the_edge(self):
         document = build(["###", "#.#", "###"])
-        problems = by_key("prefab.dispenser.health").check(document, 1, 2)
+        problems = by_key("prefab.dispenser.health").check(document, 1, 3)
         self.assertEqual([p.code for p in problems], ["C7E-BOUNDARY-001"])
 
     def test_the_vortex_needs_clear_floor(self):
@@ -225,15 +242,23 @@ class Preconditions(unittest.TestCase):
 
 
 class Rotation(unittest.TestCase):
+    """Nothing ships rotatable today -- every structure is a single word whose
+    facing the engine reads off the map. The machinery stays because it is what
+    a multi-cell structure would need, and the toolbar button hides itself
+    until one exists."""
+
+    def test_nothing_ships_rotatable(self):
+        self.assertEqual([p.key for p in PREFABS if p.rotatable], [])
+
     def test_a_rotatable_footprint_turns(self):
-        prefab = by_key("prefab.dispenser.ammo")
-        self.assertEqual(prefab.preconditions[0].dx, 0)
-        self.assertEqual(prefab.preconditions[0].dy, 1)
+        prefab = replace(by_key("prefab.dispenser.ammo"), rotatable=True,
+                         preconditions=(Precondition(0, 1, "floor", "floor"),))
         turned = prefab.rotated(1)
         self.assertEqual((turned.preconditions[0].dx, turned.preconditions[0].dy), (-1, 0))
 
     def test_four_turns_return(self):
-        prefab = by_key("prefab.dispenser.ammo")
+        prefab = replace(by_key("prefab.dispenser.ammo"), rotatable=True,
+                         preconditions=(Precondition(0, 1, "floor", "floor"),))
         turned = prefab
         for _ in range(4):
             turned = turned.rotated(1)
@@ -243,13 +268,6 @@ class Rotation(unittest.TestCase):
     def test_a_non_rotatable_prefab_ignores_rotation(self):
         prefab = by_key("prefab.pushwall.secret")
         self.assertIs(prefab.rotated(1), prefab)
-
-    def test_rotation_finds_the_floor_on_the_other_side(self):
-        # A dispenser in the left wall needs floor to its east, not its south.
-        document = build(["###", "#.#", "###"])
-        upright = by_key("prefab.dispenser.ammo")
-        self.assertNotEqual(upright.check(document, 0, 1), [])
-        self.assertEqual(upright.rotated(3).check(document, 0, 1), [])
 
 
 class Doors(unittest.TestCase):

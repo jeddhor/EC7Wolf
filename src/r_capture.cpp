@@ -105,17 +105,58 @@ namespace
 	// so hands it to a different player on each machine.
 	bool     g_topUpAmmo      = false;
 
-	// --capture-forward [FROMTIC]: walk forward from a given tic. Negative
+	// One press: held from `from` for `tics` tics, or forever when tics < 0.
+	struct PressWindow
+	{
+		long from;
+		long tics;
+	};
+	bool InWindow(const TArray<PressWindow> &windows)
+	{
+		const long now = (long)gamestate.TimeCount;
+		for(unsigned int i = 0; i < windows.Size(); ++i)
+		{
+			if(now >= windows[i].from &&
+				(windows[i].tics < 0 || now < windows[i].from + windows[i].tics))
+				return true;
+		}
+		return false;
+	}
+
+	// --capture-forward [FROMTIC [TICS]]: walk forward over a window. Negative
 	// controly is forward (wl_agent.cpp thrusts by -controly), and RUNMOVE is
 	// the running magnitude, which is what forwardmove[1] scales -- so this
 	// measures the speed a player actually moves at rather than the value in
 	// their definition.
-	long     g_forwardFrom    = -1;
-	// --capture-use TIC: hold the use key from this tic. Nothing else in the
-	// harness can press it, so anything the player operates by hand -- an
+	//
+	// --capture-use TIC [TICS]: hold the use key over a window. Nothing else in
+	// the harness can press it, so anything the player operates by hand -- an
 	// elevator, a dispenser, an access terminal, a door -- was untestable
-	// headlessly until this existed.
-	long     g_useFrom        = -1;
+	// headlessly until this existed. A use that never lets go keeps re-opening
+	// the door it just opened, so anything about what happens *after* a door is
+	// open needs the key released again.
+	//
+	// Both may be given more than once, and each occurrence is another window.
+	// A player who walks into a doorway, stops, and then closes the door on
+	// themselves needs three separate presses to reproduce, which one window
+	// each could not express.
+	TArray<PressWindow> g_forwardWindows;
+	TArray<PressWindow> g_useWindows;
+
+	// --capture-place TIC X Y [ANGLE]: put the player at one exact spot, once.
+	// Unlike --capture-warp, which pins them there every tic, this is a single
+	// assignment, so the tics after it are ordinary play. Reaching a particular
+	// sub-tile position by steering is a matter of luck at 35 tics a second;
+	// stating it is not.
+	long     g_placeTic       = -1;
+	double   g_placeX         = 0.0, g_placeY = 0.0, g_placeAngle = -1.0;
+	bool     g_placeDone      = false;
+
+	// --capture-trace [FROMTIC]: print the player's position every tic. A tile
+	// coordinate is too coarse to tell "stopped by a wall" from "cannot move at
+	// all", and that difference is the whole question when something reports
+	// being stuck.
+	long     g_traceFrom      = -1;
 
 	// --capture-scoreboard: hold the scoreboard key down.
 	bool     g_holdScoreboard = false;
@@ -554,14 +595,34 @@ void ParseArgs(int argc, char **argv)
 			g_holdScoreboard = true;
 			g_armed = true;
 		}
-		else if(strcmp(arg, "--capture-forward") == 0)
+		else if(strcmp(arg, "--capture-place") == 0 && i + 3 < argc)
 		{
-			g_forwardFrom = (i + 1 < argc && argv[i+1][0] != '-') ? atol(argv[++i]) : 0;
+			g_placeTic = atol(argv[++i]);
+			g_placeX = atof(argv[++i]);
+			g_placeY = atof(argv[++i]);
+			if(i + 1 < argc && argv[i+1][0] >= '0' && argv[i+1][0] <= '9')
+				g_placeAngle = atof(argv[++i]);
 			g_armed = true;
 		}
-		else if(strcmp(arg, "--capture-use") == 0)
+		else if(strcmp(arg, "--capture-trace") == 0)
 		{
-			g_useFrom = (i + 1 < argc && argv[i+1][0] != '-') ? atol(argv[++i]) : 0;
+			g_traceFrom = (i + 1 < argc && argv[i+1][0] >= '0' && argv[i+1][0] <= '9')
+				? atol(argv[++i]) : 0;
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-forward") == 0 || strcmp(arg, "--capture-use") == 0)
+		{
+			PressWindow window = { 0, -1 };
+			if(i + 1 < argc && argv[i+1][0] >= '0' && argv[i+1][0] <= '9')
+			{
+				window.from = atol(argv[++i]);
+				if(i + 1 < argc && argv[i+1][0] >= '0' && argv[i+1][0] <= '9')
+					window.tics = atol(argv[++i]);
+			}
+			if(strcmp(arg, "--capture-forward") == 0)
+				g_forwardWindows.Push(window);
+			else
+				g_useWindows.Push(window);
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-ammo") == 0)
@@ -921,13 +982,13 @@ void InjectControls(TicCmd_t &cmd)
 	if(g_holdScoreboard)
 		cmd.buttonstate[bt_scoreboard] = true;
 
-	if(g_forwardFrom >= 0 && (long)gamestate.TimeCount >= g_forwardFrom)
+	if(InWindow(g_forwardWindows))
 	{
 		cmd.controly = -RUNMOVE;
 		cmd.buttonstate[bt_run] = true;
 	}
 
-	if(g_useFrom >= 0 && (long)gamestate.TimeCount >= g_useFrom)
+	if(InWindow(g_useWindows))
 		cmd.buttonstate[bt_use] = true;
 
 	if(g_fireFrom < 0 || (long)gamestate.TimeCount < g_fireFrom)
@@ -1043,6 +1104,27 @@ void PreTic()
 			pmo->angle = g_warpAngle;
 			pmo->pitch = 0;
 		}
+	}
+
+	if(g_placeTic >= 0 && !g_placeDone && (long)gamestate.TimeCount >= g_placeTic &&
+		players[ConsolePlayer].mo)
+	{
+		g_placeDone = true;
+		AActor *pmo = players[ConsolePlayer].mo;
+		pmo->x = FLOAT2FIXED(g_placeX);
+		pmo->y = FLOAT2FIXED(g_placeY);
+		if(g_placeAngle >= 0.0)
+			pmo->angle = (angle_t)(g_placeAngle * ANGLE_1);
+		Printf("Capture: placed the player at %.4f, %.4f\n", g_placeX, g_placeY);
+	}
+
+	if(g_traceFrom >= 0 && (long)gamestate.TimeCount >= g_traceFrom &&
+		players[ConsolePlayer].mo)
+	{
+		const AActor *pmo = players[ConsolePlayer].mo;
+		Printf("Capture: trace tic=%u x=%.4f y=%.4f tile=(%u,%u)\n",
+			gamestate.TimeCount, FIXED2FLOAT(pmo->x), FIXED2FLOAT(pmo->y),
+			pmo->tilex, pmo->tiley);
 	}
 }
 

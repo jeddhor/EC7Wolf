@@ -638,6 +638,29 @@ class EVDoor : public Thinker
 						--wait;
 					break;
 				case Closing:
+					// A door that has started closing has to keep looking.
+					//
+					// The decision to close is taken on the tic before the tile
+					// turns solid -- Tick sets slideAmount below 0xffff, and a
+					// door is only passable at 0xffff -- and the player gets one
+					// move in between. One move at running speed is enough to
+					// carry somebody standing in front of a doorway into it, and
+					// from the next tic every direction is refused, because
+					// TryMove rejects any destination still overlapping the tile
+					// and one move is not enough to leave. The door has to be
+					// opened again to get out, which is exactly what it looks
+					// like from inside: being caught in the door.
+					//
+					// Wolf3D's DoorClosing tests for the player every tic and
+					// calls DoorOpening when it finds one. So does this. Solid
+					// actors only, matching the elevator's forced close: a piece
+					// of scenery in a doorway must not hold a door open forever.
+					if(CheckJammed(true))
+					{
+						ChangeState(Opening);
+						break;
+					}
+
 					if(amount > 0)
 						amount -= speed;
 					if(amount <= 0)

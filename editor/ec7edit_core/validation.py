@@ -173,16 +173,26 @@ def validate_map(document: MapDocument, catalog: Catalog | None = None) -> list[
                 colour = "RED" if "red" in entry.aliases else "BLUE"
                 locks.setdefault(colour, coordinates(index, width))
         if locks:
+            # A card reaches the player two ways: lying on the floor, or handed
+            # over by the wall terminal of that colour. Corridor 7 mostly uses
+            # the terminal, so counting only floor cards would warn about the
+            # ordinary case.
             keys = set()
             for value in plane1:
                 entry = catalog.for_value(1, value)
                 if entry is not None and "keycard" in entry.aliases:
                     keys.add("RED" if "red key" in entry.aliases else "BLUE")
+            for value in plane0:
+                entry = catalog.for_value(0, value)
+                if entry is not None and entry.subcategory == "terminal" \
+                        and "keycard" in entry.aliases:
+                    keys.add("RED" if "red" in entry.aliases else "BLUE")
             for colour, cell in locks.items():
                 if colour not in keys:
                     problems.append(Diagnostic(
                         "C7E-DOOR-003", Severity.WARNING,
-                        f"a {colour}-locked door has no {colour} access card on this floor",
+                        f"a {colour}-locked door has no {colour} access card on this "
+                        f"floor and no {colour} terminal to grant one",
                         _where(*cell),
                     ))
 

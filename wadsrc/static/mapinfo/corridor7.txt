@@ -10,16 +10,21 @@ gameinfo
 	titlepage = "C7G0005"
 	titletime = 6
 	titlemusic = "C7MUS00"
-	// C7MUS19, not the title theme. The archive holds thirty-four songs
-	// and every one of these entries pointed at the first of them, so
-	// the menu, the title pages and the intermission all played the
-	// same piece. Measured out of AUDIOT: C7MUS00 runs 65.8s and
-	// C7MUS19 runs 16.5s -- the minute-and-six title theme and the
-	// seventeen-second menu loop the game is remembered as having.
+	// Every one of these pointed at C7MUS00 -- one placeholder in five
+	// places, so the menu, the title pages, the intermission and the
+	// high-score page all played the same minute of music.
+	//
+	// The archive holds thirty-four songs. Summing their IMF delays at
+	// 700Hz gives durations, and the three short ones are unmistakable:
+	// C7MUS00 runs 65.8s, C7MUS19 runs 16.5s and C7MUS21 runs 13.7s --
+	// the minute-and-six title theme, the seventeen-second menu loop and
+	// the fourteen-second intermission loop. Nothing else is within eight
+	// seconds of any of them; the next shortest song is 21.9s and most run
+	// past a hundred.
 	menumusic = "C7MUS19"
-	intermissionmusic = "C7MUS00"
-	victorymusic = "C7MUS00"
-	scoresmusic = "C7MUS00"
+	intermissionmusic = "C7MUS21"
+	victorymusic = "C7MUS21"
+	scoresmusic = "C7MUS21"
 	// The released high-score page writes with the large 13-row archive font
 	// (glyph ink rows 1..10, matching the captured original page).
 	highscoresfont = "BigFont"

@@ -472,26 +472,28 @@ title pages, the menu, the intermission, the high-score page -- pointed at
 The archive holds thirty-four songs. Measured out of AUDIOT by summing the
 IMF delays at 700Hz:
 
-| lump | seconds |
-| --- | --- |
-| C7MUS00 | 65.8 |
-| C7MUS19 | 16.5 |
-| C7MUS21 | 13.7 |
-| C7MUS03 | 21.9 |
-| (thirty others) | 30 – 173 |
+| lump | seconds | used for |
+| --- | --- | --- |
+| C7MUS21 | 13.7 | intermission, victory, high scores |
+| C7MUS19 | 16.5 | the menu |
+| C7MUS03 | 21.9 | -- |
+| C7MUS00 | 65.8 | the title and credit pages |
+| (thirty others) | 30 – 173 | levels, by the schedule |
 
-C7MUS00 at 65.8 seconds is the minute-and-six title theme, and C7MUS19 at
-16.5 is the seventeen-second menu loop -- the only song anywhere near that
-length. The menu now plays it.
+The three short ones are unmistakable: a minute-and-six title theme, a
+seventeen-second menu loop and a fourteen-second intermission loop, matching
+what the game is remembered as having. Nothing else is within eight seconds of
+any of them -- the next shortest song is 21.9s and most run past a hundred, so
+these are the only candidates for a screen you sit on briefly.
+
+The fourteen-second loop covers the intermission, the victory page and the high
+scores. It was identified from its length; a guess that it was `C7MUS04` did not
+survive measurement, that song running 153.6 seconds.
 
 The title theme also started too early: before the Capstone logo and the story
 cinematic rather than after them, so it played over their own dialogue from the
 moment the game opened. It begins with the title pages now, which is what a
 minute of music for a credits loop is for.
-
-**Intermission, victory and high-score music are still `C7MUS00`.** Not because
-that is right but because nothing has been measured that says otherwise, and a
-guess dressed as a finding is worse than a placeholder that is known to be one.
 
 ### On a CD there is no menu music, and that is correct
 

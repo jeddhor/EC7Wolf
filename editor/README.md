@@ -22,6 +22,11 @@ $ editor/ec7edit
 First run asks for three paths — the engine, your game data, and somewhere to
 keep projects — and answers with a checklist rather than a verdict.
 
+The **Doors and Specials** tab holds compound tools rather than the raw words
+behind them — one click writes every word a structure needs. Painting the raw
+value instead would give you, for instance, a pushwall marker on open floor
+with no wall to push.
+
 Tools: select, paint, line, rectangle, fill, erase, pick, place, transporter
 (`S B L R F E I P T`). **F8** checks the open map; **F5** exports it and
 launches the engine on it — and refuses first if the map is one the engine

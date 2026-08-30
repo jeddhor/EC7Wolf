@@ -98,6 +98,63 @@ class Contract(unittest.TestCase):
                     self.assertTrue(0 <= value <= 0xFFFF)
 
 
+class RetractableDoors(unittest.TestCase):
+    """The ten four-frame doors, and the frames that are not paint."""
+
+    def test_each_door_writes_its_own_base_wall(self):
+        # The bug this guards: an earlier version offered one generic
+        # "disintegrating wall" over wall 1, whose next three pages are
+        # unrelated materials -- a door that animates into rubbish.
+        from ec7edit_core.prefabs import ANIMATED_DOORS
+
+        for base, name, _ in ANIMATED_DOORS:
+            prefab = by_key(f"prefab.door.animated.{base:03d}")
+            with self.subTest(base=base):
+                self.assertIsNotNone(prefab, name)
+                writes = dict(((w.plane, w.value) for w in prefab.writes))
+                self.assertEqual(prefab.writes[0].value, base)
+                self.assertEqual(prefab.writes[1].value, 106)
+
+    def test_every_frame_belongs_to_exactly_one_door(self):
+        from ec7edit_core.prefabs import ANIMATED_DOORS, ANIMATION_FRAMES
+
+        owners = {}
+        for base, _, _ in ANIMATED_DOORS:
+            for step in (1, 2, 3):
+                owners.setdefault(base + step, []).append(base)
+        for frame, bases in owners.items():
+            self.assertEqual(len(bases), 1, f"{frame} claimed by {bases}")
+        self.assertEqual(set(ANIMATION_FRAMES), set(owners) - {84})
+
+    def test_the_open_force_field_is_not_treated_as_a_frame(self):
+        # 84 is the one frame the shipped maps place directly, 59 times.
+        from ec7edit_core.prefabs import ANIMATION_FRAMES
+
+        self.assertNotIn(84, ANIMATION_FRAMES)
+
+    def test_frames_are_not_offered_as_paint(self):
+        for frame in (46, 74, 194, 234, 242):
+            entry = CATALOG.for_value(0, frame)
+            with self.subTest(frame=frame):
+                self.assertEqual(entry.category, "raw")
+                self.assertFalse(entry.safe_for_new_maps)
+
+    def test_the_closed_bases_stay_paintable_and_are_named(self):
+        # A closed door used as scenery is a real thing: word 193 is placed
+        # 2620 times in the shipped maps and never opens.
+        for base in (73, 193, 233, 241):
+            entry = CATALOG.for_value(0, base)
+            with self.subTest(base=base):
+                self.assertEqual(entry.category, "walls")
+                self.assertIn("door", entry.name.lower())
+
+    def test_a_door_and_its_marker_land_together(self):
+        document = build(["#####", "#...#", "#####"])
+        prefab = by_key("prefab.door.animated.073")
+        self.assertEqual(sorted(prefab.placement(2, 1)),
+                         sorted([(0, 2, 1, 73), (1, 2, 1, 106)]))
+
+
 class Placement(unittest.TestCase):
     def test_a_pushwall_is_a_wall_plus_a_marker(self):
         prefab = by_key("prefab.pushwall.secret")

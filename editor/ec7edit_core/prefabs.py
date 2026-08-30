@@ -199,6 +199,71 @@ class Prefab:
 DEFAULT_WALL = 1
 
 
+#: The four-frame retractable doors, named from their artwork. `base` is the
+#: closed frame; `base+1` to `base+3` are the opening animation and are never
+#: placed on a map by anything.
+ANIMATED_DOORS = (
+    (45, "Retractable door (alien machinery)",
+     "A grey and red alien bulkhead that retracts to an open aperture."),
+    (49, "Retractable door (red membrane)",
+     "A red organic membrane that draws back to an open aperture."),
+    (53, "Retractable door (iris hatch)",
+     "A circular metal iris in a blue frame that opens outward."),
+    (73, "Retractable door (hazard shutter)",
+     "A slatted silver shutter with hazard striping that rolls up."),
+    (81, "Force field door",
+     "A cross-hatched energy screen that thins to nothing as it opens. Its "
+     "closed frame is already half aperture, because it is a screen you can "
+     "see through rather than a solid door."),
+    (117, "Retractable door (green organic)",
+     "A green organic panel with yellow veins that parts in the middle."),
+    (193, "Retractable door (arrow door)",
+     "A pale double door with inward-pointing arrows that draws apart. Present "
+     "in the artwork; no shipped map places one."),
+    (229, "Retractable door (metal iris)",
+     "A spiral metal iris that winds open."),
+    (233, "Retractable door (louvre slats)",
+     "Horizontal white slats that draw back one band at a time. Present in the "
+     "artwork; no shipped map places one."),
+    (241, "Retractable door (hazard cross)",
+     "A yellow-and-white door whose central cross opens outward. Present in "
+     "the artwork; no shipped map places one."),
+)
+
+#: Every wall word that is an intermediate frame of one of those animations.
+#: Word 84 is deliberately absent: it is the force field's open state and the
+#: shipped maps place it directly, 59 times.
+#:
+#: The ten bases were found two ways, because neither alone is enough. Seven
+#: carry marker 106 somewhere in the shipped archive, which is proof. The other
+#: three are in the artwork only, found by measuring how much of each wall page
+#: is palette index 255 -- the masked aperture -- and looking for four
+#: consecutive pages where that fraction only grows. That measurement also
+#: proposes bases one page early, where an ordinary wall happens to precede a
+#: door, so every candidate was looked at before being accepted: 80, 192 and
+#: 240 are a red texture, grey static and a monitor screen respectively.
+ANIMATION_FRAMES = tuple(
+    sorted({base + step for base, _, _ in ANIMATED_DOORS for step in (1, 2, 3)} - {84})
+)
+
+
+def _animated_door(base: int, name: str, description: str) -> Prefab:
+    """A retractable door: its closed wall page, plus the marker that opens it."""
+    return Prefab(
+        key=f"prefab.door.animated.{base:03d}",
+        name=name,
+        description=description,
+        category="specials",
+        writes=(Write(0, 0, 0, base), Write(1, 0, 0, 106)),
+        erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
+        evidence=f"xlat/corridor7.txt things trigger 106, Wall_AnimateRemove; the "
+                 f"archive places wall {base} under marker 106 and never places "
+                 f"{base + 1}..{base + 3} at all",
+        notes=f"Frames {base + 1}, {base + 2} and {base + 3} belong to this door "
+              "and are not paint.",
+    )
+
+
 def _terminal(key, name, value, description, evidence) -> Prefab:
     """A one-shot wall terminal: a single plane-0 word with floor to reach it."""
     return Prefab(
@@ -235,18 +300,30 @@ PREFABS: tuple[Prefab, ...] = (
         "so it is the one to use for a shortcut rather than a discovery.",
         "xlat/corridor7.txt things trigger 101; the released maps use 101 and 102",
     ),
-    _wall_marker(
-        "prefab.wall.disintegrating", "Disintegrating wall", 106,
-        "Advances four texture frames when used and leaves the masked aperture "
-        "open. The wall it starts from must have four consecutive pages.",
-        "xlat/corridor7.txt things trigger 106, Wall_AnimateRemove",
-        notes="The base wall needs frames at wall, wall+1, wall+2 and wall+3.",
+    # The seven retractable doors. Each is a specific base wall plus marker
+    # 106, and the base matters: the marker advances through the *next three*
+    # wall pages, so it only makes a door where those three pages are the rest
+    # of an opening animation. An earlier version of this offered one generic
+    # "disintegrating wall" over wall 1, which would have animated into three
+    # unrelated materials.
+    #
+    # The seven were found rather than assumed: across the shipped archive,
+    # every cell carrying marker 106 has one of these seven words under it, and
+    # the three frames after each base are never placed by any map.
+    *(
+        _animated_door(base, name, description)
+        for base, name, description in ANIMATED_DOORS
     ),
-    _wall_marker(
-        "prefab.wall.open-aperture", "Open aperture", 107,
-        "The disintegrating wall's already-open state, as the shipped maps store "
-        "it. Preserved on import; placing one by hand is an Advanced choice.",
-        "xlat/corridor7.txt things ignore 107; the engine reads it as the open state",
+    Prefab(
+        key="prefab.door.forcefield-open",
+        name="Force field door (already open)",
+        description="The force field door in its open state, which is how the "
+                    "shipped maps store one that starts open. 59 cells use it.",
+        category="specials",
+        writes=(Write(0, 0, 0, 84), Write(1, 0, 0, 107)),
+        erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
+        evidence="xlat things ignore 107; the archive places wall 84 with marker "
+                 "107, and 84 is the last frame of the wall-81 animation",
         advanced=True,
     ),
     Prefab(

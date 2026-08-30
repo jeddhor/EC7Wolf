@@ -70,10 +70,13 @@ from .workers import WorkerPool
 
 CATALOG_PATH = Path(__file__).resolve().parents[1] / "resources" / "editor_catalog.json"
 
+#: Section 8.6's tabs. "Doors and Specials" holds the compound *tools* rather
+#: than the raw words behind them: offering both was offering two things that
+#: looked identical and were not, since painting a pushwall's marker straight
+#: on to floor leaves a moving wall with no wall in it.
 PALETTE_TABS = (
-    ("Structures", "prefabs"),
+    ("Doors and Specials", "prefabs"),
     ("Walls", "walls"),
-    ("Doors and Specials", "specials"),
     ("Objects", "objects"),
     ("Enemies", "enemies"),
     ("Starts and Paths", "starts"),
@@ -313,12 +316,7 @@ class MainWindow(QMainWindow):
         # they get a plain list because what matters is the name and what it
         # needs, not a picture of one word out of several.
         self.prefab_list = QListWidget(self)
-        self.prefab_list.setAccessibleName("Structures palette")
-        for prefab in PREFABS:
-            item = QListWidgetItem(prefab.name + ("  (Advanced)" if prefab.advanced else ""))
-            item.setToolTip(f"{prefab.description}\n\nSource: {prefab.evidence}")
-            item.setData(Qt.UserRole, prefab.key)
-            self.prefab_list.addItem(item)
+        self.prefab_list.setAccessibleName("Doors and specials palette")
         # Both signals: `currentItemChanged` catches keyboard navigation, and
         # `itemClicked` catches clicking the row that is already current --
         # which is exactly what you do coming back from the Walls tab to the
@@ -327,7 +325,7 @@ class MainWindow(QMainWindow):
             lambda current, _previous: self._on_prefab_chosen(current, _previous))
         self.prefab_list.itemClicked.connect(
             lambda item: self._on_prefab_chosen(item, None))
-        self.palette_tabs.addTab(self.prefab_list, "Structures")
+        self.palette_tabs.addTab(self.prefab_list, "Doors and Specials")
 
         for title, category in PALETTE_TABS[1:]:
             view = QListView(self.palette_tabs)
@@ -342,6 +340,8 @@ class MainWindow(QMainWindow):
             view.clicked.connect(self._on_palette_clicked)
             self.palette_models[category] = model
             self.palette_tabs.addTab(view, title)
+        self._refresh_prefabs()
+        self._refresh_prefabs()
         self.palette_tabs.currentChanged.connect(lambda _: self._refresh_palette())
         layout.addWidget(self.palette_tabs, 1)
 
@@ -793,9 +793,12 @@ class MainWindow(QMainWindow):
         if self.catalog is None:
             return
         index = self.palette_tabs.currentIndex()
-        if index <= 0:
-            return  # tab 0 is Structures, which is not a catalogue model
+        if index < 0:
+            return
         _, category = PALETTE_TABS[index]
+        if category == "prefabs":
+            self._refresh_prefabs()
+            return
         entries = CatalogFilter(self.catalog).entries(
             category=category, query=self.search.text()
         )
@@ -804,6 +807,20 @@ class MainWindow(QMainWindow):
             entries = [entry for entry in entries
                        if any((entry.plane, value) in used for value in entry.values)]
         self.palette_models[category].set_entries(entries)
+
+    def _refresh_prefabs(self) -> None:
+        """Rebuild the compound-tool list, honouring the search box."""
+        query = self.search.text().strip().lower()
+        self.prefab_list.clear()
+        for prefab in PREFABS:
+            haystack = " ".join((prefab.name, prefab.description, prefab.key,
+                                 str(prefab.writes[0].value))).lower()
+            if query and query not in haystack:
+                continue
+            item = QListWidgetItem(prefab.name + ("  (Advanced)" if prefab.advanced else ""))
+            item.setToolTip(f"{prefab.description}\n\nSource: {prefab.evidence}")
+            item.setData(Qt.UserRole, prefab.key)
+            self.prefab_list.addItem(item)
 
     def _on_prefab_chosen(self, current, _previous) -> None:
         if current is None:

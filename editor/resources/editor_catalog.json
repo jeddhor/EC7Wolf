@@ -945,20 +945,24 @@
     },
     {
       "aliases": [
+        "door",
+        "closed",
+        "retractable",
         "C7W0044"
       ],
       "blocking": true,
       "category": "walls",
+      "description": "A grey and red alien bulkhead that retracts to an open aperture. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
       "evidence": "xlat/corridor7.txt tile 45",
       "grade": "A",
       "key": "wall.045",
       "minskill": 0,
-      "name": "Wall 045",
+      "name": "Retractable door (alien machinery) \u2014 closed",
       "placement": "wall",
       "plane": 0,
       "rank": 45,
       "safe_for_new_maps": true,
-      "subcategory": "material",
+      "subcategory": "door",
       "test_vector": "wall-045",
       "texture": "C7W0044",
       "value": 45,
@@ -968,89 +972,24 @@
     },
     {
       "aliases": [
-        "C7W0045"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 46",
-      "grade": "A",
-      "key": "wall.046",
-      "minskill": 0,
-      "name": "Wall 046",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 46,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-046",
-      "texture": "C7W0045",
-      "value": 46,
-      "values": [
-        46
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0046"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 47",
-      "grade": "A",
-      "key": "wall.047",
-      "minskill": 0,
-      "name": "Wall 047",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 47,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-047",
-      "texture": "C7W0046",
-      "value": 47,
-      "values": [
-        47
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0047"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 48",
-      "grade": "A",
-      "key": "wall.048",
-      "minskill": 0,
-      "name": "Wall 048",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 48,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-048",
-      "texture": "C7W0047",
-      "value": 48,
-      "values": [
-        48
-      ]
-    },
-    {
-      "aliases": [
+        "door",
+        "closed",
+        "retractable",
         "C7W0048"
       ],
       "blocking": true,
       "category": "walls",
+      "description": "A red organic membrane that draws back to an open aperture. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
       "evidence": "xlat/corridor7.txt tile 49",
       "grade": "A",
       "key": "wall.049",
       "minskill": 0,
-      "name": "Wall 049",
+      "name": "Retractable door (red membrane) \u2014 closed",
       "placement": "wall",
       "plane": 0,
       "rank": 49,
       "safe_for_new_maps": true,
-      "subcategory": "material",
+      "subcategory": "door",
       "test_vector": "wall-049",
       "texture": "C7W0048",
       "value": 49,
@@ -1060,163 +999,29 @@
     },
     {
       "aliases": [
-        "C7W0049"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 50",
-      "grade": "A",
-      "key": "wall.050",
-      "minskill": 0,
-      "name": "Wall 050",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 50,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-050",
-      "texture": "C7W0049",
-      "value": 50,
-      "values": [
-        50
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0050"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 51",
-      "grade": "A",
-      "key": "wall.051",
-      "minskill": 0,
-      "name": "Wall 051",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 51,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-051",
-      "texture": "C7W0050",
-      "value": 51,
-      "values": [
-        51
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0051"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 52",
-      "grade": "A",
-      "key": "wall.052",
-      "minskill": 0,
-      "name": "Wall 052",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 52,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-052",
-      "texture": "C7W0051",
-      "value": 52,
-      "values": [
-        52
-      ]
-    },
-    {
-      "aliases": [
+        "door",
+        "closed",
+        "retractable",
         "C7W0052"
       ],
       "blocking": true,
       "category": "walls",
+      "description": "A circular metal iris in a blue frame that opens outward. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
       "evidence": "xlat/corridor7.txt tile 53",
       "grade": "A",
       "key": "wall.053",
       "minskill": 0,
-      "name": "Wall 053",
+      "name": "Retractable door (iris hatch) \u2014 closed",
       "placement": "wall",
       "plane": 0,
       "rank": 53,
       "safe_for_new_maps": true,
-      "subcategory": "material",
+      "subcategory": "door",
       "test_vector": "wall-053",
       "texture": "C7W0052",
       "value": 53,
       "values": [
         53
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0053"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 54",
-      "grade": "A",
-      "key": "wall.054",
-      "minskill": 0,
-      "name": "Wall 054",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 54,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-054",
-      "texture": "C7W0053",
-      "value": 54,
-      "values": [
-        54
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0054"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 55",
-      "grade": "A",
-      "key": "wall.055",
-      "minskill": 0,
-      "name": "Wall 055",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 55,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-055",
-      "texture": "C7W0054",
-      "value": 55,
-      "values": [
-        55
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0055"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 56",
-      "grade": "A",
-      "key": "wall.056",
-      "minskill": 0,
-      "name": "Wall 056",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 56,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-056",
-      "texture": "C7W0055",
-      "value": 56,
-      "values": [
-        56
       ]
     },
     {
@@ -1566,94 +1371,29 @@
     },
     {
       "aliases": [
+        "door",
+        "closed",
+        "retractable",
         "C7W0072"
       ],
       "blocking": true,
       "category": "walls",
+      "description": "A slatted silver shutter with hazard striping that rolls up. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
       "evidence": "xlat/corridor7.txt tile 73",
       "grade": "A",
       "key": "wall.073",
       "minskill": 0,
-      "name": "Wall 073",
+      "name": "Retractable door (hazard shutter) \u2014 closed",
       "placement": "wall",
       "plane": 0,
       "rank": 73,
       "safe_for_new_maps": true,
-      "subcategory": "material",
+      "subcategory": "door",
       "test_vector": "wall-073",
       "texture": "C7W0072",
       "value": 73,
       "values": [
         73
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0073"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 74",
-      "grade": "A",
-      "key": "wall.074",
-      "minskill": 0,
-      "name": "Wall 074",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 74,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-074",
-      "texture": "C7W0073",
-      "value": 74,
-      "values": [
-        74
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0074"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 75",
-      "grade": "A",
-      "key": "wall.075",
-      "minskill": 0,
-      "name": "Wall 075",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 75,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-075",
-      "texture": "C7W0074",
-      "value": 75,
-      "values": [
-        75
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0075"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 76",
-      "grade": "A",
-      "key": "wall.076",
-      "minskill": 0,
-      "name": "Wall 076",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 76,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-076",
-      "texture": "C7W0075",
-      "value": 76,
-      "values": [
-        76
       ]
     },
     {
@@ -1750,20 +1490,24 @@
     },
     {
       "aliases": [
+        "door",
+        "closed",
+        "retractable",
         "C7W0080"
       ],
       "blocking": true,
       "category": "walls",
+      "description": "A cross-hatched energy screen that thins to nothing as it opens. Its closed frame is already half aperture, because it is a screen you can see through rather than a solid door. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
       "evidence": "xlat/corridor7.txt tile 81",
       "grade": "A",
       "key": "wall.081",
       "minskill": 0,
-      "name": "Wall 081",
+      "name": "Force field door \u2014 closed",
       "placement": "wall",
       "plane": 0,
       "rank": 81,
       "safe_for_new_maps": true,
-      "subcategory": "material",
+      "subcategory": "door",
       "test_vector": "wall-081",
       "texture": "C7W0080",
       "value": 81,
@@ -1773,66 +1517,25 @@
     },
     {
       "aliases": [
-        "C7W0081"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 82",
-      "grade": "A",
-      "key": "wall.082",
-      "minskill": 0,
-      "name": "Wall 082",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 82,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-082",
-      "texture": "C7W0081",
-      "value": 82,
-      "values": [
-        82
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0082"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 83",
-      "grade": "A",
-      "key": "wall.083",
-      "minskill": 0,
-      "name": "Wall 083",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 83,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-083",
-      "texture": "C7W0082",
-      "value": 83,
-      "values": [
-        83
-      ]
-    },
-    {
-      "aliases": [
+        "door",
+        "force field",
+        "open",
+        "aperture",
         "C7W0083"
       ],
       "blocking": true,
       "category": "walls",
+      "description": "The force field door's open state. The only animation frame the shipped maps place directly -- 59 cells use it, for a door that starts open.",
       "evidence": "xlat/corridor7.txt tile 84",
       "grade": "A",
       "key": "wall.084",
       "minskill": 0,
-      "name": "Wall 084",
+      "name": "Force field door \u2014 open",
       "placement": "wall",
       "plane": 0,
       "rank": 84,
       "safe_for_new_maps": true,
-      "subcategory": "material",
+      "subcategory": "door",
       "test_vector": "wall-084",
       "texture": "C7W0083",
       "value": 84,
@@ -2486,94 +2189,29 @@
     },
     {
       "aliases": [
+        "door",
+        "closed",
+        "retractable",
         "C7W0116"
       ],
       "blocking": true,
       "category": "walls",
+      "description": "A green organic panel with yellow veins that parts in the middle. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
       "evidence": "xlat/corridor7.txt tile 117",
       "grade": "A",
       "key": "wall.117",
       "minskill": 0,
-      "name": "Wall 117",
+      "name": "Retractable door (green organic) \u2014 closed",
       "placement": "wall",
       "plane": 0,
       "rank": 117,
       "safe_for_new_maps": true,
-      "subcategory": "material",
+      "subcategory": "door",
       "test_vector": "wall-117",
       "texture": "C7W0116",
       "value": 117,
       "values": [
         117
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0117"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 118",
-      "grade": "A",
-      "key": "wall.118",
-      "minskill": 0,
-      "name": "Wall 118",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 118,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-118",
-      "texture": "C7W0117",
-      "value": 118,
-      "values": [
-        118
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0118"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 119",
-      "grade": "A",
-      "key": "wall.119",
-      "minskill": 0,
-      "name": "Wall 119",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 119,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-119",
-      "texture": "C7W0118",
-      "value": 119,
-      "values": [
-        119
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0119"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 120",
-      "grade": "A",
-      "key": "wall.120",
-      "minskill": 0,
-      "name": "Wall 120",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 120,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-120",
-      "texture": "C7W0119",
-      "value": 120,
-      "values": [
-        120
       ]
     },
     {
@@ -4234,94 +3872,29 @@
     },
     {
       "aliases": [
+        "door",
+        "closed",
+        "retractable",
         "C7W0192"
       ],
       "blocking": true,
       "category": "walls",
+      "description": "A pale double door with inward-pointing arrows that draws apart. Present in the artwork; no shipped map places one. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
       "evidence": "xlat/corridor7.txt tile 193",
       "grade": "A",
       "key": "wall.193",
       "minskill": 0,
-      "name": "Wall 193",
+      "name": "Retractable door (arrow door) \u2014 closed",
       "placement": "wall",
       "plane": 0,
       "rank": 193,
       "safe_for_new_maps": true,
-      "subcategory": "material",
+      "subcategory": "door",
       "test_vector": "wall-193",
       "texture": "C7W0192",
       "value": 193,
       "values": [
         193
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0193"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 194",
-      "grade": "A",
-      "key": "wall.194",
-      "minskill": 0,
-      "name": "Wall 194",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 194,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-194",
-      "texture": "C7W0193",
-      "value": 194,
-      "values": [
-        194
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0194"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 195",
-      "grade": "A",
-      "key": "wall.195",
-      "minskill": 0,
-      "name": "Wall 195",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 195,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-195",
-      "texture": "C7W0194",
-      "value": 195,
-      "values": [
-        195
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0195"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 196",
-      "grade": "A",
-      "key": "wall.196",
-      "minskill": 0,
-      "name": "Wall 196",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 196,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-196",
-      "texture": "C7W0195",
-      "value": 196,
-      "values": [
-        196
       ]
     },
     {
@@ -5062,20 +4635,24 @@
     },
     {
       "aliases": [
+        "door",
+        "closed",
+        "retractable",
         "C7W0228"
       ],
       "blocking": true,
       "category": "walls",
+      "description": "A spiral metal iris that winds open. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
       "evidence": "xlat/corridor7.txt tile 229",
       "grade": "A",
       "key": "wall.229",
       "minskill": 0,
-      "name": "Wall 229",
+      "name": "Retractable door (metal iris) \u2014 closed",
       "placement": "wall",
       "plane": 0,
       "rank": 229,
       "safe_for_new_maps": true,
-      "subcategory": "material",
+      "subcategory": "door",
       "test_vector": "wall-229",
       "texture": "C7W0228",
       "value": 229,
@@ -5085,163 +4662,29 @@
     },
     {
       "aliases": [
-        "C7W0229"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 230",
-      "grade": "A",
-      "key": "wall.230",
-      "minskill": 0,
-      "name": "Wall 230",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 230,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-230",
-      "texture": "C7W0229",
-      "value": 230,
-      "values": [
-        230
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0230"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 231",
-      "grade": "A",
-      "key": "wall.231",
-      "minskill": 0,
-      "name": "Wall 231",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 231,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-231",
-      "texture": "C7W0230",
-      "value": 231,
-      "values": [
-        231
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0231"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 232",
-      "grade": "A",
-      "key": "wall.232",
-      "minskill": 0,
-      "name": "Wall 232",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 232,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-232",
-      "texture": "C7W0231",
-      "value": 232,
-      "values": [
-        232
-      ]
-    },
-    {
-      "aliases": [
+        "door",
+        "closed",
+        "retractable",
         "C7W0232"
       ],
       "blocking": true,
       "category": "walls",
+      "description": "Horizontal white slats that draw back one band at a time. Present in the artwork; no shipped map places one. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
       "evidence": "xlat/corridor7.txt tile 233",
       "grade": "A",
       "key": "wall.233",
       "minskill": 0,
-      "name": "Wall 233",
+      "name": "Retractable door (louvre slats) \u2014 closed",
       "placement": "wall",
       "plane": 0,
       "rank": 233,
       "safe_for_new_maps": true,
-      "subcategory": "material",
+      "subcategory": "door",
       "test_vector": "wall-233",
       "texture": "C7W0232",
       "value": 233,
       "values": [
         233
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0233"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 234",
-      "grade": "A",
-      "key": "wall.234",
-      "minskill": 0,
-      "name": "Wall 234",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 234,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-234",
-      "texture": "C7W0233",
-      "value": 234,
-      "values": [
-        234
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0234"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 235",
-      "grade": "A",
-      "key": "wall.235",
-      "minskill": 0,
-      "name": "Wall 235",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 235,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-235",
-      "texture": "C7W0234",
-      "value": 235,
-      "values": [
-        235
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0235"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 236",
-      "grade": "A",
-      "key": "wall.236",
-      "minskill": 0,
-      "name": "Wall 236",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 236,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-236",
-      "texture": "C7W0235",
-      "value": 236,
-      "values": [
-        236
       ]
     },
     {
@@ -5338,94 +4781,29 @@
     },
     {
       "aliases": [
+        "door",
+        "closed",
+        "retractable",
         "C7W0240"
       ],
       "blocking": true,
       "category": "walls",
+      "description": "A yellow-and-white door whose central cross opens outward. Present in the artwork; no shipped map places one. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
       "evidence": "xlat/corridor7.txt tile 241",
       "grade": "A",
       "key": "wall.241",
       "minskill": 0,
-      "name": "Wall 241",
+      "name": "Retractable door (hazard cross) \u2014 closed",
       "placement": "wall",
       "plane": 0,
       "rank": 241,
       "safe_for_new_maps": true,
-      "subcategory": "material",
+      "subcategory": "door",
       "test_vector": "wall-241",
       "texture": "C7W0240",
       "value": 241,
       "values": [
         241
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0241"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 242",
-      "grade": "A",
-      "key": "wall.242",
-      "minskill": 0,
-      "name": "Wall 242",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 242,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-242",
-      "texture": "C7W0241",
-      "value": 242,
-      "values": [
-        242
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0242"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 243",
-      "grade": "A",
-      "key": "wall.243",
-      "minskill": 0,
-      "name": "Wall 243",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 243,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-243",
-      "texture": "C7W0242",
-      "value": 243,
-      "values": [
-        243
-      ]
-    },
-    {
-      "aliases": [
-        "C7W0243"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 244",
-      "grade": "A",
-      "key": "wall.244",
-      "minskill": 0,
-      "name": "Wall 244",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 244,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-244",
-      "texture": "C7W0243",
-      "value": 244,
-      "values": [
-        244
       ]
     },
     {
@@ -11662,6 +11040,384 @@
     },
     {
       "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0045"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (alien machinery) (wall 45), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 45..48 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.046",
+      "minskill": 0,
+      "name": "Retractable door (alien machinery) \u2014 frame 2 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 46,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-046",
+      "texture": "C7W0045",
+      "value": 46,
+      "values": [
+        46
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0046"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (alien machinery) (wall 45), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 45..48 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.047",
+      "minskill": 0,
+      "name": "Retractable door (alien machinery) \u2014 frame 3 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 47,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-047",
+      "texture": "C7W0046",
+      "value": 47,
+      "values": [
+        47
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0047"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (alien machinery) (wall 45), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 45..48 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.048",
+      "minskill": 0,
+      "name": "Retractable door (alien machinery) \u2014 frame 4 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 48,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-048",
+      "texture": "C7W0047",
+      "value": 48,
+      "values": [
+        48
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0049"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (red membrane) (wall 49), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 49..52 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.050",
+      "minskill": 0,
+      "name": "Retractable door (red membrane) \u2014 frame 2 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 50,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-050",
+      "texture": "C7W0049",
+      "value": 50,
+      "values": [
+        50
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0050"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (red membrane) (wall 49), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 49..52 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.051",
+      "minskill": 0,
+      "name": "Retractable door (red membrane) \u2014 frame 3 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 51,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-051",
+      "texture": "C7W0050",
+      "value": 51,
+      "values": [
+        51
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0051"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (red membrane) (wall 49), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 49..52 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.052",
+      "minskill": 0,
+      "name": "Retractable door (red membrane) \u2014 frame 4 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 52,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-052",
+      "texture": "C7W0051",
+      "value": 52,
+      "values": [
+        52
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0053"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (iris hatch) (wall 53), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 53..56 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.054",
+      "minskill": 0,
+      "name": "Retractable door (iris hatch) \u2014 frame 2 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 54,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-054",
+      "texture": "C7W0053",
+      "value": 54,
+      "values": [
+        54
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0054"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (iris hatch) (wall 53), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 53..56 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.055",
+      "minskill": 0,
+      "name": "Retractable door (iris hatch) \u2014 frame 3 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 55,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-055",
+      "texture": "C7W0054",
+      "value": 55,
+      "values": [
+        55
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0055"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (iris hatch) (wall 53), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 53..56 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.056",
+      "minskill": 0,
+      "name": "Retractable door (iris hatch) \u2014 frame 4 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 56,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-056",
+      "texture": "C7W0055",
+      "value": 56,
+      "values": [
+        56
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0073"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (hazard shutter) (wall 73), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 73..76 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.074",
+      "minskill": 0,
+      "name": "Retractable door (hazard shutter) \u2014 frame 2 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 74,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-074",
+      "texture": "C7W0073",
+      "value": 74,
+      "values": [
+        74
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0074"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (hazard shutter) (wall 73), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 73..76 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.075",
+      "minskill": 0,
+      "name": "Retractable door (hazard shutter) \u2014 frame 3 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 75,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-075",
+      "texture": "C7W0074",
+      "value": 75,
+      "values": [
+        75
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0075"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (hazard shutter) (wall 73), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 73..76 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.076",
+      "minskill": 0,
+      "name": "Retractable door (hazard shutter) \u2014 frame 4 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 76,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-076",
+      "texture": "C7W0075",
+      "value": 76,
+      "values": [
+        76
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0081"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for force field door (wall 81), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 81..84 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.082",
+      "minskill": 0,
+      "name": "Force field door \u2014 frame 2 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 82,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-082",
+      "texture": "C7W0081",
+      "value": 82,
+      "values": [
+        82
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0082"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for force field door (wall 81), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 81..84 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.083",
+      "minskill": 0,
+      "name": "Force field door \u2014 frame 3 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 83,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-083",
+      "texture": "C7W0082",
+      "value": 83,
+      "values": [
+        83
+      ]
+    },
+    {
+      "aliases": [
         "masked",
         "wall",
         "raw",
@@ -11904,6 +11660,87 @@
     },
     {
       "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0117"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (green organic) (wall 117), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 117..120 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.118",
+      "minskill": 0,
+      "name": "Retractable door (green organic) \u2014 frame 2 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 118,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-118",
+      "texture": "C7W0117",
+      "value": 118,
+      "values": [
+        118
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0118"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (green organic) (wall 117), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 117..120 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.119",
+      "minskill": 0,
+      "name": "Retractable door (green organic) \u2014 frame 3 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 119,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-119",
+      "texture": "C7W0118",
+      "value": 119,
+      "values": [
+        119
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0119"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (green organic) (wall 117), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 117..120 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.120",
+      "minskill": 0,
+      "name": "Retractable door (green organic) \u2014 frame 4 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 120,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-120",
+      "texture": "C7W0119",
+      "value": 120,
+      "values": [
+        120
+      ]
+    },
+    {
+      "aliases": [
         "raw",
         "ignored"
       ],
@@ -11973,6 +11810,87 @@
     },
     {
       "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0193"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (arrow door) (wall 193), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 193..196 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.194",
+      "minskill": 0,
+      "name": "Retractable door (arrow door) \u2014 frame 2 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 194,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-194",
+      "texture": "C7W0193",
+      "value": 194,
+      "values": [
+        194
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0194"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (arrow door) (wall 193), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 193..196 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.195",
+      "minskill": 0,
+      "name": "Retractable door (arrow door) \u2014 frame 3 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 195,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-195",
+      "texture": "C7W0194",
+      "value": 195,
+      "values": [
+        195
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0195"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (arrow door) (wall 193), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 193..196 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.196",
+      "minskill": 0,
+      "name": "Retractable door (arrow door) \u2014 frame 4 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 196,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-196",
+      "texture": "C7W0195",
+      "value": 196,
+      "values": [
+        196
+      ]
+    },
+    {
+      "aliases": [
         "raw",
         "ignored"
       ],
@@ -12015,6 +11933,249 @@
       "value": 215,
       "values": [
         215
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0229"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (metal iris) (wall 229), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 229..232 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.230",
+      "minskill": 0,
+      "name": "Retractable door (metal iris) \u2014 frame 2 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 230,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-230",
+      "texture": "C7W0229",
+      "value": 230,
+      "values": [
+        230
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0230"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (metal iris) (wall 229), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 229..232 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.231",
+      "minskill": 0,
+      "name": "Retractable door (metal iris) \u2014 frame 3 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 231,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-231",
+      "texture": "C7W0230",
+      "value": 231,
+      "values": [
+        231
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0231"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (metal iris) (wall 229), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 229..232 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.232",
+      "minskill": 0,
+      "name": "Retractable door (metal iris) \u2014 frame 4 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 232,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-232",
+      "texture": "C7W0231",
+      "value": 232,
+      "values": [
+        232
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0233"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (louvre slats) (wall 233), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 233..236 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.234",
+      "minskill": 0,
+      "name": "Retractable door (louvre slats) \u2014 frame 2 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 234,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-234",
+      "texture": "C7W0233",
+      "value": 234,
+      "values": [
+        234
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0234"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (louvre slats) (wall 233), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 233..236 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.235",
+      "minskill": 0,
+      "name": "Retractable door (louvre slats) \u2014 frame 3 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 235,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-235",
+      "texture": "C7W0234",
+      "value": 235,
+      "values": [
+        235
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0235"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (louvre slats) (wall 233), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 233..236 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.236",
+      "minskill": 0,
+      "name": "Retractable door (louvre slats) \u2014 frame 4 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 236,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-236",
+      "texture": "C7W0235",
+      "value": 236,
+      "values": [
+        236
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0241"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (hazard cross) (wall 241), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 241..244 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.242",
+      "minskill": 0,
+      "name": "Retractable door (hazard cross) \u2014 frame 2 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 242,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-242",
+      "texture": "C7W0241",
+      "value": 242,
+      "values": [
+        242
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0242"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (hazard cross) (wall 241), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 241..244 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.243",
+      "minskill": 0,
+      "name": "Retractable door (hazard cross) \u2014 frame 3 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 243,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-243",
+      "texture": "C7W0242",
+      "value": 243,
+      "values": [
+        243
+      ]
+    },
+    {
+      "aliases": [
+        "door",
+        "animation",
+        "frame",
+        "C7W0243"
+      ],
+      "blocking": true,
+      "category": "raw",
+      "description": "Part of the opening animation for retractable door (hazard cross) (wall 241), not a material. The engine advances through these when the door opens, and no shipped map places one directly.",
+      "evidence": "palette index 255 is the masked aperture; walls 241..244 form a run whose aperture only grows, and the archive never places this word",
+      "grade": "B",
+      "key": "raw.0.244",
+      "minskill": 0,
+      "name": "Retractable door (hazard cross) \u2014 frame 4 of 4",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 244,
+      "safe_for_new_maps": false,
+      "subcategory": "animation frame",
+      "test_vector": "frame-244",
+      "texture": "C7W0243",
+      "value": 244,
+      "values": [
+        244
       ]
     },
     {

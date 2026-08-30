@@ -200,6 +200,33 @@ def _wall_entries(xlat: Xlat, curation: Curation) -> list[CatalogEntry]:
         if value in xlat.tile_triggers:
             continue
         custom = curation.for_wall(value)
+        if custom.get("animation_frame"):
+            # A frame of a door's opening animation, not a material. It goes to
+            # Raw so an imported map that somehow uses one still shows it, but
+            # it is not offered as paint -- painting frame 3 of a door gives a
+            # wall that is half aperture and opens on to nothing.
+            entries.append(
+                CatalogEntry(
+                    key=f"raw.0.{value:03d}",
+                    category="raw",
+                    subcategory=custom.get("subcategory", "animation frame"),
+                    rank=value,
+                    name=custom.get("name", f"Wall {value:03d} (animation frame)"),
+                    description=custom.get("description", ""),
+                    aliases=tuple(custom.get("aliases", [])) + (tile.texture,),
+                    plane=0,
+                    value=value,
+                    values=(value,),
+                    texture=tile.texture,
+                    placement="wall",
+                    blocking=True,
+                    safe_for_new_maps=False,
+                    evidence=custom.get("evidence", f"xlat/corridor7.txt tile {value}"),
+                    grade="B",
+                    test_vector=f"frame-{value:03d}",
+                )
+            )
+            continue
         page = value - WALL_PAGE_OFFSET
         entries.append(
             CatalogEntry(

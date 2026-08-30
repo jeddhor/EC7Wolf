@@ -143,6 +143,27 @@ def validate_map(document: MapDocument, catalog: Catalog | None = None) -> list[
                 _where(*cell),
             ))
 
+    # -- wall markers with no wall under them ------------------------------
+    # The mirror of the check above, and the one that catches a pushwall placed
+    # as a bare marker: 98, 101, 102 and 106 modify the wall cell they sit in,
+    # so on open floor they are a moving wall with nothing to move.
+    if catalog is not None:
+        floating = []
+        for index, value in enumerate(plane1):
+            if not value or value == EMPTY_OBJECT:
+                continue
+            entry = catalog.for_value(1, value)
+            if entry is None or entry.placement != "wall":
+                continue
+            if not (1 <= plane0[index] <= 250):
+                floating.append((coordinates(index, width), entry.name))
+        for cell, name in floating[:5]:
+            problems.append(Diagnostic(
+                "C7E-WALL-001", preserved if imported else Severity.ERROR,
+                f"{name} has no wall to act on; it needs a solid wall in the same cell",
+                _where(*cell),
+            ))
+
     # -- locked doors without their key ------------------------------------
     if catalog is not None:
         locks = {}

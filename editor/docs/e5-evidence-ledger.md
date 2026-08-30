@@ -43,7 +43,28 @@ A second one in the same area: `int()` on a Qt 6 flag enum raises, and the
 canvas did exactly that when emitting a press. The first click in a real
 session would have thrown.
 
-## 3. The validator earns being read
+## 3. A bug only a screenshot could find
+
+Rendering the window against real game data showed the wall palette full of
+artwork and the enemy palette full of numbered placeholders. The decoder was
+fine — the Alioprobe decodes to 1977 opaque pixels on demand.
+
+Every background job carried the document revision, and a result arriving after
+the document moved on was discarded. That rule is right for anything derived
+from the map and wrong for a thumbnail: the artwork is the user's copy of the
+game, and it does not change because they painted a cell. The screenshot script
+happened to place an alien *while the enemy thumbnails were decoding*, so all
+of them were dropped as stale — which in real use means the palette stops
+filling in the moment you do anything.
+
+Jobs now say whether they track the document. Thumbnails do not.
+
+Two smaller things the same screenshot caught: Qt reads `&` in a tab label as a
+mnemonic marker, so "Doors & Specials" rendered as "Doors _Specials"; and the
+Bandor morph tiles came out as a chair, a filing cabinet, a plant and a barrel,
+which is independent confirmation that those four curated identities are right.
+
+## 4. The validator earns being read
 
 A first version reported five errors on every map the game shipped. A validator
 like that teaches people to close the panel, and then the one that mattered is
@@ -72,7 +93,7 @@ After both, across the 60 shipped maps:
 The validator independently rediscovering the four empty slots is the useful
 kind of agreement.
 
-## 4. The catalogue decides the plane, not the tool
+## 5. The catalogue decides the plane, not the tool
 
 A wall brush and an enemy brush are the same code. The difference is that the
 catalogue entry says plane 0 or plane 1, which is why placing a door and
@@ -84,7 +105,7 @@ cell holds one, otherwise the wall under it. The first version picked from
 whichever plane the previous selection happened to use, which made the tool
 depend on invisible state.
 
-## 5. Facings are words, and the inspector says so
+## 6. Facings are words, and the inspector says so
 
 Turning an alien to face north is not a property assignment; 108 and 109 are
 different words for the same alien. The inspector shows the raw value
@@ -95,7 +116,7 @@ approximated: there is no patrolling Eniram, because the translation has no
 entry for one, and offering the control would promise something the format
 cannot express.
 
-## 6. One stroke, one undo
+## 7. One stroke, one undo
 
 A drag opens a gesture, tags every command with it, and closes on release, so
 the history coalesces the whole stroke. Ctrl+Z takes back the line you drew,
@@ -105,7 +126,7 @@ clicks are two.
 Painting a value that is already there records nothing at all — an undo step
 that does nothing when pressed is worse than no step.
 
-## 7. The playtest launch
+## 8. The playtest launch
 
 An argument vector, never a shell string: nothing in a filename can become a
 command, and a path with a space needs no quoting. The plan is built and
@@ -118,7 +139,7 @@ the entire mechanism by which the edit reaches the game.
 
 The export lands in the workspace, never beside the game data.
 
-## 8. The fill is bounded
+## 9. The fill is bounded
 
 `FILL_BUDGET` is 33 000 — enough to fill the largest map the engine allows
 (181×181 is 32 761 cells) and no more. An unbounded fill on a map whose outer
@@ -129,7 +150,7 @@ into a message.
 Four-connected, not eight: a diagonal gap is a gap you can see and cannot walk
 through, and a fill leaking across one would surprise whoever drew the wall.
 
-## 9. Tests
+## 10. Tests
 
 | Suite | Tests |
 | --- | --- |
@@ -137,12 +158,12 @@ through, and a fill leaking across one would surprise whoever drew the wall.
 | `test_validation` | 19 |
 | `test_engine_runner` | 13 |
 | `test_editing` (offscreen GUI) | 31 |
-| **E5 total** | **87** |
+| **E5 total** | **88** |
 
-Whole editor suite: **523** — 438 headless, 85 offscreen GUI — plus the
+Whole editor suite: **524** — 438 headless, 86 offscreen GUI — plus the
 owned-data slice gate.
 
-## 10. What E5 did not do
+## 11. What E5 did not do
 
 No copy and paste in the GUI (the transforms exist and are tested; nothing is
 bound to them yet), no prefabs, no reachability analysis, no MAPINFO. Full

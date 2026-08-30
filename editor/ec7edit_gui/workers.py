@@ -35,6 +35,9 @@ class Job:
     #: Set to stop at the next checkpoint. Read by the work function.
     cancelled: bool = False
     metadata: dict = field(default_factory=dict)
+    #: Whether the answer goes stale when the document changes. False for work
+    #: that does not depend on the document at all.
+    tracks_revision: bool = True
 
     def cancel(self) -> None:
         self.cancelled = True
@@ -101,12 +104,22 @@ class WorkerPool(QObject):
         """
         self._revision = revision
 
-    def submit(self, key: str, work, *, metadata: dict | None = None) -> Job:
-        """Queue work under `key`, replacing any earlier job with that key."""
+    def submit(self, key: str, work, *, metadata: dict | None = None,
+               tracks_revision: bool = True) -> Job:
+        """Queue work under `key`, replacing any earlier job with that key.
+
+        `tracks_revision=False` for work whose answer does not depend on the
+        document. Decoding a wall page is the example: the artwork is the
+        user's copy of the game, and it does not change because they painted a
+        cell. Tagging those with the revision meant that painting *anything*
+        discarded every thumbnail still in flight, and the palette stopped
+        filling in.
+        """
         existing = self._jobs.get(key)
         if existing is not None:
             existing.cancel()
-        job = Job(key=key, revision=self._revision, work=work, metadata=metadata or {})
+        job = Job(key=key, revision=self._revision, work=work, metadata=metadata or {},
+                  tracks_revision=tracks_revision)
         self._jobs[key] = job
         self._pool.start(_Task(job, self._signals))
         return job
@@ -134,7 +147,7 @@ class WorkerPool(QObject):
             del self._jobs[job.key]
         if job.cancelled:
             return
-        if job.revision != self._revision:
+        if job.tracks_revision and job.revision != self._revision:
             self.discarded.emit(job.key)
             return
         self.completed.emit(job.key, result)

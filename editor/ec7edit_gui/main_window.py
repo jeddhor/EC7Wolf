@@ -67,10 +67,10 @@ CATALOG_PATH = Path(__file__).resolve().parents[1] / "resources" / "editor_catal
 
 PALETTE_TABS = (
     ("Walls", "walls"),
-    ("Doors & Specials", "specials"),
+    ("Doors and Specials", "specials"),
     ("Objects", "objects"),
     ("Enemies", "enemies"),
-    ("Starts & Paths", "starts"),
+    ("Starts and Paths", "starts"),
     ("Zones", "zones"),
     ("Raw", "raw"),
 )

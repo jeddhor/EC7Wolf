@@ -397,6 +397,17 @@ class Workers(unittest.TestCase):
         self.assertEqual(self.discarded, ["b"])
         self.assertEqual(self.completed, [])
 
+    def test_work_that_does_not_track_the_document_survives_an_edit(self):
+        # A thumbnail is the user's artwork; it does not go stale because they
+        # painted a cell. Tagging those with the revision meant painting
+        # anything discarded every thumbnail still decoding.
+        self.pool.set_revision(1)
+        self.pool.submit("art", lambda job: "pixels", tracks_revision=False)
+        self.pool.set_revision(2)
+        self.drain()
+        self.assertEqual(self.completed, [("art", "pixels")])
+        self.assertEqual(self.discarded, [])
+
     def test_a_failing_job_does_not_take_the_pool_down(self):
         def explode(job):
             raise RuntimeError("boom")

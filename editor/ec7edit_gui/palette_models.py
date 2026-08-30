@@ -143,7 +143,10 @@ class CatalogModel(QAbstractListModel):
                 return None
             return factory.pixels_for(entry)
 
-        self._pool.submit(f"thumb:{entry.key}", work, metadata={"entry": entry})
+        # Not revision-tracked: a thumbnail is the user's artwork, which does
+        # not go stale because the document changed.
+        self._pool.submit(f"thumb:{entry.key}", work, metadata={"entry": entry},
+                          tracks_revision=False)
 
     def _on_decoded(self, key: str, result) -> None:
         if not key.startswith("thumb:") or result is None or self._factory is None:

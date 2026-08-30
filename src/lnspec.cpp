@@ -458,6 +458,13 @@ IMPLEMENT_INTERNAL_CLASS(C7HealthDispenser)
 // 85 animates through 88, where a second use supplies 25 health and leaves
 // empty wall 89. Wall 111 supplies a 50-round clip and immediately changes to
 // empty wall 112. Wall 110 refills the visor without consuming the station.
+// The three wall units say what the shipped game says. Those strings live
+// together at 0x3B002 in CORR7CD.EXE -- "Medic Pack", "50 Rnd Clip",
+// "Visor Battery", then the two access-terminal messages -- which is how the
+// dispensers can be told apart from the floor pickups at 0x3ADDA: the game
+// keeps wall-unit text in its own block. The "FULL ..." refusals below have no
+// counterpart in the executable, so what the original prints when you use a
+// full unit is still unknown and these are ours.
 FUNC(C7_Dispenser)
 {
 	if(!spot || !spot->tile || !activator)
@@ -486,7 +493,7 @@ FUNC(C7_Dispenser)
 				return 0;
 			SetC7WallTexture(spot, 89);
 			if(activator == players[ConsolePlayer].camera)
-				StatusBar->SetTopMessage("25 Health Restored");
+				StatusBar->SetTopMessage("Medic Pack");
 			return 1;
 		}
 		if(spot->texture[0] != initial)
@@ -516,7 +523,7 @@ FUNC(C7_Dispenser)
 		SetC7WallTexture(spot, 112);
 		PlaySoundLocMapSpot("c7/dispenser/ammo", spot);
 		if(activator == players[ConsolePlayer].camera)
-			StatusBar->SetTopMessage("50 Rounds Acquired");
+			StatusBar->SetTopMessage("50 Rnd Clip");
 		return 1;
 	}
 
@@ -534,7 +541,7 @@ FUNC(C7_Dispenser)
 		visor->amount = visor->maxamount;
 		PlaySoundLocMapSpot("c7/dispenser/visor", spot);
 		if(activator == players[ConsolePlayer].camera)
-			StatusBar->SetTopMessage("VISOR BATTERY RECHARGED");
+			StatusBar->SetTopMessage("Visor Battery");
 		return 1;
 	}
 
@@ -1399,6 +1406,26 @@ FUNC(Exit_Normal)
 		if(control[activator->player->GetPlayerNum()].buttonheld[bt_use])
 			return 0;
 		control[activator->player->GetPlayerNum()].buttonheld[bt_use] = true;
+	}
+
+	// Light the elevator's arrow before the floor ends. The swap alone is not
+	// enough to see: what follows is SD_WaitSoundDone, which blocks without
+	// drawing, so the last frame on screen would still show the unlit panel
+	// for the whole length of the elevator sound. One explicit refresh puts
+	// the lit arrow up, and it costs no tics, so nothing about the simulation
+	// or the transition timing moves.
+	if(IWad::CheckGameFilter("Corridor7") && args[1] > 0 && spot && spot->tile)
+	{
+		FString litName;
+		litName.Format("C7W%04u", args[1]-1);
+		const FTextureID lit = TexMan.CheckForTexture(litName, FTexture::TEX_Wall);
+		if(lit.isValid())
+		{
+			for(unsigned int side = 0;side < 4;++side)
+				spot->texture[side] = lit;
+			if(activator == players[ConsolePlayer].camera)
+				ThreeDRefresh();
+		}
 	}
 
 	if(IWad::CheckGameFilter("Corridor7") && args[0] == 0 && strcmp(gamestate.mapname, "MAP40") == 0)

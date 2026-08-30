@@ -247,9 +247,13 @@ void AInventory::Touch(AActor *toucher)
 		if(IWad::CheckGameFilter("Corridor7"))
 		{
 			struct PickupMessage { const char *type; const char *message; };
+			// The first three name classes nothing spawns -- Corridor 7 uses
+			// wall dispensers for health, ammo and visor charge, and these are
+			// the pickup forms that were dropped. Kept in step with the game's
+			// own strings anyway, so the table stays one consistent thing.
 			static const PickupMessage messages[] = {
-				{ "C7MedicPack", "25 Health Restored" },
-				{ "C7AmmoClip", "50 Rounds Acquired" },
+				{ "C7MedicPack", "Medic Pack" },
+				{ "C7AmmoClip", "50 Rnd Clip" },
 				{ "C7AmmoPack", "100 Rounds Acquired" },
 				{ "C7Adrenaline", "300 Health Boost" },
 				{ "C7BodyArmor", "Body Armor" },

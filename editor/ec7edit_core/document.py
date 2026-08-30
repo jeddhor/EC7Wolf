@@ -150,14 +150,48 @@ class MapDocument:
             source=source,
         )
 
+    #: Plane-0 word for a plain solid wall, and plane-1's empty marker. The
+    #: second is 18, not 0: a new map whose object plane were all zeros would
+    #: place whatever word 0 means on every cell of it.
+    SOLID_WALL = 1
+    EMPTY_OBJECT = 18
+
     @classmethod
     def blank(cls, *, slot: int = 1, name: str = "NEW MAP", width: int = 64,
               height: int = 64) -> "MapDocument":
+        """Three planes of zeros. The primitive, with no opinions."""
         return cls(
             uuid=new_uuid(),
             slot=slot,
             native_name=NativeName.from_text(name),
             planes=MapPlanes.empty(width, height),
+        )
+
+    @classmethod
+    def new_room(cls, *, slot: int = 1, name: str = "NEW MAP", width: int = 64,
+                 height: int = 64) -> "MapDocument":
+        """A map somebody would actually want to start drawing on.
+
+        Two differences from `blank`, both of which every author would make
+        immediately: the boundary is solid, because an open edge lets the
+        player walk out of the world, and the object plane holds Corridor 7's
+        empty marker rather than zeros -- a plane of zeros would place whatever
+        word 0 means on every cell of the map.
+        """
+        cells = width * height
+        floor = [0] * cells
+        for x in range(width):
+            floor[x] = floor[(height - 1) * width + x] = cls.SOLID_WALL
+        for y in range(height):
+            floor[y * width] = floor[y * width + width - 1] = cls.SOLID_WALL
+        return cls(
+            uuid=new_uuid(),
+            slot=slot,
+            native_name=NativeName.from_text(name),
+            planes=MapPlanes(
+                width, height,
+                (tuple(floor), (cls.EMPTY_OBJECT,) * cells, (0,) * cells),
+            ),
         )
 
 

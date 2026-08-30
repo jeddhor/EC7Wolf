@@ -310,18 +310,23 @@ class Canvas(unittest.TestCase):
 
 
 class Palette(Base):
+    def show_tab(self, category: str) -> None:
+        """Select a palette tab by category, not by a number that moves."""
+        index = [c for _, c in PALETTE_TABS].index(category)
+        self.window.palette_tabs.setCurrentIndex(index)
+        QApplication.processEvents()
+
     def test_every_tab_has_entries(self):
         for title, category in PALETTE_TABS:
-            self.window.palette_tabs.setCurrentIndex(
-                [c for _, c in PALETTE_TABS].index(category)
-            )
-            QApplication.processEvents()
+            if category == "prefabs":
+                self.assertGreater(self.window.prefab_list.count(), 0, "Structures is empty")
+                continue
+            self.show_tab(category)
             model = self.window.palette_models[category]
             self.assertGreater(model.rowCount(), 0, f"{title} is empty")
 
     def test_search_narrows_the_list(self):
-        self.window.palette_tabs.setCurrentIndex(3)  # Enemies
-        QApplication.processEvents()
+        self.show_tab("enemies")
         model = self.window.palette_models["enemies"]
         everything = model.rowCount()
         self.window.search.setText("Rodex")
@@ -330,7 +335,7 @@ class Palette(Base):
         self.assertGreater(model.rowCount(), 0)
 
     def test_searching_by_raw_value_works(self):
-        self.window.palette_tabs.setCurrentIndex(3)
+        self.show_tab("enemies")
         self.window.search.setText("108")
         QApplication.processEvents()
         model = self.window.palette_models["enemies"]

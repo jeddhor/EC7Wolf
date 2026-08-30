@@ -71,7 +71,7 @@ done
 # gl_selftest is here rather than below because --gltest is handled before the
 # IWAD is opened: it needs no game data, and it is the only thing that proves the
 # shaders actually compile on the runner's driver. A broken shader still links.
-data_free_gates='definitions names ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3 ec7edit_e4 ec7edit_e5 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
+data_free_gates='definitions names ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3 ec7edit_e4 ec7edit_e5 ec7edit_e6 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
 
 data_gates='
 corridor7
@@ -249,6 +249,11 @@ for g in $data_free_gates; do
 			# provenance, link containment.
 			run_gate "$g" "ec7edit E0 foundation" \
 				"$here/test_ec7edit_e0.sh" ;;
+		ec7edit_e6)
+			# Data-free: the compound tools, and the coverage report that is
+			# E6's exit gate -- every semantic reachable or labelled.
+			run_gate "$g" "ec7edit E6 semantics" \
+				"$here/test_ec7edit_e6.sh" ;;
 		ec7edit_e5)
 			# Data-free: tool geometry with no Qt, plus the tools driven
 			# through the real window on the offscreen platform.

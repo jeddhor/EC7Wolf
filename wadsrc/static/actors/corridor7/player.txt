@@ -410,6 +410,24 @@ actor C7AssaultCannon : C7Weapon
 	}
 }
 
+// C7MedicPack, C7AmmoClip, C7VisorBattery and C7ScoreBonus are leftovers, kept
+// because they cost nothing and because deleting them would lose what they
+// record about the game's history.
+// None is placed by any map word, and none can be: Corridor 7 chose wall
+// dispensers over floor pickups for health, ammo and visor charge, and these
+// are the pickup forms that did not survive that decision. Their sprites were
+// guessed when they were written and are wrong -- C7VisorBattery's C071 is the
+// fourth frame of the proximity mine's explosion -- which is harmless only
+// because nothing ever spawns them. The live versions are the C7_Dispenser
+// cases in lnspec.cpp.
+//
+// C7ScoreBonus is a different leftover: it inherits ECWolf's ScoreItem, the
+// Wolfenstein 3D treasure mechanic, which Corridor 7 does not have.
+//
+// The two that looked like leftovers and are not: C7Bayonet is the Taser, the
+// self-powered infinite-ammo fallback in weapon slot 1, and C7M16 is slot 3.
+// Both are handed to the player at spawn rather than placed, which is why no
+// map word mentions them.
 actor C7MedicPack : Health
 {
 	inventory.pickupsound "misc/medkit_pkup"

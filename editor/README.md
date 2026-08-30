@@ -8,10 +8,12 @@ directory holds the implementation as it arrives.
 
 ## State
 
-**Milestone E5 — the first playable slice.** EC7Edit opens a Corridor 7 map,
-lets you change it, and plays what you changed. Paint walls from a palette of
-real thumbnails, place aliens and turn them to face where you want, undo
-anything, save, and press **F5** to watch EC7Wolf load your edit.
+**Milestone E6 — the complete semantic palette.** EC7Edit opens a Corridor 7
+map, lets you change it, and plays what you changed. Paint walls from a palette
+of real thumbnails, place doors and dispensers and pushwalls as single clicks,
+pair a transporter in two, turn aliens to face where you want, copy and rotate
+a whole region, undo anything, save, and press **F5** to watch EC7Wolf load
+your edit.
 
 ```console
 $ editor/ec7edit
@@ -20,9 +22,9 @@ $ editor/ec7edit
 First run asks for three paths — the engine, your game data, and somewhere to
 keep projects — and answers with a checklist rather than a verdict.
 
-Tools: select, paint, line, rectangle, fill, erase, pick (`S B L R F E I`).
-**F8** checks the open map; **F5** exports it and launches the engine on it.
-Your archive is only ever read.
+Tools: select, paint, line, rectangle, fill, erase, pick, place, transporter
+(`S B L R F E I P T`). **F8** checks the open map; **F5** exports it and
+launches the engine on it. Your archive is only ever read.
 
 Shown against a generated archive rather than a retail one, since the map
 names in the shipped file are not this project's to publish:
@@ -68,16 +70,17 @@ archive without refusing to open it.
 | [`docs/e3-evidence-ledger.md`](docs/e3-evidence-ledger.md) | E3: the modelled 10 000 operations, the eleven injected save failures, and two defects they found |
 | [`docs/e4-evidence-ledger.md`](docs/e4-evidence-ledger.md) | E4: the measured packaging decision, and why the engine is not run until you ask |
 | [`docs/e5-evidence-ledger.md`](docs/e5-evidence-ledger.md) | E5: the exit gate met end to end, and the drag bug that would have made painting unusable |
+| [`docs/e6-evidence-ledger.md`](docs/e6-evidence-ledger.md) | E6: nineteen compound tools, the door rule copied from the engine, and the six gaps coverage found |
 | [`scripts/make_fixtures.py`](scripts/make_fixtures.py) | Generates the synthetic corpus, including eleven malformed inputs |
 | [`scripts/audit_links.py`](scripts/audit_links.py) | Fails on a Markdown link that escapes the git root or points at an untracked file |
 | [`resources/editor_catalog.json`](resources/) | The generated catalogue: 457 entries joining raw map words to names, sprites and placement rules |
 | [`scripts/generate_catalog.py`](scripts/generate_catalog.py) | Rebuilds it from the engine's translation and actors; `verify` is a gate |
 | [`scripts/build_c7assets.py`](scripts/build_c7assets.py) | Builds `tools/c7assets.py` by inlining the decoders, so there is only one copy of them |
-| [`tests/unit/`](tests/unit/) | 438 tests, plain `unittest`, no runner dependency |
-| [`tests/gui/`](tests/gui/) | 85 more, real Qt widgets on the offscreen platform |
+| [`tests/unit/`](tests/unit/) | 488 tests, plain `unittest`, no runner dependency |
+| [`tests/gui/`](tests/gui/) | 122 more, real Qt widgets on the offscreen platform |
 
 Run it all with `tools/run_gates.sh ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3
-ec7edit_e4 ec7edit_e5`, or add `ec7edit_override ec7edit_assets ec7edit_slice`
+ec7edit_e4 ec7edit_e5 ec7edit_e6`, or add `ec7edit_override ec7edit_assets ec7edit_slice`
 where the game data is present — the last of those edits a real map and watches
 the engine load it.
 
@@ -123,6 +126,5 @@ PySide6 arrives with the GUI, as an optional extra.
 
 ## Next
 
-E6 completes the semantic editing: every special, the compound placements,
-prefabs for transporter pairs and secret elevators, and the rules that stop you
-building something the game cannot load.
+E7 makes validation continuous — reachability, key-and-door routes, and the
+problems panel updating as you draw rather than when you ask.

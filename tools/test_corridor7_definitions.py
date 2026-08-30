@@ -254,7 +254,12 @@ for wall_id, kind in ((85, 1), (88, 1), (111, 2), (110, 3)):
         f"Corridor 7 dispenser wall {wall_id}",
     )
 require(r'FUNC\(C7_Dispenser\).*?C7MedicPack.*?GiveInventory.*?SetC7WallTexture\(spot,\s*89\).*?C7Bullets.*?GiveInventory\(ammo,\s*50\).*?SetC7WallTexture\(spot,\s*112\)', LNSPEC, "Corridor 7 wall dispensers grant 25 health or 50 bullets and become empty")
-require(r'args\[0\]\s*==\s*3.*?C7VisorCharge.*?FULL VISOR CHARGE.*?visor->amount\s*=\s*visor->maxamount.*?VISOR BATTERY RECHARGED',
+# "Visor Battery" is the game's own string, at 0x3B002 in CORR7CD.EXE, in a
+# block with "Medic Pack", "50 Rnd Clip" and the two access-terminal messages.
+# That grouping is what identifies all five as wall-unit text: the floor
+# pickups live in their own block at 0x3ADDA. This check used to assert
+# "VISOR BATTERY RECHARGED", which was ours and not the game's.
+require(r'args\[0\]\s*==\s*3.*?C7VisorCharge.*?FULL VISOR CHARGE.*?visor->amount\s*=\s*visor->maxamount.*?"Visor Battery"',
         LNSPEC, "wall 110 is a non-wasteful reusable visor charger")
 require(r'FULL HEALTH.*?return\s+false', INVENTORY,
         "health packs remain in the world when the player is full")

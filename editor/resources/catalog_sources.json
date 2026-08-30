@@ -457,10 +457,15 @@
       "aliases": [
         "terminal",
         "computer",
-        "switch"
+        "switch",
+        "blue",
+        "keycard",
+        "access"
       ],
-      "description": "One-shot terminal; its result page is wall 12.",
-      "name": "Access terminal (second)"
+      "description": "Grants the BLUE access card.",
+      "evidence": "xlat trigger 11 arg1 = 2; lnspec.cpp maps arg1 = 2 to C7Static002",
+      "name": "BLUE access terminal",
+      "subcategory": "terminal"
     },
     "0:110": {
       "aliases": [
@@ -622,10 +627,13 @@
       "aliases": [
         "alarm",
         "terminal",
-        "switch"
+        "switch",
+        "alert"
       ],
-      "description": "One-shot alarm terminal; its result page is wall 31.",
-      "name": "Intruder alarm"
+      "description": "Wakes every alien on the floor that can hear it. One shot.",
+      "evidence": "xlat trigger 30 arg1 = 3, which calls P_AlertCorridor7Monsters",
+      "name": "Intruder alarm",
+      "subcategory": "terminal"
     },
     "0:63": {
       "aliases": [
@@ -658,10 +666,15 @@
       "aliases": [
         "terminal",
         "computer",
-        "switch"
+        "switch",
+        "red",
+        "keycard",
+        "access"
       ],
-      "description": "One-shot computer terminal; its result page is the next wall ID.",
-      "name": "Access terminal"
+      "description": "Grants the RED access card. No red card is ever on a floor -- a terminal is the only way to get one.",
+      "evidence": "xlat trigger 9 arg1 = 1; lnspec.cpp maps arg1 = 1 to C7Static001",
+      "name": "RED access terminal",
+      "subcategory": "terminal"
     },
     "1:101": {
       "aliases": [

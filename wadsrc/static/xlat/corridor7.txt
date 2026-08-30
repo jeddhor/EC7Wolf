@@ -62,10 +62,14 @@ tiles
 
 	// Wall 63 is Corridor 7's normal elevator switch. arg0 distinguishes it
 	// from floor/vortex exits so the two boss floors can disable the elevator.
+	// arg1 is the wall the switch becomes once it works: 64 is the same panel
+	// with its arrow lit, which is the only feedback the player gets that the
+	// elevator accepted them before the floor ends.
 	trigger 63
 	{
 		action = "Exit_Normal";
 		arg0 = 1;
+		arg1 = 64;
 		playeruse = true;
 	}
 

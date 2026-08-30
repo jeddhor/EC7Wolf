@@ -102,12 +102,38 @@ class XlatParsing(unittest.TestCase):
         # `tiles` early and lose everything after it.
         self.assertEqual(len(self.xlat.tiles), 2)
 
+    def test_a_player_start_faces_north_first(self):
+        # The engine reflects a start's angle: (360 + 360/angles) - angle.
+        # Four offsets that read east/north/west/south for an alien read
+        # north/east/south/west for a start, and a lab map confirms it -- word
+        # 19 looks at -y, 20 at +x, 21 at +y, 22 at -x.
+        start = self.xlat.thing_for(19)
+        self.assertEqual([start.direction_for(v) for v in start.values],
+                         ["north", "east", "south", "west"])
+
+    def test_an_alien_faces_east_first(self):
+        alien = self.xlat.thing_for(108)
+        self.assertEqual([alien.direction_for(v) for v in alien.values],
+                         ["east", "north", "west", "south"])
+
+    def test_only_starts_get_the_reflection(self):
+        from ec7edit_core.xlat import uses_player_rotation
+
+        self.assertTrue(uses_player_rotation("Player1Start"))
+        self.assertTrue(uses_player_rotation("DeathmatchStart"))
+        self.assertFalse(uses_player_rotation("PatrolPoint"))
+        self.assertFalse(uses_player_rotation("C7Rodex"))
+
     def test_four_angles_expand_to_four_values(self):
         alien = self.xlat.thing_for(108)
         self.assertEqual(list(alien.values), [108, 109, 110, 111])
         self.assertEqual(
             [alien.direction_for(v) for v in alien.values], list(DIRECTIONS_4)
         )
+
+    def test_the_synthetic_start_reflects_too(self):
+        start = self.xlat.thing_for(19)
+        self.assertEqual(start.direction_for(19), "north")
 
     def test_eight_angles_expand_to_eight(self):
         patrol = self.xlat.thing_for(90)

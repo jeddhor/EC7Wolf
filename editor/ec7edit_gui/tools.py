@@ -28,6 +28,8 @@ from PySide6.QtCore import QObject, Qt, Signal
 from ec7edit_core.catalog import CatalogEntry
 from ec7edit_core.commands import Command, write_words
 from ec7edit_core.document import MapDocument
+from ec7edit_core.prefabs import Prefab
+from ec7edit_core.rules import free_channel
 from ec7edit_core.tools import (
     FILL_BUDGET,
     flood_cells,
@@ -49,6 +51,8 @@ class Tool(Enum):
     FILL = "fill"
     ERASER = "eraser"
     EYEDROPPER = "eyedropper"
+    PREFAB = "prefab"
+    TRANSPORTER = "transporter"
 
     @property
     def label(self) -> str:
@@ -60,6 +64,8 @@ class Tool(Enum):
             Tool.FILL: "Fill",
             Tool.ERASER: "Erase",
             Tool.EYEDROPPER: "Pick",
+            Tool.PREFAB: "Place",
+            Tool.TRANSPORTER: "Transporter",
         }[self]
 
     @property
@@ -67,7 +73,7 @@ class Tool(Enum):
         return {
             Tool.POINTER: "S", Tool.BRUSH: "B", Tool.LINE: "L",
             Tool.RECTANGLE: "R", Tool.FILL: "F", Tool.ERASER: "E",
-            Tool.EYEDROPPER: "I",
+            Tool.EYEDROPPER: "I", Tool.PREFAB: "P", Tool.TRANSPORTER: "T",
         }[self]
 
 
@@ -95,6 +101,8 @@ class ToolController(QObject):
 
     #: Emitted with a command the window should run.
     command_ready = Signal(object)
+    #: A prefab could not go where it was clicked; carries the diagnostics.
+    refused = Signal(object)
     #: The eyedropper found this raw value on this plane.
     picked = Signal(int, int)
     #: The selection changed.
@@ -106,6 +114,11 @@ class ToolController(QObject):
         super().__init__(parent)
         self.tool = Tool.BRUSH
         self.entry: CatalogEntry | None = None
+        self.prefab: Prefab | None = None
+        #: Quarter turns applied to the selected prefab's footprint.
+        self.prefab_rotation = 0
+        #: The first end of a transporter pair, waiting for its second click.
+        self.pending_transporter: tuple[int, int, int] | None = None
         self.document: MapDocument | None = None
         self.selection = Selection()
         self.filled_rectangle = False
@@ -122,6 +135,92 @@ class ToolController(QObject):
 
     def set_entry(self, entry: CatalogEntry | None) -> None:
         self.entry = entry
+
+    def set_prefab(self, prefab: Prefab | None) -> None:
+        self.prefab = prefab
+        self.prefab_rotation = 0
+        if prefab is not None:
+            self.tool = Tool.PREFAB
+            self.message.emit(f"{prefab.name}: {prefab.description}")
+
+    def rotate_prefab(self) -> None:
+        """Turn the pending prefab a quarter turn clockwise."""
+        if self.prefab is None or not self.prefab.rotatable:
+            self.message.emit("This one has no orientation to turn")
+            return
+        self.prefab_rotation = (self.prefab_rotation + 1) % 4
+        self.message.emit(f"{self.prefab.name}, turned {self.prefab_rotation * 90} degrees")
+
+    @property
+    def oriented_prefab(self) -> Prefab | None:
+        if self.prefab is None:
+            return None
+        return self.prefab.rotated(self.prefab_rotation)
+
+    def _place_prefab(self, x: int, y: int) -> None:
+        """One click, one compound structure, one undo step -- or a refusal.
+
+        Refusing is the useful half. A dispenser with no floor in front of it
+        is a wall unit nobody can reach, and finding that out at playtest is
+        much worse than being told at the click.
+        """
+        prefab = self.oriented_prefab
+        if prefab is None or self.document is None:
+            return
+        problems = prefab.check(self.document, x, y)
+        if problems:
+            self.refused.emit(problems)
+            self.message.emit(problems[0].message)
+            return
+        command = write_words(self.document, prefab.placement(x, y),
+                              label=prefab.name, gesture=self._gesture)
+        if command.changes_anything:
+            self.command_ready.emit(command)
+
+    def _place_transporter(self, x: int, y: int) -> None:
+        """Two clicks make a channel; the first alone makes nothing.
+
+        A transporter with one end is not a half-built transporter, it is a
+        broken map, so the first click is remembered rather than written and
+        the pair is placed together as one undo step.
+        """
+        from ec7edit_core.prefabs import is_floor
+
+        if self.document is None:
+            return
+        if not is_floor(self.document.cell(0, x, y)):
+            self.message.emit("A transporter pad needs floor to stand on")
+            return
+
+        if self.pending_transporter is None:
+            channel = free_channel(self.document)
+            if channel is None:
+                self.message.emit("All eight transporter channels are already paired")
+                return
+            self.pending_transporter = (channel, x, y)
+            self.message.emit(
+                f"Channel {channel}: first end at ({x}, {y}). Click its other end."
+            )
+            return
+
+        channel, first_x, first_y = self.pending_transporter
+        if (x, y) == (first_x, first_y):
+            self.message.emit("A channel needs two different cells")
+            return
+        self.pending_transporter = None
+        command = write_words(
+            self.document,
+            [(0, first_x, first_y, channel), (0, x, y, channel)],
+            label=f"Transporter channel {channel}",
+        )
+        if command.changes_anything:
+            self.command_ready.emit(command)
+        self.message.emit(f"Channel {channel} paired ({first_x}, {first_y}) to ({x}, {y})")
+
+    def cancel_pending(self) -> None:
+        if self.pending_transporter is not None:
+            self.pending_transporter = None
+            self.message.emit("Transporter cancelled")
 
     def set_document(self, document: MapDocument | None) -> None:
         """Point at a map, or at a newer snapshot of the one already open.
@@ -198,6 +297,14 @@ class ToolController(QObject):
         if self.tool is Tool.POINTER:
             self.selection = Selection(x, y, 1, 1)
             self.selection_changed.emit(self.selection)
+            return
+
+        if self.tool is Tool.PREFAB:
+            self._place_prefab(x, y)
+            return
+
+        if self.tool is Tool.TRANSPORTER:
+            self._place_transporter(x, y)
             return
 
         if self.tool is Tool.FILL:

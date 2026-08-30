@@ -125,6 +125,41 @@ class Structure(unittest.TestCase):
             project.maps[0].slot = 9
 
 
+class NewRoom(unittest.TestCase):
+    """`new_room` is walled with an empty object plane; `blank` is all zeros."""
+
+    def test_blank_really_is_blank(self):
+        document = MapDocument.blank(width=6, height=6)
+        for plane in range(3):
+            self.assertTrue(all(v == 0 for v in document.planes.planes[plane]))
+
+    def test_a_room_is_walled(self):
+        document = MapDocument.new_room(width=10, height=8)
+        for x in range(10):
+            self.assertEqual(document.cell(0, x, 0), MapDocument.SOLID_WALL)
+            self.assertEqual(document.cell(0, x, 7), MapDocument.SOLID_WALL)
+        for y in range(8):
+            self.assertEqual(document.cell(0, 0, y), MapDocument.SOLID_WALL)
+            self.assertEqual(document.cell(0, 9, y), MapDocument.SOLID_WALL)
+
+    def test_the_middle_is_open(self):
+        self.assertEqual(MapDocument.new_room(width=10, height=8).cell(0, 5, 4), 0)
+
+    def test_the_object_plane_is_the_empty_marker(self):
+        # Zero is a word that means something; 18 is the one that means nothing.
+        document = MapDocument.new_room(width=6, height=6)
+        self.assertTrue(all(v == MapDocument.EMPTY_OBJECT
+                            for v in document.planes.planes[1]))
+
+    def test_plane_two_starts_at_zero(self):
+        document = MapDocument.new_room(width=6, height=6)
+        self.assertTrue(all(v == 0 for v in document.planes.planes[2]))
+
+    def test_the_two_constructors_differ(self):
+        self.assertNotEqual(MapDocument.blank(width=6, height=6).planes.planes,
+                            MapDocument.new_room(width=6, height=6).planes.planes)
+
+
 class Interop(unittest.TestCase):
     def test_import_from_a_record_keeps_the_exact_name_bytes(self):
         raw = b"SLOT\x00\x001\x00" + b"\x00" * 8

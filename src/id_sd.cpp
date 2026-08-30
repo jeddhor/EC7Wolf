@@ -1439,7 +1439,15 @@ SD_StopSound(void)
 void
 SD_WaitSoundDone(void)
 {
-	while (SD_SoundPlaying())
+	// Bounded, because the old unbounded spin froze the game outright wherever
+	// SD_SoundPlaying() never went false: a device that went away mid-session,
+	// a stuck channel, or the dummy driver a headless test runs under. The
+	// elevator is where it bit -- using one would hang the process instead of
+	// finishing the floor. Every Corridor 7 sound is well under a second, so
+	// this ceiling only ever fires when something is already wrong, and
+	// cutting a sound short is much better than not returning.
+	const unsigned int limit = 2000/5;
+	for(unsigned int waited = 0;waited < limit && SD_SoundPlaying();++waited)
 		SDL_Delay(5);
 }
 

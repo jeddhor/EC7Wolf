@@ -42,10 +42,13 @@ from ec7edit_core.catalog import Catalog, load_catalog
 from ec7edit_core.commands import History
 from ec7edit_core.discovery import Profile, data_fingerprint
 from ec7edit_core.engine_runner import build_launch_plan
+from ec7edit_core.rules import check_door, check_transporters, door_cells
+from ec7edit_core.transforms import copy_region, flip_clip, paste_writes, rotate_clip
 from ec7edit_core.validation import summarise, validate_map
 from ec7edit_core.document import MapDocument, ProjectDocument, SourceReference, utc_now
 from ec7edit_core.errors import Ec7EditError
 from ec7edit_core.paths import SourceIdentity
+from ec7edit_core.prefabs import PREFABS, by_key as prefab_by_key
 from ec7edit_core.project import (
     PROJECT_SUFFIX,
     RecoveryStore,
@@ -66,6 +69,7 @@ from .workers import WorkerPool
 CATALOG_PATH = Path(__file__).resolve().parents[1] / "resources" / "editor_catalog.json"
 
 PALETTE_TABS = (
+    ("Structures", "prefabs"),
     ("Walls", "walls"),
     ("Doors and Specials", "specials"),
     ("Objects", "objects"),
@@ -117,6 +121,7 @@ class MainWindow(QMainWindow):
 
         self.tools = ToolController(self)
         self.tools.command_ready.connect(self.run_command)
+        self.tools.refused.connect(self._on_prefab_refused)
         self.tools.picked.connect(self._on_picked)
         self.tools.message.connect(lambda text: self.statusBar().showMessage(text, 3000))
 
@@ -155,12 +160,15 @@ class MainWindow(QMainWindow):
         file_menu = self.menuBar().addMenu("&File")
         self.action_new = self._action("&New project", self.new_project, QKeySequence.New)
         self.action_open = self._action("&Open project…", self.open_project, QKeySequence.Open)
+        self.action_new_map = self._action("New &map…", self.new_map, "Ctrl+M",
+                                           tip="Add an empty map to this project")
         self.action_import = self._action("&Import map from archive…", self.import_map, "Ctrl+I")
         self.action_save = self._action("&Save", self.save_project, QKeySequence.Save)
         self.action_save_as = self._action("Save &As…", self.save_project_as, "Ctrl+Shift+S")
         self.action_export = self._action("&Export preview WAD…", self.export_preview, "Ctrl+E")
         self.action_quit = self._action("&Quit", self.close, QKeySequence.Quit)
-        for action in (self.action_new, self.action_open, self.action_import):
+        for action in (self.action_new, self.action_open, self.action_new_map,
+                       self.action_import):
             file_menu.addAction(action)
         file_menu.addSeparator()
         for action in (self.action_save, self.action_save_as, self.action_export):
@@ -171,8 +179,19 @@ class MainWindow(QMainWindow):
         edit_menu = self.menuBar().addMenu("&Edit")
         self.action_undo = self._action("&Undo", self.undo, QKeySequence.Undo)
         self.action_redo = self._action("&Redo", self.redo, QKeySequence.Redo)
+        self.action_copy = self._action("&Copy", self.copy_selection, QKeySequence.Copy)
+        self.action_paste = self._action("&Paste", self.paste_clipboard, QKeySequence.Paste)
+        self.action_rotate_sel = self._action(
+            "Rotate selection", self.rotate_clipboard, "Ctrl+Shift+R",
+            tip="Turn the copied area a quarter turn, facings included")
+        self.action_flip_h = self._action("Flip selection across", self.flip_clipboard_h)
+        self.action_flip_v = self._action("Flip selection down", self.flip_clipboard_v)
         edit_menu.addAction(self.action_undo)
         edit_menu.addAction(self.action_redo)
+        edit_menu.addSeparator()
+        for action in (self.action_copy, self.action_paste, self.action_rotate_sel,
+                       self.action_flip_h, self.action_flip_v):
+            edit_menu.addAction(action)
 
         view_menu = self.menuBar().addMenu("&View")
         self.action_zoom_in = self._action("Zoom &in", self.zoom_in, QKeySequence.ZoomIn)
@@ -192,9 +211,11 @@ class MainWindow(QMainWindow):
             tip="Export the open map and launch the engine on it",
         )
         self.action_validate = self._action("&Check this map", self.validate, "F8")
+        self.action_statistics = self._action("Map &statistics", self.show_statistics)
         self.action_setup = self._action("&Setup…", self.run_setup, tip="Engine, data, workspace")
         self.tools_menu.addAction(self.action_test)
         self.tools_menu.addAction(self.action_validate)
+        self.tools_menu.addAction(self.action_statistics)
         self.tools_menu.addSeparator()
         self.tools_menu.addAction(self.action_setup)
 
@@ -227,6 +248,12 @@ class MainWindow(QMainWindow):
             bar.addAction(action)
             self.tool_actions[tool] = action
         self.tool_actions[Tool.BRUSH].setChecked(True)
+
+        self.action_rotate = self._action(
+            "&Turn structure", self.tools.rotate_prefab, "Ctrl+R",
+            tip="Turn the selected structure a quarter turn clockwise",
+        )
+        bar.addAction(self.action_rotate)
 
         self.filled_box = QCheckBox("Filled", self)
         self.filled_box.setAccessibleName("Filled rectangle")
@@ -261,10 +288,33 @@ class MainWindow(QMainWindow):
         self.search.textChanged.connect(self._refresh_palette)
         layout.addWidget(self.search)
 
+        self.used_only = QCheckBox("Only what this map uses", palette)
+        self.used_only.setAccessibleName("Filter to values used in this map")
+        self.used_only.setToolTip(
+            "Show only the entries the open map already has, which is how you find "
+            "the wall you are looking at rather than the one you are looking for."
+        )
+        self.used_only.toggled.connect(lambda _: self._refresh_palette())
+        layout.addWidget(self.used_only)
+
         self.palette_tabs = QTabWidget(palette)
         self.palette_tabs.setAccessibleName("Palette")
         self.palette_models: dict[str, CatalogModel] = {}
-        for title, category in PALETTE_TABS:
+
+        # Structures are not catalogue entries -- they are compound tools, and
+        # they get a plain list because what matters is the name and what it
+        # needs, not a picture of one word out of several.
+        self.prefab_list = QListWidget(self)
+        self.prefab_list.setAccessibleName("Structures palette")
+        for prefab in PREFABS:
+            item = QListWidgetItem(prefab.name + ("  (Advanced)" if prefab.advanced else ""))
+            item.setToolTip(f"{prefab.description}\n\nSource: {prefab.evidence}")
+            item.setData(Qt.UserRole, prefab.key)
+            self.prefab_list.addItem(item)
+        self.prefab_list.currentItemChanged.connect(self._on_prefab_chosen)
+        self.palette_tabs.addTab(self.prefab_list, "Structures")
+
+        for title, category in PALETTE_TABS[1:]:
             view = QListView(self.palette_tabs)
             view.setViewMode(QListView.IconMode)
             view.setResizeMode(QListView.Adjust)
@@ -379,6 +429,46 @@ class MainWindow(QMainWindow):
         self.set_project(project, Path(path))
         self.settings.remember_project(path)
         self.statusBar().showMessage(f"Opened {Path(path).name}", 4000)
+
+    def new_map(self, name: str | None = None, slot: int | None = None,
+                width: int = 64, height: int = 64) -> MapDocument | None:
+        """Add an empty map to the project and open it.
+
+        Corridor 7's floors are 64x64 and the engine will not load anything
+        bigger than 181, so the size is offered but rarely changed. The slot
+        defaults to the first one this project is not already using -- two maps
+        exporting to MAP01 would silently shadow each other.
+        """
+        used = {document.slot for document in self.project.maps}
+        if slot is None:
+            slot = next((n for n in range(1, 101) if n not in used), None)
+            if slot is None:
+                self._error("No free slot", "This project already fills MAP01 to MAP100.")
+                return None
+
+        if name is None:
+            from PySide6.QtWidgets import QInputDialog
+
+            name, accepted = QInputDialog.getText(
+                self, "New map", f"Name for {f'MAP{slot:02d}'}:", text=f"MAP {slot}"
+            )
+            if not accepted:
+                return None
+
+        try:
+            document = MapDocument.new_room(slot=slot, name=name or f"MAP {slot}",
+                                            width=width, height=height)
+        except Ec7EditError as error:
+            self._error("Could not create that map", str(error))
+            return None
+
+        self.project = self.project.added(document)
+        self._refresh()
+        self.open_map(document.uuid)
+        self.statusBar().showMessage(
+            f"Added {document.lump_name} ({width}x{height})", 4000
+        )
+        return document
 
     def import_map(self, archive_path: str | None = None, number: int | None = None) -> None:
         if archive_path is None:
@@ -558,13 +648,38 @@ class MainWindow(QMainWindow):
         if self.catalog is None:
             return
         index = self.palette_tabs.currentIndex()
-        if index < 0:
-            return
+        if index <= 0:
+            return  # tab 0 is Structures, which is not a catalogue model
         _, category = PALETTE_TABS[index]
         entries = CatalogFilter(self.catalog).entries(
             category=category, query=self.search.text()
         )
+        if self.used_only.isChecked():
+            used = self.used_values()
+            entries = [entry for entry in entries
+                       if any((entry.plane, value) in used for value in entry.values)]
         self.palette_models[category].set_entries(entries)
+
+    def _on_prefab_chosen(self, current, _previous) -> None:
+        if current is None:
+            return
+        prefab = prefab_by_key(current.data(Qt.UserRole))
+        if prefab is None:
+            return
+        self.tools.set_prefab(prefab)
+        self.select_tool(Tool.PREFAB)
+        needs = "; ".join(check.why for check in prefab.preconditions) or "nothing in particular"
+        self.selection_label.setText(
+            f"<b>{prefab.name}</b><br>{prefab.description}<br><i>Needs: {needs}</i>"
+        )
+
+    def _on_prefab_refused(self, problems) -> None:
+        self.problems.clear()
+        for problem in problems:
+            item = QListWidgetItem(f"{problem.severity.name.lower()}: {problem.message}"
+                                   + (f"  [{problem.where}]" if problem.where else ""))
+            item.setToolTip(problem.code)
+            self.problems.addItem(item)
 
     def _on_palette_clicked(self, index) -> None:
         entry = index.data(EntryRole)
@@ -635,6 +750,128 @@ class MainWindow(QMainWindow):
         self._sync_canvases()
         self._refresh()
 
+    # -- clipboard ----------------------------------------------------------
+
+    clipboard = None
+
+    def copy_selection(self) -> bool:
+        """Copy the pointer selection. All three planes, always.
+
+        Copying only what is visible would silently drop the zone under the
+        floor and whatever plane 2 holds, and the paste would look right until
+        somebody played it.
+        """
+        tab = self.current_tab
+        selection = self.tools.selection
+        if tab is None or selection.empty:
+            self.statusBar().showMessage("Select an area first, with the Select tool", 4000)
+            return False
+        document = self.project.map_by_uuid(tab.map_uuid)
+        try:
+            self.clipboard = copy_region(
+                document, selection.x, selection.y, selection.width, selection.height
+            )
+        except ValueError as error:
+            self._error("Could not copy", str(error))
+            return False
+        self.statusBar().showMessage(
+            f"Copied {self.clipboard.width}x{self.clipboard.height} cells", 4000)
+        return True
+
+    def paste_clipboard(self) -> bool:
+        """Paste at the selection's corner, as one undo step."""
+        tab = self.current_tab
+        if tab is None or self.clipboard is None:
+            self.statusBar().showMessage("Nothing copied yet", 4000)
+            return False
+        document = self.project.map_by_uuid(tab.map_uuid)
+        selection = self.tools.selection
+        writes = paste_writes(document, self.clipboard, selection.x, selection.y)
+        if not writes:
+            self.statusBar().showMessage("That paste would land outside the map", 4000)
+            return False
+        from ec7edit_core.commands import write_words
+
+        self.run_command(write_words(document, writes, label="Paste"))
+        self.statusBar().showMessage(f"Pasted at ({selection.x}, {selection.y})", 4000)
+        return True
+
+    def rotate_clipboard(self) -> bool:
+        """Turn what was copied, rewriting facings through the catalogue."""
+        if self.clipboard is None:
+            self.statusBar().showMessage("Nothing copied yet", 4000)
+            return False
+        self.clipboard = rotate_clip(self.clipboard, 1, self.catalog)
+        self.statusBar().showMessage(
+            f"Turned; now {self.clipboard.width}x{self.clipboard.height}", 4000)
+        return True
+
+    def flip_clipboard_h(self) -> bool:
+        return self._flip("horizontal")
+
+    def flip_clipboard_v(self) -> bool:
+        return self._flip("vertical")
+
+    def _flip(self, axis: str) -> bool:
+        if self.clipboard is None:
+            self.statusBar().showMessage("Nothing copied yet", 4000)
+            return False
+        self.clipboard = flip_clip(self.clipboard, axis, self.catalog)
+        self.statusBar().showMessage(f"Flipped {axis}", 4000)
+        return True
+
+    # -- statistics ---------------------------------------------------------
+
+    def map_statistics(self) -> dict:
+        """What is actually on the open map, counted by what it means."""
+        tab = self.current_tab
+        if tab is None or self.catalog is None:
+            return {}
+        document = self.project.map_by_uuid(tab.map_uuid)
+        from collections import Counter
+
+        from .tools import EMPTY_OBJECT
+
+        counts = Counter()
+        for plane in (0, 1):
+            for value in document.planes.planes[plane]:
+                if plane == 1 and value in (0, EMPTY_OBJECT):
+                    continue
+                entry = self.catalog.for_value(plane, value)
+                counts[entry.category if entry else "unknown"] += 1
+        floor = sum(1 for v in document.planes.planes[0] if v == 0 or 256 <= v <= 300)
+        return {
+            "cells": document.planes.cell_count,
+            "floor": floor,
+            "walls": counts.get("walls", 0),
+            "specials": counts.get("specials", 0),
+            "objects": counts.get("objects", 0),
+            "enemies": counts.get("enemies", 0),
+            "starts": counts.get("starts", 0),
+            "unknown": counts.get("unknown", 0),
+        }
+
+    def show_statistics(self) -> None:
+        stats = self.map_statistics()
+        if not stats:
+            self.statusBar().showMessage("Open a map first", 4000)
+            return
+        QMessageBox.information(
+            self, "Map statistics",
+            "\n".join(f"{name.title():10} {count}" for name, count in stats.items()),
+        )
+
+    def used_values(self) -> set:
+        """Every `(plane, value)` the open map actually uses, for the filter."""
+        tab = self.current_tab
+        if tab is None:
+            return set()
+        document = self.project.map_by_uuid(tab.map_uuid)
+        used = set()
+        for plane in (0, 1):
+            used |= {(plane, value) for value in set(document.planes.planes[plane])}
+        return used
+
     # -- validation and playtest -------------------------------------------
 
     def validate(self) -> list:
@@ -645,6 +882,9 @@ class MainWindow(QMainWindow):
             return []
         document = self.project.map_by_uuid(tab.map_uuid)
         problems = validate_map(document, self.catalog)
+        problems.extend(check_transporters(document))
+        for x, y in door_cells(document, self.catalog):
+            problems.extend(check_door(document, x, y))
         for problem in problems:
             item = QListWidgetItem(f"{problem.severity.name.lower()}: {problem.message}"
                                    + (f"  [{problem.where}]" if problem.where else ""))

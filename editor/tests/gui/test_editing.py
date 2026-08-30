@@ -150,6 +150,55 @@ class Brush(Base):
         self.assertEqual(self.window.history.depth, depth)
 
 
+class NewMap(Base):
+    """Starting from nothing, which is the other way in besides importing."""
+
+    def test_it_adds_a_map_and_opens_it(self):
+        before = len(self.window.project)
+        document = self.window.new_map(name="FRESH", slot=9, width=16, height=16)
+        self.assertIsNotNone(document)
+        self.assertEqual(len(self.window.project), before + 1)
+        self.assertEqual(self.window.current_tab.map_uuid, document.uuid)
+
+    def test_it_comes_walled(self):
+        # A blank map is all floor, so the first thing the validator would say
+        # is that the player can walk out of the world.
+        document = self.window.new_map(name="WALLED", slot=9, width=12, height=12)
+        document = self.window.project.map_by_uuid(document.uuid)
+        for x in range(12):
+            self.assertNotEqual(document.cell(0, x, 0), 0)
+            self.assertNotEqual(document.cell(0, x, 11), 0)
+        self.assertEqual(document.cell(0, 5, 5), 0)
+
+    def test_the_object_plane_starts_empty_not_zero(self):
+        # Corridor 7's empty marker is 18. A plane of zeros would place
+        # whatever word 0 means on every single cell.
+        document = self.window.new_map(name="EMPTY", slot=9, width=8, height=8)
+        document = self.window.project.map_by_uuid(document.uuid)
+        self.assertEqual(document.cell(1, 4, 4), EMPTY_OBJECT)
+
+    def test_it_picks_a_free_slot(self):
+        # The project already holds slot 1 from setUp.
+        document = self.window.new_map(name="AUTO", width=8, height=8)
+        self.assertEqual(document.slot, 2)
+
+    def test_you_can_paint_on_it_immediately(self):
+        document = self.window.new_map(name="PAINT", slot=9, width=10, height=10)
+        self.choose(WALL_ENTRY)
+        self.stroke(Tool.BRUSH, [(3, 3), (6, 3)])
+        painted = self.window.project.map_by_uuid(document.uuid)
+        for x in range(3, 7):
+            self.assertEqual(painted.cell(0, x, 3), 2)
+
+    def test_a_new_map_validates_once_it_has_a_start(self):
+        document = self.window.new_map(name="VALID", slot=9, width=12, height=12)
+        self.choose("thing.player1start")
+        self.stroke(Tool.BRUSH, [(5, 5)])
+        codes = [p.code for p in self.window.validate()]
+        self.assertNotIn("C7E-BOUNDARY-001", codes)
+        self.assertNotIn("C7E-START-001", codes)
+
+
 class Shapes(Base):
     def test_a_line(self):
         self.choose(WALL_ENTRY)
@@ -330,6 +379,253 @@ class Validation(Base):
         self.window.validate()
         items = [self.window.problems.item(i) for i in range(self.window.problems.count())]
         self.assertTrue(any(item.data(Qt.UserRole) for item in items))
+
+
+class Structures(Base):
+    """Compound tools: one click, one structure, one undo -- or a refusal."""
+
+    def choose_prefab(self, key: str) -> None:
+        from ec7edit_core.prefabs import by_key
+
+        prefab = by_key(key)
+        self.assertIsNotNone(prefab, key)
+        self.window.tools.set_prefab(prefab)
+        self.window.select_tool(Tool.PREFAB)
+
+    def place(self, x: int, y: int) -> None:
+        self.window._on_press(x, y, Qt.LeftButton.value)
+        self.window.tools.release(x, y)
+
+    def test_a_pushwall_writes_both_planes_at_once(self):
+        self.choose_prefab("prefab.pushwall.secret")
+        self.place(4, 4)
+        self.assertEqual(self.document.cell(0, 4, 4), 1)
+        self.assertEqual(self.document.cell(1, 4, 4), 98)
+
+    def test_it_is_a_single_undo(self):
+        self.choose_prefab("prefab.pushwall.secret")
+        before = self.document.planes.planes
+        self.place(4, 4)
+        self.assertEqual(self.window.history.depth, 1)
+        self.window.undo()
+        self.assertEqual(self.document.planes.planes, before)
+
+    def test_a_refused_placement_writes_nothing(self):
+        # A dispenser needs floor in front. In the middle of the top wall of
+        # the room from setUp, the cell below is floor, so aim at a corner.
+        self.choose_prefab("prefab.dispenser.health")
+        before = self.document.planes.planes
+        self.place(0, 9)          # bottom-left corner: no floor below it
+        self.assertEqual(self.document.planes.planes, before)
+        self.assertFalse(self.window.history.can_undo)
+
+    def test_a_refusal_is_reported(self):
+        self.choose_prefab("prefab.dispenser.health")
+        self.place(0, 9)
+        self.assertGreater(self.window.problems.count(), 0)
+
+    def test_a_dispenser_goes_in_a_wall_with_floor_in_front(self):
+        self.choose_prefab("prefab.dispenser.health")
+        self.place(4, 0)          # top wall, floor at (4,1)
+        self.assertEqual(self.document.cell(0, 4, 0), 85)
+
+    def test_turning_a_structure_moves_what_it_needs(self):
+        # In the left wall, the floor is to the east, not the south.
+        self.choose_prefab("prefab.dispenser.ammo")
+        self.place(0, 4)
+        self.assertNotEqual(self.document.cell(0, 0, 4), 111, "should have been refused")
+        self.window.tools.rotate_prefab()
+        self.window.tools.rotate_prefab()
+        self.window.tools.rotate_prefab()
+        self.place(0, 4)
+        self.assertEqual(self.document.cell(0, 0, 4), 111)
+
+    def test_the_structures_tab_lists_them(self):
+        from ec7edit_core.prefabs import PREFABS
+
+        self.assertEqual(self.window.prefab_list.count(), len(PREFABS))
+
+    def test_choosing_from_the_list_arms_the_tool(self):
+        self.window.prefab_list.setCurrentRow(0)
+        QApplication.processEvents()
+        self.assertIsNotNone(self.window.tools.prefab)
+        self.assertEqual(self.window.tools.tool, Tool.PREFAB)
+
+
+class Transporters(Base):
+    def arm(self):
+        self.window.select_tool(Tool.TRANSPORTER)
+
+    def click(self, x, y):
+        self.window._on_press(x, y, Qt.LeftButton.value)
+        self.window.tools.release(x, y)
+
+    def test_one_click_writes_nothing(self):
+        # A channel with one end is a broken map, not a half-built one.
+        self.arm()
+        before = self.document.planes.planes
+        self.click(3, 3)
+        self.assertEqual(self.document.planes.planes, before)
+        self.assertIsNotNone(self.window.tools.pending_transporter)
+
+    def test_two_clicks_make_a_pair(self):
+        self.arm()
+        self.click(3, 3)
+        self.click(6, 6)
+        self.assertEqual(self.document.cell(0, 3, 3), 279)
+        self.assertEqual(self.document.cell(0, 6, 6), 279)
+
+    def test_the_pair_is_one_undo(self):
+        self.arm()
+        before = self.document.planes.planes
+        self.click(3, 3)
+        self.click(6, 6)
+        self.assertEqual(self.window.history.depth, 1)
+        self.window.undo()
+        self.assertEqual(self.document.planes.planes, before)
+
+    def test_a_second_pair_takes_the_next_channel(self):
+        self.arm()
+        self.click(2, 2); self.click(3, 2)
+        self.click(2, 4); self.click(3, 4)
+        self.assertEqual(self.document.cell(0, 2, 2), 279)
+        self.assertEqual(self.document.cell(0, 2, 4), 280)
+
+    def test_clicking_the_same_cell_twice_does_not_pair_it_with_itself(self):
+        self.arm()
+        self.click(3, 3)
+        self.click(3, 3)
+        self.assertEqual(self.document.cell(0, 3, 3), 0)
+        self.assertIsNotNone(self.window.tools.pending_transporter)
+
+    def test_a_pad_needs_floor(self):
+        self.arm()
+        self.click(0, 0)          # a wall
+        self.assertIsNone(self.window.tools.pending_transporter)
+
+    def test_validation_reports_a_lone_endpoint(self):
+        from ec7edit_core.commands import write_words
+
+        document = self.document
+        self.window.run_command(write_words(document, [(0, 4, 4, 279)]))
+        codes = [p.code for p in self.window.validate()]
+        self.assertIn("C7E-WARP-001", codes)
+
+    def test_validation_is_quiet_about_a_proper_pair(self):
+        self.arm()
+        self.click(3, 3)
+        self.click(6, 6)
+        codes = [p.code for p in self.window.validate()]
+        self.assertNotIn("C7E-WARP-001", codes)
+
+
+class Clipboard(Base):
+    """Copy, paste and the transforms, through the window."""
+
+    def select(self, x, y, w, h):
+        self.window.select_tool(Tool.POINTER)
+        self.window._on_press(x, y, Qt.LeftButton.value)
+        self.window.tools.drag(x + w - 1, y + h - 1, Qt.LeftButton.value)
+        self.window.tools.release(x + w - 1, y + h - 1)
+
+    def test_copy_needs_a_selection(self):
+        self.assertFalse(self.window.copy_selection())
+
+    def test_copy_then_paste(self):
+        self.choose(WALL_ENTRY)
+        self.stroke(Tool.BRUSH, [(2, 2)])
+        self.select(2, 2, 2, 2)
+        self.assertTrue(self.window.copy_selection())
+        self.select(5, 5, 2, 2)
+        self.assertTrue(self.window.paste_clipboard())
+        self.assertEqual(self.document.cell(0, 5, 5), 2)
+
+    def test_a_paste_is_one_undo(self):
+        self.choose(WALL_ENTRY)
+        self.stroke(Tool.BRUSH, [(2, 2)])
+        self.select(2, 2, 2, 2)
+        self.window.copy_selection()
+        before = self.document.planes.planes
+        self.select(5, 5, 2, 2)
+        depth = self.window.history.depth
+        self.window.paste_clipboard()
+        self.assertEqual(self.window.history.depth, depth + 1)
+        self.window.undo()
+        self.assertEqual(self.document.planes.planes, before)
+
+    def test_copy_takes_all_three_planes(self):
+        self.choose("thing.c7rodex.stand.skill1")
+        self.stroke(Tool.BRUSH, [(2, 2)])
+        self.select(2, 2, 1, 1)
+        self.window.copy_selection()
+        self.select(6, 6, 1, 1)
+        self.window.paste_clipboard()
+        self.assertEqual(self.document.cell(1, 6, 6), RODEX_EAST)
+
+    def test_rotating_the_clipboard_turns_a_facing(self):
+        self.choose("thing.c7rodex.stand.skill1")
+        self.stroke(Tool.BRUSH, [(2, 2)])
+        self.select(2, 2, 1, 1)
+        self.window.copy_selection()
+        self.assertTrue(self.window.rotate_clipboard())
+        self.select(6, 6, 1, 1)
+        self.window.paste_clipboard()
+        entry = CATALOG.for_value(1, self.document.cell(1, 6, 6))
+        self.assertEqual(entry.actor, "C7Rodex")
+        self.assertEqual(dict(entry.directions).get("south"), self.document.cell(1, 6, 6))
+
+    def test_flipping_the_clipboard(self):
+        self.choose("thing.c7rodex.stand.skill1")
+        self.stroke(Tool.BRUSH, [(2, 2)])
+        self.select(2, 2, 1, 1)
+        self.window.copy_selection()
+        self.assertTrue(self.window.flip_clipboard_h())
+        self.select(6, 6, 1, 1)
+        self.window.paste_clipboard()
+        entry = CATALOG.for_value(1, self.document.cell(1, 6, 6))
+        self.assertEqual(dict(entry.directions).get("west"), self.document.cell(1, 6, 6))
+
+    def test_transforms_need_something_copied(self):
+        self.assertFalse(self.window.rotate_clipboard())
+        self.assertFalse(self.window.flip_clipboard_v())
+
+
+class Statistics(Base):
+    def test_it_counts_what_is_there(self):
+        stats = self.window.map_statistics()
+        self.assertEqual(stats["cells"], 100)
+        self.assertGreater(stats["walls"], 0)
+        self.assertGreater(stats["floor"], 0)
+
+    def test_placing_an_enemy_shows_up(self):
+        before = self.window.map_statistics()["enemies"]
+        self.choose("thing.c7rodex.stand.skill1")
+        self.stroke(Tool.BRUSH, [(4, 4)])
+        self.assertEqual(self.window.map_statistics()["enemies"], before + 1)
+
+    def test_the_used_filter_narrows_the_palette(self):
+        from ec7edit_gui.main_window import PALETTE_TABS
+
+        index = [c for _, c in PALETTE_TABS].index("enemies")
+        self.window.palette_tabs.setCurrentIndex(index)
+        QApplication.processEvents()
+        everything = self.window.palette_models["enemies"].rowCount()
+        self.window.used_only.setChecked(True)
+        QApplication.processEvents()
+        self.assertLess(self.window.palette_models["enemies"].rowCount(), everything)
+
+    def test_the_filter_shows_what_the_map_does_use(self):
+        self.choose("thing.c7rodex.stand.skill1")
+        self.stroke(Tool.BRUSH, [(4, 4)])
+        from ec7edit_gui.main_window import PALETTE_TABS
+
+        index = [c for _, c in PALETTE_TABS].index("enemies")
+        self.window.palette_tabs.setCurrentIndex(index)
+        self.window.used_only.setChecked(True)
+        QApplication.processEvents()
+        model = self.window.palette_models["enemies"]
+        names = [model.data(model.index(r, 0)) for r in range(model.rowCount())]
+        self.assertIn("Rodex", names)
 
 
 class Playtest(Base):

@@ -492,6 +492,11 @@ def build_catalog(
         # capacity, an inheritance base -- and was never meant to be placed.
         if actor.spawn_sprite is None or name in placeable:
             continue
+        # Nor is a starting weapon missing: the player is handed it, and no
+        # map word puts one down. Reporting the Taser as an unplaced item was
+        # a statement about this check, not about the game.
+        if actor.granted:
+            continue
         if actor.role in ("enemy", "item"):
             unresolved.append(f"actor {name} ({actor.role}) has no xlat entry that places it")
 

@@ -45,12 +45,33 @@ _IGNORE = re.compile(r"\bignore\s+(\d+)\s*;")
 _THING = re.compile(r"\{\s*(\d+)\s*,\s*([$\w]+)\s*,\s*(\w+)\s*,\s*([\w|]+)\s*,\s*(\d+)\s*\}")
 _ASSIGN = re.compile(r"(\w+)\s*=\s*([^;]+);")
 
-#: The eight facings a patrol point can take, and the four an actor can spawn
+#: The eight facings a patrol point can take, and the four an actor spawns
 #: with, in the order the value offsets run. Wolf3D's convention, which
-#: Corridor 7 inherited unchanged.
+#: Corridor 7 inherited unchanged: angle counts counter-clockwise from east.
 DIRECTIONS_8 = ("east", "northeast", "north", "northwest",
                 "west", "southwest", "south", "southeast")
 DIRECTIONS_4 = ("east", "north", "west", "south")
+
+#: Player starts are the exception, and it is in the engine's own decoder:
+#:
+#:     thing.angle = (oldnum - type.oldnum) * (360 / type.angles);
+#:     if(playerRotation) thing.angle = (360 + 360/type.angles) - thing.angle;
+#:
+#: That reflection turns the same four offsets into north, east, south, west --
+#: clockwise from north instead of counter-clockwise from east. Confirmed in a
+#: lab map with a different wall on each side of the player: word 19 looks at
+#: -y, 20 at +x, 21 at +y, 22 at -x.
+PLAYER_DIRECTIONS_4 = ("north", "east", "south", "west")
+
+
+def uses_player_rotation(classname: str) -> bool:
+    """Whether the engine reflects this class's spawn angle.
+
+    `playerRotation` in `gamemap_planes.cpp` covers `SMT_Player1Start` through
+    `SMT_DeathmatchStart`, which is every start and nothing else.
+    """
+    return (classname.startswith("Player") and classname.endswith("Start")) \
+        or classname == "DeathmatchStart"
 
 
 @dataclass(frozen=True)
@@ -116,7 +137,12 @@ class XlatThing:
         """Which way a spawn at `value` faces, or '' when it has no facing."""
         if not self.angles:
             return ""
-        names = DIRECTIONS_8 if self.angles == 8 else DIRECTIONS_4
+        if self.angles == 8:
+            names = DIRECTIONS_8
+        elif uses_player_rotation(self.classname):
+            names = PLAYER_DIRECTIONS_4
+        else:
+            names = DIRECTIONS_4
         offset = value - self.value
         return names[offset] if 0 <= offset < len(names) else ""
 

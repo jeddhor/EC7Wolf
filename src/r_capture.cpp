@@ -111,6 +111,11 @@ namespace
 	// measures the speed a player actually moves at rather than the value in
 	// their definition.
 	long     g_forwardFrom    = -1;
+	// --capture-use TIC: hold the use key from this tic. Nothing else in the
+	// harness can press it, so anything the player operates by hand -- an
+	// elevator, a dispenser, an access terminal, a door -- was untestable
+	// headlessly until this existed.
+	long     g_useFrom        = -1;
 
 	// --capture-scoreboard: hold the scoreboard key down.
 	bool     g_holdScoreboard = false;
@@ -554,6 +559,11 @@ void ParseArgs(int argc, char **argv)
 			g_forwardFrom = (i + 1 < argc && argv[i+1][0] != '-') ? atol(argv[++i]) : 0;
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-use") == 0)
+		{
+			g_useFrom = (i + 1 < argc && argv[i+1][0] != '-') ? atol(argv[++i]) : 0;
+			g_armed = true;
+		}
 		else if(strcmp(arg, "--capture-ammo") == 0)
 		{
 			g_topUpAmmo = true;
@@ -916,6 +926,9 @@ void InjectControls(TicCmd_t &cmd)
 		cmd.controly = -RUNMOVE;
 		cmd.buttonstate[bt_run] = true;
 	}
+
+	if(g_useFrom >= 0 && (long)gamestate.TimeCount >= g_useFrom)
+		cmd.buttonstate[bt_use] = true;
 
 	if(g_fireFrom < 0 || (long)gamestate.TimeCount < g_fireFrom)
 		return;

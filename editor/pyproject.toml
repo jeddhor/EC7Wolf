@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Jason Tripp
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ec7edit"
+version = "0.1.0"
+description = "A level editor for Corridor 7: Alien Invasion, built alongside EC7Wolf"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.10"
+authors = [{ name = "Jason Tripp" }]
+keywords = ["corridor7", "ecwolf", "level editor", "ted5", "wolf3d"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Games/Entertainment :: First Person Shooters",
+]
+
+# The core has none, deliberately. Everything it needs to read and write
+# Corridor 7's formats is in the standard library, which is what lets the
+# codec tests run anywhere Python does -- including a CI runner with no right
+# to the game data and no display. The GUI's PySide6 requirement arrives with
+# the GUI, as an optional extra, so installing the core never pulls in Qt.
+dependencies = []
+
+[project.optional-dependencies]
+gui = ["PySide6>=6.5,<7"]
+
+[project.scripts]
+ec7edit = "ec7edit_core.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/jeddhor/EC7Wolf"
+Documentation = "https://github.com/jeddhor/EC7Wolf/blob/main/ECWolf/docs/corridor7-level-editor.md"
+
+[tool.setuptools]
+packages = ["ec7edit_core"]
+
+[tool.setuptools.package-data]
+ec7edit_core = ["py.typed"]

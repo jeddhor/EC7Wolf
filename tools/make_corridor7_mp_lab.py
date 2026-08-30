@@ -26,9 +26,10 @@ Usage:
 SOURCE is a pristine MAPTEMP.CO7, only ever read. LENGTH is the corridor's
 interior length in tiles, default 24.
 
-WARNING: pass a real path for OUT, never a symlink into a game-data directory.
-This writes a complete archive, and following a symlink would overwrite the
-original maps.
+SOURCE is never opened for writing, and OUT is refused if it resolves to the
+source, to a hard or symbolic link aliasing it, or to anywhere in the source's
+directory. The write is atomic and read back, and the source's digest is
+checked again afterwards.
 """
 
 from __future__ import annotations
@@ -37,9 +38,12 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools" / "python"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "editor"))
 
-from corridor7_map import MapData, encode_archive, parse_archive  # noqa: E402
+from ec7edit_core.archive import encode_archive, read_archive  # noqa: E402
+from ec7edit_core.names import NativeName  # noqa: E402
+from ec7edit_core.paths import OutputGuard, SourceIdentity, atomic_write  # noqa: E402
+from ec7edit_core.planes import MapPlanes  # noqa: E402
 
 PLAYER_START = 20   # plane-1 value for a player start facing east
 EMPTY = 18          # plane-1 filler
@@ -54,14 +58,16 @@ def main() -> None:
 
     source, out = Path(sys.argv[1]), Path(sys.argv[2])
     length = int(sys.argv[3]) if len(sys.argv) == 4 else 24
-    if out.is_symlink():
-        sys.exit(f"refusing to write through the symlink {out}")
     if length < 4:
         sys.exit("a corridor shorter than four tiles is not worth walking down")
 
-    maps = list(parse_archive(source.read_bytes()))
-    header = maps[0].header
-    width, height = header.width, header.height
+    identity = SourceIdentity.probe(source)
+    guard = OutputGuard.for_source(source)
+    output = guard.check(out)
+
+    archive = read_archive(source)
+    records = list(archive.records)
+    width, height = records[0].width, records[0].height
     if PLAYER_X + length + 1 > width or ROW + 1 >= height:
         sys.exit(f"a {length}-tile corridor does not fit in {width}x{height}")
 
@@ -76,12 +82,15 @@ def main() -> None:
         walls[ROW * width + x] = 0
     things[ROW * width + PLAYER_X] = PLAYER_START
 
-    maps[0] = MapData(
-        replace(header, name="Corr7 MP Lab"),
-        (tuple(walls), tuple(things), tuple(meta)),
+    records[0] = replace(
+        records[0],
+        name=NativeName.from_text("Corr7 MP Lab"),
+        planes=MapPlanes(width, height, (tuple(walls), tuple(things), tuple(meta))),
+        source=None,
     )
-    out.write_bytes(encode_archive(tuple(maps)))
-    print(f"wrote {out} (a {length}-tile corridor, players start together facing east)")
+    atomic_write(output, encode_archive(records), guard=guard)
+    identity.verify_unchanged()
+    print(f"wrote {output} (a {length}-tile corridor, players start together facing east)")
 
 
 if __name__ == "__main__":

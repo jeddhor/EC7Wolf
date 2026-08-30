@@ -28,9 +28,12 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools" / "python"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "editor"))
 
-from corridor7_map import MapData, encode_archive, parse_archive  # noqa: E402
+from ec7edit_core.archive import encode_archive, read_archive  # noqa: E402
+from ec7edit_core.names import NativeName  # noqa: E402
+from ec7edit_core.paths import OutputGuard, SourceIdentity, atomic_write  # noqa: E402
+from ec7edit_core.planes import MapPlanes  # noqa: E402
 
 PLAYER_START = 20   # plane-1 value for a player start facing east
 EMPTY = 18          # plane-1 filler
@@ -44,8 +47,6 @@ def main() -> None:
         sys.exit(f"usage: {sys.argv[0]} SOURCE OUT OBJECT:X [OBJECT:X ...]")
 
     source, out = Path(sys.argv[1]), Path(sys.argv[2])
-    if out.is_symlink():
-        sys.exit(f"refusing to write through the symlink {out}")
 
     placements = []
     for spec in sys.argv[3:]:
@@ -54,9 +55,13 @@ def main() -> None:
             sys.exit(f"bad placement {spec!r}, expected OBJECT:X")
         placements.append((int(obj), int(x)))
 
-    maps = list(parse_archive(source.read_bytes()))
-    header = maps[0].header
-    width, height = header.width, header.height
+    identity = SourceIdentity.probe(source)
+    guard = OutputGuard.for_source(source)
+    output = guard.check(out)
+
+    archive = read_archive(source)
+    records = list(archive.records)
+    width, height = records[0].width, records[0].height
 
     walls = [0] * (width * height)
     things = [EMPTY] * (width * height)
@@ -78,13 +83,16 @@ def main() -> None:
             sys.exit(f"placement x={x} is outside the corridor or on the player")
         things[ROW * width + x] = obj
 
-    maps[0] = MapData(
-        replace(header, name="Corr7 AI Lab"),
-        (tuple(walls), tuple(things), tuple(meta)),
+    records[0] = replace(
+        records[0],
+        name=NativeName.from_text("Corr7 AI Lab"),
+        planes=MapPlanes(width, height, (tuple(walls), tuple(things), tuple(meta))),
+        source=None,
     )
-    out.write_bytes(encode_archive(tuple(maps)))
+    atomic_write(output, encode_archive(records), guard=guard)
+    identity.verify_unchanged()
     placed = ", ".join(f"object {o} at {x - PLAYER_X} tiles" for o, x in placements)
-    print(f"wrote {out} ({placed})")
+    print(f"wrote {output} ({placed})")
 
 
 if __name__ == "__main__":

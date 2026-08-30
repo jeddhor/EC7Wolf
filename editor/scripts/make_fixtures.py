@@ -54,7 +54,15 @@ SYNTH_BASE = 0xE000
 
 
 def rlew_compress(words: list[int]) -> bytes:
-    """Canonical RLEW: runs of three or more, and never a bare literal tag."""
+    """A legal RLEW encoding: runs of three or more, never a bare literal tag.
+
+    Deliberately not the production writer's encoding. E1 measured the retail
+    archive and found its encoder never emits a run shorter than four, so
+    `ec7edit_core.rlew` matches that instead. Keeping this generator at three
+    means the fixtures exercise a legal encoding the production writer would
+    not itself produce, which is what makes reading them a real test of the
+    decoder rather than a round trip through one shared assumption.
+    """
     out = bytearray()
     i = 0
     while i < len(words):
@@ -155,9 +163,32 @@ def build_archive(maps: list[tuple[str, int, int]], *,
     return bytes(out)
 
 
-def build_planes_lump(width: int, height: int, salt: int) -> bytes:
-    """A WDC3.1-style PLANES payload: three uncompressed word planes."""
-    out = bytearray()
+def build_planes_lump(width: int, height: int, salt: int,
+                     name: str = "SYNTHPLANES") -> bytes:
+    """A complete WDC3.1 PLANES lump: 34-byte header, then three word planes.
+
+    Restated from the engine's own writer and reader rather than imported, so
+    that checking the production codec against this is a comparison of two
+    implementations instead of a round trip through one:
+
+      00  char[6]  WDC3.1
+      06  u32      map count
+      10  u16      plane count
+      12  u16      name length
+      14  char[16] name
+      30  u16      width
+      32  u16      height
+      34  ...      three uncompressed planes of width*height u16
+
+    E1 corrected this: it used to emit the payload alone, so the WAD fixture
+    built from it held a PLANES lump the engine could not have loaded.
+    """
+    out = bytearray(34)
+    out[0:6] = b"WDC3.1"
+    struct.pack_into("<I", out, 6, 1)
+    struct.pack_into("<HH", out, 10, 3, NAME_FIELD)
+    out[14:14 + NAME_FIELD] = name.encode("ascii")[:NAME_FIELD - 1].ljust(NAME_FIELD, b"\x00")
+    struct.pack_into("<HH", out, 30, width, height)
     for p in range(3):
         for word in synth_plane(width, height, salt + p):
             out += struct.pack("<H", word)
@@ -232,15 +263,35 @@ def malformed() -> dict[str, bytes]:
     inside = bytearray(good)
     struct.pack_into("<I", inside, 12, 4)
     cases["plane-offset-in-header.bin"] = bytes(inside)
-    # A stream that expands to fewer words than it declares.
-    short = bytearray(good)
-    short[-2:] = b""
-    cases["truncated-plane.bin"] = bytes(short)
-    # A run whose count would overrun the declared expansion.
-    overrun = build_archive([("SYNTH01", 4, 4)])
-    body = bytearray(overrun)
-    tail = struct.pack("<HHH", RLEW_TAG, 0xFFFF, SYNTH_BASE)
-    cases["rlew-overrun.bin"] = bytes(body[:-len(tail)] + tail)
+    # Truncated mid-plane: the header still declares plane 2's full length,
+    # but the file stops inside it. Everything after the cut goes with it,
+    # terminator included, because that is what truncation means.
+    plane2_offset, plane2_length = struct.unpack_from("<IH", good, 16)[0], struct.unpack_from("<H", good, 24)[0]
+    cases["truncated-plane.bin"] = good[:plane2_offset + plane2_length // 2]
+    # A run count that overruns the declared expansion, edited inside plane 0's
+    # stream so the archive's structure stays intact and the decoder is what
+    # refuses it. 4x4 expands to 32 bytes; 0xFFFF words is far past that.
+    small = build_archive([("SYNTH01", 4, 4)])
+    overrun = bytearray(small)
+    stream_at = 46 + 2  # first record header, then the stream's size prefix
+    struct.pack_into("<HHH", overrun, stream_at, RLEW_TAG, 0xFFFF, SYNTH_BASE)
+    cases["rlew-overrun.bin"] = bytes(overrun)
+    # A later record whose plane 0 begins inside its own 42-byte header. Only
+    # a later record can express this fault: the first record's plane 0 offset
+    # is implicit, so there is no field to corrupt.
+    two = bytearray(build_archive([("SYNTH01", 4, 4), ("SYNTH02", 4, 4)]))
+    second = two.index(MAP_MARKER, 46)
+    struct.pack_into("<I", two, second + 4, second + 8)
+    cases["plane0-inside-header.bin"] = bytes(two)
+    # A stream whose declared expanded size disagrees with the header's
+    # dimensions. Neither is corrupt on its own; together they cannot both be
+    # right, and a reader that trusts either one silently loads the wrong map.
+    mismatch = bytearray(good)
+    struct.pack_into("<H", mismatch, 46, 8 * 8 * 2 - 2)
+    cases["plane-size-mismatch.bin"] = bytes(mismatch)
+    # Bytes after the terminator. The engine only reads a terminator when
+    # exactly four bytes remain, so this is trailing data, not an end.
+    cases["trailing-garbage.bin"] = good + b"\x00\x00"
     return cases
 
 

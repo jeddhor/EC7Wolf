@@ -71,7 +71,7 @@ done
 # gl_selftest is here rather than below because --gltest is handled before the
 # IWAD is opened: it needs no game data, and it is the only thing that proves the
 # shaders actually compile on the runner's driver. A broken shader still links.
-data_free_gates='definitions names ec7edit_e0 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
+data_free_gates='definitions names ec7edit_e0 ec7edit_e1 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
 
 data_gates='
 corridor7
@@ -90,6 +90,7 @@ corridor7_pages
 corridor7_topmessage
 corridor7_upscale
 corridor7_controls
+ec7edit_override
 multiplayer_loopback
 multiplayer_latency
 multiplayer_menu
@@ -246,6 +247,12 @@ for g in $data_free_gates; do
 			# provenance, link containment.
 			run_gate "$g" "ec7edit E0 foundation" \
 				"$here/test_ec7edit_e0.sh" ;;
+		ec7edit_e1)
+			# Also data-free: the codec's own inputs are all generated. Runs
+			# under CPython 3.12 when one is available, since that is the
+			# reference runtime and not what this machine has by default.
+			run_gate "$g" "ec7edit E1 codec" \
+				"$here/test_ec7edit_e1.sh" ;;
 		android_native)
 			# Needs an NDK, not the game data, so it lives with the data-free
 			# gates; it skips itself where there is no SDK, which is every
@@ -261,6 +268,12 @@ for g in $data_free_gates; do
 			# one gate that skips on the self-hosted runner too.
 			run_gate "$g" "android device" \
 				"$here/test_android_device.sh" ;;
+		ec7edit_override)
+			# The one editor claim unit tests cannot make: the engine loads
+			# what the exporter writes, in place of a stock map. Needs the
+			# owned archive, so it is a data gate rather than a hosted one.
+			run_gate "$g" "ec7edit map override" \
+				"$here/test_ec7edit_override.sh" "$build_dir" "$data_dir" ;;
 		gl_bench)
 			# Frame time at the shipped default. A floor, not a competition.
 			run_gate "$g" "gl frame time" "$here/test_gl_bench.sh" \

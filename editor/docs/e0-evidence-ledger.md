@@ -37,7 +37,7 @@ Line numbers are navigation aids and go stale; symbol names are the contract.
 
 ## 2. Strictness gaps found by the synthetic corpus
 
-The malformed fixtures were run through the existing out-of-root parser. Seven
+The malformed fixtures were run through the existing out-of-root parser. Six
 of eight are refused. The two accepted are recorded here rather than fixed,
 because E0 does not move production code:
 
@@ -54,6 +54,11 @@ because E0 does not move production code:
 
 Both accepted cases were predicted by plan §4.2. That the prediction survived
 contact with a generated corpus is the useful part.
+
+**E1 outcome:** all of them are refused by `ec7edit_core`, and the corpus grew
+to eleven. E1 also found that two of the eight above were malformed in ways
+they did not claim — see the E1 ledger, §2. The count in the first line of this
+section was wrong when written (six, not seven); corrected 2026-08-29.
 
 One correction belongs here too, because it is the kind of mistake this ledger
 exists to catch. The `oversize-dimensions` fixture originally patched offset 30,
@@ -82,20 +87,30 @@ repository. This is a live defect, not a hypothetical: the second of those two
 tools was written during the multiplayer work and copied the idiom from the
 first without noticing what it implied.
 
-**Decision, per plan §E0** ("do not copy code into the ECWolf git root until
-that decision is recorded; independently reimplement documented contracts when
-reuse is uncertain"):
+**Resolved, 2026-08-29.** The owner confirms the file is his own work and that
+everything in this project carries one licence: *"Everything is under the same
+license -- the map editor will be the same license as EC7Wolf."* The editor is
+therefore **GPL-3.0-or-later**, matching the engine's effective licence, and
+every new file carries an SPDX tag saying so. Reuse is authorised.
 
-- treat the file as **behavioural evidence only**;
-- do not copy it into the repository;
-- E1 writes an independent codec from the byte contracts in §1, tested against
-  the synthetic corpus;
-- once E1's codec exists, the two lab tools move onto it, which removes the
-  out-of-root import and makes them work from a clean clone.
+What E1 did with that permission is worth recording, because "authorised" and
+"correct to reuse" are different questions. The reference codec is sound on
+structure and was used as behavioural evidence throughout, but it is lossy in
+two ways the editor cannot afford:
 
-Open question for the owner: where did `corridor7_map.py` come from? If it is
-original work it can simply be licensed and moved in, and E1 gets shorter. That
-question is **unresolved** and owned by E0.
+- it decodes a name to the text before the first NUL and re-encodes from that,
+  destroying the trailing bytes — which the shipped archive really does carry,
+  in maps 47 to 50;
+- its RLEW run threshold is three, so it never reproduces the original
+  encoder's bytes (74 of 180 planes by luck; see §7).
+
+So E1 wrote `ec7edit_core` fresh against the engine's own loader rather than
+adapting the reference. The out-of-root dependency is gone either way: both lab
+tools now import the in-repository package, and the E1 gate checks that no
+`tools/python` path escape comes back.
+
+Grade **A**: licence stated by the owner, reuse authorised, and the production
+code independent of the question.
 
 ## 4. Runtime and platform matrix
 
@@ -105,14 +120,22 @@ Measured on the development machine, not assumed:
 | --- | --- | --- |
 | Editor version | `EC7Edit 0.1.0` | — |
 | Core language floor | Python 3.10 (matches the repository tools) | — |
-| Reference GUI runtime | Python 3.12 per plan §1 | **Python 3.14.4** |
+| Reference runtime | **CPython 3.12** (owner's decision, 2026-08-29) | 3.12.13, via `uv python install 3.12` |
+| System interpreter here | — | Python 3.14.4 |
 | Qt / PySide6 | PySide6 6.x | PySide6 6.10.2, Qt 6.10.2 |
 | Acceptance targets | Windows 11 x64; Ubuntu 24.04 x64 and arm64 | Linux x64 |
 
-**Unresolved (D):** the plan names Python 3.12 as the reference GUI runtime and
-this machine has 3.14.4. Either the reference moves to 3.14 or CI has to pin
-3.12; the tested upper bound cannot be frozen honestly until that is decided.
-Nothing in E0 depends on the answer, and E1's core is Qt-free either way.
+**Resolved (A), 2026-08-29.** The owner chose 3.12 and gave the reason: *"more
+people are going to have it."* The development machine has only 3.14.4, so the
+reference is supplied by `uv python install 3.12`, which fetches a standalone
+CPython build — no container, no system package, and the same mechanism works
+on a CI runner. `test_ec7edit_e1.sh` prefers a `python3.12` on `PATH`, falls
+back to `uv python find 3.12`, and prints which interpreter it used, so a run
+on the wrong one is visible rather than assumed.
+
+The floor stays 3.10 to match the repository's other tools. The tested range is
+therefore **3.10 floor, 3.12 reference, 3.14.4 also exercised** — the last
+because it is what this machine runs by default, not because it is supported.
 
 ## 5. Commercial-content boundary
 

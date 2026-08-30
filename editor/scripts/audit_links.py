@@ -37,7 +37,14 @@ EXTERNAL = ("http://", "https://", "mailto:", "ftp://", "#")
 
 
 def git_root() -> Path:
-    out = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+    """The repository this script lives in, not the one the caller stands in.
+
+    Gates run from whatever directory suits them -- the data directory, a
+    temporary work tree -- so asking git about the current directory finds
+    either the wrong repository or none at all.
+    """
+    out = subprocess.run(["git", "-C", str(Path(__file__).resolve().parent),
+                          "rev-parse", "--show-toplevel"],
                          capture_output=True, text=True, check=True)
     return Path(out.stdout.strip()).resolve()
 

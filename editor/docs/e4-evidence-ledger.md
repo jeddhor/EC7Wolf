@@ -81,7 +81,26 @@ Problems panel always get the report regardless.
 that was never shown, so the layout-reset test was asserting something it could
 not observe. The property that means what the test meant is `isHidden()`.
 
-## 5. Staleness is dropped, not displayed
+## 5. The defect the offscreen tests did not find
+
+`run_setup` read `dialog.Accepted`. In PySide6 that enum is a class attribute,
+so reading it off an instance raises -- and it raises *after* the dialog
+closes, which is past the point anything was looking. It parsed, it imported,
+54 GUI tests passed, and it crashed the first time a real person finished
+setup.
+
+The gap was simple: nothing drove `run_setup()`. Every test built the window
+and exercised what it could reach, and the one path that only runs on a fresh
+install ran for the first time on the user's machine.
+
+Three tests now cover it, including one that pins the mistake itself
+(`hasattr(dialog, "Accepted")` is False while `hasattr(QDialog, "Accepted")` is
+True), and `scripts/check_qt_idioms.py` parses the GUI for both this and
+`int(event.button())` -- the other Qt 6 idiom that imports cleanly and raises
+when it runs. Parsed rather than grepped, because the first version of that
+check flagged the comment explaining the bug.
+
+## 6. Staleness is dropped, not displayed
 
 Every background result carries the document revision it was requested at, and
 one that arrives after the document has moved on is discarded. Without it,
@@ -93,7 +112,7 @@ rather than assume it.
 A worker that raises does not take the pool down, and resubmitting a key
 cancels the job it replaces.
 
-## 6. The licensing boundary, in the GUI
+## 7. The licensing boundary, in the GUI
 
 Decoded artwork lives in a bounded in-memory cache for the session and is never
 written to disk. That is the difference between reading somebody's game and
@@ -105,9 +124,9 @@ The palette works with no game data: every entry gets a labelled placeholder
 tile. That is not only for CI — it is the state a first-time user is in before
 setup, and a palette of empty squares would look broken.
 
-## 7. Tests
+## 8. Tests
 
-54 offscreen GUI tests in 0.37 s, under CPython 3.12.13 with PySide6 6.11.2.
+58 offscreen GUI tests in 0.6 s, under CPython 3.12.13 with PySide6 6.11.2.
 Real `QApplication`, real widgets, real painting, real signal delivery; nothing
 is mocked, because a GUI test that stubs the toolkit tests the stub.
 
@@ -122,7 +141,7 @@ is mocked, because a GUI test that stubs the toolkit tests the stub.
 | Layout | round trip through settings, reset at three window sizes |
 | First run | the eleven checks, and the engine not running unasked |
 
-## 8. What E4 did not do
+## 9. What E4 did not do
 
 No editing tools — the canvas draws and hit-tests, and E5 makes it paint. No
 Windows or arm64 measurement: the packaging numbers are from Linux x64, and the

@@ -715,16 +715,28 @@ class MainWindow(QMainWindow):
 
     # -- setup ------------------------------------------------------------
 
-    def run_setup(self) -> None:
+    def run_setup(self) -> bool:
+        """Show first-run setup. Returns whether a profile was saved.
+
+        `QDialog.DialogCode.Accepted`, not `dialog.Accepted`: in PySide6 the
+        enum lives on the class, and reading it off an instance raises. That
+        is easy to write and impossible to see until the dialog closes.
+        """
+        from PySide6.QtWidgets import QDialog
+
         from .first_run import FirstRunDialog
 
         dialog = FirstRunDialog(self.settings.profile, self)
-        if dialog.exec() == dialog.Accepted:
-            profile = dialog.profile()
-            self.settings.profile = profile
-            self.thumbnails.clear()
-            self.open_assets(profile)
-            self._refresh_palette()
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return False
+        profile = dialog.profile()
+        self.settings.profile = profile
+        self.settings.sync()
+        self.thumbnails.clear()
+        self.open_assets(profile)
+        self._refresh_palette()
+        self.statusBar().showMessage("Setup saved", 4000)
+        return True
 
     # -- housekeeping -----------------------------------------------------
 

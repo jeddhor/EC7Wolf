@@ -634,6 +634,85 @@ class FirstRun(unittest.TestCase):
             dialog.deleteLater()
 
 
+class Setup(Base):
+    """First-run setup, driven from the window the way `main()` drives it.
+
+    Nothing exercised this path before, which is how `dialog.Accepted` shipped:
+    in PySide6 that enum is a class attribute, so reading it off an instance
+    raises, and the failure only happens after the dialog closes -- past the
+    point any earlier test looked.
+    """
+
+    def make_data(self) -> Path:
+        from ec7edit_core.assets import PALETTE_OFFSET
+
+        data = self.root / "game"
+        data.mkdir()
+        executable = bytearray(b"\x00" * PALETTE_OFFSET)
+        for index in range(256):
+            executable += bytes(((index // 4) & 63, (index // 8) & 63, (index // 16) & 63))
+        (data / "CORR7CD.EXE").write_bytes(bytes(executable))
+        (data / "MAPTEMP.CO7").write_bytes(encode_archive([
+            MapRecord(1, NativeName.from_text("SYNTH"), MapPlanes.empty(8, 8))
+        ]))
+        import struct
+
+        header = struct.pack("<HHH", 2, 1, 2)
+        header += struct.pack("<2I", 18, 18) + struct.pack("<2H", 0, 0)
+        (data / "GFXTILES.CO7").write_bytes(header)
+        return data
+
+    def run_setup_answering(self, answer):
+        from PySide6.QtWidgets import QDialog
+
+        from ec7edit_gui import first_run
+
+        data = self.make_data()
+        original_exec = first_run.FirstRunDialog.exec
+        original_profile = first_run.FirstRunDialog.profile
+
+        def fake_exec(dialog):
+            dialog.data.path = str(data)
+            dialog.workspace.path = str(self.root / "projects")
+            dialog._revalidate()
+            return answer
+
+        first_run.FirstRunDialog.exec = fake_exec
+        try:
+            return self.window.run_setup()
+        finally:
+            first_run.FirstRunDialog.exec = original_exec
+            first_run.FirstRunDialog.profile = original_profile
+
+    def test_accepting_saves_the_profile(self):
+        from PySide6.QtWidgets import QDialog
+
+        self.assertTrue(self.run_setup_answering(QDialog.DialogCode.Accepted))
+        self.assertTrue(self.settings.configured)
+        self.assertTrue(self.settings.profile.data_dir)
+
+    def test_cancelling_changes_nothing(self):
+        from PySide6.QtWidgets import QDialog
+
+        before = self.settings.profile.data_dir
+        self.assertFalse(self.run_setup_answering(QDialog.DialogCode.Rejected))
+        self.assertEqual(self.settings.profile.data_dir, before)
+
+    def test_the_dialog_code_is_a_class_attribute(self):
+        # The mistake itself, pinned: PySide6 puts enum values on the class,
+        # and an instance does not carry them.
+        from PySide6.QtWidgets import QDialog
+
+        from ec7edit_gui.first_run import FirstRunDialog
+
+        dialog = FirstRunDialog()
+        try:
+            self.assertFalse(hasattr(dialog, "Accepted"))
+            self.assertTrue(hasattr(QDialog, "Accepted"))
+        finally:
+            dialog.deleteLater()
+
+
 class ExceptionReporting(unittest.TestCase):
     def test_the_hook_records_rather_than_losing_it(self):
         seen = []

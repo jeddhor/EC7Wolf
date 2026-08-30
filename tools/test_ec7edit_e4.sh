@@ -128,6 +128,17 @@ else
 	status=1
 fi
 
+printf '\nQt idioms that parse and then raise\n'
+# `dialog.Accepted` and `int(event.button())` both import cleanly and fail only
+# when the code path runs. Both shipped once. Parsed, not grepped -- a grep
+# matches the comment explaining the bug as readily as the bug.
+if output=$("$python" "$editor/scripts/check_qt_idioms.py" "$editor/ec7edit_gui" 2>&1); then
+	printf '  ok   %s\n' "$output"
+else
+	printf '  FAIL %s\n' "$(printf '%s' "$output" | head -5)"
+	status=1
+fi
+
 printf '\nNothing commercial in the tree\n'
 # Reading the user's own files is the whole point, so the check is not about
 # filenames. What must not exist is retail content *in the repository*, or a

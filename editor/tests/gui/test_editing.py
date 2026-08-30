@@ -86,10 +86,17 @@ class Base(unittest.TestCase):
         return self.window.project.map_by_uuid(self.uuid)
 
     def choose(self, key: str) -> None:
+        """Pick a palette entry the way the view does.
+
+        Through `_on_palette_clicked` rather than by setting the tool's entry
+        directly: a shortcut here is a shortcut past the handler, and past the
+        bug where choosing a wall left a structure armed.
+        """
         entry = CATALOG.by_key(key)
         self.assertIsNotNone(entry, key)
-        self.window.selected_entry = entry
-        self.window.tools.set_entry(entry)
+        self.window._on_palette_clicked(
+            type("Index", (), {"data": lambda _self, _role: entry})()
+        )
 
     def stroke(self, tool: Tool, points) -> None:
         """Press, drag through the points, release -- one gesture."""
@@ -172,10 +179,21 @@ class NewMap(Base):
 
     def test_the_object_plane_starts_empty_not_zero(self):
         # Corridor 7's empty marker is 18. A plane of zeros would place
-        # whatever word 0 means on every single cell.
+        # whatever word 0 means on every single cell. The one exception is the
+        # player start in the middle.
         document = self.window.new_map(name="EMPTY", slot=9, width=8, height=8)
         document = self.window.project.map_by_uuid(document.uuid)
-        self.assertEqual(document.cell(1, 4, 4), EMPTY_OBJECT)
+        self.assertEqual(document.cell(1, 1, 1), EMPTY_OBJECT)
+        self.assertEqual(document.cell(1, 6, 6), EMPTY_OBJECT)
+
+    def test_a_new_map_can_be_tested_straight_away(self):
+        # The whole point of the start: a fresh map has to pass validation, or
+        # pressing F5 launches an engine that prints "No player 1 start!" and
+        # exits, which looks like a crash.
+        document = self.window.new_map(name="TESTABLE", slot=9, width=16, height=16)
+        self.window.open_map(document.uuid)
+        errors = [p for p in self.window.validate() if p.severity.name == "ERROR"]
+        self.assertEqual(errors, [])
 
     def test_it_picks_a_free_slot(self):
         # The project already holds slot 1 from setUp.
@@ -452,6 +470,94 @@ class Structures(Base):
         self.assertEqual(self.window.tools.tool, Tool.PREFAB)
 
 
+class PaletteHandover(Base):
+    """Choosing from one palette has to disarm whatever the last one armed.
+
+    The bug this exists for: pick a structure, then pick a wall, then click.
+    The palette showed the wall selected and the click placed the structure.
+    """
+
+    def choose_prefab(self, key: str) -> None:
+        from ec7edit_core.prefabs import by_key
+
+        self.window.tools.set_prefab(by_key(key))
+        self.window.select_tool(Tool.PREFAB)
+
+    def click(self, x, y):
+        self.window._on_press(x, y, Qt.LeftButton.value)
+        self.window.tools.release(x, y)
+
+    def test_choosing_a_wall_after_a_structure_paints_the_wall(self):
+        self.choose_prefab("prefab.pushwall.secret")
+        self.choose(WALL_ENTRY)
+        self.click(4, 4)
+        self.assertEqual(self.document.cell(0, 4, 4), 2, "painted the wall")
+        self.assertEqual(self.document.cell(1, 4, 4), EMPTY_OBJECT,
+                         "the structure's marker was written anyway")
+
+    def test_the_tool_goes_back_to_the_brush(self):
+        self.choose_prefab("prefab.pushwall.secret")
+        self.choose(WALL_ENTRY)
+        self.assertEqual(self.window.tools.tool, Tool.BRUSH)
+        self.assertIsNone(self.window.tools.prefab)
+
+    def test_choosing_a_wall_mid_transporter_cancels_the_pending_end(self):
+        self.window.select_tool(Tool.TRANSPORTER)
+        self.click(3, 3)
+        self.assertIsNotNone(self.window.tools.pending_transporter)
+        self.choose(WALL_ENTRY)
+        self.assertIsNone(self.window.tools.pending_transporter)
+        self.click(6, 6)
+        self.assertEqual(self.document.cell(0, 6, 6), 2)
+
+    def test_choosing_a_structure_cancels_a_pending_transporter(self):
+        self.window.select_tool(Tool.TRANSPORTER)
+        self.click(3, 3)
+        self.choose_prefab("prefab.pushwall.plain")
+        self.assertIsNone(self.window.tools.pending_transporter)
+
+    def test_switching_tools_by_hand_drops_the_structure(self):
+        self.choose_prefab("prefab.pushwall.secret")
+        self.choose(WALL_ENTRY)
+        self.window.select_tool(Tool.LINE)
+        self.assertIsNone(self.window.tools.prefab)
+        self.window._on_press(2, 6, Qt.LeftButton.value)
+        self.window.tools.release(5, 6)
+        for x in range(2, 6):
+            self.assertEqual(self.document.cell(0, x, 6), 2)
+
+    def test_going_back_to_a_structure_still_works(self):
+        self.choose(WALL_ENTRY)
+        self.choose_prefab("prefab.pushwall.secret")
+        self.click(4, 4)
+        self.assertEqual(self.document.cell(1, 4, 4), 98)
+
+    def test_reclicking_the_current_structure_rearms_it(self):
+        # Coming back from the Walls tab, the row you want is already the
+        # current one, so currentItemChanged never fires. Clicking it has to
+        # arm it anyway or the structure list looks broken.
+        self.window.prefab_list.setCurrentRow(0)
+        QApplication.processEvents()
+        self.choose(WALL_ENTRY)
+        self.assertEqual(self.window.tools.tool, Tool.BRUSH)
+
+        item = self.window.prefab_list.item(0)
+        self.window.prefab_list.itemClicked.emit(item)
+        QApplication.processEvents()
+        self.assertEqual(self.window.tools.tool, Tool.PREFAB)
+        self.assertIsNotNone(self.window.tools.prefab)
+
+    def test_the_real_palette_signal_does_the_same(self):
+        # Not the helper: the actual click handler the view is wired to.
+        self.choose_prefab("prefab.pushwall.secret")
+        entry = CATALOG.by_key(WALL_ENTRY)
+        self.window._on_palette_clicked(type("I", (), {"data": lambda self, r: entry})())
+        self.assertEqual(self.window.tools.tool, Tool.BRUSH)
+        self.click(5, 5)
+        self.assertEqual(self.document.cell(0, 5, 5), 2)
+        self.assertEqual(self.document.cell(1, 5, 5), EMPTY_OBJECT)
+
+
 class Transporters(Base):
     def arm(self):
         self.window.select_tool(Tool.TRANSPORTER)
@@ -626,6 +732,158 @@ class Statistics(Base):
         model = self.window.palette_models["enemies"]
         names = [model.data(model.index(r, 0)) for r in range(model.rowCount())]
         self.assertIn("Rodex", names)
+
+
+class MapsList(Base):
+    """The right-click actions on the maps list."""
+
+    def second_map(self):
+        return self.window.new_map(name="SECOND", slot=2, width=8, height=8)
+
+    def test_rename(self):
+        uuid = self.window.project.maps[0].uuid
+        self.assertTrue(self.window.rename_map(uuid, "ATRIUM"))
+        self.assertEqual(self.window.project.map_by_uuid(uuid).name, "ATRIUM")
+
+    def test_rename_is_undoable(self):
+        uuid = self.window.project.maps[0].uuid
+        before = self.window.project.map_by_uuid(uuid).name
+        self.window.rename_map(uuid, "ATRIUM")
+        self.window.undo()
+        self.assertEqual(self.window.project.map_by_uuid(uuid).name, before)
+
+    def test_an_unencodable_rename_is_refused(self):
+        from PySide6.QtWidgets import QMessageBox
+
+        uuid = self.window.project.maps[0].uuid
+        before = self.window.project.map_by_uuid(uuid).name
+        original = QMessageBox.warning
+        QMessageBox.warning = staticmethod(lambda *a, **k: None)
+        try:
+            self.assertFalse(self.window.rename_map(uuid, "x" * 40))
+        finally:
+            QMessageBox.warning = original
+        self.assertEqual(self.window.project.map_by_uuid(uuid).name, before)
+
+    def test_change_slot(self):
+        uuid = self.window.project.maps[0].uuid
+        self.assertTrue(self.window.change_slot(uuid, 7))
+        self.assertEqual(self.window.project.map_by_uuid(uuid).slot, 7)
+        self.assertEqual(self.window.project.map_by_uuid(uuid).lump_name, "MAP07")
+
+    def test_a_taken_slot_is_refused(self):
+        from PySide6.QtWidgets import QMessageBox
+
+        self.second_map()
+        first = self.window.project.maps[0].uuid
+        original = QMessageBox.warning
+        QMessageBox.warning = staticmethod(lambda *a, **k: None)
+        try:
+            self.assertFalse(self.window.change_slot(first, 2))
+        finally:
+            QMessageBox.warning = original
+        self.assertEqual(self.window.project.map_by_uuid(first).slot, 1)
+
+    def test_slot_change_is_undoable(self):
+        uuid = self.window.project.maps[0].uuid
+        self.window.change_slot(uuid, 7)
+        self.window.undo()
+        self.assertEqual(self.window.project.map_by_uuid(uuid).slot, 1)
+
+    def test_duplicate(self):
+        uuid = self.window.project.maps[0].uuid
+        self.assertTrue(self.window.duplicate_map(uuid))
+        self.assertEqual(len(self.window.project), 2)
+        copy = self.window.project.maps[1]
+        self.assertNotEqual(copy.uuid, uuid)
+        self.assertEqual(copy.planes.planes,
+                         self.window.project.map_by_uuid(uuid).planes.planes)
+
+    def test_duplicate_takes_a_free_slot(self):
+        uuid = self.window.project.maps[0].uuid
+        self.window.duplicate_map(uuid)
+        slots = [document.slot for document in self.window.project.maps]
+        self.assertEqual(len(slots), len(set(slots)))
+
+    def test_duplicate_is_undoable(self):
+        uuid = self.window.project.maps[0].uuid
+        self.window.duplicate_map(uuid)
+        self.window.undo()
+        self.assertEqual(len(self.window.project), 1)
+
+    def test_delete(self):
+        uuid = self.window.project.maps[0].uuid
+        self.assertTrue(self.window.delete_map(uuid, confirm=False))
+        self.assertEqual(len(self.window.project), 0)
+        self.assertEqual(self.window.map_list.count(), 0)
+
+    def test_delete_closes_the_tab(self):
+        uuid = self.window.project.maps[0].uuid
+        self.window.open_map(uuid)
+        self.window.delete_map(uuid, confirm=False)
+        self.assertEqual(self.window.tabs.count(), 0)
+
+    def test_delete_is_undoable(self):
+        # The whole reason it is a command: an editor whose delete cannot be
+        # taken back is one people are afraid to use.
+        uuid = self.window.project.maps[0].uuid
+        before = self.window.project.map_by_uuid(uuid).planes.planes
+        self.window.delete_map(uuid, confirm=False)
+        self.window.undo()
+        self.assertEqual(len(self.window.project), 1)
+        restored = self.window.project.map_by_uuid(uuid)
+        self.assertEqual(restored.planes.planes, before)
+
+    def test_undoing_a_delete_puts_it_back_where_it_was(self):
+        self.second_map()
+        first = self.window.project.maps[0].uuid
+        self.window.delete_map(first, confirm=False)
+        self.window.undo()
+        self.assertEqual(self.window.project.maps[0].uuid, first)
+
+    def test_redo_deletes_again(self):
+        uuid = self.window.project.maps[0].uuid
+        self.window.delete_map(uuid, confirm=False)
+        self.window.undo()
+        self.window.redo()
+        self.assertEqual(len(self.window.project), 0)
+
+    def test_the_context_menu_offers_the_actions(self):
+        menu = self.window.build_map_menu(0)
+        self.assertIsNotNone(menu)
+        names = [action.text() for action in menu.actions() if action.text()]
+        for expected in ("&Open", "&Rename…", "Change &slot…", "D&uplicate",
+                         "&Check this map", "&Test in EC7Wolf", "&Delete"):
+            self.assertIn(expected, names)
+        menu.deleteLater()
+
+    def test_the_menu_acts_on_the_row_it_was_opened_on(self):
+        from PySide6.QtWidgets import QMessageBox
+
+        self.second_map()
+        menu = self.window.build_map_menu(1)
+        delete = next(a for a in menu.actions() if a.text() == "&Delete")
+        # The real action asks before deleting, which on the offscreen platform
+        # would wait forever. Answer it.
+        original = QMessageBox.question
+        QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.Yes)
+        try:
+            delete.trigger()
+            QApplication.processEvents()
+        finally:
+            QMessageBox.question = original
+        menu.deleteLater()
+        # The second map went, not the first or whichever is open.
+        self.assertEqual(len(self.window.project), 1)
+        self.assertEqual(self.window.project.maps[0].name, "ROOM")
+
+    def test_a_row_that_is_not_there_has_no_menu(self):
+        self.assertIsNone(self.window.build_map_menu(99))
+
+    def test_right_clicking_empty_space_does_nothing(self):
+        from PySide6.QtCore import QPoint
+
+        self.window._map_context_menu(QPoint(0, 10000))
 
 
 class Playtest(Base):

@@ -21,6 +21,8 @@ from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
     QCheckBox,
+    QInputDialog,
+    QMenu,
     QDockWidget,
     QFileDialog,
     QLabel,
@@ -46,7 +48,7 @@ from ec7edit_core.rules import check_door, check_transporters, door_cells
 from ec7edit_core.transforms import copy_region, flip_clip, paste_writes, rotate_clip
 from ec7edit_core.validation import summarise, validate_map
 from ec7edit_core.document import MapDocument, ProjectDocument, SourceReference, utc_now
-from ec7edit_core.errors import Ec7EditError
+from ec7edit_core.errors import Ec7EditError, Severity
 from ec7edit_core.paths import SourceIdentity
 from ec7edit_core.prefabs import PREFABS, by_key as prefab_by_key
 from ec7edit_core.project import (
@@ -263,6 +265,10 @@ class MainWindow(QMainWindow):
         bar.addWidget(self.filled_box)
 
     def select_tool(self, tool: Tool) -> None:
+        if tool is not Tool.PREFAB:
+            self.tools.prefab = None
+        if tool is not Tool.TRANSPORTER:
+            self.tools.cancel_pending()
         self.tools.set_tool(tool)
         action = self.tool_actions.get(tool)
         if action is not None and not action.isChecked():
@@ -272,6 +278,8 @@ class MainWindow(QMainWindow):
         self.map_list = QListWidget(self)
         self.map_list.setAccessibleName("Maps in this project")
         self.map_list.currentRowChanged.connect(self._on_map_selected)
+        self.map_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.map_list.customContextMenuRequested.connect(self._map_context_menu)
         maps_dock = QDockWidget("Maps", self)
         maps_dock.setObjectName("maps-dock")
         maps_dock.setWidget(self.map_list)
@@ -311,7 +319,14 @@ class MainWindow(QMainWindow):
             item.setToolTip(f"{prefab.description}\n\nSource: {prefab.evidence}")
             item.setData(Qt.UserRole, prefab.key)
             self.prefab_list.addItem(item)
-        self.prefab_list.currentItemChanged.connect(self._on_prefab_chosen)
+        # Both signals: `currentItemChanged` catches keyboard navigation, and
+        # `itemClicked` catches clicking the row that is already current --
+        # which is exactly what you do coming back from the Walls tab to the
+        # structure you were using, and which would otherwise re-arm nothing.
+        self.prefab_list.currentItemChanged.connect(
+            lambda current, _previous: self._on_prefab_chosen(current, _previous))
+        self.prefab_list.itemClicked.connect(
+            lambda item: self._on_prefab_chosen(item, None))
         self.palette_tabs.addTab(self.prefab_list, "Structures")
 
         for title, category in PALETTE_TABS[1:]:
@@ -535,7 +550,7 @@ class MainWindow(QMainWindow):
         self._identity = None
         return self.save_project()
 
-    def export_preview(self) -> None:
+    def export_preview(self, only: str | None = None) -> None:
         if not self.project.maps:
             self._error("Nothing to export", "This project has no maps yet.")
             return
@@ -548,9 +563,8 @@ class MainWindow(QMainWindow):
         from ec7edit_core.wad import build_preview_wad
 
         try:
-            blob = build_preview_wad(
-                [(d.lump_name, d.to_record()) for d in self.project.maps]
-            )
+            chosen = [d for d in self.project.maps if only is None or d.uuid == only]
+            blob = build_preview_wad([(d.lump_name, d.to_record()) for d in chosen])
             guard = OutputGuard()
             if self.settings.profile.data_dir:
                 guard = OutputGuard(protected_roots=(Path(self.settings.profile.data_dir),))
@@ -629,6 +643,137 @@ class MainWindow(QMainWindow):
         if cell and tab is not None:
             self.inspector.show_cell(self.project.map_by_uuid(tab.map_uuid), *cell)
 
+    # -- the maps list ------------------------------------------------------
+
+    def _map_context_menu(self, point) -> None:
+        """Right-click on a map. Everything acts on the map you clicked, not on
+        whichever one happens to be open."""
+        item = self.map_list.itemAt(point)
+        if item is None:
+            return
+        menu = self.build_map_menu(self.map_list.row(item))
+        if menu is not None:
+            menu.exec(self.map_list.mapToGlobal(point))
+
+    def build_map_menu(self, row: int) -> "QMenu | None":
+        """The menu for one row, built but not shown.
+
+        Separate from showing it so a test can read the actions off it. A test
+        that has to open a modal to find out what is in a menu is a test that
+        hangs on the offscreen platform.
+        """
+        if not 0 <= row < len(self.project.maps):
+            return None
+        document = self.project.maps[row]
+
+        menu = QMenu(self)
+        menu.setObjectName("map-context-menu")
+        actions = [
+            ("&Open", lambda: self.open_map(document.uuid)),
+            ("&Rename…", lambda: self.rename_map(document.uuid)),
+            ("Change &slot…", lambda: self.change_slot(document.uuid)),
+            ("D&uplicate", lambda: self.duplicate_map(document.uuid)),
+            (None, None),
+            ("&Check this map", lambda: (self.open_map(document.uuid), self.validate())),
+            ("&Test in EC7Wolf", lambda: (self.open_map(document.uuid), self.playtest())),
+            ("&Export this map…", lambda: self.export_preview(only=document.uuid)),
+            (None, None),
+            ("&Delete", lambda: self.delete_map(document.uuid)),
+        ]
+        for title, slot in actions:
+            if title is None:
+                menu.addSeparator()
+                continue
+            action = menu.addAction(title)
+            action.setObjectName(title.lower().replace("&", "").replace("…", "")
+                                 .replace(" ", "-"))
+            action.triggered.connect(slot)
+        return menu
+
+    def rename_map(self, uuid: str, name: str | None = None) -> bool:
+        """Rename a map. This replaces the whole 16-byte field, deliberately."""
+        document = self.project.map_by_uuid(uuid)
+        if name is None:
+            name, accepted = QInputDialog.getText(
+                self, "Rename map", "Name (15 characters, plain ASCII):",
+                text=document.name,
+            )
+            if not accepted:
+                return False
+        from ec7edit_core.commands import rename_map as rename_command
+
+        try:
+            command = rename_command(document, name)
+        except Ec7EditError as error:
+            self._error("That name will not fit", str(error))
+            return False
+        self.run_command(command)
+        self._refresh()
+        return True
+
+    def change_slot(self, uuid: str, slot: int | None = None) -> bool:
+        """Change which MAPxx a map exports as."""
+        document = self.project.map_by_uuid(uuid)
+        if slot is None:
+            slot, accepted = QInputDialog.getInt(
+                self, "Change slot", "Export as MAP:", document.slot, 1, 100)
+            if not accepted:
+                return False
+        taken = {other.slot: other for other in self.project.maps if other.uuid != uuid}
+        if slot in taken:
+            self._error(
+                "That slot is taken",
+                f"MAP{slot:02d} is already {taken[slot].name!r}. Two maps in one slot "
+                "would shadow each other in the export.",
+            )
+            return False
+        from ec7edit_core.commands import set_slot
+
+        self.run_command(set_slot(document, slot))
+        self._refresh()
+        return True
+
+    def duplicate_map(self, uuid: str) -> bool:
+        """Copy a map into the next free slot, with its own identity."""
+        from dataclasses import replace as _replace
+
+        from ec7edit_core.commands import add_map
+        from ec7edit_core.document import new_uuid
+
+        document = self.project.map_by_uuid(uuid)
+        used = {other.slot for other in self.project.maps}
+        slot = next((n for n in range(1, 101) if n not in used), None)
+        if slot is None:
+            self._error("No free slot", "This project already fills MAP01 to MAP100.")
+            return False
+
+        copy = _replace(document, uuid=new_uuid(), slot=slot, source=document.source)
+        self.run_command(add_map(copy, self.project.index_of(uuid) + 1,
+                                 label=f"Duplicate {document.name}"))
+        self._refresh()
+        self.open_map(copy.uuid)
+        return True
+
+    def delete_map(self, uuid: str, *, confirm: bool = True) -> bool:
+        """Remove a map. Undoable, which is why it is a command and not a pop."""
+        document = self.project.map_by_uuid(uuid)
+        if confirm:
+            answer = QMessageBox.question(
+                self, "Delete map",
+                f"Delete {document.lump_name} {document.name!r} from this project?\n\n"
+                "Undo will bring it back.",
+                QMessageBox.Yes | QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                return False
+
+        from ec7edit_core.commands import remove_map
+
+        self.run_command(remove_map(self.project, uuid))
+        self._refresh()
+        self.statusBar().showMessage(f"Deleted {document.lump_name}", 4000)
+        return True
+
     def _on_map_selected(self, row: int) -> None:
         if 0 <= row < len(self.project.maps):
             self.open_map(self.project.maps[row].uuid)
@@ -666,6 +811,7 @@ class MainWindow(QMainWindow):
         prefab = prefab_by_key(current.data(Qt.UserRole))
         if prefab is None:
             return
+        self.tools.cancel_pending()
         self.tools.set_prefab(prefab)
         self.select_tool(Tool.PREFAB)
         needs = "; ".join(check.why for check in prefab.preconditions) or "nothing in particular"
@@ -681,14 +827,27 @@ class MainWindow(QMainWindow):
             item.setToolTip(problem.code)
             self.problems.addItem(item)
 
+    #: Tools that act on whatever is armed rather than on the palette entry.
+    #: Picking something from a palette has to take you out of these, or the
+    #: next click still does the old thing.
+    _ARMED_TOOLS = (Tool.POINTER, Tool.EYEDROPPER, Tool.PREFAB, Tool.TRANSPORTER)
+
     def _on_palette_clicked(self, index) -> None:
         entry = index.data(EntryRole)
         if entry is None:
             return
         self.selected_entry = entry
         self.tools.set_entry(entry)
-        if self.tools.tool in (Tool.POINTER, Tool.EYEDROPPER):
+
+        # Choosing a wall means you want to paint a wall. A structure left
+        # armed from the Structures tab, or half a transporter waiting for its
+        # second click, would otherwise swallow the click and place the old
+        # thing -- with the palette showing the new one as selected.
+        self.tools.set_prefab(None)
+        self.tools.cancel_pending()
+        if self.tools.tool in self._ARMED_TOOLS:
             self.select_tool(Tool.BRUSH)
+
         self.selection_label.setText(
             f"<b>{entry.name}</b> — raw {entry.value} on plane {entry.plane}"
             + (f"<br>{entry.description}" if entry.description else "")
@@ -731,9 +890,15 @@ class MainWindow(QMainWindow):
         """The one path by which a map changes."""
         self.project = self.history.do(self.project, command)
         self.pool.set_revision(self.project.revision)
+        # Orphans first: a command can now remove a map, so a tab may be
+        # pointing at something that is no longer in the project, and both the
+        # canvas sync and the tool below would ask for it by id.
+        self._close_orphan_tabs()
         self._sync_canvases()
         tab = self.current_tab
-        if tab is not None:
+        if tab is None:
+            self.tools.set_document(None)
+        else:
             # The controller holds a snapshot, and an immutable document means
             # the old one would keep reporting the words from before this edit.
             self.tools.set_document(self.project.map_by_uuid(tab.map_uuid))
@@ -742,13 +907,26 @@ class MainWindow(QMainWindow):
 
     def undo(self) -> None:
         self.project = self.history.undo(self.project)
+        self._close_orphan_tabs()
         self._sync_canvases()
         self._refresh()
 
     def redo(self) -> None:
         self.project = self.history.redo(self.project)
+        self._close_orphan_tabs()
         self._sync_canvases()
         self._refresh()
+
+    def _close_orphan_tabs(self) -> None:
+        """Shut tabs whose map is no longer in the project.
+
+        A command can now add or remove a map, so undo and redo can leave a tab
+        pointing at something that is not there.
+        """
+        alive = {document.uuid for document in self.project.maps}
+        for index in range(self.tabs.count() - 1, -1, -1):
+            if self.tabs.widget(index).map_uuid not in alive:
+                self.tabs.removeTab(index)
 
     # -- clipboard ----------------------------------------------------------
 
@@ -914,6 +1092,24 @@ class MainWindow(QMainWindow):
             return False
 
         document = self.project.map_by_uuid(tab.map_uuid)
+
+        # Check before launching. The engine's answer to a map with no player
+        # start is to print "No player 1 start!" and exit, which from the
+        # outside is indistinguishable from a crash -- the window appears and
+        # vanishes. Better to say what is wrong while the editor still has the
+        # user's attention.
+        blocking = [problem for problem in self.validate()
+                    if problem.severity is Severity.ERROR]
+        if blocking:
+            self._error(
+                "This map will not load yet",
+                blocking[0].message
+                + (f"\n\nAt {blocking[0].where}." if blocking[0].where else "")
+                + (f"\n\nand {len(blocking) - 1} more; see the Problems panel."
+                   if len(blocking) > 1 else ""),
+            )
+            return False
+
         workspace = Path(profile.workspace_dir or Path.home()) / ".ec7edit-playtest"
         target = workspace / f"{document.lump_name.lower()}-preview.wad"
 
@@ -937,11 +1133,18 @@ class MainWindow(QMainWindow):
         self._note_problem(f"Playtest: {plan.described()}")
         import subprocess
 
+        # Keep what the engine says. When it refuses a map it explains itself
+        # on stdout and then exits, and without this that explanation goes
+        # nowhere the user will ever look.
+        log = workspace / "playtest.log"
         try:
-            subprocess.Popen(plan.argv, cwd=str(plan.cwd))
+            with open(log, "w", encoding="utf-8") as stream:
+                subprocess.Popen(plan.argv, cwd=str(plan.cwd),
+                                 stdout=stream, stderr=subprocess.STDOUT)
         except OSError as error:
             self._error("The engine did not start", str(error))
             return False
+        self._note_problem(f"Engine output: {log}")
         self.statusBar().showMessage(f"Testing {document.lump_name} in EC7Wolf", 6000)
         return True
 

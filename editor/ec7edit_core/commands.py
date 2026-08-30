@@ -77,27 +77,70 @@ class NameEdit:
 
 
 @dataclass(frozen=True)
+class MapEdit:
+    """A map added to or removed from the project.
+
+    The whole document is kept, not just its id, because undoing a deletion
+    has to put the map *back* -- every plane, its name, its source reference
+    and its identity. Corridor 7 maps are twelve thousand words, so holding one
+    is cheap, and the alternative is a delete you cannot take back.
+    """
+
+    document: "MapDocument"
+    index: int
+    added: bool
+
+    def inverted(self) -> "MapEdit":
+        return MapEdit(self.document, self.index, not self.added)
+
+    @property
+    def changes_anything(self) -> bool:
+        return True
+
+
+@dataclass(frozen=True)
+class SlotEdit:
+    """A map's target `MAPxx` slot changed."""
+
+    map_uuid: str
+    before: int
+    after: int
+
+    def inverted(self) -> "SlotEdit":
+        return SlotEdit(self.map_uuid, self.after, self.before)
+
+    @property
+    def changes_anything(self) -> bool:
+        return self.before != self.after
+
+
+@dataclass(frozen=True)
 class Command:
     """A named, undoable change: a bag of edits and how to describe it."""
 
     label: str
     cells: tuple[CellEdit, ...] = ()
     names: tuple[NameEdit, ...] = ()
+    slots: tuple[SlotEdit, ...] = ()
+    maps: tuple[MapEdit, ...] = ()
     #: Adjacent commands sharing a gesture id coalesce into one undo step.
     gesture: str = ""
 
     def __len__(self) -> int:
-        return len(self.cells) + len(self.names)
+        return len(self.cells) + len(self.names) + len(self.slots) + len(self.maps)
 
     @property
     def changes_anything(self) -> bool:
-        return any(edit.changes_anything for edit in self.cells + self.names)
+        return any(edit.changes_anything
+                   for edit in self.cells + self.names + self.slots + self.maps)
 
     def inverted(self) -> "Command":
         return Command(
             label=self.label,
             cells=tuple(edit.inverted() for edit in reversed(self.cells)),
             names=tuple(edit.inverted() for edit in reversed(self.names)),
+            slots=tuple(edit.inverted() for edit in reversed(self.slots)),
+            maps=tuple(edit.inverted() for edit in reversed(self.maps)),
             gesture=self.gesture,
         )
 
@@ -113,6 +156,8 @@ class Command:
             label=self.label,
             cells=self.cells + later.cells,
             names=self.names + later.names,
+            slots=self.slots + later.slots,
+            maps=self.maps + later.maps,
             gesture=self.gesture,
         )
 
@@ -123,7 +168,7 @@ def apply_command(project: ProjectDocument, command: Command) -> ProjectDocument
     Edits are grouped by map so a stroke over one map rebuilds its planes once
     rather than once per cell.
     """
-    if not command.cells and not command.names:
+    if not len(command):
         return project
 
     by_map: dict[str, list[CellEdit]] = {}
@@ -165,6 +210,30 @@ def apply_command(project: ProjectDocument, command: Command) -> ProjectDocument
             raise _command_error(f"command renames map {edit.map_uuid}, which is not open")
         position = index_of[edit.map_uuid]
         maps[position] = replace(maps[position], native_name=edit.after)
+
+    for edit in command.slots:
+        if edit.map_uuid not in index_of:
+            raise _command_error(f"command reslots map {edit.map_uuid}, which is not open")
+        maps[index_of[edit.map_uuid]] = replace(
+            maps[index_of[edit.map_uuid]], slot=edit.after
+        )
+
+    # Structural changes last, so a command that edits a map and then removes
+    # it does both in the order it was written -- and so the indices the cell
+    # edits used are still valid when they run.
+    for edit in command.maps:
+        if edit.added:
+            if any(existing.uuid == edit.document.uuid for existing in maps):
+                raise _command_error(f"map {edit.document.uuid} is already in the project")
+            maps.insert(min(edit.index, len(maps)), edit.document)
+        else:
+            position = next(
+                (i for i, existing in enumerate(maps)
+                 if existing.uuid == edit.document.uuid), None
+            )
+            if position is None:
+                raise _command_error(f"map {edit.document.uuid} is not in the project")
+            del maps[position]
 
     return project.with_maps(maps)
 
@@ -209,6 +278,20 @@ def write_words(document: MapDocument, writes, *, label: str = "Place",
         if before != value:
             edits.append(CellEdit(document.uuid, plane, index, before, value))
     return Command(label, tuple(edits), gesture=gesture)
+
+
+def remove_map(project: ProjectDocument, uuid: str, *, label: str = "Delete map") -> Command:
+    """Take a map out of the project, undoably."""
+    index = project.index_of(uuid)
+    return Command(label, maps=(MapEdit(project.maps[index], index, added=False),))
+
+
+def add_map(document: MapDocument, index: int, *, label: str = "Add map") -> Command:
+    return Command(label, maps=(MapEdit(document, index, added=True),))
+
+
+def set_slot(document: MapDocument, slot: int, *, label: str = "Change slot") -> Command:
+    return Command(label, slots=(SlotEdit(document.uuid, document.slot, slot),))
 
 
 def rename_map(document: MapDocument, text: str, *, label: str = "Rename") -> Command:
@@ -351,9 +434,13 @@ class Transaction:
     def commit(self, project: ProjectDocument) -> ProjectDocument:
         cells: tuple[CellEdit, ...] = ()
         names: tuple[NameEdit, ...] = ()
+        slots: tuple[SlotEdit, ...] = ()
+        maps: tuple[MapEdit, ...] = ()
         for command in self._commands:
             cells += command.cells
             names += command.names
+            slots += command.slots
+            maps += command.maps
         return self.history.do(
-            project, Command(self.label, cells, names, gesture=self.gesture)
+            project, Command(self.label, cells, names, slots, maps, gesture=self.gesture)
         )

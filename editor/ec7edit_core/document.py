@@ -155,6 +155,9 @@ class MapDocument:
     #: place whatever word 0 means on every cell of it.
     SOLID_WALL = 1
     EMPTY_OBJECT = 18
+    #: The player start facing east. Corridor 7 reflects a start's angle, so
+    #: this band reads north, east, south, west -- 20 is east, not 19.
+    PLAYER_START_EAST = 20
 
     @classmethod
     def blank(cls, *, slot: int = 1, name: str = "NEW MAP", width: int = 64,
@@ -169,14 +172,16 @@ class MapDocument:
 
     @classmethod
     def new_room(cls, *, slot: int = 1, name: str = "NEW MAP", width: int = 64,
-                 height: int = 64) -> "MapDocument":
+                 height: int = 64, with_start: bool = True) -> "MapDocument":
         """A map somebody would actually want to start drawing on.
 
-        Two differences from `blank`, both of which every author would make
+        Three differences from `blank`, all of which every author would make
         immediately: the boundary is solid, because an open edge lets the
-        player walk out of the world, and the object plane holds Corridor 7's
-        empty marker rather than zeros -- a plane of zeros would place whatever
-        word 0 means on every cell of the map.
+        player walk out of the world; the object plane holds Corridor 7's empty
+        marker rather than zeros, since a plane of zeros would place whatever
+        word 0 means on every cell; and there is a player start in the middle,
+        because the engine refuses a map without one -- it prints "No player 1
+        start!" and exits, which looks exactly like a crash.
         """
         cells = width * height
         floor = [0] * cells
@@ -184,13 +189,18 @@ class MapDocument:
             floor[x] = floor[(height - 1) * width + x] = cls.SOLID_WALL
         for y in range(height):
             floor[y * width] = floor[y * width + width - 1] = cls.SOLID_WALL
+
+        objects = [cls.EMPTY_OBJECT] * cells
+        if with_start:
+            objects[(height // 2) * width + (width // 2)] = cls.PLAYER_START_EAST
+
         return cls(
             uuid=new_uuid(),
             slot=slot,
             native_name=NativeName.from_text(name),
             planes=MapPlanes(
                 width, height,
-                (tuple(floor), (cls.EMPTY_OBJECT,) * cells, (0,) * cells),
+                (tuple(floor), tuple(objects), (0,) * cells),
             ),
         )
 

@@ -24,7 +24,10 @@ keep projects — and answers with a checklist rather than a verdict.
 
 Tools: select, paint, line, rectangle, fill, erase, pick, place, transporter
 (`S B L R F E I P T`). **F8** checks the open map; **F5** exports it and
-launches the engine on it. Your archive is only ever read.
+launches the engine on it — and refuses first if the map is one the engine
+would reject, rather than starting a game that closes again immediately.
+Right-click a map in the list to rename, reslot, duplicate, test or delete it;
+all of those undo. Your archive is only ever read.
 
 Shown against a generated archive rather than a retail one, since the map
 names in the shipped file are not this project's to publish:

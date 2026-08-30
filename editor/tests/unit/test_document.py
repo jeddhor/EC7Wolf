@@ -147,9 +147,26 @@ class NewRoom(unittest.TestCase):
 
     def test_the_object_plane_is_the_empty_marker(self):
         # Zero is a word that means something; 18 is the one that means nothing.
-        document = MapDocument.new_room(width=6, height=6)
+        document = MapDocument.new_room(width=6, height=6, with_start=False)
         self.assertTrue(all(v == MapDocument.EMPTY_OBJECT
                             for v in document.planes.planes[1]))
+
+    def test_a_new_room_comes_with_a_player_start(self):
+        # Without one the engine prints "No player 1 start!" and exits, which
+        # from outside looks exactly like a crash.
+        document = MapDocument.new_room(width=10, height=10)
+        starts = [v for v in document.planes.planes[1]
+                  if v == MapDocument.PLAYER_START_EAST]
+        self.assertEqual(len(starts), 1)
+        self.assertEqual(document.cell(1, 5, 5), MapDocument.PLAYER_START_EAST)
+
+    def test_the_start_faces_east(self):
+        # Corridor 7 reflects a start's angle: 19 is north, 20 is east.
+        self.assertEqual(MapDocument.PLAYER_START_EAST, 20)
+
+    def test_the_start_stands_on_floor(self):
+        document = MapDocument.new_room(width=10, height=10)
+        self.assertEqual(document.cell(0, 5, 5), 0)
 
     def test_plane_two_starts_at_zero(self):
         document = MapDocument.new_room(width=6, height=6)

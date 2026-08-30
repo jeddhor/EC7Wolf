@@ -306,6 +306,7 @@ behavior for other games was preserved wherever possible; these are the deltas.
 | Document | What it is |
 | --- | --- |
 | [`docs/corridor7.md`](docs/corridor7.md) | The exhaustive feature list, every reconstruction and how it was established, and the honest list of deviations. |
+| [`docs/corridor7-level-editor.md`](docs/corridor7-level-editor.md) | The complete product design, native-format contract, validation and test strategy, and phased AI-agent implementation plan for a simple point-and-click Corridor 7 level editor. |
 | [`docs/corridor7-technical-strategy-compendium.pdf`](docs/corridor7-technical-strategy-compendium.pdf) | Evidence-graded research dossier on the original game: mechanics, weapons and actors, map format and object codes, asset containers, executable offsets, and what changed from stock Wolfenstein 3D. Every claim carries an evidence grade, so a confirmed retail behaviour is never mixed up with an inference. It is the reference this port was built against. |
 | [`docs/renderer/`](docs/renderer/) | The renderer redesign, one document per phase — baseline and harness through the OpenGL cutover, hardening and optimization. |
 | [`docs/corridor7-video.md`](docs/corridor7-video.md) | The CD cinematics: what is on the disc, the FLIC format they are in, and how extraction and playback work. |

@@ -8,10 +8,11 @@ directory holds the implementation as it arrives.
 
 ## State
 
-**Milestone E1 — the native codec and preview export.** There is no GUI yet.
+**Milestone E2 — decoders and the semantic catalogue.** There is no GUI yet.
 What works is everything underneath one: reading and writing Corridor 7's map
-archive, and exporting a map the running game will load in place of a stock
-one.
+archive, exporting a map the running game will load in place of a stock one,
+decoding the artwork, and knowing that plane-1 word 108 is an Alioprobe facing
+east.
 
 Shown against a generated archive rather than a retail one, since the map
 names in the shipped file are not this project's to publish:
@@ -43,12 +44,16 @@ archive without refusing to open it.
 | [`docs/native-formats.md`](docs/native-formats.md) | The byte layouts as implemented, checked against the engine that loads them |
 | [`docs/e0-evidence-ledger.md`](docs/e0-evidence-ledger.md) | E0: contracts traced to source, with grades |
 | [`docs/e1-evidence-ledger.md`](docs/e1-evidence-ledger.md) | E1: what the codec proved, and what it found |
+| [`docs/e2-evidence-ledger.md`](docs/e2-evidence-ledger.md) | E2: decoder equivalence, and three things the catalogue found in the data |
 | [`scripts/make_fixtures.py`](scripts/make_fixtures.py) | Generates the synthetic corpus, including eleven malformed inputs |
 | [`scripts/audit_links.py`](scripts/audit_links.py) | Fails on a Markdown link that escapes the git root or points at an untracked file |
-| [`tests/unit/`](tests/unit/) | 166 tests, plain `unittest`, no runner dependency |
+| [`resources/editor_catalog.json`](resources/) | The generated catalogue: 457 entries joining raw map words to names, sprites and placement rules |
+| [`scripts/generate_catalog.py`](scripts/generate_catalog.py) | Rebuilds it from the engine's translation and actors; `verify` is a gate |
+| [`scripts/build_c7assets.py`](scripts/build_c7assets.py) | Builds `tools/c7assets.py` by inlining the decoders, so there is only one copy of them |
+| [`tests/unit/`](tests/unit/) | 242 tests, plain `unittest`, no runner dependency |
 
-Run it all with `tools/run_gates.sh ec7edit_e0 ec7edit_e1`, or add
-`ec7edit_override` where the game data is present.
+Run it all with `tools/run_gates.sh ec7edit_e0 ec7edit_e1 ec7edit_e2`, or add
+`ec7edit_override ec7edit_assets` where the game data is present.
 
 ## Two things worth knowing
 
@@ -82,6 +87,5 @@ PySide6 arrives with the GUI, as an optional extra.
 
 ## Next
 
-E2 adds the shared asset decoders and the semantic catalog: palettes, wall and
-sprite graphics, and the mapping from raw plane words to things a person can
-recognise.
+E3 adds the document model: undo, transactions, the project schema, atomic save
+and crash recovery — still headless, still testable without a display.

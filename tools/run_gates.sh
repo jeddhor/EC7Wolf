@@ -71,7 +71,7 @@ done
 # gl_selftest is here rather than below because --gltest is handled before the
 # IWAD is opened: it needs no game data, and it is the only thing that proves the
 # shaders actually compile on the runner's driver. A broken shader still links.
-data_free_gates='definitions names ec7edit_e0 ec7edit_e1 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
+data_free_gates='definitions names ec7edit_e0 ec7edit_e1 ec7edit_e2 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
 
 data_gates='
 corridor7
@@ -91,6 +91,7 @@ corridor7_topmessage
 corridor7_upscale
 corridor7_controls
 ec7edit_override
+ec7edit_assets
 multiplayer_loopback
 multiplayer_latency
 multiplayer_menu
@@ -247,6 +248,12 @@ for g in $data_free_gates; do
 			# provenance, link containment.
 			run_gate "$g" "ec7edit E0 foundation" \
 				"$here/test_ec7edit_e0.sh" ;;
+		ec7edit_e2)
+			# Data-free: synthetic pages, plus the two "regenerate and diff"
+			# checks that stop the catalogue and the single-file asset browser
+			# drifting from the engine and the decoders they are built from.
+			run_gate "$g" "ec7edit E2 assets" \
+				"$here/test_ec7edit_e2.sh" ;;
 		ec7edit_e1)
 			# Also data-free: the codec's own inputs are all generated. Runs
 			# under CPython 3.12 when one is available, since that is the
@@ -268,6 +275,11 @@ for g in $data_free_gates; do
 			# one gate that skips on the self-hosted runner too.
 			run_gate "$g" "android device" \
 				"$here/test_android_device.sh" ;;
+		ec7edit_assets)
+			# Decodes the real artwork and checks the catalogue against the
+			# shipped maps. Reports counts and a digest, never retail bytes.
+			run_gate "$g" "ec7edit asset decode" \
+				"$here/test_ec7edit_assets.sh" "$build_dir" "$data_dir" ;;
 		ec7edit_override)
 			# The one editor claim unit tests cannot make: the engine loads
 			# what the exporter writes, in place of a stock map. Needs the

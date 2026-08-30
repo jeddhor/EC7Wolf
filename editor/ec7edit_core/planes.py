@@ -22,6 +22,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .errors import native_error
+
 #: Both dimensions are u16 in the file, but the engine refuses anything larger.
 MAX_DIMENSION = 181
 MIN_DIMENSION = 1
@@ -43,8 +45,6 @@ def coordinates(index: int, width: int) -> tuple[int, int]:
 
 def validate_dimensions(width: int, height: int, *, where: str = "") -> None:
     """Reject what `FGamemaps::Open` would reject, with the same thresholds."""
-    from .errors import native_error
-
     for name, value in (("width", width), ("height", height)):
         if not MIN_DIMENSION <= value <= MAX_DIMENSION:
             raise native_error(
@@ -67,8 +67,6 @@ class MapPlanes:
     planes: tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...]]
 
     def __post_init__(self) -> None:
-        from .errors import native_error
-
         validate_dimensions(self.width, self.height)
         if len(self.planes) != PLANE_COUNT:
             raise native_error(

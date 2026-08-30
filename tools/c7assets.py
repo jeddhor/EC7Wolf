@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
-"""Corridor 7: Alien Invasion — in-memory asset gallery.
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Jason Tripp
+"""Corridor 7: Alien Invasion -- in-memory asset gallery.
 
-Drop this single file into a directory that holds the released Corridor 7
-data (GFXTILES.CO7, VGAGRAPH set, MAPTEMP.CO7, CORR7CD.EXE, ecwolf.pk3) and
-run it:
+Drop this single file into a directory that holds the released Corridor 7 data
+(GFXTILES.CO7, VGAGRAPH set, MAPTEMP.CO7, CORR7CD.EXE, ecwolf.pk3) and run it:
 
     python3 c7assets.py            # serves http://127.0.0.1:8777
     python3 c7assets.py --port 9000 --dir /path/to/release
 
 Everything is decoded into memory; no files are written and no originals are
 modified. Only the Python 3.10+ standard library is required.
+
+GENERATED FILE. The decoders below are inlined from ECWolf/editor/ec7edit_core
+so that this tool and the level editor cannot disagree about a format. Edit
+those modules or editor/scripts/c7assets_gallery.py and run
+editor/scripts/build_c7assets.py; a gate checks that this file matches.
 """
 
 from __future__ import annotations
@@ -20,25 +26,970 @@ import re
 import struct
 import zipfile
 import zlib
-from collections import Counter, defaultdict
+from collections import Counter, OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 # --------------------------------------------------------------------------
-# Corridor 7 palette + PNG encoding (no third-party imports)
+# Inlined from ECWolf/editor/ec7edit_core by editor/scripts/build_c7assets.py.
+# GENERATED FILE -- do not edit tools/c7assets.py. Edit the modules or
+# editor/scripts/c7assets_gallery.py and rebuild; a gate checks this.
 # --------------------------------------------------------------------------
 
+# --- ec7edit_core/errors.py ------------------------------------------
+
+"""Diagnostics: the stable `C7E-*` codes from the design guide, appendix C.
+
+A diagnostic is data, never a formatted string that the caller has to parse
+back. The code is the contract -- tests assert on codes, the GUI groups by
+them, and the message is free to improve without breaking either.
+"""
+
+
+
+import enum
+from dataclasses import dataclass, field
+
+
+class Severity(enum.Enum):
+    """Ordered so a caller can ask for "error or worse" with a comparison."""
+
+    INFORMATION = 10
+    WARNING = 20
+    ERROR = 30
+
+    def __lt__(self, other: "Severity") -> bool:
+        return self.value < other.value
+
+    def __le__(self, other: "Severity") -> bool:
+        return self.value <= other.value
+
+    def __gt__(self, other: "Severity") -> bool:
+        return self.value > other.value
+
+    def __ge__(self, other: "Severity") -> bool:
+        return self.value >= other.value
+
+
+@dataclass(frozen=True)
+class Diagnostic:
+    """One problem, one place, one stable code."""
+
+    code: str
+    severity: Severity
+    message: str
+    #: Free-form location -- "map 3 plane 1", a file offset, a path. Display
+    #: only; never parsed.
+    where: str = ""
+
+    def __str__(self) -> str:
+        location = f" [{self.where}]" if self.where else ""
+        return f"{self.code} {self.severity.name.lower()}: {self.message}{location}"
+
+
+class Ec7EditError(Exception):
+    """Base class carrying a diagnostic rather than only a message."""
+
+    def __init__(self, diagnostic: Diagnostic) -> None:
+        super().__init__(str(diagnostic))
+        self.diagnostic = diagnostic
+
+
+class NativeFormatError(Ec7EditError):
+    """A `C7E-NATIVE-*` failure: the TED5 archive or an RLEW stream."""
+
+
+class WadFormatError(Ec7EditError):
+    """A `C7E-WAD-*` failure: the preview WAD or its PLANES lump."""
+
+
+class ExportError(Ec7EditError):
+    """A `C7E-EXPORT-*` or `C7E-SOURCE-*` failure: paths, writes, readback."""
+
+
+def native_error(code: str, message: str, where: str = "") -> NativeFormatError:
+    return NativeFormatError(Diagnostic(code, Severity.ERROR, message, where))
+
+
+def wad_error(code: str, message: str, where: str = "") -> WadFormatError:
+    return WadFormatError(Diagnostic(code, Severity.ERROR, message, where))
+
+
+def export_error(code: str, message: str, where: str = "") -> ExportError:
+    return ExportError(Diagnostic(code, Severity.ERROR, message, where))
+
+
+@dataclass
+class DiagnosticLog:
+    """A collecting parameter: parsers append, callers inspect by code."""
+
+    entries: list[Diagnostic] = field(default_factory=list)
+
+    def add(self, code: str, severity: Severity, message: str, where: str = "") -> None:
+        self.entries.append(Diagnostic(code, severity, message, where))
+
+    def information(self, code: str, message: str, where: str = "") -> None:
+        self.add(code, Severity.INFORMATION, message, where)
+
+    def warning(self, code: str, message: str, where: str = "") -> None:
+        self.add(code, Severity.WARNING, message, where)
+
+    def codes(self) -> list[str]:
+        return [entry.code for entry in self.entries]
+
+    def worst(self) -> Severity | None:
+        return max((entry.severity for entry in self.entries), default=None)
+
+    def __iter__(self):
+        return iter(self.entries)
+
+    def __len__(self) -> int:
+        return len(self.entries)
+
+# --- ec7edit_core/planes.py ------------------------------------------
+
+"""The canonical in-memory plane model and the coordinate convention.
+
+Frozen here so that no other module gets to have an opinion about it:
+
+* origin `(0, 0)` is the native top-left cell;
+* `x` grows to the right, `y` grows downward;
+* the linear index is `y * width + x`;
+* file plane order is 0, 1, 2.
+
+The canvas is free to draw compass north upward. Raw coordinates never rotate
+to suit a view -- the moment they do, an exported map stops matching the one
+on screen in a way no test would catch.
+
+A cell is not one value. Geometry lives in plane 0, objects in plane 1, and
+plane 2 carries data this editor preserves without claiming to understand, so
+all three are kept side by side and none is ever synthesised from another.
+"""
+
+
+
+from dataclasses import dataclass
+
+
+#: Both dimensions are u16 in the file, but the engine refuses anything larger.
+MAX_DIMENSION = 181
+MIN_DIMENSION = 1
+
+#: Exactly three, always. The four-plane case in the engine is Rise of the
+#: Triad's, reached by a different loader path that Corridor 7 never takes.
+PLANE_COUNT = 3
+
+
+def linear_index(x: int, y: int, width: int) -> int:
+    """The one place the row-major convention is spelled out."""
+    return y * width + x
+
+
+def coordinates(index: int, width: int) -> tuple[int, int]:
+    """Inverse of `linear_index`, for turning a diagnostic offset into a cell."""
+    return index % width, index // width
+
+
+def validate_dimensions(width: int, height: int, *, where: str = "") -> None:
+    """Reject what `FGamemaps::Open` would reject, with the same thresholds."""
+    for name, value in (("width", width), ("height", height)):
+        if not MIN_DIMENSION <= value <= MAX_DIMENSION:
+            raise native_error(
+                "C7E-BOUNDARY-001" if value == 0 else "C7E-NATIVE-001",
+                f"{name} {value} is outside the engine's {MIN_DIMENSION}..{MAX_DIMENSION}",
+                where,
+            )
+
+
+@dataclass(frozen=True)
+class MapPlanes:
+    """Three independent `width * height` arrays of unsigned 16-bit words.
+
+    Immutable: editing produces a new snapshot. That is what makes undo cheap
+    and what stops a background thread from seeing half an edit.
+    """
+
+    width: int
+    height: int
+    planes: tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...]]
+
+    def __post_init__(self) -> None:
+        validate_dimensions(self.width, self.height)
+        if len(self.planes) != PLANE_COUNT:
+            raise native_error(
+                "C7E-SCHEMA-002", f"expected {PLANE_COUNT} planes, got {len(self.planes)}"
+            )
+        expected = self.width * self.height
+        for number, plane in enumerate(self.planes):
+            if len(plane) != expected:
+                raise native_error(
+                    "C7E-SCHEMA-002",
+                    f"plane {number} holds {len(plane)} cells, "
+                    f"{self.width}x{self.height} needs {expected}",
+                )
+
+    @property
+    def cell_count(self) -> int:
+        return self.width * self.height
+
+    def at(self, plane: int, x: int, y: int) -> int:
+        """Read one cell. Bounds are the caller's business, deliberately."""
+        return self.planes[plane][linear_index(x, y, self.width)]
+
+    def rows(self, plane: int):
+        """Iterate the plane a row at a time, top row first."""
+        data = self.planes[plane]
+        for y in range(self.height):
+            begin = y * self.width
+            yield data[begin : begin + self.width]
+
+    @classmethod
+    def empty(cls, width: int, height: int) -> "MapPlanes":
+        blank = (0,) * (width * height)
+        return cls(width, height, (blank, blank, blank))
+
+    def with_plane(self, plane: int, values: tuple[int, ...]) -> "MapPlanes":
+        replaced = list(self.planes)
+        replaced[plane] = tuple(values)
+        return MapPlanes(self.width, self.height, tuple(replaced))  # type: ignore[arg-type]
+
+# --- ec7edit_core/names.py -------------------------------------------
+
+"""The 16-byte native map name, kept raw.
+
+Every other Corridor 7 tool treats this field as a C string and throws away
+whatever follows the terminator. Four records in the retail archive have
+nonzero bytes back there. They may well be nothing -- TED5 reusing a buffer --
+but a lossless editor does not get to decide that on the author's behalf, so
+an imported name carries its exact 16 bytes alongside the text it displays,
+and only a deliberate rename replaces the field.
+
+That gives three outcomes, matching appendix C:
+
+* imported and canonical      -- silent;
+* imported and noncanonical   -- `C7E-NATIVE-007`, information, still exportable;
+* renamed to something unencodable -- `C7E-NATIVE-004`, error, nothing is written.
+"""
+
+
+
+from dataclasses import dataclass
+
+
+#: The field is fixed width in both record layouts and in the PLANES lump.
+NAME_FIELD_BYTES = 16
+
+#: A new or renamed map keeps a byte for the terminator, so the engine and
+#: every downstream C string agree about where the text stops.
+MAX_CANONICAL_TEXT = NAME_FIELD_BYTES - 1
+
+_PRINTABLE = range(0x20, 0x7F)
+
+
+@dataclass(frozen=True)
+class NativeName:
+    """Exactly 16 bytes, plus the text a human should see for them."""
+
+    raw: bytes
+    #: True when these bytes came from a file rather than from a rename.
+    imported: bool = False
+
+    def __post_init__(self) -> None:
+        if len(self.raw) != NAME_FIELD_BYTES:
+            raise native_error(
+                "C7E-NATIVE-004",
+                f"name field is {len(self.raw)} bytes, must be exactly {NAME_FIELD_BYTES}",
+            )
+
+    @property
+    def text(self) -> str:
+        """Display form: bytes up to the first NUL, unprintables shown as `.`.
+
+        Never used for writing. The raw field is what gets written.
+        """
+        head = self.raw.split(b"\x00", 1)[0]
+        return "".join(chr(b) if b in _PRINTABLE else "." for b in head)
+
+    @property
+    def is_canonical(self) -> bool:
+        """Would the canonical writer produce exactly these bytes?"""
+        terminator = self.raw.find(b"\x00")
+        if terminator < 0:
+            return False  # 16 printable bytes and nowhere for the NUL
+        head = self.raw[:terminator]
+        tail = self.raw[terminator:]
+        return (
+            len(head) <= MAX_CANONICAL_TEXT
+            and all(b in _PRINTABLE for b in head)
+            and tail == b"\x00" * len(tail)
+        )
+
+    def describe_noncanonical(self) -> str:
+        """Why `is_canonical` is False, for a diagnostic a person can act on."""
+        terminator = self.raw.find(b"\x00")
+        if terminator < 0:
+            return f"all {NAME_FIELD_BYTES} bytes are used, leaving no terminator"
+        head = self.raw[:terminator]
+        if any(b not in _PRINTABLE for b in head):
+            return "the displayed part contains bytes outside printable ASCII"
+        tail = self.raw[terminator:]
+        if tail != b"\x00" * len(tail):
+            nonzero = sum(1 for byte in tail if byte)
+            return (
+                f"{nonzero} nonzero byte(s) follow the terminator "
+                f"(tail {tail.hex(' ')})"
+            )
+        return "canonical"
+
+    def report(self, log: DiagnosticLog, where: str = "") -> None:
+        """Note a preserved noncanonical field. Information, not a complaint."""
+        if self.imported and not self.is_canonical:
+            log.information(
+                "C7E-NATIVE-007",
+                f"name field preserved exactly: {self.describe_noncanonical()}",
+                where,
+            )
+
+    @classmethod
+    def from_raw(cls, raw: bytes) -> "NativeName":
+        """Import: keep the bytes, whatever they are."""
+        return cls(bytes(raw), imported=True)
+
+    @classmethod
+    def from_text(cls, text: str) -> "NativeName":
+        """Rename: replace the whole field, or refuse.
+
+        Refusing is the point. Silently truncating to 15 bytes, or substituting
+        `?` for a character the format cannot hold, would let an author think
+        they had named a map something they did not.
+        """
+        try:
+            encoded = text.encode("ascii")
+        except UnicodeEncodeError as error:
+            raise native_error(
+                "C7E-NATIVE-004",
+                f"name {text!r} is not ASCII: {error.reason} at position {error.start}",
+            ) from error
+        if any(b not in _PRINTABLE for b in encoded):
+            raise native_error(
+                "C7E-NATIVE-004",
+                f"name {text!r} contains a control character; printable ASCII only",
+            )
+        if len(encoded) > MAX_CANONICAL_TEXT:
+            raise native_error(
+                "C7E-NATIVE-004",
+                f"name {text!r} is {len(encoded)} bytes; the limit is "
+                f"{MAX_CANONICAL_TEXT} plus a terminator",
+            )
+        return cls(encoded.ljust(NAME_FIELD_BYTES, b"\x00"), imported=False)
+
+# --- ec7edit_core/rlew.py --------------------------------------------
+
+"""RLEW: the word-oriented run-length coding TED5 wraps every plane in.
+
+The decoder is written to mirror `ValidateTed5RLEW` in
+`src/resourcefiles/file_gamemaps.cpp` step for step, because the useful
+question is never "is this stream reasonable" but "will the engine take it".
+Where the engine accepts something the canonical writer would not produce, the
+decoder accepts it too and says so with a diagnostic rather than refusing.
+
+Stream layout, little-endian throughout:
+
+    u16 expanded_bytes          -- decoded size, which is width*height*2
+    then words until the decoded size is reached:
+        w != 0xABCD             -- one literal word
+        0xABCD, u16 n, u16 v    -- n copies of v
+
+A literal that happens to equal the tag has no short form and must use the
+triple, however few of them there are. The stream must end exactly as the last needed word is produced: the
+engine checks both `out == expandedBytes` and `in == length`.
+"""
+
+
+
+import struct
+
+
+#: Corridor 7 stores the tag in the archive only for `GAMEMAPS`; the
+#: self-contained TED5 archive hardcodes it, and so does the engine.
+RLEW_TAG = 0xABCD
+
+#: `expanded_bytes` and each plane's stored length are both u16.
+MAX_EXPANDED_BYTES = 0xFFFF
+MAX_STREAM_BYTES = 0xFFFF
+
+#: The run count is a u16. In practice the expanded-size ceiling binds first.
+MAX_RUN = 0xFFFF
+
+#: Shortest run the writer will emit, measured off the shipped archive rather
+#: than reasoned about. A run of three costs six bytes and so do three
+#: literals, so the choice at exactly three is free on size and the original
+#: TED5 encoder spent it on literals: across all 180 planes of the retail
+#: archive it never once emits a run shorter than four. Matching that is what
+#: makes a re-encode byte-identical to what shipped, so an archive rewritten
+#: by this editor differs from the original only where the author edited it.
+RUN_THRESHOLD = 4
+
+
+def decode_plane(
+    stream: bytes,
+    expected_words: int,
+    *,
+    where: str = "",
+    log: DiagnosticLog | None = None,
+) -> tuple[int, ...]:
+    """Expand one stored plane, including its expanded-size prefix.
+
+    `expected_words` is `width * height` from the record header. The declared
+    size must agree with it exactly: a stream that expands correctly to the
+    wrong size is still the wrong plane.
+    """
+    expanded_bytes = expected_words * 2
+    if expanded_bytes > MAX_EXPANDED_BYTES:
+        raise native_error(
+            "C7E-NATIVE-002",
+            f"{expected_words} words expand to {expanded_bytes} bytes, past the "
+            f"{MAX_EXPANDED_BYTES}-byte limit of the size field",
+            where,
+        )
+    length = len(stream)
+    if length < 2 or length % 2:
+        raise native_error(
+            "C7E-NATIVE-002",
+            f"stored length {length} is not a whole number of words above the size prefix",
+            where,
+        )
+
+    declared = struct.unpack_from("<H", stream, 0)[0]
+    if declared != expanded_bytes:
+        raise native_error(
+            "C7E-NATIVE-002",
+            f"stream declares {declared} expanded bytes, header requires {expanded_bytes}",
+            where,
+        )
+
+    output: list[int] = []
+    cursor = 2
+    produced = 0
+    while produced < expanded_bytes:
+        if cursor + 2 > length:
+            raise native_error(
+                "C7E-NATIVE-002",
+                f"stream ends after {produced} of {expanded_bytes} bytes",
+                where,
+            )
+        value = struct.unpack_from("<H", stream, cursor)[0]
+        if value == RLEW_TAG:
+            if cursor + 6 > length:
+                raise native_error(
+                    "C7E-NATIVE-002", "truncated run: tag without its count and value", where
+                )
+            count, repeated = struct.unpack_from("<HH", stream, cursor + 2)
+            if count * 2 > expanded_bytes - produced:
+                raise native_error(
+                    "C7E-NATIVE-002",
+                    f"run of {count} words overruns the {expanded_bytes}-byte plane",
+                    where,
+                )
+            if count == 0 and log is not None:
+                log.warning(
+                    "C7E-NATIVE-006",
+                    "stream contains a zero-count run; the meaning is preserved and the "
+                    "canonical writer emits none",
+                    where,
+                )
+            output.extend([repeated] * count)
+            produced += count * 2
+            cursor += 6
+        else:
+            output.append(value)
+            produced += 2
+            cursor += 2
+
+    if cursor != length:
+        raise native_error(
+            "C7E-NATIVE-002",
+            f"{length - cursor} trailing bytes after the plane was complete",
+            where,
+        )
+    return tuple(output)
+
+
+def encode_plane(words: tuple[int, ...] | list[int], *, where: str = "") -> bytes:
+    """Encode one plane canonically: shortest form, no zero-count runs.
+
+    Deterministic by construction -- the same words always give the same bytes,
+    on every platform and every run, which is what lets an export digest be a
+    contract instead of one machine's luck.
+    """
+    expanded_bytes = len(words) * 2
+    if expanded_bytes > MAX_EXPANDED_BYTES:
+        raise native_error(
+            "C7E-NATIVE-003",
+            f"{len(words)} words expand to {expanded_bytes} bytes, past the "
+            f"{MAX_EXPANDED_BYTES}-byte limit of the size field",
+            where,
+        )
+
+    output = bytearray(struct.pack("<H", expanded_bytes))
+    cursor = 0
+    total = len(words)
+    while cursor < total:
+        value = words[cursor]
+        if not 0 <= value <= 0xFFFF:
+            raise native_error(
+                "C7E-CELL-001", f"word {value} at index {cursor} is outside 0..65535", where
+            )
+        end = cursor + 1
+        while end < total and words[end] == value and end - cursor < MAX_RUN:
+            end += 1
+        count = end - cursor
+        if value == RLEW_TAG or count >= RUN_THRESHOLD:
+            output.extend(struct.pack("<HHH", RLEW_TAG, count, value))
+        else:
+            output.extend(struct.pack(f"<{count}H", *words[cursor:end]))
+        cursor = end
+
+    if len(output) > MAX_STREAM_BYTES:
+        raise native_error(
+            "C7E-NATIVE-003",
+            f"encoded plane is {len(output)} bytes, past the {MAX_STREAM_BYTES}-byte "
+            "limit of the stored length field",
+            where,
+        )
+    return bytes(output)
+
+# --- ec7edit_core/archive.py -----------------------------------------
+
+"""The self-contained TED5 archive Corridor 7 ships as `MAPTEMP.CO7`.
+
+Unlike Wolfenstein's split `MAPHEAD`/`GAMEMAPS` pair, this one file carries
+both the headers and the plane streams, and each header is followed
+immediately by its own three streams rather than all headers preceding all
+data. The first record is 46 bytes and begins with the signature; every later
+record is 42 bytes and begins with `!ID!`; a bare `!ID!` ends the archive.
+
+The first record's plane-0 offset is **implicit**. It is not stored anywhere:
+the stream simply begins at byte 46, and the engine hardcodes that
+(`headers[0].PlaneOffset[0] = sizeof(first)`). Only planes 1 and 2 have stored
+offsets in that record, which is why it is 46 bytes rather than 50.
+
+Record layouts, little-endian::
+
+    first (46)                       later (42)
+    00  char[12] "TED5v1.0.\\0\\0\\0"   00  char[4]  "!ID!"
+    (plane 0 offset is implicit 46)  04  u32[3]   plane offsets
+    12  u32[2]   plane 1, 2 offsets  16  u16[3]   plane lengths
+    20  u16[3]   plane lengths       22  u16      width
+    26  u16      width               24  u16      height
+    28  u16      height              26  char[16] name
+    30  char[16] name
+
+Every byte of both layouts is accounted for; the only field this editor cannot
+fully explain is the tail of the name, which `names.py` preserves verbatim.
+
+Validation is deliberately the engine's, not a tidier superset of it. Where
+`FGamemaps::Open` accepts something the canonical writer would never emit, so
+does this parser -- with a diagnostic. Refusing to open a map the game itself
+loads would be a worse failure than any amount of noncanonical input.
+"""
+
+
+
+import struct
+from dataclasses import dataclass, field
+from pathlib import Path
+
+
+
+
+
+TED5_SIGNATURE = b"TED5v1.0.\x00\x00\x00"
+MAP_MARKER = b"!ID!"
+
+FIRST_RECORD_BYTES = 46
+LATER_RECORD_BYTES = 42
+
+#: `Ted5MapHeader headers[MAX_TED5_MAPS]` in the engine is a fixed array, so
+#: this is a hard bound and not a policy choice.
+MAX_MAPS = 100
+
+_U32_MAX = 0xFFFFFFFF
+
+
+@dataclass(frozen=True)
+class RecordSource:
+    """Where a record's bytes were, exactly as the file stated them.
+
+    Kept so that a re-export can be compared against its origin, and so a
+    diagnostic can name a file offset instead of an abstract map number.
+    """
+
+    header_offset: int
+    plane_offsets: tuple[int, int, int]
+    plane_lengths: tuple[int, int, int]
+
+
+@dataclass(frozen=True)
+class MapRecord:
+    """One map: its slot, its 16 raw name bytes, and its three planes."""
+
+    number: int  # 1-based; the archive's order is the map number
+    name: NativeName
+    planes: MapPlanes
+    source: RecordSource | None = None
+
+    @property
+    def lump_name(self) -> str:
+        """What the engine will call this map: `MAP01`, `MAP02`, ...
+
+        The engine formats with `%02d`, so slot 100 becomes `MAP100` -- five
+        characters, which still fits a WAD's eight-byte name field.
+        """
+        return f"MAP{self.number:02d}"
+
+    @property
+    def width(self) -> int:
+        return self.planes.width
+
+    @property
+    def height(self) -> int:
+        return self.planes.height
+
+
+@dataclass
+class Archive:
+    """A parsed archive plus everything noticed while parsing it."""
+
+    records: tuple[MapRecord, ...]
+    diagnostics: DiagnosticLog = field(default_factory=DiagnosticLog)
+    #: False when the file ends immediately after its last plane. The engine
+    #: accepts that; the canonical writer always adds the terminator.
+    terminated: bool = True
+
+    def __len__(self) -> int:
+        return len(self.records)
+
+    def __iter__(self):
+        return iter(self.records)
+
+    def __getitem__(self, index: int) -> MapRecord:
+        return self.records[index]
+
+    def by_number(self, number: int) -> MapRecord:
+        for record in self.records:
+            if record.number == number:
+                return record
+        raise native_error(
+            "C7E-NATIVE-001", f"archive has no map {number} (it holds {len(self.records)})"
+        )
+
+
+def _u16(data: bytes, offset: int) -> int:
+    return struct.unpack_from("<H", data, offset)[0]
+
+
+def _u32(data: bytes, offset: int) -> int:
+    return struct.unpack_from("<I", data, offset)[0]
+
+
+def _parse_header(
+    data: bytes, offset: int, index: int
+) -> tuple[NativeName, int, int, tuple[int, int, int], tuple[int, int, int]]:
+    """Read one record header. Returns name, width, height, offsets, lengths."""
+    where = f"map {index + 1}"
+    if index == 0:
+        if len(data) < FIRST_RECORD_BYTES:
+            raise native_error(
+                "C7E-NATIVE-001",
+                f"file is {len(data)} bytes, too short for a {FIRST_RECORD_BYTES}-byte "
+                "first record",
+                where,
+            )
+        if data[:12] != TED5_SIGNATURE:
+            raise native_error(
+                "C7E-NATIVE-001", f"signature is {data[:12]!r}, expected {TED5_SIGNATURE!r}", where
+            )
+        plane_offsets = (FIRST_RECORD_BYTES, _u32(data, 12), _u32(data, 16))
+        plane_lengths = tuple(_u16(data, 20 + plane * 2) for plane in range(PLANE_COUNT))
+        width = _u16(data, 26)
+        height = _u16(data, 28)
+        raw_name = data[30:46]
+    else:
+        if len(data) - offset < LATER_RECORD_BYTES:
+            raise native_error(
+                "C7E-NATIVE-001",
+                f"{len(data) - offset} bytes left at 0x{offset:x}, too few for a "
+                f"{LATER_RECORD_BYTES}-byte record",
+                where,
+            )
+        if data[offset : offset + 4] != MAP_MARKER:
+            raise native_error(
+                "C7E-NATIVE-001",
+                f"expected {MAP_MARKER!r} at 0x{offset:x}, found "
+                f"{data[offset:offset + 4]!r}",
+                where,
+            )
+        plane_offsets = tuple(_u32(data, offset + 4 + plane * 4) for plane in range(PLANE_COUNT))
+        plane_lengths = tuple(_u16(data, offset + 16 + plane * 2) for plane in range(PLANE_COUNT))
+        width = _u16(data, offset + 22)
+        height = _u16(data, offset + 24)
+        raw_name = data[offset + 26 : offset + 42]
+
+    return (
+        NativeName.from_raw(raw_name),
+        width,
+        height,
+        plane_offsets,  # type: ignore[return-value]
+        plane_lengths,  # type: ignore[return-value]
+    )
+
+
+def parse_archive(data: bytes, *, log: DiagnosticLog | None = None) -> Archive:
+    """Parse a whole archive, applying the engine's acceptance rules."""
+    diagnostics = log if log is not None else DiagnosticLog()
+    if len(data) > _U32_MAX:
+        raise native_error(
+            "C7E-NATIVE-001", f"file is {len(data)} bytes; offsets are 32-bit"
+        )
+
+    records: list[MapRecord] = []
+    offset = 0
+    terminated = False
+
+    while offset < len(data):
+        # The engine only reads a terminator when exactly four bytes remain,
+        # so `!ID!` anywhere else is a record marker or an error, never an end.
+        if len(data) - offset == 4:
+            if data[offset : offset + 4] == MAP_MARKER:
+                offset += 4
+                terminated = True
+                break
+
+        if len(records) >= MAX_MAPS:
+            raise native_error(
+                "C7E-NATIVE-001",
+                f"archive holds more than {MAX_MAPS} maps, the engine's fixed limit",
+                f"0x{offset:x}",
+            )
+
+        index = len(records)
+        where = f"map {index + 1}"
+        name, width, height, plane_offsets, plane_lengths = _parse_header(data, offset, index)
+        validate_dimensions(width, height, where=where)
+
+        header_bytes = FIRST_RECORD_BYTES if index == 0 else LATER_RECORD_BYTES
+        minimum_plane_offset = offset + header_bytes
+        previous_end = 0
+        for plane in range(PLANE_COUNT):
+            start = plane_offsets[plane]
+            end = start + plane_lengths[plane]
+            if end > len(data):
+                raise native_error(
+                    "C7E-NATIVE-001",
+                    f"plane {plane} runs 0x{start:x}+{plane_lengths[plane]} past the "
+                    f"end of the {len(data)}-byte file",
+                    where,
+                )
+            if plane == 0 and start < minimum_plane_offset:
+                raise native_error(
+                    "C7E-NATIVE-001",
+                    f"plane 0 starts at 0x{start:x}, inside its own "
+                    f"{header_bytes}-byte header ending at 0x{minimum_plane_offset:x}",
+                    where,
+                )
+            if plane and start < previous_end:
+                raise native_error(
+                    "C7E-NATIVE-001",
+                    f"plane {plane} starts at 0x{start:x}, overlapping plane "
+                    f"{plane - 1} which ends at 0x{previous_end:x}",
+                    where,
+                )
+            previous_end = end
+
+        expected_words = width * height
+        planes = tuple(
+            decode_plane(
+                data[plane_offsets[plane] : plane_offsets[plane] + plane_lengths[plane]],
+                expected_words,
+                where=f"{where} ({name.text}) plane {plane}",
+                log=diagnostics,
+            )
+            for plane in range(PLANE_COUNT)
+        )
+
+        name.report(diagnostics, where)
+        records.append(
+            MapRecord(
+                number=index + 1,
+                name=name,
+                planes=MapPlanes(width, height, planes),  # type: ignore[arg-type]
+                source=RecordSource(offset, plane_offsets, plane_lengths),
+            )
+        )
+        offset = plane_offsets[PLANE_COUNT - 1] + plane_lengths[PLANE_COUNT - 1]
+
+    if offset != len(data):
+        raise native_error(
+            "C7E-NATIVE-001",
+            f"{len(data) - offset} unexplained bytes after the last record at 0x{offset:x}",
+        )
+    if not records:
+        raise native_error(
+            "C7E-NATIVE-001",
+            "archive contains no maps; the engine rejects an empty or marker-only file",
+        )
+    if not terminated:
+        diagnostics.warning(
+            "C7E-NATIVE-005",
+            f"file ends at 0x{offset:x} without the conventional final {MAP_MARKER!r}; "
+            "the engine loads it and the canonical writer adds one",
+        )
+    return Archive(tuple(records), diagnostics, terminated)
+
+
+def encode_archive(records) -> bytes:
+    """Write a canonical archive: implicit first offset, terminator, no runs of zero.
+
+    Deterministic. Given the same records this returns the same bytes, which is
+    what makes an export digest reproducible across machines.
+    """
+    records = tuple(records)
+    if not 1 <= len(records) <= MAX_MAPS:
+        raise native_error(
+            "C7E-NATIVE-001",
+            f"an archive holds 1..{MAX_MAPS} maps, not {len(records)}",
+        )
+
+    output = bytearray()
+    for index, record in enumerate(records):
+        where = f"map {index + 1}"
+        planes = record.planes
+        validate_dimensions(planes.width, planes.height, where=where)
+        streams = tuple(
+            encode_plane(planes.planes[plane], where=f"{where} plane {plane}")
+            for plane in range(PLANE_COUNT)
+        )
+
+        header_offset = len(output)
+        header_bytes = FIRST_RECORD_BYTES if index == 0 else LATER_RECORD_BYTES
+        output.extend(b"\x00" * header_bytes)
+
+        plane_offsets = []
+        for stream in streams:
+            plane_offsets.append(len(output))
+            output.extend(stream)
+        if plane_offsets[-1] + len(streams[-1]) > _U32_MAX:
+            raise native_error("C7E-NATIVE-001", "archive exceeds the 32-bit offset space", where)
+
+        raw_name = record.name.raw
+        if len(raw_name) != NAME_FIELD_BYTES:
+            raise native_error(
+                "C7E-NATIVE-004",
+                f"name field is {len(raw_name)} bytes, must be {NAME_FIELD_BYTES}",
+                where,
+            )
+        lengths = tuple(len(stream) for stream in streams)
+
+        if index == 0:
+            # Plane 0's offset is not written: it is always immediately after
+            # this header, which is exactly what the engine assumes.
+            assert plane_offsets[0] == FIRST_RECORD_BYTES
+            output[header_offset : header_offset + 12] = TED5_SIGNATURE
+            struct.pack_into("<II", output, header_offset + 12, plane_offsets[1], plane_offsets[2])
+            struct.pack_into("<HHH", output, header_offset + 20, *lengths)
+            struct.pack_into("<HH", output, header_offset + 26, planes.width, planes.height)
+            output[header_offset + 30 : header_offset + 46] = raw_name
+        else:
+            output[header_offset : header_offset + 4] = MAP_MARKER
+            struct.pack_into("<III", output, header_offset + 4, *plane_offsets)
+            struct.pack_into("<HHH", output, header_offset + 16, *lengths)
+            struct.pack_into("<HH", output, header_offset + 22, planes.width, planes.height)
+            output[header_offset + 26 : header_offset + 42] = raw_name
+
+    output.extend(MAP_MARKER)
+    return bytes(output)
+
+
+def read_archive(path: Path | str, *, log: DiagnosticLog | None = None) -> Archive:
+    """Parse an archive from disk. Read-only: the source is never opened for writing."""
+    return parse_archive(Path(path).read_bytes(), log=log)
+
+# --- ec7edit_core/assets.py ------------------------------------------
+
+"""Bounded decoders for Corridor 7's graphics containers.
+
+Every decoder here takes bytes and returns pixels. None of them opens a file,
+none writes one, and none keeps a copy: the retail data is the user's, and the
+editor's job is to look at it, not to own it. That is also why the cache at the
+bottom is in memory and bounded -- an unbounded one would eventually be a copy
+of the game on disk, with all the licensing that implies.
+
+Three containers:
+
+* the palette, which lives in `CORR7CD.EXE` rather than in any data file;
+* `GFXTILES.CO7`, holding 64x64 wall pages and Wolfenstein column-post sprites;
+* the `VGADICT`/`VGAHEAD`/`VGAGRAPH` set, holding Huffman-compressed planar
+  pictures.
+
+The decoders are deliberately defensive. This is third-party binary data of
+unknown provenance -- a truncated file, a wrong file with the right name, a
+sprite whose column posts point outside the page -- and the failure mode has
+to be a clear exception, never a silent read past the end of a buffer.
+"""
+
+
+
+import struct
+import zlib
+from collections import OrderedDict
+from dataclasses import dataclass
+
+#: The 6-bit VGA DAC palette sits at this offset in the CD executable. There is
+#: no copy of it in any .CO7 file, which is why the executable is one of the
+#: required game files even though nothing ever runs it.
 PALETTE_OFFSET = 0x2FFC0
 PALETTE_SIZE = 768
 
+WALL_SIZE = 64
+SPRITE_SIZE = 64
+
+
+class AssetError(ValueError):
+    """A container did not decode. Always says which one and why."""
+
+
+# ---------------------------------------------------------------------------
+# Palette
+# ---------------------------------------------------------------------------
+
 
 def load_palette(executable: bytes) -> list[int]:
-    """Expand the 6-bit VGA DAC palette embedded in CORR7CD.EXE to 8-bit RGB."""
+    """Expand the embedded 6-bit DAC palette to 8-bit RGB triples.
+
+    The six-bit check is the useful part: it is what tells a real Corridor 7
+    executable from a file of the same name that happens to be long enough.
+    """
     raw = executable[PALETTE_OFFSET : PALETTE_OFFSET + PALETTE_SIZE]
-    if len(raw) != PALETTE_SIZE or any(c > 63 for c in raw):
-        raise ValueError("Corridor 7 6-bit palette not found in executable")
-    return [((c << 2) | (c >> 4)) for c in raw]
+    if len(raw) != PALETTE_SIZE:
+        raise AssetError(
+            f"executable is {len(executable)} bytes; the palette needs "
+            f"{PALETTE_OFFSET + PALETTE_SIZE}"
+        )
+    if any(component > 63 for component in raw):
+        raise AssetError("no 6-bit VGA palette at the expected offset")
+    # 6 bits to 8 by replicating the top two, which is what the DAC does.
+    return [(component << 2) | (component >> 4) for component in raw]
+
+
+def palette_rgb(palette: list[int], index: int) -> tuple[int, int, int]:
+    return palette[index * 3], palette[index * 3 + 1], palette[index * 3 + 2]
+
+
+# ---------------------------------------------------------------------------
+# PNG, with nothing but zlib
+# ---------------------------------------------------------------------------
 
 
 def _png_chunk(tag: bytes, data: bytes) -> bytes:
@@ -51,100 +1002,170 @@ def _png_chunk(tag: bytes, data: bytes) -> bytes:
 
 
 def encode_png(width: int, height: int, pixels: bytes, *, alpha: bool) -> bytes:
-    """Encode raw RGB/RGBA bytes into a PNG using only zlib."""
+    """Encode raw RGB or RGBA bytes as a PNG.
+
+    Deterministic: fixed filter, fixed compression level, so the same pixels
+    give the same file and a thumbnail digest means something.
+    """
     channels = 4 if alpha else 3
-    color_type = 6 if alpha else 2
     stride = width * channels
+    if len(pixels) != stride * height:
+        raise AssetError(f"{width}x{height} needs {stride * height} bytes, got {len(pixels)}")
+
     raw = bytearray()
     for y in range(height):
-        raw.append(0)  # filter type 0 (none)
+        raw.append(0)  # filter 0, none
         raw += pixels[y * stride : (y + 1) * stride]
-    ihdr = struct.pack(">IIBBBBB", width, height, 8, color_type, 0, 0, 0)
+    header = struct.pack(">IIBBBBB", width, height, 8, 6 if alpha else 2, 0, 0, 0)
     return (
         b"\x89PNG\r\n\x1a\n"
-        + _png_chunk(b"IHDR", ihdr)
+        + _png_chunk(b"IHDR", header)
         + _png_chunk(b"IDAT", zlib.compress(bytes(raw), 9))
         + _png_chunk(b"IEND", b"")
     )
 
 
-# --------------------------------------------------------------------------
-# GFXTILES: 64x64 wall pages + Wolfenstein column-post sprites
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# GFXTILES: walls and sprites
+# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class GfxHeader:
+    """The chunk directory at the head of GFXTILES.CO7."""
+
     chunk_count: int
     sprite_start: int
     sound_start: int
     offsets: tuple[int, ...]
     lengths: tuple[int, ...]
 
+    def wall_pages(self) -> range:
+        return range(0, self.sprite_start)
+
+    def sprite_pages(self) -> range:
+        return range(self.sprite_start, self.sound_start)
+
+    def chunk(self, data: bytes, index: int) -> bytes:
+        """One chunk's bytes, bounds-checked against the file."""
+        if not 0 <= index < self.chunk_count:
+            raise AssetError(f"chunk {index} is outside 0..{self.chunk_count - 1}")
+        start, length = self.offsets[index], self.lengths[index]
+        if start + length > len(data):
+            raise AssetError(
+                f"chunk {index} runs 0x{start:x}+{length} past the {len(data)}-byte file"
+            )
+        return data[start : start + length]
+
 
 def parse_gfx_header(data: bytes) -> GfxHeader:
+    if len(data) < 6:
+        raise AssetError(f"GFXTILES is {len(data)} bytes, too short for a header")
     chunk_count, sprite_start, sound_start = struct.unpack_from("<HHH", data)
+    directory = 6 + chunk_count * 6
+    if chunk_count == 0 or directory > len(data):
+        raise AssetError(
+            f"GFXTILES declares {chunk_count} chunks, needing {directory} bytes of "
+            f"directory in a {len(data)}-byte file"
+        )
+    if not sprite_start <= sound_start <= chunk_count:
+        raise AssetError(
+            f"GFXTILES boundaries are out of order: walls|{sprite_start}|"
+            f"{sound_start}|{chunk_count}"
+        )
     offsets = struct.unpack_from(f"<{chunk_count}I", data, 6)
     lengths = struct.unpack_from(f"<{chunk_count}H", data, 6 + chunk_count * 4)
     return GfxHeader(chunk_count, sprite_start, sound_start, offsets, lengths)
 
 
 def wall_rgb(page: bytes, palette: list[int]) -> bytes:
-    """Decode a 64x64 column-major wall page to row-major RGB bytes."""
-    out = bytearray(64 * 64 * 3)
-    for y in range(64):
-        for x in range(64):
-            c = page[x * 64 + y]
-            d = (y * 64 + x) * 3
-            out[d] = palette[c * 3]
-            out[d + 1] = palette[c * 3 + 1]
-            out[d + 2] = palette[c * 3 + 2]
+    """Decode a 64x64 wall page to row-major RGB.
+
+    Wall pages are stored column-major, which is the transpose everyone forgets
+    once and then never again.
+    """
+    expected = WALL_SIZE * WALL_SIZE
+    if len(page) < expected:
+        raise AssetError(f"wall page is {len(page)} bytes, needs {expected}")
+
+    out = bytearray(expected * 3)
+    for y in range(WALL_SIZE):
+        for x in range(WALL_SIZE):
+            index = page[x * WALL_SIZE + y] * 3
+            destination = (y * WALL_SIZE + x) * 3
+            out[destination] = palette[index]
+            out[destination + 1] = palette[index + 1]
+            out[destination + 2] = palette[index + 2]
     return bytes(out)
 
 
 def sprite_rgba(page: bytes, palette: list[int]) -> bytes:
-    """Decode a Wolfenstein column-post sprite to 64x64 RGBA bytes."""
+    """Decode a Wolfenstein column-post sprite to 64x64 RGBA.
+
+    Sprites are sparse: a left and right column bound, one command offset per
+    column in between, and each command a chain of `(end, source, start)`
+    triples terminated by a zero end. Everything an untrusted file could lie
+    about here is checked, because every one of those values is an index.
+    """
+    if len(page) < 4:
+        raise AssetError(f"sprite page is {len(page)} bytes, too short for its bounds")
     left, right = struct.unpack_from("<HH", page)
-    if left > right or right >= 64 or 4 + (right - left + 1) * 2 > len(page):
-        raise ValueError(f"invalid sprite column range {left}..{right}")
-    rgba = bytearray(64 * 64 * 4)
+    if left > right or right >= SPRITE_SIZE:
+        raise AssetError(f"sprite column range {left}..{right} is outside 0..{SPRITE_SIZE - 1}")
+    if 4 + (right - left + 1) * 2 > len(page):
+        raise AssetError("sprite page is too short for its column table")
+
+    rgba = bytearray(SPRITE_SIZE * SPRITE_SIZE * 4)
     for x in range(left, right + 1):
         command = struct.unpack_from("<H", page, 4 + (x - left) * 2)[0]
-        seen = 0
+        posts = 0
         while True:
+            if command + 2 > len(page):
+                raise AssetError(f"sprite column {x} post table runs past the page")
             end_word = struct.unpack_from("<H", page, command)[0]
             if end_word == 0:
                 break
+            if command + 6 > len(page):
+                raise AssetError(f"sprite column {x} has a truncated post")
             source = struct.unpack_from("<h", page, command + 2)[0]
             start_word = struct.unpack_from("<H", page, command + 4)[0]
             start, end = start_word >> 1, end_word >> 1
-            if start > end or end > 64 or source + start < 0 or source + end > len(page):
-                raise ValueError(f"sprite column {x} post is invalid")
+            if start > end or end > SPRITE_SIZE or source + start < 0 or source + end > len(page):
+                raise AssetError(f"sprite column {x} post {start}..{end} is out of range")
             for y in range(start, end):
-                c = page[source + y]
-                d = (y * 64 + x) * 4
-                rgba[d] = palette[c * 3]
-                rgba[d + 1] = palette[c * 3 + 1]
-                rgba[d + 2] = palette[c * 3 + 2]
-                rgba[d + 3] = 255
+                index = page[source + y] * 3
+                destination = (y * SPRITE_SIZE + x) * 4
+                rgba[destination] = palette[index]
+                rgba[destination + 1] = palette[index + 1]
+                rgba[destination + 2] = palette[index + 2]
+                rgba[destination + 3] = 255
             command += 6
-            seen += 1
-            if seen > 64:
-                raise ValueError(f"sprite column {x} has excessive posts")
+            posts += 1
+            if posts > SPRITE_SIZE:
+                raise AssetError(f"sprite column {x} has more posts than it has pixels")
     return bytes(rgba)
 
 
 def average_color(rgb: bytes) -> tuple[int, int, int]:
-    n = len(rgb) // 3
-    r = sum(rgb[0::3]) // n
-    g = sum(rgb[1::3]) // n
-    b = sum(rgb[2::3]) // n
-    return r, g, b
+    """The mean colour of an RGB buffer, for a palette swatch."""
+    count = len(rgb) // 3
+    if not count:
+        return 0, 0, 0
+    return sum(rgb[0::3]) // count, sum(rgb[1::3]) // count, sum(rgb[2::3]) // count
 
 
-# --------------------------------------------------------------------------
-# VGAGRAPH: Huffman-compressed planar VGA pictures
-# --------------------------------------------------------------------------
+def is_blank(pixels: bytes, *, channels: int) -> bool:
+    """True when nothing would be visible: all one colour, or fully transparent."""
+    if not pixels:
+        return True
+    if channels == 4:
+        return not any(pixels[3::4])
+    return len(set(zip(pixels[0::3], pixels[1::3], pixels[2::3]))) <= 1
+
+
+# ---------------------------------------------------------------------------
+# VGAGRAPH: Huffman-compressed planar pictures
+# ---------------------------------------------------------------------------
 
 
 def _huff_expand(source: bytes, nodes: list[tuple[int, int]], expected: int) -> bytes:
@@ -160,57 +1181,360 @@ def _huff_expand(source: bytes, nodes: list[tuple[int, int]], expected: int) -> 
                 node = 254
             else:
                 node = child - 256
-    raise ValueError(f"huffman chunk ended at {len(out)} of {expected}")
+    raise AssetError(f"Huffman chunk ended at {len(out)} of {expected} bytes")
 
 
-def extract_vga(vgadict: bytes, vgahead: bytes, vgagraph: bytes, palette: list[int]):
+@dataclass(frozen=True)
+class VgaPicture:
+    """One decoded VGAGRAPH picture, row-major RGB."""
+
+    number: int  # the C7G#### id the engine uses
+    width: int
+    height: int
+    rgb: bytes
+
+
+def extract_vga(
+    vgadict: bytes, vgahead: bytes, vgagraph: bytes, palette: list[int]
+) -> list[VgaPicture]:
+    """Decode every picture chunk.
+
+    Chunk 0 is PICTABLE (the dimensions), 1 and 2 are fonts, 3 is TILE8, and
+    the pictures start at 4 -- so picture *i* is chunk *i+4* and carries the
+    engine's id *i+3*. A chunk whose size does not match its declared
+    dimensions is skipped rather than guessed at.
+    """
+    if len(vgadict) < 255 * 4:
+        raise AssetError(f"VGADICT is {len(vgadict)} bytes, needs {255 * 4}")
     nodes = list(struct.iter_unpack("<HH", vgadict[: 255 * 4]))
-    offsets = [int.from_bytes(vgahead[i : i + 3], "little") for i in range(0, len(vgahead), 3)]
+    offsets = [
+        int.from_bytes(vgahead[i : i + 3], "little") for i in range(0, len(vgahead) - 2, 3)
+    ]
+
     decoded: list[bytes] = []
-    for i, start in enumerate(offsets):
-        if start == len(vgagraph):
+    for index, start in enumerate(offsets):
+        if start >= len(vgagraph):
             break
-        end = offsets[i + 1] if i + 1 < len(offsets) else len(vgagraph)
+        end = offsets[index + 1] if index + 1 < len(offsets) else len(vgagraph)
+        if not start + 4 <= end <= len(vgagraph):
+            raise AssetError(f"VGAGRAPH chunk {index} spans 0x{start:x}..0x{end:x}")
         expected = struct.unpack_from("<I", vgagraph, start)[0]
         decoded.append(_huff_expand(vgagraph[start + 4 : end], nodes, expected))
-    # chunk 0 = PICTABLE, 1/2 = fonts, 3 = TILE8, pictures start at chunk 4
-    dims = []
-    for w, h in struct.iter_unpack("<HH", decoded[0][: len(decoded[0]) & ~3]):
-        if not (0 < w <= 640 and 0 < h <= 480):
+
+    if not decoded:
+        raise AssetError("VGAGRAPH decoded to no chunks")
+
+    table = decoded[0]
+    dimensions = []
+    for width, height in struct.iter_unpack("<HH", table[: len(table) & ~3]):
+        if not (0 < width <= 640 and 0 < height <= 480):
             break
-        dims.append((w, h))
-    pics = []
-    count = min(len(dims), max(0, len(decoded) - 4))
-    for i in range(count):
-        w, h = dims[i]
-        data = decoded[i + 4]
-        if len(data) != w * h or w % 4:
+        dimensions.append((width, height))
+
+    pictures: list[VgaPicture] = []
+    for index in range(min(len(dimensions), max(0, len(decoded) - 4))):
+        width, height = dimensions[index]
+        data = decoded[index + 4]
+        if len(data) != width * height or width % 4:
             continue
-        plane = w * h // 4
-        rgb = bytearray(w * h * 3)
-        for y in range(h):
-            prow = y * (w // 4)
-            for x in range(w):
-                c = data[(x & 3) * plane + prow + (x >> 2)]
-                d = (y * w + x) * 3
-                rgb[d] = palette[c * 3]
-                rgb[d + 1] = palette[c * 3 + 1]
-                rgb[d + 2] = palette[c * 3 + 2]
-        pics.append((w, h, bytes(rgb), i + 3))  # i+3 == ECWolf C7G#### id number
-    return pics
+        pictures.append(
+            VgaPicture(index + 3, width, height, _unplane(data, width, height, palette))
+        )
+    return pictures
+
+
+def _unplane(data: bytes, width: int, height: int, palette: list[int]) -> bytes:
+    """Undo VGA's four-plane interleave into row-major RGB."""
+    plane = width * height // 4
+    rgb = bytearray(width * height * 3)
+    for y in range(height):
+        row = y * (width // 4)
+        for x in range(width):
+            index = data[(x & 3) * plane + row + (x >> 2)] * 3
+            destination = (y * width + x) * 3
+            rgb[destination] = palette[index]
+            rgb[destination + 1] = palette[index + 1]
+            rgb[destination + 2] = palette[index + 2]
+    return bytes(rgb)
+
+
+# ---------------------------------------------------------------------------
+# A bounded cache
+# ---------------------------------------------------------------------------
+
+
+class ImageCache:
+    """Least-recently-used, bounded by total bytes rather than entry count.
+
+    Entry count is the wrong unit here: a 320x200 picture is fifty times a
+    wall page, so a hundred-entry cache is somewhere between 1 and 60 MB
+    depending on what the user happened to click. Bytes are what the machine
+    actually has.
+    """
+
+    def __init__(self, budget_bytes: int = 32 << 20) -> None:
+        self.budget = budget_bytes
+        self._entries: OrderedDict[str, bytes] = OrderedDict()
+        self._size = 0
+        self.hits = 0
+        self.misses = 0
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    @property
+    def size_bytes(self) -> int:
+        return self._size
+
+    def get(self, key: str):
+        if key in self._entries:
+            self._entries.move_to_end(key)
+            self.hits += 1
+            return self._entries[key]
+        self.misses += 1
+        return None
+
+    def put(self, key: str, value: bytes) -> None:
+        if key in self._entries:
+            self._size -= len(self._entries.pop(key))
+        # An item larger than the whole budget is not cached; caching it would
+        # evict everything and then itself.
+        if len(value) > self.budget:
+            return
+        self._entries[key] = value
+        self._size += len(value)
+        while self._size > self.budget:
+            _, evicted = self._entries.popitem(last=False)
+            self._size -= len(evicted)
+
+    def fetch(self, key: str, produce):
+        """Get, or produce and store. The only method callers normally need."""
+        found = self.get(key)
+        if found is None:
+            found = produce()
+            self.put(key, found)
+        return found
+
+    def clear(self) -> None:
+        self._entries.clear()
+        self._size = 0
+
+# --- ec7edit_core/decorate.py ----------------------------------------
+
+"""Reader for the Corridor 7 DECORATE actors the engine defines.
+
+XLAT says which class a map word spawns; DECORATE says what that class *is* --
+what it inherits from, which sprite page it shows when it is standing still,
+and what the person who wrote it said about it in the comment above. All three
+matter to a catalogue entry, and all three are already in the repository, so
+the alternative to reading them is maintaining a copy that goes stale the first
+time somebody fixes an actor.
+
+Sprite pages are the join to the artwork: a DECORATE frame `C001 A -1` names
+page 1 of `GFXTILES.CO7`'s sprite range, which is what the palette browser has
+to draw. The `Spawn` state's first page is the one an editor should show,
+because that is what the map looks like before anything moves.
+
+This reads either the source tree (`wadsrc/static/actors/corridor7/`) or a
+built `ec7wolf.pk3`. Same parser, same result -- the pk3's copies are the same
+text.
+"""
+
+
+
+import re
+import zipfile
+from collections import defaultdict
+from dataclasses import dataclass, field
+from pathlib import Path
+
+#: A DECORATE sprite frame: four-character page name, then frame letters.
+#: Corridor 7's are all `C` plus three digits.
+_SPRITE = re.compile(r"\bC(\d{3})\s+[A-Z]")
+_ACTOR = re.compile(r"^\s*actor\s+(\w+)\s*(?::\s*(\w+))?", re.IGNORECASE)
+_STATE_LABEL = re.compile(
+    r"^\s*(Spawn|See|Path|Missile|Melee|Pain|Death|Raise|Idle)\s*:", re.IGNORECASE
+)
+
+SOURCES = ("monsters", "statics", "player")
+
+#: Engine base classes, by what an actor inheriting from one of them *is*.
+#: Matched against the root of the inheritance chain, not the immediate parent,
+#: so `C7Disintegrator : C7Weapon : Weapon` reaches "item" in one step of
+#: resolution rather than needing its own rule.
+_ROOT_ROLES = {
+    "weapon": "item",
+    "ammo": "item",
+    "health": "item",
+    "key": "item",
+    "inventory": "item",
+    "custominventory": "item",
+    "scoreitem": "item",
+    "maprevealer": "item",
+    "armor": "item",
+    "basicarmorpickup": "item",
+    "powerup": "item",
+    "powerupgiver": "item",
+    "wolfensteinmonster": "enemy",
+    "playerpawn": "player",
+}
+
+
+@dataclass
+class ActorInfo:
+    """One DECORATE actor, as much as an editor needs to describe it."""
+
+    name: str
+    parent: str
+    source: str  # which file it came from
+    role: str  # enemy | item | decoration | effect | player
+    note: str  # the comment above the declaration, if any
+    spawn_sprite: int | None = None
+    sprites: set[int] = field(default_factory=set)
+    states: dict[int, set[str]] = field(default_factory=lambda: defaultdict(set))
+
+    @property
+    def blocking(self) -> bool:
+        """Whether walking into it is refused. Decorations mostly block."""
+        return self.role in ("enemy", "decoration")
+
+
+def classify(actors: dict[str, "ActorInfo"], name: str) -> str:
+    """Decide what an actor is by following its inheritance to the root.
+
+    The file an actor is declared in is not the answer: `player.txt` holds the
+    weapons and the inventory as well as the pawn, and the projectiles live
+    beside the monsters that fire them. Only the chain says what something is.
+
+    Deliberately conservative at the end of the chain: an actor that reaches a
+    root nothing recognises becomes a decoration, which is the safest thing for
+    an editor to draw and the least likely to imply behaviour it lacks.
+    """
+    seen: set[str] = set()
+    current = name
+    while current and current not in seen:
+        seen.add(current)
+        info = actors.get(current)
+        parent = info.parent if info else ""
+        role = _ROOT_ROLES.get(parent.lower())
+        if role:
+            return role
+        if not parent:
+            break
+        if parent not in actors:
+            # An unresolved parent is a fact, not a guess to paper over.
+            return _ROOT_ROLES.get(parent.lower(), "decoration")
+        current = parent
+
+    # Nothing in the chain named a known base. Fall back on where it lives:
+    # an actor declared among the monsters that has no monster root is one of
+    # their projectiles or effects.
+    info = actors.get(name)
+    if info and info.source == "monsters":
+        return "effect"
+    return "decoration"
+
+
+def parse_decorate(text: str, source: str) -> dict[str, ActorInfo]:
+    """Parse one DECORATE file into actors keyed by class name."""
+    actors: dict[str, ActorInfo] = {}
+    lines = text.splitlines()
+    pending: list[str] = []
+    index = 0
+
+    while index < len(lines):
+        stripped = lines[index].strip()
+        if stripped.startswith("//"):
+            pending.append(stripped.lstrip("/ ").strip())
+            index += 1
+            continue
+
+        match = _ACTOR.match(lines[index])
+        if not match:
+            # Any other content ends a comment's association with what follows.
+            if stripped and not stripped.startswith(("/*", "*")):
+                pending = []
+            index += 1
+            continue
+
+        name, parent = match.group(1), (match.group(2) or "")
+        note = " ".join(part for part in pending if part).strip()
+        pending = []
+
+        body: list[str] = []
+        depth = 0
+        started = False
+        while index < len(lines):
+            line = lines[index]
+            depth += line.count("{") - line.count("}")
+            body.append(line)
+            if "{" in line:
+                started = True
+            index += 1
+            if started and depth <= 0:
+                break
+
+        info = ActorInfo(name, parent, source, "", note)
+        label = None
+        for line in body:
+            found = _STATE_LABEL.match(line)
+            if found:
+                label = found.group(1).capitalize()
+            for sprite in _SPRITE.finditer(line):
+                page = int(sprite.group(1))
+                info.sprites.add(page)
+                if label:
+                    info.states[page].add(label)
+                if info.spawn_sprite is None and label in (None, "Spawn"):
+                    info.spawn_sprite = page
+        if info.spawn_sprite is None and info.sprites:
+            info.spawn_sprite = min(info.sprites)
+        actors[name] = info
+
+    return actors
+
+
+def resolve_roles(actors: dict[str, ActorInfo]) -> dict[str, ActorInfo]:
+    """Fill in every actor's role once the whole graph is known."""
+    for name, info in actors.items():
+        info.role = classify(actors, name)
+    return actors
+
+
+def read_actors_from_source(root: Path | str) -> dict[str, ActorInfo]:
+    """Read `wadsrc/static/actors/corridor7/` out of a checkout."""
+    root = Path(root)
+    actors: dict[str, ActorInfo] = {}
+    for source in SOURCES:
+        path = root / f"{source}.txt"
+        if path.exists():
+            actors.update(parse_decorate(path.read_text(encoding="latin-1"), source))
+    return resolve_roles(actors)
+
+
+def read_actors_from_pk3(path: Path | str) -> dict[str, ActorInfo]:
+    """Read the same files out of a built `ec7wolf.pk3`."""
+    actors: dict[str, ActorInfo] = {}
+    with zipfile.ZipFile(path) as archive:
+        for source in SOURCES:
+            try:
+                raw = archive.read(f"actors/corridor7/{source}.txt")
+            except KeyError:
+                continue
+            actors.update(parse_decorate(raw.decode("latin-1"), source))
+    return resolve_roles(actors)
+
 
 
 # --------------------------------------------------------------------------
-# MAPTEMP: self-contained TED5 archive (used for cross-referencing usage)
+# Adapters: the shapes this gallery grew up with, over the canonical codecs
 # --------------------------------------------------------------------------
-
-TED5_SIGNATURE = b"TED5v1.0.\x00\x00\x00"
-MAP_MARKER = b"!ID!"
-RLEW_TAG = 0xABCD
 
 
 @dataclass(frozen=True)
 class GameMap:
+    """The flat view of a map this gallery was written against."""
+
     index: int
     name: str
     width: int
@@ -218,160 +1542,32 @@ class GameMap:
     planes: tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...]]
 
 
-def _u16(d: bytes, o: int) -> int:
-    return struct.unpack_from("<H", d, o)[0]
-
-
-def _u32(d: bytes, o: int) -> int:
-    return struct.unpack_from("<I", d, o)[0]
-
-
-def _decode_rlew(data: bytes, expected_words: int) -> tuple[int, ...]:
-    words = struct.unpack_from(f"<{(len(data) - 2) // 2}H", data, 2)
-    out: list[int] = []
-    i = 0
-    while i < len(words):
-        value = words[i]
-        i += 1
-        if value != RLEW_TAG:
-            out.append(value)
-        else:
-            count, repeated = words[i : i + 2]
-            i += 2
-            out.extend([repeated] * count)
-    return tuple(out)
-
-
 def parse_maps(data: bytes) -> list[GameMap]:
-    maps: list[GameMap] = []
-    offset = 0
-    while offset < len(data):
-        if data[offset:] == MAP_MARKER:
-            break
-        index = len(maps)
-        if index == 0:
-            if data[:12] != TED5_SIGNATURE:
-                raise ValueError("bad TED5 signature")
-            plane_offsets = (46, _u32(data, 12), _u32(data, 16))
-            lengths_at = 20
-        else:
-            if data[offset : offset + 4] != MAP_MARKER:
-                raise ValueError(f"expected !ID! at {offset:#x}")
-            plane_offsets = tuple(_u32(data, offset + 4 + i * 4) for i in range(3))
-            lengths_at = offset + 16
-        plane_lengths = tuple(_u16(data, lengths_at + i * 2) for i in range(3))
-        width = _u16(data, lengths_at + 6)
-        height = _u16(data, lengths_at + 8)
-        name = data[lengths_at + 10 : lengths_at + 26].split(b"\x00", 1)[0].decode("ascii", "replace")
-        planes = tuple(
-            _decode_rlew(data[s : s + ln], width * height)
-            for s, ln in zip(plane_offsets, plane_lengths)
+    """Read MAPTEMP through the production codec, then flatten it."""
+    return [
+        GameMap(
+            record.number - 1,
+            record.name.text,
+            record.width,
+            record.height,
+            record.planes.planes,
         )
-        maps.append(GameMap(index, name, width, height, planes))
-        offset = plane_offsets[-1] + plane_lengths[-1]
-    return maps
-
-
-# --------------------------------------------------------------------------
-# ecwolf.pk3 DECORATE parsing: sprite page -> actor identity + role
-# --------------------------------------------------------------------------
-
-SPRITE_TOKEN = re.compile(r"\bC(\d{3})\s+[A-Z]")
-ACTOR_RE = re.compile(r"\bactor\s+(\w+)\s*(?::\s*(\w+))?", re.IGNORECASE)
-STATE_LABEL = re.compile(r"^\s*(Spawn|See|Missile|Melee|Pain|Death|Raise)\s*:", re.IGNORECASE)
-
-
-@dataclass
-class ActorInfo:
-    name: str
-    parent: str
-    role: str  # enemy | decoration | item | effect | player
-    note: str
-    spawn_sprite: int | None
-    sprites: set[int] = field(default_factory=set)
-    states: dict[int, set[str]] = field(default_factory=lambda: defaultdict(set))
-
-
-def _classify(name: str, parent: str, source: str) -> str:
-    p = parent.lower()
-    n = name.lower()
-    if source == "player":
-        return "player"
-    if source == "monsters":
-        if "monster" in p or "wolfenstein" in p or name in _MONSTER_HINTS:
-            return "enemy"
-        # projectiles / effects declared alongside monsters
-        return "effect"
-    # statics.txt
-    if "key" in p or "ammo" in p or "health" in p or "inventory" in p or "weapon" in p:
-        return "item"
-    return "decoration"
-
-
-# Actor names known to be enemies even without an obvious monster parent.
-_MONSTER_HINTS = set()
+        for record in parse_archive(data)
+    ]
 
 
 def parse_actors(pk3: zipfile.ZipFile) -> dict[str, ActorInfo]:
+    """DECORATE actors from an already-open pk3, for the browser's sprite join."""
     actors: dict[str, ActorInfo] = {}
-    for source in ("monsters", "statics", "player"):
+    for source in SOURCES:
         try:
-            text = pk3.read(f"actors/corridor7/{source}.txt").decode("latin-1")
+            raw = pk3.read(f"actors/corridor7/{source}.txt")
         except KeyError:
             continue
-        # Split into top-level actor blocks while retaining preceding comments.
-        pending_comment: list[str] = []
-        lines = text.splitlines()
-        i = 0
-        while i < len(lines):
-            line = lines[i]
-            stripped = line.strip()
-            m = ACTOR_RE.search(stripped)
-            if stripped.startswith("//"):
-                pending_comment.append(stripped.lstrip("/ ").strip())
-                i += 1
-                continue
-            if not m or not stripped.lower().startswith("actor"):
-                if stripped and not stripped.startswith("/*") and not stripped.startswith("*"):
-                    pending_comment = []
-                i += 1
-                continue
-            name, parent = m.group(1), (m.group(2) or "")
-            note = " ".join(c for c in pending_comment if c).strip()
-            pending_comment = []
-            # gather this actor's body up to matching brace depth
-            depth = 0
-            body: list[str] = []
-            started = False
-            while i < len(lines):
-                bl = lines[i]
-                depth += bl.count("{") - bl.count("}")
-                body.append(bl)
-                if "{" in bl:
-                    started = True
-                i += 1
-                if started and depth <= 0:
-                    break
-            info = ActorInfo(name, parent, _classify(name, parent, source), note, None)
-            current_label = None
-            for bl in body:
-                lm = STATE_LABEL.match(bl)
-                if lm:
-                    current_label = lm.group(1).capitalize()
-                for sm in SPRITE_TOKEN.finditer(bl):
-                    page = int(sm.group(1))
-                    info.sprites.add(page)
-                    if current_label:
-                        info.states[page].add(current_label)
-                    if info.spawn_sprite is None and (current_label == "Spawn" or current_label is None):
-                        info.spawn_sprite = page
-            if info.spawn_sprite is None and info.sprites:
-                info.spawn_sprite = min(info.sprites)
-            actors[name] = info
-    return actors
+        actors.update(parse_decorate(raw.decode("latin-1"), source))
+    return resolve_roles(actors)
 
 
-# --------------------------------------------------------------------------
 # Curated knowledge base (from the Technical & Strategy Compendium + repo docs)
 # --------------------------------------------------------------------------
 
@@ -607,7 +1803,8 @@ class Library:
             self._read("VGAGRAPH.CO7"),
             palette,
         )
-        for w, h, rgb, chunk_id in pics:
+        for picture in pics:
+            w, h, rgb, chunk_id = picture.width, picture.height, picture.rgb, picture.number
             name = f"C7G{chunk_id:04d}"
             sub = "HUD & Status" if 23 <= chunk_id <= 74 else "Screens & UI"
             meta = {

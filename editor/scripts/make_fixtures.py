@@ -226,6 +226,58 @@ def build_indexed_image(width: int, height: int) -> bytes:
     return bytes(struct.pack("<HH", width, height) + palette + pixels)
 
 
+def build_palette_executable() -> bytes:
+    """A stand-in for CORR7CD.EXE carrying a synthetic 6-bit palette.
+
+    Only the palette window matters, so the rest is a recognisable filler
+    rather than anything resembling an executable. The values stay inside
+    0..63 because that six-bit range is exactly what the loader checks to tell
+    a real Corridor 7 executable from a file of the right length.
+    """
+    PALETTE_OFFSET, PALETTE_SIZE = 0x2FFC0, 768
+    out = bytearray(b"SYNTHETIC-NOT-AN-EXECUTABLE\x00" * 1000)
+    out = out[:PALETTE_OFFSET].ljust(PALETTE_OFFSET, b"\x00")
+    # A deterministic ramp: entry i is (i/4, i/8, i/16) clipped into 0..63.
+    for index in range(256):
+        out += bytes(((index // 4) & 63, (index // 8) & 63, (index // 16) & 63))
+    return bytes(out)
+
+
+def build_wall_page(salt: int = 0) -> bytes:
+    """A 64x64 wall page, column-major, as GFXTILES stores them."""
+    return bytes(((x * 3 + y * 5 + salt) & 0xFF) for x in range(64) for y in range(64))
+
+
+def build_sprite_page(left: int = 20, right: int = 43) -> bytes:
+    """A Wolfenstein column-post sprite: one post per column, all opaque.
+
+    Built to the format rather than copied from one, so a decoder that agrees
+    with it agrees with the documented layout and not with a captured sample.
+    """
+    columns = right - left + 1
+    top, bottom = 16, 48
+    height = bottom - top
+    # Layout: bounds, column offsets, then per column a (end, source, start)
+    # triple, a terminating zero, and the column's pixels.
+    header = 4 + columns * 2
+    per_column = 6 + 2 + height
+    body = bytearray()
+    offsets = []
+    for index in range(columns):
+        base = header + index * per_column
+        offsets.append(base)
+        pixels_at = base + 8
+        # `source` is the offset the decoder adds `y` to, so it is biased by
+        # the post's own starting row.
+        body += struct.pack("<HhH", bottom * 2, pixels_at - top, top * 2)
+        body += struct.pack("<H", 0)
+        body += bytes(((index * 7 + y) & 0xFF) or 1 for y in range(height))
+    out = bytearray(struct.pack("<HH", left, right))
+    for offset in offsets:
+        out += struct.pack("<H", offset)
+    return bytes(out + body)
+
+
 def build_project(name: str) -> bytes:
     """A versioned project file over synthetic planes."""
     document = {
@@ -309,6 +361,10 @@ def fixture_set() -> dict[str, bytes]:
     ])
     out["planes/8x8.planes"] = build_planes_lump(8, 8, 0)
     out["image/gradient.idx"] = build_indexed_image(32, 32)
+    out["assets/palette.exe"] = build_palette_executable()
+    out["assets/wall.page"] = build_wall_page()
+    out["assets/wall-alt.page"] = build_wall_page(salt=91)
+    out["assets/sprite.page"] = build_sprite_page()
     out["project/minimal.ec7proj"] = build_project("Synthetic Project")
     for name, blob in malformed().items():
         out[f"malformed/{name}"] = blob

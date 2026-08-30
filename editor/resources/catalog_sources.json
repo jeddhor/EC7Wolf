@@ -1,0 +1,752 @@
+{
+  "_comment": [
+    "Curated identity for the EC7Edit catalogue. Everything else is generated:",
+    "see editor/scripts/generate_catalog.py. Only put here what no input file",
+    "can supply -- a friendly name, a search alias, a sentence of advice --",
+    "and record where the identity came from in 'evidence'."
+  ],
+  "actors": {
+    "C7Adrenaline": {
+      "aliases": [
+        "health",
+        "stim"
+      ],
+      "description": "Restores health.",
+      "evidence": "",
+      "name": "Adrenaline",
+      "subcategory": "pickup"
+    },
+    "C7AmmoPack": {
+      "aliases": [
+        "ammo",
+        "bullets"
+      ],
+      "description": "Standard rounds for the human weapons.",
+      "evidence": "",
+      "name": "Ammo Pack",
+      "subcategory": "pickup"
+    },
+    "C7AssaultCannon": {
+      "aliases": [
+        "cannon",
+        "weapon",
+        "alien"
+      ],
+      "description": "Four-round burst, very energy-efficient. CD release only.",
+      "evidence": "strategy compendium weapon 7",
+      "name": "Alien Assault Cannon",
+      "subcategory": "pickup"
+    },
+    "C7BodyArmor": {
+      "aliases": [
+        "armor",
+        "armour"
+      ],
+      "description": "Absorbs damage until it is used up.",
+      "evidence": "",
+      "name": "Body Armor",
+      "subcategory": "pickup"
+    },
+    "C7ChargePack": {
+      "aliases": [
+        "energy",
+        "charge"
+      ],
+      "description": "Energy for the alien weapons.",
+      "evidence": "",
+      "name": "Charge Pack",
+      "subcategory": "pickup"
+    },
+    "C7DamageField": {
+      "aliases": [
+        "trap",
+        "rod",
+        "infrared",
+        "visor"
+      ],
+      "description": "Walk-through trap rod. Visible only under infrared; it hurts on contact.",
+      "evidence": "xlat things 32/33 comment",
+      "name": "Energy Rod",
+      "subcategory": "pickup"
+    },
+    "C7DamageFieldAlt": {
+      "aliases": [
+        "trap",
+        "ring",
+        "infrared",
+        "visor"
+      ],
+      "description": "Walk-through trap ring. Visible only under infrared; it hurts on contact.",
+      "evidence": "xlat things 32/33 comment",
+      "name": "Energy Ring",
+      "subcategory": "pickup"
+    },
+    "C7Disintegrator": {
+      "aliases": [
+        "disintegrator",
+        "weapon",
+        "alien"
+      ],
+      "description": "Boss and emergency weapon with an enormous energy cost.",
+      "evidence": "strategy compendium weapon 8",
+      "name": "Alien Disintegrator",
+      "subcategory": "pickup"
+    },
+    "C7DualBlaster": {
+      "aliases": [
+        "blaster",
+        "weapon",
+        "alien"
+      ],
+      "description": "Economical alien sidearm, two energy per shot.",
+      "evidence": "strategy compendium weapon 5",
+      "name": "Alien Dual Blaster",
+      "subcategory": "pickup"
+    },
+    "C7Eitak": {
+      "aliases": [
+        "guard",
+        "class 18"
+      ],
+      "description": "Primary alien-world guard; accurate in groups. Use open space.",
+      "evidence": "monsters.txt:506 accurate guards assist packs",
+      "name": "Eitak",
+      "subcategory": "alien"
+    },
+    "C7Eniram": {
+      "aliases": [
+        "cloaked",
+        "invisible",
+        "class 22"
+      ],
+      "description": "Invisible until it fires. Needs infrared or the proximity map.",
+      "evidence": "monsters.txt:379 invisible outside infrared",
+      "name": "Eniram",
+      "subcategory": "alien"
+    },
+    "C7EniramBoss": {
+      "aliases": [
+        "boss",
+        "golden horns",
+        "class 21"
+      ],
+      "description": "Solid and non-cloaking, carries a Plasma Rifle. Avoid narrow corridors.",
+      "evidence": "xlat comment at things 196",
+      "name": "Eniram Boss",
+      "subcategory": "boss"
+    },
+    "C7ExitVortex": {
+      "aliases": [
+        "exit",
+        "end",
+        "vortex"
+      ],
+      "description": "Completes the floor.",
+      "evidence": "",
+      "name": "Exit Vortex",
+      "subcategory": "pickup"
+    },
+    "C7FloorPlan": {
+      "aliases": [
+        "map",
+        "automap",
+        "reveal"
+      ],
+      "description": "Reveals the floor's map. Per-floor, like the access cards.",
+      "evidence": "statics.txt comment on interhubamount",
+      "name": "Floor Plan",
+      "subcategory": "pickup"
+    },
+    "C7Invulnerability": {
+      "aliases": [
+        "powerup",
+        "invulnerable"
+      ],
+      "description": "Temporary invulnerability, with the strobing palette.",
+      "evidence": "",
+      "name": "Invulnerability Sphere",
+      "subcategory": "pickup"
+    },
+    "C7M343": {
+      "aliases": [
+        "tribarrel",
+        "weapon",
+        "burst"
+      ],
+      "description": "Three-round burst; the preferred human weapon at distance.",
+      "evidence": "strategy compendium weapon 4",
+      "name": "M-343 Tribarrel",
+      "subcategory": "pickup"
+    },
+    "C7Mechanoid": {
+      "aliases": [
+        "boss",
+        "mechanoid",
+        "class 20"
+      ],
+      "description": "Slow, audible footsteps, brutal at close range. May drop the Dual Blaster.",
+      "evidence": "strategy compendium",
+      "name": "Mechanoid Warrior",
+      "subcategory": "boss"
+    },
+    "C7MinePack": {
+      "aliases": [
+        "mine",
+        "explosive"
+      ],
+      "description": "Fifteen-foot blast, lethal to the Marine too. Twenty-five carried at most.",
+      "evidence": "strategy compendium",
+      "name": "Proximity Mines",
+      "subcategory": "pickup"
+    },
+    "C7MorphBarrel": {
+      "aliases": [
+        "bandor",
+        "morph",
+        "disguise",
+        "barrel"
+      ],
+      "description": "A Bandor disguised as a barrel. It morphs when disturbed, and others nearby may rush the kill site.",
+      "evidence": "statics/monsters inheritance from C7Bandor; strategy compendium",
+      "name": "Bandor (barrel)",
+      "subcategory": "alien"
+    },
+    "C7MorphChair": {
+      "aliases": [
+        "bandor",
+        "morph",
+        "disguise",
+        "chair"
+      ],
+      "description": "A Bandor disguised as a chair. It morphs when disturbed, and others nearby may rush the kill site.",
+      "evidence": "statics/monsters inheritance from C7Bandor; strategy compendium",
+      "name": "Bandor (chair)",
+      "subcategory": "alien"
+    },
+    "C7MorphFile": {
+      "aliases": [
+        "bandor",
+        "morph",
+        "disguise",
+        "filing cabinet"
+      ],
+      "description": "A Bandor disguised as a filing cabinet. It morphs when disturbed, and others nearby may rush the kill site.",
+      "evidence": "statics/monsters inheritance from C7Bandor; strategy compendium",
+      "name": "Bandor (filing cabinet)",
+      "subcategory": "alien"
+    },
+    "C7MorphPlant": {
+      "aliases": [
+        "bandor",
+        "morph",
+        "disguise",
+        "plant"
+      ],
+      "description": "A Bandor disguised as a plant. It morphs when disturbed, and others nearby may rush the kill site.",
+      "evidence": "statics/monsters inheritance from C7Bandor; strategy compendium",
+      "name": "Bandor (plant)",
+      "subcategory": "alien"
+    },
+    "C7Nerraw": {
+      "aliases": [
+        "surprise",
+        "class 17"
+      ],
+      "description": "Small and apparently harmless; can kill a strong Marine in seconds.",
+      "evidence": "strategy compendium",
+      "name": "Nerraw",
+      "subcategory": "alien"
+    },
+    "C7OrganicEye": {
+      "aliases": [
+        "organic eye",
+        "class 3",
+        "sentry"
+      ],
+      "description": "Slow alarm unit, dangerous in packs. Clear it early before it draws traffic.",
+      "evidence": "monsters.txt:15 names it outright",
+      "name": "Alioprobe",
+      "subcategory": "alien"
+    },
+    "C7Otrebor": {
+      "aliases": [
+        "sub-boss",
+        "technician",
+        "class 13"
+      ],
+      "description": "Solitary blaster sub-boss with an evil laugh. Burst it down from range.",
+      "evidence": "monsters.txt:425 solitary blaster sub-boss",
+      "name": "Otrebor",
+      "subcategory": "alien"
+    },
+    "C7PlasmaRifle": {
+      "aliases": [
+        "plasma",
+        "weapon",
+        "alien"
+      ],
+      "description": "Travelling plasma with a blast radius; it can set off mines.",
+      "evidence": "strategy compendium weapon 6",
+      "name": "Alien Plasma Rifle",
+      "subcategory": "pickup"
+    },
+    "C7ProbeEye": {
+      "aliases": [
+        "probe eye",
+        "class 4",
+        "centurion"
+      ],
+      "description": "Extremely fast and sound-reactive, sometimes ambush placed.",
+      "evidence": "monsters.txt:62 names it outright",
+      "name": "Animated Probe",
+      "subcategory": "alien"
+    },
+    "C7Rodex": {
+      "aliases": [
+        "centurion",
+        "class 7"
+      ],
+      "description": "Pack attacker that may retreat or turn away. Distinctive squeal.",
+      "evidence": "monsters.txt:294 names it",
+      "name": "Rodex",
+      "subcategory": "alien"
+    },
+    "C7Semaj": {
+      "aliases": [
+        "slime",
+        "melee",
+        "class 16"
+      ],
+      "description": "Purple slime that attacks the legs. No ranged weapon, easy to overlook.",
+      "evidence": "monsters.txt:541 melee-only slime",
+      "name": "Semaj",
+      "subcategory": "alien"
+    },
+    "C7Shotgun": {
+      "aliases": [
+        "shotgun",
+        "weapon"
+      ],
+      "description": "Strongest at close range. CD release only.",
+      "evidence": "strategy compendium weapon 2",
+      "name": "Assault Shotgun",
+      "subcategory": "pickup"
+    },
+    "C7Solrac": {
+      "aliases": [
+        "boss",
+        "leader",
+        "class 20"
+      ],
+      "description": "Leader boss with an eye-energy attack. Apparitions elsewhere are untouchable.",
+      "evidence": "strategy compendium",
+      "name": "Solrac",
+      "subcategory": "boss"
+    },
+    "C7Static001": {
+      "aliases": [
+        "red key",
+        "keycard",
+        "access"
+      ],
+      "description": "Opens red-locked doors. Per-floor: it does not survive a floor change.",
+      "evidence": "lnspec.cpp:366 maps door arg 1 to this class",
+      "name": "RED access card",
+      "subcategory": "pickup"
+    },
+    "C7Static002": {
+      "aliases": [
+        "blue key",
+        "keycard",
+        "access"
+      ],
+      "description": "Opens blue-locked doors. Per-floor: it does not survive a floor change.",
+      "evidence": "lnspec.cpp:366 maps door arg 2 to this class",
+      "name": "BLUE access card",
+      "subcategory": "pickup"
+    },
+    "C7Tebazile": {
+      "aliases": [
+        "boss",
+        "guardian",
+        "class 19"
+      ],
+      "description": "Guardian boss with a five-stage morph: Tebazile, Eniram Boss, Tymok, Solrac, Tebazile.",
+      "evidence": "strategy compendium",
+      "name": "Tebazile",
+      "subcategory": "boss"
+    },
+    "C7Tenaj": {
+      "aliases": [
+        "technician",
+        "class 5"
+      ],
+      "description": "Smart, quick technician; often turns away. May drop charge packs.",
+      "evidence": "monsters.txt:172 native common class 2",
+      "name": "Tenaj",
+      "subcategory": "alien"
+    },
+    "C7TransporterExit": {
+      "aliases": [
+        "teleport",
+        "warp",
+        "portal"
+      ],
+      "description": "The other end of a paired transporter channel.",
+      "evidence": "",
+      "name": "Transporter Exit",
+      "subcategory": "pickup"
+    },
+    "C7TransporterField": {
+      "aliases": [
+        "teleport",
+        "warp",
+        "portal"
+      ],
+      "description": "One end of a paired transporter channel.",
+      "evidence": "",
+      "name": "Transporter Field",
+      "subcategory": "pickup"
+    },
+    "C7Ttocs": {
+      "aliases": [
+        "warrior",
+        "class 6"
+      ],
+      "description": "Slow and durable brute warrior. Keep your distance.",
+      "evidence": "monsters.txt:337 names it",
+      "name": "Ttocs",
+      "subcategory": "alien"
+    },
+    "C7Tymok": {
+      "aliases": [
+        "boss",
+        "class 25"
+      ],
+      "description": "Fast dodger with a Plasma Rifle. Works alone; keep moving.",
+      "evidence": "strategy compendium",
+      "name": "Tymok",
+      "subcategory": "boss"
+    },
+    "PatrolPoint": {
+      "aliases": [
+        "path",
+        "waypoint",
+        "turn",
+        "patrol"
+      ],
+      "description": "Turns a patrolling alien. Without these every patrolling alien walks in its spawn direction until something blocks it and then stands still forever.",
+      "evidence": "xlat things 90 comment: 254 of 288 markers point at another marker",
+      "name": "Patrol turning point",
+      "subcategory": "path"
+    },
+    "Player1Start": {
+      "aliases": [
+        "start",
+        "spawn",
+        "marine"
+      ],
+      "description": "Where the Marine begins the floor. Exactly one per single-player map.",
+      "evidence": "xlat things 19",
+      "name": "Player start",
+      "subcategory": "player"
+    }
+  },
+  "values": {
+    "0:11": {
+      "aliases": [
+        "terminal",
+        "computer",
+        "switch"
+      ],
+      "description": "One-shot terminal; its result page is wall 12.",
+      "name": "Access terminal (second)"
+    },
+    "0:110": {
+      "aliases": [
+        "energy",
+        "dispenser",
+        "charge"
+      ],
+      "description": "Dispenses alien-weapon energy on use.",
+      "name": "Energy dispenser"
+    },
+    "0:111": {
+      "aliases": [
+        "ammo",
+        "dispenser",
+        "bullets"
+      ],
+      "description": "Dispenses standard rounds on use.",
+      "name": "Ammo dispenser"
+    },
+    "0:251": {
+      "aliases": [
+        "door"
+      ],
+      "description": "Opens on use. The axis is inferred from the map's topology.",
+      "name": "Door"
+    },
+    "0:252": {
+      "aliases": [
+        "door",
+        "red",
+        "locked"
+      ],
+      "description": "Needs the RED access card.",
+      "name": "Door (RED lock)"
+    },
+    "0:253": {
+      "aliases": [
+        "door",
+        "blue",
+        "locked"
+      ],
+      "description": "Needs the BLUE access card.",
+      "name": "Door (BLUE lock)"
+    },
+    "0:254": {
+      "aliases": [
+        "door"
+      ],
+      "description": "Opens on use. The axis is inferred from the map's topology.",
+      "name": "Door"
+    },
+    "0:278": {
+      "aliases": [
+        "ambush",
+        "zone",
+        "fill"
+      ],
+      "description": "Fill zone that makes the aliens standing in it ambushers.",
+      "name": "Ambush area"
+    },
+    "0:279": {
+      "aliases": [
+        "teleport",
+        "warp",
+        "transporter",
+        "portal",
+        "channel 1"
+      ],
+      "description": "One end of a paired intralevel transporter. A channel needs exactly two endpoints, and both carry the same value.",
+      "name": "Transporter channel 1"
+    },
+    "0:280": {
+      "aliases": [
+        "teleport",
+        "warp",
+        "transporter",
+        "portal",
+        "channel 2"
+      ],
+      "description": "One end of a paired intralevel transporter. A channel needs exactly two endpoints, and both carry the same value.",
+      "name": "Transporter channel 2"
+    },
+    "0:281": {
+      "aliases": [
+        "teleport",
+        "warp",
+        "transporter",
+        "portal",
+        "channel 3"
+      ],
+      "description": "One end of a paired intralevel transporter. A channel needs exactly two endpoints, and both carry the same value.",
+      "name": "Transporter channel 3"
+    },
+    "0:282": {
+      "aliases": [
+        "teleport",
+        "warp",
+        "transporter",
+        "portal",
+        "channel 4"
+      ],
+      "description": "One end of a paired intralevel transporter. A channel needs exactly two endpoints, and both carry the same value.",
+      "name": "Transporter channel 4"
+    },
+    "0:283": {
+      "aliases": [
+        "teleport",
+        "warp",
+        "transporter",
+        "portal",
+        "channel 5"
+      ],
+      "description": "One end of a paired intralevel transporter. A channel needs exactly two endpoints, and both carry the same value.",
+      "name": "Transporter channel 5"
+    },
+    "0:284": {
+      "aliases": [
+        "teleport",
+        "warp",
+        "transporter",
+        "portal",
+        "channel 6"
+      ],
+      "description": "One end of a paired intralevel transporter. A channel needs exactly two endpoints, and both carry the same value.",
+      "name": "Transporter channel 6"
+    },
+    "0:285": {
+      "aliases": [
+        "teleport",
+        "warp",
+        "transporter",
+        "portal",
+        "channel 7"
+      ],
+      "description": "One end of a paired intralevel transporter. A channel needs exactly two endpoints, and both carry the same value.",
+      "name": "Transporter channel 7"
+    },
+    "0:286": {
+      "aliases": [
+        "teleport",
+        "warp",
+        "transporter",
+        "portal",
+        "channel 8"
+      ],
+      "description": "One end of a paired intralevel transporter. A channel needs exactly two endpoints, and both carry the same value.",
+      "name": "Transporter channel 8"
+    },
+    "0:287": {
+      "aliases": [
+        "exit",
+        "end of level",
+        "completion"
+      ],
+      "description": "The ordinary floor-completion marker, crossed rather than used.",
+      "name": "Floor exit marker"
+    },
+    "0:30": {
+      "aliases": [
+        "alarm",
+        "terminal",
+        "switch"
+      ],
+      "description": "One-shot alarm terminal; its result page is wall 31.",
+      "name": "Intruder alarm"
+    },
+    "0:63": {
+      "aliases": [
+        "elevator",
+        "lift",
+        "exit"
+      ],
+      "description": "The normal floor exit.",
+      "name": "Elevator switch"
+    },
+    "0:85": {
+      "aliases": [
+        "health",
+        "dispenser",
+        "chamber"
+      ],
+      "description": "Dispenses health after a four-frame wall animation.",
+      "name": "Health chamber"
+    },
+    "0:88": {
+      "aliases": [
+        "health",
+        "dispenser",
+        "chamber"
+      ],
+      "description": "The health unit, present directly in two released maps.",
+      "name": "Health chamber"
+    },
+    "0:9": {
+      "aliases": [
+        "terminal",
+        "computer",
+        "switch"
+      ],
+      "description": "One-shot computer terminal; its result page is the next wall ID.",
+      "name": "Access terminal"
+    },
+    "1:101": {
+      "aliases": [
+        "pushwall",
+        "moving wall"
+      ],
+      "description": "Slides two tiles. Unlike the secret pushwall it is not counted.",
+      "name": "Moving wall"
+    },
+    "1:102": {
+      "aliases": [
+        "pushwall",
+        "moving wall"
+      ],
+      "description": "Slides two tiles. Unlike the secret pushwall it is not counted.",
+      "name": "Moving wall"
+    },
+    "1:106": {
+      "aliases": [
+        "mutable",
+        "animate",
+        "force field"
+      ],
+      "description": "Advances four texture frames and leaves the masked aperture open.",
+      "name": "Disintegrating wall"
+    },
+    "1:107": {
+      "aliases": [
+        "masked",
+        "aperture",
+        "raw"
+      ],
+      "description": "The already-open state of the disintegrating wall, as imported.",
+      "name": "Open aperture (raw)",
+      "subcategory": "wall setting"
+    },
+    "1:18": {
+      "aliases": [
+        "nothing",
+        "blank",
+        "clear"
+      ],
+      "description": "Corridor 7's empty object-plane marker. Every cell with nothing on it holds this, not zero.",
+      "name": "Empty",
+      "subcategory": "empty"
+    },
+    "1:86": {
+      "aliases": [
+        "masked",
+        "wall",
+        "raw"
+      ],
+      "description": "Occurs only inside wall cells, where the DOS engine reads it to configure masked-wall behaviour. It is not an object.",
+      "name": "Masked-wall setting 86",
+      "subcategory": "wall setting"
+    },
+    "1:87": {
+      "aliases": [
+        "masked",
+        "wall",
+        "raw"
+      ],
+      "description": "Occurs only inside wall cells, where the DOS engine reads it to configure masked-wall behaviour. It is not an object.",
+      "name": "Masked-wall setting 87",
+      "subcategory": "wall setting"
+    },
+    "1:88": {
+      "aliases": [
+        "masked",
+        "wall",
+        "raw"
+      ],
+      "description": "Occurs only inside wall cells, where the DOS engine reads it to configure masked-wall behaviour. It is not an object.",
+      "name": "Masked-wall setting 88",
+      "subcategory": "wall setting"
+    },
+    "1:98": {
+      "aliases": [
+        "pushwall",
+        "secret",
+        "moving wall"
+      ],
+      "description": "Slides two tiles and counts toward the restricted-area total.",
+      "name": "Secret pushwall"
+    }
+  },
+  "walls": {}
+}

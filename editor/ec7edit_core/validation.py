@@ -17,7 +17,9 @@ What is checked now:
 * every word is a word the translation knows, so nothing silently spawns
   nothing;
 * things stand on floor rather than inside walls;
-* a locked door has a matching key somewhere on the floor.
+* a locked door has a matching key somewhere on the floor;
+* the floor is made of sound areas, because a cell with no area is a cell
+  nothing can hear the player through.
 
 Each diagnostic carries a stable `C7E-*` code and a cell, so the GUI can put
 the cursor on the problem instead of describing it.
@@ -163,6 +165,29 @@ def validate_map(document: MapDocument, catalog: Catalog | None = None) -> list[
                 f"{name} has no wall to act on; it needs a solid wall in the same cell",
                 _where(*cell),
             ))
+
+    # -- floor with no sound area ------------------------------------------
+    #
+    # Corridor 7's floor words are Wolf3D areas. The engine decides whether a
+    # monster hears gunfire by asking map->CheckLink() whether the shooter's
+    # area reaches the listener's, and CheckLink answers false the moment
+    # either side is NULL. Word 0 is walkable but carries no area, so on a
+    # floor built from it nothing can hear anything: aliens ignore gunfire
+    # entirely and wake only on sight or on contact, which reads as "the
+    # monsters are broken" rather than as a property of the floor. None of the
+    # sixty shipped maps contains a single plane-0 zero.
+    # Severity follows the same rule as the other authored-content checks: an
+    # error in a map somebody is drawing, a warning in one that came out of the
+    # retail archive, where an unexpected word is evidence about the original
+    # rather than a mistake to correct.
+    zoneless = [index for index, value in enumerate(plane0) if value == 0]
+    if zoneless:
+        problems.append(Diagnostic(
+            "C7E-ZONE-001", preserved if imported else Severity.ERROR,
+            f"{len(zoneless)} floor cell(s) have no sound area, so nothing on this "
+            "map can hear the player; Tools -> Give the floor sound areas fixes it",
+            _where(*coordinates(zoneless[0], width)),
+        ))
 
     # -- locked doors without their key ------------------------------------
     if catalog is not None:

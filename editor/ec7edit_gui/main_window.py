@@ -45,7 +45,12 @@ from ec7edit_core.catalog import Catalog, load_catalog
 from ec7edit_core.commands import History
 from ec7edit_core.discovery import Profile, data_fingerprint
 from ec7edit_core.engine_runner import build_launch_plan
-from ec7edit_core.rules import check_door, check_transporters, door_cells
+from ec7edit_core.rules import (
+    assign_sound_areas as sound_area_writes,
+    check_door,
+    check_transporters,
+    door_cells,
+)
 from ec7edit_core.transforms import copy_region, flip_clip, paste_writes, rotate_clip
 from ec7edit_core.validation import summarise, validate_map
 from ec7edit_core.document import MapDocument, ProjectDocument, SourceReference, utc_now
@@ -282,10 +287,15 @@ class MainWindow(QMainWindow):
         )
         self.action_validate = self._action("&Check this map", self.validate, "F8")
         self.action_statistics = self._action("Map &statistics", self.show_statistics)
+        self.action_sound_areas = self._action(
+            "Give the floor sound &areas", self.assign_sound_areas,
+            tip="Repair floor cells that have no sound area, so aliens can hear",
+        )
         self.action_setup = self._action("&Setup…", self.run_setup, tip="Engine, data, workspace")
         self.tools_menu.addAction(self.action_test)
         self.tools_menu.addAction(self.action_validate)
         self.tools_menu.addAction(self.action_statistics)
+        self.tools_menu.addAction(self.action_sound_areas)
         self.tools_menu.addSeparator()
         self.tools_menu.addAction(self.action_setup)
 
@@ -1170,6 +1180,36 @@ class MainWindow(QMainWindow):
         return used
 
     # -- validation and playtest -------------------------------------------
+
+    def assign_sound_areas(self) -> int:
+        """Repair a floor whose cells carry no sound area.
+
+        Offered as a command because there is no other reasonable way to do it
+        by hand: the fill tool reaches one connected region per click, and a
+        map with rooms behind doors has as many regions as it has rooms. It is
+        also a repair nobody should have to make -- the editor floored new maps
+        with word 0 until 2026-08-31, and every map made before that has this.
+        """
+        tab = self.current_tab
+        if tab is None:
+            return 0
+        from ec7edit_core.commands import write_words
+
+        document = self.project.map_by_uuid(tab.map_uuid)
+        writes = sound_area_writes(document)
+        if not writes:
+            self.statusBar().showMessage(
+                "Every floor cell already has a sound area", 4000)
+            return 0
+        areas = sorted({value for *_, value in writes})
+        self.run_command(write_words(document, writes,
+                                     label="Give the floor sound areas"))
+        self.statusBar().showMessage(
+            f"Gave {len(writes)} floor cell(s) "
+            f"{'an area' if len(areas) == 1 else f'{len(areas)} areas'} "
+            f"({', '.join(str(a) for a in areas)})", 6000)
+        self.validate()
+        return len(writes)
 
     def validate(self) -> list:
         """Check the open map and fill the Problems panel."""

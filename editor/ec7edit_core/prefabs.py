@@ -205,6 +205,10 @@ class Prefab:
 #: A wall page that reads as a plain surface, used where a prefab needs a wall
 #: and the author has not chosen one. Page 0, the grey diagonal.
 DEFAULT_WALL = 1
+#: What erasing a structure puts back on plane 0. A sound area, not zero: see
+#: MapDocument.DEFAULT_FLOOR -- a cell with no area is a cell nothing can hear
+#: through, and the shipped maps never use word 0.
+DEFAULT_FLOOR = 256
 
 
 #: The four-frame retractable doors, named from their artwork. `base` is the
@@ -263,7 +267,7 @@ def _animated_door(base: int, name: str, description: str) -> Prefab:
         description=description,
         category="specials",
         writes=(Write(0, 0, 0, base), Write(1, 0, 0, 106)),
-        erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
+        erase_to=(Write(0, 0, 0, DEFAULT_FLOOR), Write(1, 0, 0, EMPTY_OBJECT)),
         evidence=f"xlat/corridor7.txt things trigger 106, Wall_AnimateRemove; the "
                  f"archive places wall {base} under marker 106 and never places "
                  f"{base + 1}..{base + 3} at all",
@@ -278,7 +282,7 @@ def _terminal(key, name, value, description, evidence) -> Prefab:
         key=key, name=name, description=description, category="specials",
         writes=(Write(0, 0, 0, value),),
         preconditions=(Precondition(0, 0, "reachable", "floor beside it to reach it from"),),
-        erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
+        erase_to=(Write(0, 0, 0, DEFAULT_FLOOR), Write(1, 0, 0, EMPTY_OBJECT)),
         evidence=evidence,
     )
 
@@ -329,7 +333,7 @@ PREFABS: tuple[Prefab, ...] = (
                     "shipped maps store one that starts open. 59 cells use it.",
         category="specials",
         writes=(Write(0, 0, 0, 84), Write(1, 0, 0, 107)),
-        erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
+        erase_to=(Write(0, 0, 0, DEFAULT_FLOOR), Write(1, 0, 0, EMPTY_OBJECT)),
         evidence="xlat things ignore 107; the archive places wall 84 with marker "
                  "107, and 84 is the last frame of the wall-81 animation",
         advanced=True,
@@ -345,7 +349,7 @@ PREFABS: tuple[Prefab, ...] = (
         preconditions=(
             Precondition(0, 0, "any", "a cell to sit in"),
         ),
-        erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
+        erase_to=(Write(0, 0, 0, DEFAULT_FLOOR), Write(1, 0, 0, EMPTY_OBJECT)),
         evidence="xlat/corridor7.txt tiles trigger 251, Door_Open",
         notes="Axis is inferred, never stored. See rules.door_axis.",
     ),
@@ -356,7 +360,7 @@ PREFABS: tuple[Prefab, ...] = (
                     "than the floor holding one.",
         category="specials",
         writes=(Write(0, 0, 0, 252),),
-        erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
+        erase_to=(Write(0, 0, 0, DEFAULT_FLOOR), Write(1, 0, 0, EMPTY_OBJECT)),
         evidence="xlat/corridor7.txt tiles trigger 252, arg3 = 1; lockdefs.txt "
                  "Lock 1 Corridor7 is C7Static002, 'BLUE Access Required'",
         notes="Lock 1 is the blue card and lock 2 is the red one, which is the "
@@ -370,7 +374,7 @@ PREFABS: tuple[Prefab, ...] = (
         description="Needs the RED access card.",
         category="specials",
         writes=(Write(0, 0, 0, 253),),
-        erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
+        erase_to=(Write(0, 0, 0, DEFAULT_FLOOR), Write(1, 0, 0, EMPTY_OBJECT)),
         evidence="xlat/corridor7.txt tiles trigger 253, arg3 = 2; lockdefs.txt "
                  "Lock 2 Corridor7 is C7Static001, 'RED Access Required'",
     ),
@@ -384,7 +388,7 @@ PREFABS: tuple[Prefab, ...] = (
         preconditions=(
             Precondition(0, 0, "reachable", "floor beside it to stand on"),
         ),
-        erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
+        erase_to=(Write(0, 0, 0, DEFAULT_FLOOR), Write(1, 0, 0, EMPTY_OBJECT)),
         evidence="xlat/corridor7.txt tiles trigger 63, Exit_Normal arg0 = 1",
         notes="arg1 = 64 is the lit panel the engine swaps in on use.",
     ),
@@ -418,7 +422,7 @@ PREFABS: tuple[Prefab, ...] = (
         preconditions=(
             Precondition(0, 0, "reachable", "floor beside it to stand in"),
         ),
-        erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
+        erase_to=(Write(0, 0, 0, DEFAULT_FLOOR), Write(1, 0, 0, EMPTY_OBJECT)),
         evidence="xlat/corridor7.txt tiles trigger 85, C7_Dispenser arg0 = 1",
         notes="The engine drives the aperture from the player's own tic; the map "
               "only needs the one wall.",
@@ -430,7 +434,7 @@ PREFABS: tuple[Prefab, ...] = (
         category="specials",
         writes=(Write(0, 0, 0, 111),),
         preconditions=(Precondition(0, 0, "reachable", "floor beside it"),),
-        erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
+        erase_to=(Write(0, 0, 0, DEFAULT_FLOOR), Write(1, 0, 0, EMPTY_OBJECT)),
         evidence="xlat/corridor7.txt tiles trigger 111, C7_Dispenser arg0 = 2",
     ),
     Prefab(
@@ -441,7 +445,7 @@ PREFABS: tuple[Prefab, ...] = (
         category="specials",
         writes=(Write(0, 0, 0, 110),),
         preconditions=(Precondition(0, 0, "reachable", "floor beside it"),),
-        erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
+        erase_to=(Write(0, 0, 0, DEFAULT_FLOOR), Write(1, 0, 0, EMPTY_OBJECT)),
         evidence="xlat/corridor7.txt tiles trigger 110, C7_Dispenser arg0 = 3",
     ),
     _wall_marker(
@@ -457,7 +461,7 @@ PREFABS: tuple[Prefab, ...] = (
                     "released maps use for it.",
         category="specials",
         writes=(Write(0, 0, 0, 254),),
-        erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
+        erase_to=(Write(0, 0, 0, DEFAULT_FLOOR), Write(1, 0, 0, EMPTY_OBJECT)),
         evidence="xlat/corridor7.txt tiles trigger 254, identical arguments to 251",
     ),
     Prefab(
@@ -468,7 +472,7 @@ PREFABS: tuple[Prefab, ...] = (
         category="specials",
         writes=(Write(0, 0, 0, 88),),
         preconditions=(Precondition(0, 0, "reachable", "floor beside it to stand in"),),
-        erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
+        erase_to=(Write(0, 0, 0, DEFAULT_FLOOR), Write(1, 0, 0, EMPTY_OBJECT)),
         evidence="xlat/corridor7.txt tiles trigger 88, C7_Dispenser arg0 = 1",
     ),
     Prefab(
@@ -479,7 +483,7 @@ PREFABS: tuple[Prefab, ...] = (
         category="specials",
         writes=(Write(0, 0, 0, 287),),
         preconditions=(Precondition(0, 0, "any", "a cell to sit in"),),
-        erase_to=(Write(0, 0, 0, 0), Write(1, 0, 0, EMPTY_OBJECT)),
+        erase_to=(Write(0, 0, 0, DEFAULT_FLOOR), Write(1, 0, 0, EMPTY_OBJECT)),
         evidence="xlat/corridor7.txt tiles trigger 287, Exit_Normal with playercross",
     ),
     Prefab(

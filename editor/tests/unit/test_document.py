@@ -143,7 +143,21 @@ class NewRoom(unittest.TestCase):
             self.assertEqual(document.cell(0, 9, y), MapDocument.SOLID_WALL)
 
     def test_the_middle_is_open(self):
-        self.assertEqual(MapDocument.new_room(width=10, height=8).cell(0, 5, 4), 0)
+        self.assertEqual(MapDocument.new_room(width=10, height=8).cell(0, 5, 4),
+                         MapDocument.DEFAULT_FLOOR)
+
+    def test_the_floor_is_a_sound_area(self):
+        # Not zero. Corridor 7's floor words are Wolf3D areas, and the engine
+        # decides whether a monster can hear gunfire by asking CheckLink()
+        # whether the shooter's area reaches the listener's. CheckLink answers
+        # false the moment either side is NULL, so on a map floored with zeros
+        # nothing ever hears anything -- aliens ignore gunfire completely and
+        # wake only on sight or contact. No shipped map holds a plane-0 zero.
+        document = MapDocument.new_room(width=8, height=8)
+        interior = [document.cell(0, x, y)
+                    for y in range(1, 7) for x in range(1, 7)]
+        self.assertTrue(all(v == MapDocument.DEFAULT_FLOOR for v in interior))
+        self.assertNotIn(0, interior)
 
     def test_the_object_plane_is_the_empty_marker(self):
         # Zero is a word that means something; 18 is the one that means nothing.
@@ -166,7 +180,7 @@ class NewRoom(unittest.TestCase):
 
     def test_the_start_stands_on_floor(self):
         document = MapDocument.new_room(width=10, height=10)
-        self.assertEqual(document.cell(0, 5, 5), 0)
+        self.assertEqual(document.cell(0, 5, 5), MapDocument.DEFAULT_FLOOR)
 
     def test_plane_two_starts_at_zero(self):
         document = MapDocument.new_room(width=6, height=6)

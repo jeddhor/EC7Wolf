@@ -33,6 +33,7 @@ from ec7edit_core.catalog import load_catalog
 from ec7edit_core.document import MapDocument, ProjectDocument
 from ec7edit_core.names import NativeName
 from ec7edit_core.planes import MapPlanes, linear_index
+from ec7edit_core.validation import validate_map
 
 from ec7edit_gui.application import build_application
 from ec7edit_gui.main_window import MainWindow
@@ -49,12 +50,17 @@ ALIOPROBE_EAST = 108
 
 
 def open_map(width=10, height=10) -> MapDocument:
-    """A room with a solid border, which is where editing usually starts."""
+    """A room with a solid border, which is where editing usually starts.
+
+    Floored with a sound area rather than word 0, because that is what a legal
+    map is: word 0 is walkable but carries no area, and nothing on such a map
+    can hear anything.
+    """
     plane0 = []
     for y in range(height):
         for x in range(width):
             edge = x in (0, width - 1) or y in (0, height - 1)
-            plane0.append(1 if edge else 0)
+            plane0.append(1 if edge else MapDocument.DEFAULT_FLOOR)
     return MapDocument("edit-uuid", 1, NativeName.from_text("ROOM"),
                        MapPlanes(width, height,
                                  (tuple(plane0), (EMPTY_OBJECT,) * (width * height),
@@ -139,7 +145,8 @@ class Brush(Base):
         self.choose("thing.c7rodex.stand.skill1")
         self.stroke(Tool.BRUSH, [(4, 4)])
         self.assertEqual(self.document.cell(1, 4, 4), RODEX_EAST)
-        self.assertEqual(self.document.cell(0, 4, 4), 0, "plane 0 was disturbed")
+        self.assertEqual(self.document.cell(0, 4, 4), MapDocument.DEFAULT_FLOOR,
+                         "plane 0 was disturbed")
 
     def test_the_plane_comes_from_the_catalogue_not_the_tool(self):
         # Same code path, different plane, because the entry says so.
@@ -174,9 +181,9 @@ class NewMap(Base):
         document = self.window.new_map(name="WALLED", slot=9, width=12, height=12)
         document = self.window.project.map_by_uuid(document.uuid)
         for x in range(12):
-            self.assertNotEqual(document.cell(0, x, 0), 0)
-            self.assertNotEqual(document.cell(0, x, 11), 0)
-        self.assertEqual(document.cell(0, 5, 5), 0)
+            self.assertNotEqual(document.cell(0, x, 0), MapDocument.DEFAULT_FLOOR)
+            self.assertNotEqual(document.cell(0, x, 11), MapDocument.DEFAULT_FLOOR)
+        self.assertEqual(document.cell(0, 5, 5), MapDocument.DEFAULT_FLOOR)
 
     def test_the_object_plane_starts_empty_not_zero(self):
         # Corridor 7's empty marker is 18. A plane of zeros would place
@@ -235,7 +242,8 @@ class Shapes(Base):
         self.window.tools.release(5, 5)
         self.assertEqual(self.document.cell(0, 2, 2), 2)
         self.assertEqual(self.document.cell(0, 5, 5), 2)
-        self.assertEqual(self.document.cell(0, 3, 3), 0, "the middle was filled")
+        self.assertEqual(self.document.cell(0, 3, 3), MapDocument.DEFAULT_FLOOR,
+                         "the middle was filled")
 
     def test_a_filled_rectangle(self):
         self.choose(WALL_ENTRY)
@@ -262,10 +270,20 @@ class Shapes(Base):
 
 class Erasing(Base):
     def test_erasing_a_wall_leaves_floor(self):
+        # Floor, meaning a sound area -- not word 0, which is no area at all
+        # and leaves a hole nothing can hear through.
         self.choose(WALL_ENTRY)
         self.stroke(Tool.BRUSH, [(3, 3)])
         self.stroke(Tool.ERASER, [(3, 3)])
-        self.assertEqual(self.document.cell(0, 3, 3), 0)
+        self.assertEqual(self.document.cell(0, 3, 3), MapDocument.DEFAULT_FLOOR)
+
+    def test_erasing_a_structure_leaves_a_sound_area_too(self):
+        from ec7edit_core.prefabs import by_key
+
+        self.window.tools.set_prefab(by_key("prefab.dispenser.ammo"))
+        self.stroke(Tool.PREFAB, [(4, 0)])
+        self.stroke(Tool.ERASER, [(4, 0)])
+        self.assertEqual(self.document.cell(0, 4, 0), MapDocument.DEFAULT_FLOOR)
 
     def test_erasing_an_object_writes_the_empty_marker(self):
         # Not zero: Corridor 7's empty object-plane word is 18.
@@ -323,6 +341,48 @@ class StubAssets:
 
     def sprite(self, page):
         return bytes([200, page % 256, 30, 255] * (64 * 64))
+
+
+class SoundAreaRepair(Base):
+    def zero_the_floor(self):
+        """The floor every map drawn before 2026-08-31 has: walkable word 0,
+        which carries no sound area, so nothing on the map can hear."""
+        document = self.document
+        words = list(document.planes.planes[0])
+        for index, value in enumerate(words):
+            if value == MapDocument.DEFAULT_FLOOR:
+                words[index] = 0
+        planes = list(document.planes.planes)
+        planes[0] = tuple(words)
+        self.window.project = self.window.project.with_map(
+            document.with_planes(MapPlanes(document.width, document.height,
+                                           tuple(planes))))
+
+    def test_it_repairs_a_floor_with_no_areas(self):
+        self.zero_the_floor()
+        self.assertIn(0, self.document.planes.planes[0])
+        self.window.assign_sound_areas()
+        self.assertNotIn(0, self.document.planes.planes[0])
+
+    def test_the_repair_is_one_undo(self):
+        self.zero_the_floor()
+        before = self.document.planes.planes
+        self.window.assign_sound_areas()
+        self.window.undo()
+        self.assertEqual(self.document.planes.planes, before)
+
+    def test_a_clean_map_is_left_alone(self):
+        before = self.document.planes.planes
+        self.assertEqual(self.window.assign_sound_areas(), 0)
+        self.assertEqual(self.document.planes.planes, before)
+
+    def test_the_validator_goes_quiet_afterwards(self):
+        self.zero_the_floor()
+        self.assertIn("C7E-ZONE-001",
+                      [p.code for p in validate_map(self.document, CATALOG)])
+        self.window.assign_sound_areas()
+        self.assertNotIn("C7E-ZONE-001",
+                         [p.code for p in validate_map(self.document, CATALOG)])
 
 
 class InspectorPreview(Base):
@@ -467,9 +527,11 @@ class InspectorPanel(Base):
         self.window.inspector.show_cell(self.document, 6, 6)
         self.assertFalse(self.window.inspector.movement.isEnabled())
 
-    def test_empty_floor_says_so(self):
+    def test_plain_floor_names_its_sound_area(self):
+        # Floor is not nothing: the word is the cell's sound area, which is
+        # what decides whether an alien standing here can hear the player.
         self.window.inspector.show_cell(self.document, 5, 5)
-        self.assertIn("Empty", self.window.inspector.heading.text())
+        self.assertIn("Area 256", self.window.inspector.heading.text())
 
 
 class Validation(Base):
@@ -704,7 +766,7 @@ class Transporters(Base):
         self.arm()
         self.click(3, 3)
         self.click(3, 3)
-        self.assertEqual(self.document.cell(0, 3, 3), 0)
+        self.assertEqual(self.document.cell(0, 3, 3), MapDocument.DEFAULT_FLOOR)
         self.assertIsNotNone(self.window.tools.pending_transporter)
 
     def test_a_pad_needs_floor(self):

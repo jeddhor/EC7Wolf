@@ -29,7 +29,10 @@ from ec7edit_core.validation import summarise, validate_map
 CATALOG = load_catalog(EDITOR / "resources" / "editor_catalog.json")
 
 WALL = 1
-FLOOR = 0
+#: A legal map's floor is a sound area. Word 0 is walkable but carries none,
+#: which is its own diagnostic now.
+FLOOR = 256
+NO_AREA = 0
 ZONE = 256
 PLAYER_START_EAST = 19
 RODEX_EAST = 216
@@ -62,6 +65,111 @@ def codes(document):
 class CleanMap(unittest.TestCase):
     def test_a_minimal_legal_map_has_no_problems(self):
         self.assertEqual(validate_map(build(), CATALOG), [])
+
+
+class SoundAreas(unittest.TestCase):
+    """Floor with no area is floor nothing can hear the player through."""
+
+    def test_floor_without_an_area_is_an_error(self):
+        document = build()
+        planes = list(document.planes.planes)
+        words = list(planes[0])
+        words[linear_index(4, 4, document.width)] = NO_AREA
+        planes[0] = tuple(words)
+        document = document.with_planes(
+            MapPlanes(document.width, document.height, tuple(planes)))
+        problems = [p for p in validate_map(document, CATALOG)
+                    if p.code == "C7E-ZONE-001"]
+        self.assertEqual(len(problems), 1)
+        self.assertEqual(problems[0].severity, Severity.ERROR)
+        self.assertIn("hear", problems[0].message)
+
+    def test_it_counts_them_and_names_the_first(self):
+        document = build(walls=False)
+        planes = list(document.planes.planes)
+        planes[0] = (NO_AREA,) * (document.width * document.height)
+        document = document.with_planes(
+            MapPlanes(document.width, document.height, tuple(planes)))
+        problem = next(p for p in validate_map(document, CATALOG)
+                       if p.code == "C7E-ZONE-001")
+        self.assertIn(str(document.width * document.height), problem.message)
+        self.assertIn("(0, 0)", problem.where)
+
+    def test_an_area_floor_is_silent(self):
+        self.assertNotIn("C7E-ZONE-001", codes(build()))
+
+    def test_an_imported_map_only_warns(self):
+        # An unexpected word in retail data is evidence about the original, not
+        # a mistake to correct -- the same rule the other authored checks use.
+        document = build(imported=True)
+        planes = list(document.planes.planes)
+        words = list(planes[0])
+        words[linear_index(4, 4, document.width)] = NO_AREA
+        planes[0] = tuple(words)
+        document = document.with_planes(
+            MapPlanes(document.width, document.height, tuple(planes)))
+        problem = next(p for p in validate_map(document, CATALOG)
+                       if p.code == "C7E-ZONE-001")
+        self.assertEqual(problem.severity, Severity.WARNING)
+
+
+class RepairingSoundAreas(unittest.TestCase):
+    """The repair for a floor made of word 0, which every map drawn before
+    2026-08-31 has. The fill tool reaches one connected region per click, and a
+    map with rooms behind doors has as many regions as it has rooms."""
+
+    def zoneless(self, rows):
+        """A map from ASCII: '#' wall, 'D' door, '.' floor with no area,
+        digits an existing area (256 + the digit)."""
+        height, width = len(rows), len(rows[0])
+        plane0, plane1 = [], [EMPTY] * (width * height)
+        for row in rows:
+            for cell in row:
+                plane0.append({"#": WALL, "D": 254, ".": NO_AREA}.get(cell)
+                              if cell in "#D." else 256 + int(cell))
+        plane1[linear_index(1, 1, width)] = PLAYER_START_EAST
+        return MapDocument("u", 1, NativeName.from_text("T"),
+                           MapPlanes(width, height,
+                                     (tuple(plane0), tuple(plane1),
+                                      (0,) * (width * height))))
+
+    def applied(self, document):
+        from ec7edit_core.rules import assign_sound_areas
+
+        words = list(document.planes.planes[0])
+        for _, x, y, value in assign_sound_areas(document):
+            words[linear_index(x, y, document.width)] = value
+        return words
+
+    def test_every_zoneless_cell_gets_an_area(self):
+        document = self.zoneless(["#####", "#...#", "#...#", "#####"])
+        self.assertNotIn(NO_AREA, self.applied(document))
+
+    def test_one_region_gets_one_area(self):
+        document = self.zoneless(["#####", "#...#", "#...#", "#####"])
+        areas = {v for v in self.applied(document) if v >= 256}
+        self.assertEqual(areas, {256})
+
+    def test_a_door_separates_two_areas(self):
+        # Which is the point of areas: sound crosses a doorway when the door
+        # opens and links them, exactly as it does in the shipped maps.
+        document = self.zoneless(["#####", "#.D.#", "#####"])
+        words = self.applied(document)
+        left = words[linear_index(1, 1, document.width)]
+        right = words[linear_index(3, 1, document.width)]
+        self.assertNotEqual(left, right)
+        self.assertEqual({left, right}, {256, 257})
+
+    def test_it_joins_an_area_that_is_already_there(self):
+        # Repairing half a map must not cut it off from the half that was right.
+        document = self.zoneless(["#####", "#.0.#", "#####"])
+        words = self.applied(document)
+        self.assertEqual({v for v in words if v >= 256}, {256})
+
+    def test_a_clean_map_needs_no_writes(self):
+        from ec7edit_core.rules import assign_sound_areas
+
+        self.assertEqual(assign_sound_areas(build()), [])
 
     def test_the_summary_says_so(self):
         self.assertEqual(summarise([]), "No problems found")

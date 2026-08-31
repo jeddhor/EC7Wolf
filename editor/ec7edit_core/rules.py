@@ -164,3 +164,71 @@ def door_cells(document: MapDocument, catalog=None) -> list[tuple[int, int]]:
     plane0 = document.planes.planes[0]
     return [(index % document.width, index // document.width)
             for index, value in enumerate(plane0) if value in doors]
+
+
+#: The plane-0 words that are sound areas. Corridor 7 defines 256..286 in the
+#: translation; anything outside that is not an area the engine knows.
+AREA_FIRST = 256
+AREA_LAST = 286
+
+
+def assign_sound_areas(document) -> list[tuple[int, int, int, int]]:
+    """Give every floor cell that has no sound area one, as `write_words` input.
+
+    Corridor 7's floor words are Wolf3D areas, and the engine carries sound
+    between two actors only if `CheckLink` finds a path from one's area to the
+    other's. Word 0 is walkable but carries no area at all, so a floor built
+    from it is a floor nothing can hear through -- see
+    `MapDocument.DEFAULT_FLOOR`.
+
+    Regions are the connected runs of floor, four-connected. A door is a
+    plane-0 word rather than floor, so it already separates the rooms it joins,
+    which is what makes the areas mean anything: sound crosses a doorway when
+    the door opens and links the two areas, exactly as it does in the shipped
+    maps.
+
+    A region touching cells that already have an area joins that one rather
+    than being given a new number -- repairing part of a map must not cut it
+    off from the part that was already right. Fresh regions take the next
+    unused number, and if a map has more regions than Corridor 7 has area
+    words they share the last one: too few areas is a map that hears too much,
+    which is recoverable, and an out-of-range word is not a map at all.
+    """
+    from .prefabs import is_floor
+
+    width, height = document.width, document.height
+    plane0 = document.planes.planes[0]
+
+    def at(x, y):
+        return plane0[y * width + x]
+
+    used = {value for value in plane0 if AREA_FIRST <= value <= AREA_LAST}
+    spare = (n for n in range(AREA_FIRST, AREA_LAST + 1) if n not in used)
+
+    writes: list[tuple[int, int, int, int]] = []
+    seen = [False] * (width * height)
+    for start in range(width * height):
+        if seen[start] or at(start % width, start // width) != 0:
+            continue
+        # One region: every zoneless floor cell reachable from here.
+        region, neighbours, stack = [], set(), [start]
+        seen[start] = True
+        while stack:
+            index = stack.pop()
+            x, y = index % width, index // width
+            region.append((x, y))
+            for nx, ny in ((x, y - 1), (x + 1, y), (x, y + 1), (x - 1, y)):
+                if not (0 <= nx < width and 0 <= ny < height):
+                    continue
+                value = at(nx, ny)
+                if value == 0:
+                    if not seen[ny * width + nx]:
+                        seen[ny * width + nx] = True
+                        stack.append(ny * width + nx)
+                elif AREA_FIRST <= value <= AREA_LAST:
+                    neighbours.add(value)
+                elif is_floor(value):
+                    pass
+        area = min(neighbours) if neighbours else next(spare, AREA_LAST)
+        writes.extend((0, x, y, area) for x, y in region)
+    return writes

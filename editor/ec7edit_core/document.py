@@ -155,6 +155,16 @@ class MapDocument:
     #: place whatever word 0 means on every cell of it.
     SOLID_WALL = 1
     EMPTY_OBJECT = 18
+    #: The plane-0 word for open floor. NOT zero.
+    #:
+    #: Corridor 7's floor words are sound areas -- Wolf3D "areas" -- and the
+    #: engine propagates noise by asking map->CheckLink() whether the shooter's
+    #: area connects to the listener's. CheckLink answers false the moment
+    #: either side is NULL, and word 0 carries no area at all, so on a map
+    #: floored with zeros nothing can ever hear anything: aliens ignore gunfire
+    #: entirely and wake only on sight or contact. None of the sixty shipped
+    #: maps contains a single plane-0 zero; 256 is the area they use most.
+    DEFAULT_FLOOR = 256
     #: The player start facing east. Corridor 7 reflects a start's angle, so
     #: this band reads north, east, south, west -- 20 is east, not 19.
     PLAYER_START_EAST = 20
@@ -175,16 +185,18 @@ class MapDocument:
                  height: int = 64, with_start: bool = True) -> "MapDocument":
         """A map somebody would actually want to start drawing on.
 
-        Three differences from `blank`, all of which every author would make
+        Four differences from `blank`, all of which every author would make
         immediately: the boundary is solid, because an open edge lets the
-        player walk out of the world; the object plane holds Corridor 7's empty
-        marker rather than zeros, since a plane of zeros would place whatever
-        word 0 means on every cell; and there is a player start in the middle,
-        because the engine refuses a map without one -- it prints "No player 1
-        start!" and exits, which looks exactly like a crash.
+        player walk out of the world; the floor is a sound area rather than
+        zero, because an area of zero is no area and nothing on such a map can
+        hear anything (see DEFAULT_FLOOR); the object plane holds Corridor 7's
+        empty marker rather than zeros, since a plane of zeros would place
+        whatever word 0 means on every cell; and there is a player start in the
+        middle, because the engine refuses a map without one -- it prints "No
+        player 1 start!" and exits, which looks exactly like a crash.
         """
         cells = width * height
-        floor = [0] * cells
+        floor = [cls.DEFAULT_FLOOR] * cells
         for x in range(width):
             floor[x] = floor[(height - 1) * width + x] = cls.SOLID_WALL
         for y in range(height):

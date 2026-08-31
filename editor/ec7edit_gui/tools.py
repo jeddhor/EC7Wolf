@@ -41,6 +41,9 @@ from ec7edit_core.tools import (
 
 #: Corridor 7's empty object marker, which is what erasing plane 1 writes.
 EMPTY_OBJECT = 18
+#: What erasing plane 0 writes: open floor, which in Corridor 7 is a sound
+#: area. See MapDocument.DEFAULT_FLOOR for why it must not be zero.
+DEFAULT_FLOOR = MapDocument.DEFAULT_FLOOR
 
 
 class Tool(Enum):
@@ -249,7 +252,10 @@ class ToolController(QObject):
 
     def _value(self) -> int | None:
         if self.tool is Tool.ERASER:
-            return EMPTY_OBJECT if self.target_plane == 1 else 0
+            # Erasing a wall leaves floor, and floor is a sound area -- word 0
+            # is not one, and a map floored with it is a map where nothing can
+            # hear the player. See MapDocument.DEFAULT_FLOOR.
+            return EMPTY_OBJECT if self.target_plane == 1 else DEFAULT_FLOOR
         if self.entry is None:
             return None
         return self.entry.value

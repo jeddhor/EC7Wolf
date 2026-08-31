@@ -12,8 +12,18 @@ The same construction drives the DOS-side DMA sound captures, where an empty
 room is the difference between "this sample belongs to the Rodex" and "this
 sample happened while a Rodex was on screen".
 
-A placement is either a plane-1 object number or the word `door`, which puts a
-plain door across the corridor at that x. A corridor with a door and nothing
+The floor is a sound area (256), the same word the shipped maps use most, and
+not zero. Corridor 7's floor words are Wolf3D areas: the engine decides whether
+a monster hears gunfire by asking CheckLink() whether the shooter's area
+reaches the listener's, and CheckLink answers false the moment either side is
+NULL. A lab floored with zeros is one where nothing can hear anything, which
+would quietly make any hearing test unfalsifiable.
+
+A placement is `OBJECT:X`, or `OBJECT:X:ROW` to put it ROW tiles north of the
+player's row -- which is how an alien is placed out of the line of fire, so
+that what reaches it can only have been the sound. The corridor is made just
+tall enough for the placements given, so `OBJECT:X` alone still builds the
+one-tile corridor it always did. `door:X` puts a plain door across it. A corridor with a door and nothing
 else in it is what the renderer gates want: a door on screen with no sprite
 drawn after it is the case where leftover door state reaches the view model.
 
@@ -43,6 +53,7 @@ from ec7edit_core.planes import MapPlanes  # noqa: E402
 PLAYER_START = 20   # plane-1 value for a player start facing east
 EMPTY = 18          # plane-1 filler
 SOLID = 1           # plane-0 wall
+FLOOR = 256         # plane-0 open floor: a sound area, NOT zero -- see below
 DOOR = 254          # plane-0 word for a plain door
 PLAYER_X = 4
 ROW = 32
@@ -57,13 +68,14 @@ def main() -> None:
     placements = []
     doors = []
     for spec in sys.argv[3:]:
-        obj, _, x = spec.partition(":")
-        if not x:
-            sys.exit(f"bad placement {spec!r}, expected OBJECT:X or door:X")
+        obj, _, rest = spec.partition(":")
+        if not rest:
+            sys.exit(f"bad placement {spec!r}, expected OBJECT:X[:ROW] or door:X")
+        x, _, row = rest.partition(":")
         if obj == "door":
             doors.append(int(x))
         else:
-            placements.append((int(obj), int(x)))
+            placements.append((int(obj), int(x), int(row) if row else 0))
 
     identity = SourceIdentity.probe(source)
     guard = OutputGuard.for_source(source)
@@ -73,18 +85,20 @@ def main() -> None:
     records = list(archive.records)
     width, height = records[0].width, records[0].height
 
-    walls = [0] * (width * height)
     things = [EMPTY] * (width * height)
     meta = [0] * (width * height)
 
+    walls = [FLOOR] * (width * height)
     for x in range(width):
         walls[x] = walls[(height - 1) * width + x] = SOLID
     for y in range(height):
         walls[y * width] = walls[y * width + width - 1] = SOLID
-    # A one-tile-tall corridor, so an alien's line to the player is never in
-    # doubt and a wake-up can only be explained by range.
+    # As short a corridor as the placements allow: with everything on the
+    # player's own row it is one tile tall, so an alien's line to the player is
+    # never in doubt and a wake-up can only be explained by range.
+    hall = max([row for _, _, row in placements] + [0])
     for x in range(1, width - 1):
-        walls[(ROW - 1) * width + x] = SOLID
+        walls[(ROW - hall - 1) * width + x] = SOLID
         walls[(ROW + 1) * width + x] = SOLID
 
     # The corridor walls above and below mean the door's axis is inferred as
@@ -95,10 +109,10 @@ def main() -> None:
         walls[ROW * width + x] = DOOR
 
     things[ROW * width + PLAYER_X] = PLAYER_START
-    for obj, x in placements:
-        if not 1 <= x < width - 1 or x == PLAYER_X:
+    for obj, x, row in placements:
+        if not 1 <= x < width - 1 or (x == PLAYER_X and row == 0):
             sys.exit(f"placement x={x} is outside the corridor or on the player")
-        things[ROW * width + x] = obj
+        things[(ROW - row) * width + x] = obj
 
     records[0] = replace(
         records[0],
@@ -108,7 +122,9 @@ def main() -> None:
     )
     atomic_write(output, encode_archive(records), guard=guard)
     identity.verify_unchanged()
-    placed = ", ".join([f"object {o} at {x - PLAYER_X} tiles" for o, x in placements]
+    placed = ", ".join([f"object {o} at {x - PLAYER_X} tiles"
+                        + (f", {r} north" if r else "")
+                        for o, x, r in placements]
                        + [f"a door at {x - PLAYER_X} tiles" for x in doors])
     print(f"wrote {output} ({placed or 'an empty corridor'})")
 

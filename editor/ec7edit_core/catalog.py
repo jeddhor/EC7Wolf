@@ -119,18 +119,35 @@ class Catalog:
     def __iter__(self):
         return iter(self.entries)
 
+    #: Built on first use, not in __init__: a Catalog is a frozen-ish value
+    #: that tests construct directly, and an index built eagerly would have to
+    #: be rebuilt by every one of them.
+    _by_value: dict | None = field(default=None, repr=False, compare=False)
+    _by_key: dict | None = field(default=None, repr=False, compare=False)
+
+    def _index(self) -> dict:
+        if self._by_value is None:
+            index: dict[tuple[int, int], CatalogEntry] = {}
+            for entry in self.entries:
+                for value in entry.values:
+                    index.setdefault((entry.plane, value), entry)
+            object.__setattr__(self, "_by_value", index)
+        return self._by_value
+
     def by_key(self, key: str) -> CatalogEntry | None:
-        for entry in self.entries:
-            if entry.key == key:
-                return entry
-        return None
+        if self._by_key is None:
+            object.__setattr__(self, "_by_key",
+                               {entry.key: entry for entry in self.entries})
+        return self._by_key.get(key)
 
     def for_value(self, plane: int, value: int) -> CatalogEntry | None:
-        """The entry that owns a raw value on a plane, if any does."""
-        for entry in self.entries:
-            if entry.plane == plane and value in entry.values:
-                return entry
-        return None
+        """The entry that owns a raw value on a plane, if any does.
+
+        Indexed, because the validator asks this once per cell per rule: on a
+        64x64 map a linear scan over 457 entries is millions of comparisons and
+        it was most of a full validation's cost.
+        """
+        return self._index().get((plane, value))
 
     def in_category(self, category: str) -> list[CatalogEntry]:
         return sorted(

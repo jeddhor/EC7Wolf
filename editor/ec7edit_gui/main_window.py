@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtCore import QTimer, QSize, Qt, Signal
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -25,12 +25,14 @@ from PySide6.QtWidgets import (
     QMenu,
     QDockWidget,
     QFileDialog,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QListView,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QComboBox,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -52,7 +54,15 @@ from ec7edit_core.rules import (
     door_cells,
 )
 from ec7edit_core.transforms import copy_region, flip_clip, paste_writes, rotate_clip
-from ec7edit_core.validation import summarise, validate_map
+from ec7edit_core.validation import (
+    Profile,
+    fix_label,
+    fix_writes,
+    profile_for_slot,
+    summarise,
+    validate_local,
+    validate_map,
+)
 from ec7edit_core.document import MapDocument, ProjectDocument, SourceReference, utc_now
 from ec7edit_core.errors import Ec7EditError, Severity
 from ec7edit_core.paths import SourceIdentity
@@ -128,6 +138,17 @@ class MainWindow(QMainWindow):
 
         self.pool = WorkerPool(self)
         self.thumbnails = ThumbnailFactory()
+        #: The last validation result, and the project revision it
+        #: describes -- so the panel can say when it has gone stale
+        #: instead of quietly showing an answer about an older map.
+        self._problems: list = []
+        self._problems_revision: int = -1
+        #: Coalesces the full pass: every edit restarts it, so the expensive
+        #: rules run once after a stroke rather than once per cell of it.
+        self._validate_timer = QTimer(self)
+        self._validate_timer.setSingleShot(True)
+        self._validate_timer.setInterval(400)
+        self._validate_timer.timeout.connect(lambda: self.validate())
         self.recovery = RecoveryStore(Path.home() / ".local" / "share" / "ec7edit" / "recovery")
 
         self.tools = ToolController(self)
@@ -464,9 +485,44 @@ class MainWindow(QMainWindow):
         self.problems = QListWidget(self)
         self.problems.setAccessibleName("Problems")
         self.problems.itemActivated.connect(self._on_problem_activated)
+        self.problems.currentItemChanged.connect(self._on_problem_selected)
+
+        # Warnings outnumber errors on any real map, and the plan's rule is
+        # that a panel nobody can scan is a panel nobody reads. The filter is
+        # a floor, not a set of checkboxes: "errors only" is the question
+        # people actually ask.
+        self.problem_filter = QComboBox(self)
+        self.problem_filter.setAccessibleName("Show problems")
+        self.problem_filter.addItem("Everything", Severity.INFORMATION)
+        self.problem_filter.addItem("Warnings and errors", Severity.WARNING)
+        self.problem_filter.addItem("Errors only", Severity.ERROR)
+        self.problem_filter.setCurrentIndex(1)
+        self.problem_filter.currentIndexChanged.connect(self._repaint_problems)
+
+        self.problem_fix = QPushButton("Fix this", self)
+        self.problem_fix.setAccessibleName("Fix the selected problem")
+        self.problem_fix.setEnabled(False)
+        self.problem_fix.clicked.connect(lambda _checked=False: self.apply_fix())
+
+        self.problem_status = QLabel("", self)
+        self.problem_status.setAccessibleName("Problem summary")
+
+        controls = QHBoxLayout()
+        controls.setContentsMargins(4, 2, 4, 2)
+        controls.addWidget(self.problem_filter)
+        controls.addWidget(self.problem_fix)
+        controls.addWidget(self.problem_status, 1)
+
+        problems_panel = QWidget(self)
+        problems_layout = QVBoxLayout(problems_panel)
+        problems_layout.setContentsMargins(0, 0, 0, 0)
+        problems_layout.setSpacing(2)
+        problems_layout.addLayout(controls)
+        problems_layout.addWidget(self.problems)
+
         problems_dock = QDockWidget("Problems", self)
         problems_dock.setObjectName("problems-dock")
-        problems_dock.setWidget(self.problems)
+        problems_dock.setWidget(problems_panel)
         self.addDockWidget(Qt.BottomDockWidgetArea, problems_dock)
         self.problems_dock = problems_dock
 
@@ -647,9 +703,46 @@ class MainWindow(QMainWindow):
         self._identity = None
         return self.save_project()
 
+    def preflight(self, maps) -> list:
+        """Every error in the maps about to leave the editor.
+
+        The plan's rule is that an export-blocking invariant has a diagnostic
+        and the diagnostic blocks the export: a WAD the engine refuses to load,
+        or loads into an unplayable floor, is worse than a refusal here,
+        because it fails somewhere with no idea what is wrong. Warnings do not
+        block -- an unfinished map is a normal thing to want to look at.
+        """
+        if self.catalog is None:
+            return []
+        blocking = []
+        for document in maps:
+            for problem in validate_map(document, self.catalog,
+                                        profile=self._map_profile(document)):
+                if problem.severity is Severity.ERROR:
+                    blocking.append((document, problem))
+        return blocking
+
+    def _preflight_refused(self, blocking, what: str) -> bool:
+        """Report a refused export. True when the caller must stop."""
+        if not blocking:
+            return False
+        lines = [f"{document.lump_name} {document.name}: {problem.message}"
+                 for document, problem in blocking[:6]]
+        if len(blocking) > 6:
+            lines.append(f"...and {len(blocking) - 6} more")
+        self._error(f"{what} has errors",
+                    "This will not play correctly, so it has not been written:\n\n"
+                    + "\n".join(lines)
+                    + "\n\nThe Problems panel lists them all; some can be fixed "
+                      "with one click.")
+        return True
+
     def export_preview(self, only: str | None = None) -> None:
         if not self.project.maps:
             self._error("Nothing to export", "This project has no maps yet.")
+            return
+        chosen = [d for d in self.project.maps if only is None or d.uuid == only]
+        if self._preflight_refused(self.preflight(chosen), "This export"):
             return
         path, _ = QFileDialog.getSaveFileName(
             self, "Export preview WAD", self._start_directory(), "WAD files (*.wad)"
@@ -660,7 +753,6 @@ class MainWindow(QMainWindow):
         from ec7edit_core.wad import build_preview_wad
 
         try:
-            chosen = [d for d in self.project.maps if only is None or d.uuid == only]
             blob = build_preview_wad([(d.lump_name, d.to_record()) for d in chosen])
             guard = OutputGuard()
             if self.settings.profile.data_dir:
@@ -1032,7 +1124,18 @@ class MainWindow(QMainWindow):
             # the old one would keep reporting the words from before this edit.
             self.tools.set_document(self.project.map_by_uuid(tab.map_uuid))
         self._refresh_title()
+        # Continuous validation: the cheap rules on every edit, the whole set
+        # when the hand stops. Painting a wall must not pay for a reachability
+        # flood, and a panel that only updates on F8 is a panel describing a
+        # map that no longer exists.
+        self._revalidate_soon()
         self.project_changed.emit()
+
+    def _revalidate_soon(self) -> None:
+        if self.catalog is None or self.current_tab is None:
+            return
+        self.validate(quick=True)
+        self._validate_timer.start()
 
     def undo(self) -> None:
         self.project = self.history.undo(self.project)
@@ -1211,27 +1314,91 @@ class MainWindow(QMainWindow):
         self.validate()
         return len(writes)
 
-    def validate(self) -> list:
-        """Check the open map and fill the Problems panel."""
+    def _map_profile(self, document) -> "Profile":
+        """Which rules apply to this map, from the slot it is exported to."""
+        return profile_for_slot(document.slot)
+
+    def validate(self, *, quick: bool = False) -> list:
+        """Check the open map and fill the Problems panel.
+
+        `quick` runs only the rules whose answer is local to the cells that
+        changed and keeps the previous answer for the rest. That is what runs
+        while somebody is painting; the full pass runs when they stop, and on
+        anything that has to be right, such as an export.
+        """
         tab = self.current_tab
-        self.problems.clear()
         if tab is None or self.catalog is None:
+            self.problems.clear()
+            self._problems = []
+            self._problems_revision = -1
             return []
         document = self.project.map_by_uuid(tab.map_uuid)
-        problems = validate_map(document, self.catalog)
-        problems.extend(check_transporters(document))
-        for x, y in door_cells(document, self.catalog):
-            problems.extend(check_door(document, x, y))
-        for problem in problems:
-            item = QListWidgetItem(f"{problem.severity.name.lower()}: {problem.message}"
-                                   + (f"  [{problem.where}]" if problem.where else ""))
-            item.setToolTip(problem.code)
-            if problem.where.startswith("cell ("):
-                numbers = problem.where[6:-1].split(",")
-                item.setData(Qt.UserRole, (int(numbers[0]), int(numbers[1])))
-            self.problems.addItem(item)
+        profile = self._map_profile(document)
+        if quick:
+            problems = validate_local(document, self.catalog, profile=profile,
+                                      previous=self._problems)
+        else:
+            problems = validate_map(document, self.catalog, profile=profile)
+            problems.extend(check_transporters(document))
+            for x, y in door_cells(document, self.catalog):
+                problems.extend(check_door(document, x, y))
+        self._problems = problems
+        self._problems_revision = self.project.revision
+        self._repaint_problems()
         self.statusBar().showMessage(summarise(problems), 6000)
         return problems
+
+    def _repaint_problems(self) -> None:
+        """Refill the list from the last result, honouring the severity floor."""
+        floor = self.problem_filter.currentData()
+        self.problems.clear()
+        shown = 0
+        for problem in self._problems:
+            if floor is not None and problem.severity < floor:
+                continue
+            shown += 1
+            item = QListWidgetItem(f"{problem.severity.name.lower()}: {problem.message}"
+                                   + (f"  [{problem.where}]" if problem.where else ""))
+            item.setToolTip(f"{problem.code}\n{problem.message}")
+            item.setData(Qt.UserRole, problem.cell)
+            item.setData(Qt.UserRole + 1, problem.fix)
+            self.problems.addItem(item)
+        hidden = len(self._problems) - shown
+        stale = self._problems_revision != self.project.revision
+        parts = [summarise(self._problems)]
+        if hidden:
+            parts.append(f"{hidden} hidden by the filter")
+        if stale:
+            # Said rather than silently shown: a panel describing a map that
+            # has since changed is worse than an empty one, because it looks
+            # current.
+            parts.append("from an earlier edit — press F8 to recheck")
+        self.problem_status.setText("  ·  ".join(parts))
+        self._on_problem_selected(self.problems.currentItem(), None)
+
+    def _on_problem_selected(self, current, _previous) -> None:
+        fix = current.data(Qt.UserRole + 1) if current is not None else ""
+        self.problem_fix.setEnabled(bool(fix))
+        self.problem_fix.setText(fix_label(fix) if fix else "Fix this")
+
+    def apply_fix(self) -> int:
+        """Apply the selected problem's repair, as one undoable command."""
+        from ec7edit_core.commands import write_words
+
+        item = self.problems.currentItem()
+        tab = self.current_tab
+        if item is None or tab is None:
+            return 0
+        fix = item.data(Qt.UserRole + 1)
+        if not fix:
+            return 0
+        document = self.project.map_by_uuid(tab.map_uuid)
+        writes = fix_writes(fix, document)
+        if not writes:
+            return 0
+        self.run_command(write_words(document, writes, label=fix_label(fix)))
+        self.validate()
+        return len(writes)
 
     def playtest(self) -> bool:
         """Export the open map and start the engine on it.

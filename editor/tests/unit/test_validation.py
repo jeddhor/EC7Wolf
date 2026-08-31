@@ -34,6 +34,8 @@ WALL = 1
 FLOOR = 256
 NO_AREA = 0
 ZONE = 256
+#: The plane-0 marker that finishes the floor when walked over.
+FLOOR_EXIT = 287
 PLAYER_START_EAST = 19
 RODEX_EAST = 216
 RED_DOOR = 253      # lock 2; lockdefs.txt Lock 2 Corridor7 is the red card
@@ -42,13 +44,19 @@ RED_TERMINAL = 9
 EMPTY = 18
 
 
-def build(width=8, height=8, *, imported=False, walls=True):
-    """A minimal legal map: solid border, open middle, one player start."""
+def build(width=8, height=8, *, imported=False, walls=True, exit=True):
+    """A minimal legal map: solid border, open middle, one start, a way out.
+
+    The exit matters: without one the floor cannot be finished, which the
+    validator says so a map that is missing it is not called clean.
+    """
     plane0 = []
     for y in range(height):
         for x in range(width):
             edge = x in (0, width - 1) or y in (0, height - 1)
             plane0.append(WALL if (edge and walls) else FLOOR)
+    if exit:
+        plane0[linear_index(width - 2, height - 2, width)] = FLOOR_EXIT
     plane1 = [EMPTY] * (width * height)
     plane1[linear_index(2, 2, width)] = PLAYER_START_EAST
     source = SourceReference("MAPTEMP.CO7", "a" * 64, 1) if imported else None

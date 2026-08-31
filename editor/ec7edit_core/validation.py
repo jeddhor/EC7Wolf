@@ -19,7 +19,12 @@ What is checked now:
 * things stand on floor rather than inside walls;
 * a locked door has a matching key somewhere on the floor;
 * the floor is made of sound areas, because a cell with no area is a cell
-  nothing can hear the player through.
+  nothing can hear the player through;
+* the floor can be finished: an exit the player can walk to, given the doors,
+  the keys and the transporters between them.
+
+Reachability is advisory and its model is written down in `reachability.py`,
+limits included. It under-reports rather than inventing errors.
 
 Each diagnostic carries a stable `C7E-*` code and a cell, so the GUI can put
 the cursor on the problem instead of describing it.
@@ -27,10 +32,13 @@ the cursor on the problem instead of describing it.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from .catalog import Catalog
 from .document import MapDocument
 from .errors import Diagnostic, Severity
 from .planes import coordinates, linear_index
+from .reachability import analyse, unreachable_floor
 
 #: Corridor 7's empty object-plane marker. Not zero.
 EMPTY_OBJECT = 18
@@ -45,7 +53,92 @@ def _where(x: int, y: int) -> str:
     return f"cell ({x}, {y})"
 
 
-def validate_map(document: MapDocument, catalog: Catalog | None = None) -> list[Diagnostic]:
+@dataclass(frozen=True)
+class Profile:
+    """What kind of map is being checked.
+
+    Corridor 7's rules are not the same for every slot: a floor exported to a
+    stock single-player slot must have exactly one start and a way out, and a
+    map being built as a deathmatch arena has neither. Rather than a pile of
+    booleans at every call site, the profile is one object the rules ask.
+    """
+
+    key: str
+    name: str
+    #: How many player starts are right. None means "do not check".
+    starts: int | None = 1
+    #: Whether the floor has to be completable.
+    needs_exit: bool = True
+    #: Whether unreachable floor is worth reporting.
+    reports_unreachable: bool = True
+
+
+#: The default, and the only one the exporters currently target.
+SINGLE_PLAYER = Profile("single_player_stock_slot", "Single player, stock slot")
+#: The stock slots that hold a network arena rather than a campaign floor.
+#:
+#: From wadsrc/static/mapinfo/corridor7.txt, where each of these names itself as
+#: its own `next` and sets `nointermission` -- a finished match starts another
+#: on the same arena. They are not the contiguous block the compendium
+#: describes: the maps at 58 and 59 are bare boxes and the eighth arena is at
+#: 60. An arena has no exit and several starts, and judging one by the
+#: campaign's rules reports both as faults.
+ARENA_SLOTS = frozenset({51, 52, 53, 54, 55, 56, 57, 60})
+#: A map for the multiplayer arenas: several starts, no exit, and unreachable
+#: pockets are usually deliberate scenery.
+DEATHMATCH = Profile("deathmatch", "Deathmatch arena",
+                     starts=None, needs_exit=False, reports_unreachable=False)
+PROFILES = {profile.key: profile for profile in (SINGLE_PLAYER, DEATHMATCH)}
+
+
+def profile_for_slot(slot: int) -> Profile:
+    """The rules that apply to the stock slot a map is exported to.
+
+    This is the plan's "target-slot context": the same map is right or wrong
+    depending on where it is going, and the editor knows where it is going
+    because the document says which slot it occupies.
+    """
+    return DEATHMATCH if slot in ARENA_SLOTS else SINGLE_PLAYER
+
+
+#: Codes whose answer depends only on the cells around the one that changed.
+#: An incremental pass runs these and keeps the rest of the previous result,
+#: which is what makes validating on every stroke affordable; a full pass runs
+#: everything and is what the Problems panel and the export preflight use.
+LOCAL_CODES = frozenset({
+    "C7E-BOUNDARY-001", "C7E-CELL-002", "C7E-THING-001", "C7E-WALL-001",
+    "C7E-ZONE-001",
+})
+
+#: Codes that are a claim about the whole map: starts, keys, routes, exits.
+GLOBAL_CODES = frozenset({
+    "C7E-START-001", "C7E-START-002", "C7E-START-003", "C7E-DOOR-003",
+    "C7E-DOOR-004", "C7E-EXIT-001", "C7E-ZONE-002",
+})
+
+
+def validate_local(document: MapDocument, catalog: Catalog | None = None, *,
+                   profile: Profile = SINGLE_PLAYER,
+                   previous: list[Diagnostic] | None = None) -> list[Diagnostic]:
+    """A cheap pass for "the user just painted a cell".
+
+    Runs the rules whose answer is local and reuses the previous result for the
+    ones that are not, so the panel stays useful between full passes without
+    flooding a stroke with reachability work. The contract the tests hold it
+    to: for every code in `LOCAL_CODES`, this agrees exactly with a full
+    validation of the same document.
+    """
+    fresh = validate_map(document, catalog, profile=profile, only=LOCAL_CODES)
+    local = [problem for problem in fresh if problem.code in LOCAL_CODES]
+    stale = [problem for problem in (previous or []) if problem.code not in LOCAL_CODES]
+    return sorted(local + stale,
+                  key=lambda problem: (-problem.severity.value, problem.code,
+                                       problem.cell or (0, 0)))
+
+
+def validate_map(document: MapDocument, catalog: Catalog | None = None, *,
+                 profile: Profile = SINGLE_PLAYER,
+                 only: frozenset[str] | None = None) -> list[Diagnostic]:
     """Check one map. Returns diagnostics worst first.
 
     Imported maps are judged more gently than authored ones, which is the
@@ -75,10 +168,10 @@ def validate_map(document: MapDocument, catalog: Catalog | None = None) -> list[
     if open_edges:
         first = open_edges[0]
         problems.append(Diagnostic(
-            "C7E-BOUNDARY-001", Severity.ERROR,
+            "C7E-BOUNDARY-001", preserved if imported else Severity.ERROR,
             f"{len(open_edges)} cell(s) on the outer boundary are walkable; "
             "the player can leave the map",
-            _where(*first),
+            _where(*first), first, fix="seal_boundary",
         ))
 
     # -- player starts ----------------------------------------------------
@@ -88,24 +181,25 @@ def validate_map(document: MapDocument, catalog: Catalog | None = None) -> list[
             entry = catalog.for_value(1, value)
             if entry is not None and entry.category == "starts" and entry.subcategory == "player":
                 starts.append(coordinates(index, width))
-    if catalog is not None:
+    if catalog is not None and profile.starts is not None:
         if not starts:
             problems.append(Diagnostic(
                 "C7E-START-001", Severity.ERROR,
                 "there is no player start on this map", "",
             ))
-        elif len(starts) > 1:
+        elif len(starts) > profile.starts:
             problems.append(Diagnostic(
                 "C7E-START-002", Severity.ERROR,
-                f"{len(starts)} player starts; a single-player map needs exactly one",
-                _where(*starts[1]),
+                f"{len(starts)} player starts; {profile.name} needs exactly "
+                f"{profile.starts}",
+                _where(*starts[1]), starts[1],
             ))
-        else:
-            index = linear_index(starts[0][0], starts[0][1], width)
-            if not _is_floor(plane0[index]):
+    if catalog is not None:
+        for start in starts:
+            if not _is_floor(plane0[linear_index(start[0], start[1], width)]):
                 problems.append(Diagnostic(
                     "C7E-START-003", Severity.ERROR,
-                    "the player start is inside a wall", _where(*starts[0]),
+                    "the player start is inside a wall", _where(*start), start,
                 ))
 
     # -- words the translation does not know ------------------------------
@@ -187,6 +281,7 @@ def validate_map(document: MapDocument, catalog: Catalog | None = None) -> list[
             f"{len(zoneless)} floor cell(s) have no sound area, so nothing on this "
             "map can hear the player; Tools -> Give the floor sound areas fixes it",
             _where(*coordinates(zoneless[0], width)),
+            coordinates(zoneless[0], width), fix="sound_areas",
         ))
 
     # -- locked doors without their key ------------------------------------
@@ -221,8 +316,137 @@ def validate_map(document: MapDocument, catalog: Catalog | None = None) -> list[
                         _where(*cell),
                     ))
 
-    problems.sort(key=lambda problem: -problem.severity.value)
+    # -- reachability -----------------------------------------------------
+    #
+    # Advisory by design: the model in reachability.py under-reports rather
+    # than inventing routes, and the plan is explicit that this is not a proof
+    # that a floor can be finished.
+    if catalog is not None and starts and (only is None or (GLOBAL_CODES & only)):
+        reach = analyse(document, catalog)
+
+        # A key behind the only door it opens. The flood is a fixpoint, so a
+        # colour still blocking when it stops is a colour whose key the player
+        # can never hold -- which is the one shape of key puzzle that is always
+        # a mistake rather than a design.
+        for colour, cells in sorted(reach.blocked.items()):
+            if colour in reach.keys:
+                continue
+            cell = coordinates(cells[0], width)
+            problems.append(Diagnostic(
+                "C7E-DOOR-004", Severity.WARNING,
+                f"the {colour} access card cannot be reached without the "
+                f"{colour} card; the route through this door is closed to the player",
+                _where(*cell), cell,
+            ))
+
+        if profile.needs_exit:
+            exits = []
+            for plane, words in ((0, plane0), (1, plane1)):
+                for index, value in enumerate(words):
+                    entry = catalog.for_value(plane, value)
+                    if entry is not None and entry.subcategory in ("exit",) \
+                            or (entry is not None and "exit" in entry.aliases):
+                        exits.append(index)
+            if not exits:
+                # A warning, not an error, and deliberately: a map somebody
+                # started ten minutes ago has no exit yet, and a validator that
+                # opens with an error on every new map is one they learn to
+                # ignore. It still has to be said -- a floor with no way out is
+                # not finishable -- so it is said once, quietly.
+                problems.append(Diagnostic(
+                    "C7E-EXIT-001", Severity.WARNING,
+                    "there is no way to finish this floor; place an elevator "
+                    "switch, a floor exit or an exit vortex", "",
+                ))
+            elif not any(_touches(index, reach.reached, width, height)
+                         for index in exits):
+                cell = coordinates(exits[0], width)
+                problems.append(Diagnostic(
+                    "C7E-EXIT-001", Severity.WARNING,
+                    "the player cannot reach any exit on this floor",
+                    _where(*cell), cell,
+                ))
+
+        if profile.reports_unreachable:
+            stranded = unreachable_floor(document, reach)
+            if stranded:
+                cell = coordinates(stranded[0], width)
+                problems.append(Diagnostic(
+                    "C7E-ZONE-002", Severity.WARNING,
+                    f"{len(stranded)} floor cell(s) cannot be reached from the "
+                    "player start",
+                    _where(*cell), cell,
+                ))
+
+    problems.sort(key=lambda problem: (-problem.severity.value, problem.code,
+                                       problem.cell or (0, 0)))
     return problems
+
+
+def _touches(index: int, reached: set[int], width: int, height: int) -> bool:
+    """Whether a cell is reached, or has a reached cell beside it.
+
+    An exit is often a switch in a wall, which the player never stands on --
+    they stand next to it and use it. Asking only whether the exit cell itself
+    was flooded would report every elevator in the game as unreachable.
+    """
+    if index in reached:
+        return True
+    x, y = index % width, index // width
+    for nx, ny in ((x, y - 1), (x + 1, y), (x, y + 1), (x - 1, y)):
+        if 0 <= nx < width and 0 <= ny < height and (ny * width + nx) in reached:
+            return True
+    return False
+
+
+# -- safe repairs ---------------------------------------------------------
+#
+# A fix is offered only where there is exactly one thing the author can have
+# meant. Sealing a boundary and giving the floor sound areas both qualify:
+# neither has a second reasonable answer, and both are tedious by hand. Most
+# diagnostics have no fix on purpose -- "there is no exit" has a hundred
+# answers and picking one for somebody is not a repair, it is a guess.
+
+
+def _fix_seal_boundary(document: MapDocument) -> list[tuple[int, int, int, int]]:
+    """Paint the outer ring solid."""
+    width, height = document.width, document.height
+    plane0 = document.planes.planes[0]
+    writes = []
+    for x in range(width):
+        for y in (0, height - 1):
+            if _is_floor(plane0[linear_index(x, y, width)]):
+                writes.append((0, x, y, document.SOLID_WALL))
+    for y in range(height):
+        for x in (0, width - 1):
+            if _is_floor(plane0[linear_index(x, y, width)]):
+                writes.append((0, x, y, document.SOLID_WALL))
+    return writes
+
+
+def _fix_sound_areas(document: MapDocument) -> list[tuple[int, int, int, int]]:
+    from .rules import assign_sound_areas
+
+    return assign_sound_areas(document)
+
+
+#: id -> (label, builder). The builder returns `write_words` input, so a fix is
+#: an ordinary command: one undo, and no path that edits a document directly.
+FIXES = {
+    "seal_boundary": ("Seal the map boundary", _fix_seal_boundary),
+    "sound_areas": ("Give the floor sound areas", _fix_sound_areas),
+}
+
+
+def fix_writes(fix: str, document: MapDocument) -> list[tuple[int, int, int, int]]:
+    """The writes a fix would make, or an empty list if there is nothing to do."""
+    entry = FIXES.get(fix)
+    return entry[1](document) if entry else []
+
+
+def fix_label(fix: str) -> str:
+    entry = FIXES.get(fix)
+    return entry[0] if entry else ""
 
 
 def summarise(problems) -> str:

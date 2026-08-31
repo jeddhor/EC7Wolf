@@ -33,6 +33,7 @@ from ec7edit_core.catalog import load_catalog
 from ec7edit_core.document import MapDocument, ProjectDocument
 from ec7edit_core.names import NativeName
 from ec7edit_core.planes import MapPlanes, linear_index
+from ec7edit_core.errors import Severity
 from ec7edit_core.validation import validate_map
 
 from ec7edit_gui.application import build_application
@@ -341,6 +342,138 @@ class StubAssets:
 
     def sprite(self, page):
         return bytes([200, page % 256, 30, 255] * (64 * 64))
+
+
+class ProblemsPanel(Base):
+    """E7: the panel is continuous, filterable, honest about staleness, and
+    can apply the repairs that have exactly one right answer."""
+
+    def break_the_boundary(self):
+        self.choose("zone.256") if CATALOG.by_key("zone.256") else None
+        document = self.document
+        planes = list(document.planes.planes)
+        words = list(planes[0])
+        words[linear_index(0, 0, document.width)] = MapDocument.DEFAULT_FLOOR
+        planes[0] = tuple(words)
+        self.window.project = self.window.project.with_map(
+            document.with_planes(MapPlanes(document.width, document.height,
+                                           tuple(planes))))
+
+    def test_editing_updates_the_panel_without_being_asked(self):
+        before = self.window.problems.count()
+        self.choose(WALL_ENTRY)
+        self.stroke(Tool.BRUSH, [(0, 5)])   # paints over the boundary: legal
+        self.stroke(Tool.ERASER, [(0, 5)])  # opens it: not
+        QApplication.processEvents()
+        codes = [self.window.problems.item(i).toolTip().split("\n")[0]
+                 for i in range(self.window.problems.count())]
+        self.assertIn("C7E-BOUNDARY-001", codes)
+        self.assertNotEqual(self.window.problems.count(), before)
+
+    def legal_map(self, *, with_exit=False):
+        """A start on the floor, so the reachability rules run at all."""
+        self.choose("thing.player1start")
+        self.stroke(Tool.BRUSH, [(5, 5)])
+        if with_exit:
+            self.choose("special.0.287")
+            self.stroke(Tool.BRUSH, [(6, 5)])
+
+    def test_the_filter_hides_warnings(self):
+        # A start makes the map legal enough to reach the advisory rules, and
+        # the missing exit is then a warning next to the boundary error.
+        self.legal_map()
+        self.stroke(Tool.ERASER, [(0, 5)])
+        self.window.validate()
+        self.window.problem_filter.setCurrentIndex(
+            self.window.problem_filter.findText("Everything"))
+        with_warnings = self.window.problems.count()
+        self.window.problem_filter.setCurrentIndex(
+            self.window.problem_filter.findText("Errors only"))
+        self.assertLess(self.window.problems.count(), with_warnings)
+        self.assertIn("hidden by the filter", self.window.problem_status.text())
+
+    def test_a_stale_result_says_so(self):
+        self.window.validate()
+        self.assertNotIn("earlier edit", self.window.problem_status.text())
+        # An edit that changes nothing the quick pass looks at still moves the
+        # revision, which is exactly the case a panel must not hide.
+        self.window._problems_revision = -99
+        self.window._repaint_problems()
+        self.assertIn("earlier edit", self.window.problem_status.text())
+
+    def test_a_fix_is_offered_and_applies(self):
+        self.stroke(Tool.ERASER, [(0, 5)])
+        self.window.validate()
+        self.window.problem_filter.setCurrentIndex(
+            self.window.problem_filter.findText("Errors only"))
+        row = next(i for i in range(self.window.problems.count())
+                   if self.window.problems.item(i).data(Qt.UserRole + 1) == "seal_boundary")
+        self.window.problems.setCurrentRow(row)
+        self.assertTrue(self.window.problem_fix.isEnabled())
+        self.assertEqual(self.window.problem_fix.text(), "Seal the map boundary")
+        self.assertGreater(self.window.apply_fix(), 0)
+        codes = [p.code for p in validate_map(self.document, CATALOG)]
+        self.assertNotIn("C7E-BOUNDARY-001", codes)
+
+    def test_a_fix_is_one_undo(self):
+        self.stroke(Tool.ERASER, [(0, 5)])
+        self.window.validate()
+        before = self.document.planes.planes
+        row = next(i for i in range(self.window.problems.count())
+                   if self.window.problems.item(i).data(Qt.UserRole + 1) == "seal_boundary")
+        self.window.problems.setCurrentRow(row)
+        self.window.apply_fix()
+        self.window.undo()
+        self.assertEqual(self.document.planes.planes, before)
+
+    def test_a_problem_with_no_fix_offers_none(self):
+        self.window.validate()
+        self.window.problem_filter.setCurrentIndex(
+            self.window.problem_filter.findText("Everything"))
+        row = next(i for i in range(self.window.problems.count())
+                   if not self.window.problems.item(i).data(Qt.UserRole + 1))
+        self.window.problems.setCurrentRow(row)
+        self.assertFalse(self.window.problem_fix.isEnabled())
+
+
+class ExportPreflight(Base):
+    def test_an_error_blocks_the_export(self):
+        from PySide6.QtWidgets import QFileDialog
+
+        self.stroke(Tool.ERASER, [(0, 5)])          # opens the boundary
+        asked = []
+        errors = []
+        original = QFileDialog.getSaveFileName
+        QFileDialog.getSaveFileName = staticmethod(
+            lambda *a, **k: (asked.append(True), ("", ""))[1])
+        self.window._error = lambda title, body: errors.append(title)
+        try:
+            self.window.export_preview()
+        finally:
+            QFileDialog.getSaveFileName = original
+        self.assertTrue(errors, "the export was not refused")
+        self.assertFalse(asked, "it asked where to write a file it must not write")
+
+    def test_a_warning_does_not(self):
+        from PySide6.QtWidgets import QFileDialog
+
+        # A legal room with no exit: one warning, no errors. An unfinished map
+        # is a normal thing to want to look at in the engine.
+        self.choose("thing.player1start")
+        self.stroke(Tool.BRUSH, [(5, 5)])
+        problems = validate_map(self.document, CATALOG)
+        self.assertTrue(any(p.severity is Severity.WARNING for p in problems))
+        self.assertFalse([p for p in problems if p.severity is Severity.ERROR],
+                         [str(p) for p in problems])
+        asked = []
+        original = QFileDialog.getSaveFileName
+        QFileDialog.getSaveFileName = staticmethod(
+            lambda *a, **k: (asked.append(True), ("", ""))[1])
+        try:
+            self.window.export_preview()
+        finally:
+            QFileDialog.getSaveFileName = original
+        self.assertTrue(asked, "a warning should not block an export")
 
 
 class SoundAreaRepair(Base):

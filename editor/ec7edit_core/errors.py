@@ -43,6 +43,16 @@ class Diagnostic:
     #: Free-form location -- "map 3 plane 1", a file offset, a path. Display
     #: only; never parsed.
     where: str = ""
+    #: The cell this is about, when it is about one. The GUI used to recover
+    #: this by parsing `where` back apart, which meant the display text and the
+    #: navigation were the same string and neither could be improved alone.
+    cell: tuple[int, int] | None = None
+    #: The id of a repair that fixes this, from `validation.FIXES`. Empty when
+    #: there is no fix that can be applied without guessing what was meant --
+    #: which is most of them, and deliberately so.
+    fix: str = ""
+    #: Extra text the fix or the panel may want, never parsed for meaning.
+    detail: str = ""
 
     def __str__(self) -> str:
         location = f" [{self.where}]" if self.where else ""

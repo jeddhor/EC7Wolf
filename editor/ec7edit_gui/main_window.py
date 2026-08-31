@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
+    QPushButton,
     QScrollArea,
     QStatusBar,
     QTabWidget,
@@ -289,9 +290,25 @@ class MainWindow(QMainWindow):
         self.map_list.currentRowChanged.connect(self._on_map_selected)
         self.map_list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.map_list.customContextMenuRequested.connect(self._map_context_menu)
+        # A new project has no maps, so the list is empty -- and an empty list
+        # is exactly where "how do I start one?" gets asked. The button is
+        # always there; the context menu covers the right-click reflex, on a
+        # row or on the blank space below the last one.
+        self.new_map_button = QPushButton("New map…", self)
+        self.new_map_button.setAccessibleName("New map")
+        self.new_map_button.setToolTip("Add an empty 64x64 map to this project (Ctrl+M)")
+        self.new_map_button.clicked.connect(lambda: self.new_map())
+
+        maps_panel = QWidget(self)
+        maps_layout = QVBoxLayout(maps_panel)
+        maps_layout.setContentsMargins(0, 0, 0, 0)
+        maps_layout.setSpacing(2)
+        maps_layout.addWidget(self.map_list)
+        maps_layout.addWidget(self.new_map_button)
+
         maps_dock = QDockWidget("Maps", self)
         maps_dock.setObjectName("maps-dock")
-        maps_dock.setWidget(self.map_list)
+        maps_dock.setWidget(maps_panel)
         self.addDockWidget(Qt.LeftDockWidgetArea, maps_dock)
         self.maps_dock = maps_dock
 
@@ -653,11 +670,14 @@ class MainWindow(QMainWindow):
 
     def _map_context_menu(self, point) -> None:
         """Right-click on a map. Everything acts on the map you clicked, not on
-        whichever one happens to be open."""
+        whichever one happens to be open.
+
+        Below the last row -- and in an empty project, anywhere -- there is no
+        map to act on, so the menu is just the one thing worth offering there.
+        """
         item = self.map_list.itemAt(point)
-        if item is None:
-            return
-        menu = self.build_map_menu(self.map_list.row(item))
+        row = self.map_list.row(item) if item is not None else -1
+        menu = self.build_map_menu(row)
         if menu is not None:
             menu.exec(self.map_list.mapToGlobal(point))
 
@@ -668,13 +688,23 @@ class MainWindow(QMainWindow):
         that has to open a modal to find out what is in a menu is a test that
         hangs on the offscreen platform.
         """
-        if not 0 <= row < len(self.project.maps):
-            return None
-        document = self.project.maps[row]
-
         menu = QMenu(self)
         menu.setObjectName("map-context-menu")
+
+        if not 0 <= row < len(self.project.maps):
+            # No row under the pointer: the only thing that makes sense here is
+            # starting one. Returning None instead would leave a right-click in
+            # an empty project doing nothing at all, which is where somebody
+            # with no maps yet is most likely to try it.
+            action = menu.addAction("&New map…")
+            action.setObjectName("new-map")
+            action.triggered.connect(lambda: self.new_map())
+            return menu
+
+        document = self.project.maps[row]
         actions = [
+            ("&New map…", lambda: self.new_map()),
+            (None, None),
             ("&Open", lambda: self.open_map(document.uuid)),
             ("&Rename…", lambda: self.rename_map(document.uuid)),
             ("Change &slot…", lambda: self.change_slot(document.uuid)),

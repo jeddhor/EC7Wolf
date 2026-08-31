@@ -282,13 +282,18 @@ def _trigger_entries(xlat: Xlat, curation: Curation) -> list[CatalogEntry]:
                     rank=value,
                     name=custom.get("name", f"{_pretty(trigger.action)} {value}"),
                     description=custom.get("description", ""),
-                    aliases=tuple(custom.get("aliases", []))
-                    + (trigger.action,)
-                    + ((xlat.tiles[value].texture,) if value in xlat.tiles else ()),
+                    aliases=tuple(custom.get("aliases", [])) + (trigger.action,),
                     plane=plane,
                     value=value,
                     values=(value,),
-                    texture=xlat.tiles[value].texture if value in xlat.tiles else "",
+                    # A plane-1 trigger has no artwork of its own. The tiles and
+                    # the things share one numeric namespace without sharing a
+                    # meaning, so xlat.tiles[98] is the wall that happens to be
+                    # numbered 98, not anything to do with the pushwall marker
+                    # numbered 98 -- and showing that wall for it is a picture
+                    # of the wrong thing. What a marker looks like is whatever
+                    # wall it was put on, which is the cell's own plane 0.
+                    texture="",
                     # Corridor 7's plane-1 triggers all configure the wall cell
                     # they sit in -- a pushwall slides a wall, a disintegrating
                     # wall opens one. Calling them floor placements made the

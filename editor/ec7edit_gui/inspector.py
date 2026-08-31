@@ -60,7 +60,7 @@ class Inspector(QWidget):
         self.preview = QLabel(self)
         self.preview.setAccessibleName("Selected artwork")
         self.preview.setAlignment(Qt.AlignCenter)
-        self.preview.setMinimumHeight(PREVIEW_SIZE)
+        self.preview.setVisible(False)
         self.secondary = QLabel(self)
         self.secondary.setAccessibleName("Artwork under it")
         self.secondary.setAlignment(Qt.AlignCenter)
@@ -111,6 +111,11 @@ class Inspector(QWidget):
 
     # -- artwork ----------------------------------------------------------
 
+    def _has_artwork(self, entry: CatalogEntry) -> bool:
+        """Whether the entry names a page of its own, rather than borrowing one."""
+        return bool(entry.sprite is not None
+                    or (entry.category in ("walls", "specials") and entry.texture))
+
     def _pixmap_for(self, entry: CatalogEntry | None, size: int):
         """The entry's artwork at `size`, or a labelled placeholder, or None.
 
@@ -138,6 +143,9 @@ class Inspector(QWidget):
 
     def _show_artwork(self, primary: CatalogEntry | None,
                       secondary: CatalogEntry | None) -> None:
+        # Nothing selected reserves nothing: a fixed 128-pixel hole above the
+        # heading reads as a broken panel, not as a space for a picture.
+        self.preview.setVisible(primary is not None)
         pixmap = self._pixmap_for(primary, PREVIEW_SIZE)
         if pixmap is None:
             self.preview.clear()
@@ -197,7 +205,15 @@ class Inspector(QWidget):
             return
 
         self.heading.setText(f"<b>{entry.name}</b><br>{entry.description or entry.actor}")
-        self._show_artwork(entry, under)
+        # The heading and the controls stay on the thing this cell holds. Only
+        # the picture moves: a plane-1 marker has no page of its own -- what a
+        # pushwall looks like IS the wall it was put on -- so that gets the
+        # large tile instead of a placeholder standing in for artwork that does
+        # not exist, and there is then nothing left for the small one.
+        if under is not None and not self._has_artwork(entry):
+            self._show_artwork(under, None)
+        else:
+            self._show_artwork(entry, under)
         self._populate(entry, words[1])
 
     def _entry_for(self, words) -> CatalogEntry | None:

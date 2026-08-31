@@ -4975,8 +4975,7 @@
         "red",
         "keycard",
         "access",
-        "C7_WallSwitch",
-        "C7W0008"
+        "C7_WallSwitch"
       ],
       "category": "specials",
       "description": "Grants the RED access card. No red card is ever on a floor -- a terminal is the only way to get one.",
@@ -4991,7 +4990,6 @@
       "safe_for_new_maps": true,
       "subcategory": "terminal",
       "test_vector": "special-0-009",
-      "texture": "C7W0008",
       "value": 9,
       "values": [
         9
@@ -5005,8 +5003,7 @@
         "blue",
         "keycard",
         "access",
-        "C7_WallSwitch",
-        "C7W0010"
+        "C7_WallSwitch"
       ],
       "category": "specials",
       "description": "Grants the BLUE access card.",
@@ -5021,7 +5018,6 @@
       "safe_for_new_maps": true,
       "subcategory": "terminal",
       "test_vector": "special-0-011",
-      "texture": "C7W0010",
       "value": 11,
       "values": [
         11
@@ -5033,8 +5029,7 @@
         "terminal",
         "switch",
         "alert",
-        "C7_WallSwitch",
-        "C7W0029"
+        "C7_WallSwitch"
       ],
       "category": "specials",
       "description": "Wakes every alien on the floor that can hear it. One shot.",
@@ -5049,7 +5044,6 @@
       "safe_for_new_maps": true,
       "subcategory": "terminal",
       "test_vector": "special-0-030",
-      "texture": "C7W0029",
       "value": 30,
       "values": [
         30
@@ -5060,8 +5054,7 @@
         "elevator",
         "lift",
         "exit",
-        "Exit_Normal",
-        "C7W0062"
+        "Exit_Normal"
       ],
       "category": "specials",
       "description": "The normal floor exit.",
@@ -5076,7 +5069,6 @@
       "safe_for_new_maps": true,
       "subcategory": "exit",
       "test_vector": "special-0-063",
-      "texture": "C7W0062",
       "value": 63,
       "values": [
         63
@@ -5087,8 +5079,7 @@
         "health",
         "dispenser",
         "chamber",
-        "C7_Dispenser",
-        "C7W0084"
+        "C7_Dispenser"
       ],
       "category": "specials",
       "description": "Dispenses health after a four-frame wall animation.",
@@ -5103,7 +5094,6 @@
       "safe_for_new_maps": true,
       "subcategory": "dispenser",
       "test_vector": "special-0-085",
-      "texture": "C7W0084",
       "value": 85,
       "values": [
         85
@@ -5114,8 +5104,7 @@
         "health",
         "dispenser",
         "chamber",
-        "C7_Dispenser",
-        "C7W0087"
+        "C7_Dispenser"
       ],
       "category": "specials",
       "description": "The health unit, present directly in two released maps.",
@@ -5130,7 +5119,6 @@
       "safe_for_new_maps": true,
       "subcategory": "dispenser",
       "test_vector": "special-0-088",
-      "texture": "C7W0087",
       "value": 88,
       "values": [
         88
@@ -5141,8 +5129,7 @@
         "pushwall",
         "secret",
         "moving wall",
-        "Pushwall_Move",
-        "C7W0097"
+        "Pushwall_Move"
       ],
       "category": "specials",
       "description": "Slides two tiles and counts toward the restricted-area total.",
@@ -5157,7 +5144,6 @@
       "safe_for_new_maps": true,
       "subcategory": "moving wall",
       "test_vector": "special-1-098",
-      "texture": "C7W0097",
       "value": 98,
       "values": [
         98
@@ -5167,8 +5153,7 @@
       "aliases": [
         "pushwall",
         "moving wall",
-        "Pushwall_Move",
-        "C7W0100"
+        "Pushwall_Move"
       ],
       "category": "specials",
       "description": "Slides two tiles. Unlike the secret pushwall it is not counted.",
@@ -5183,7 +5168,6 @@
       "safe_for_new_maps": true,
       "subcategory": "moving wall",
       "test_vector": "special-1-101",
-      "texture": "C7W0100",
       "value": 101,
       "values": [
         101
@@ -5193,8 +5177,7 @@
       "aliases": [
         "pushwall",
         "moving wall",
-        "Pushwall_Move",
-        "C7W0101"
+        "Pushwall_Move"
       ],
       "category": "specials",
       "description": "Slides two tiles. Unlike the secret pushwall it is not counted.",
@@ -5209,7 +5192,6 @@
       "safe_for_new_maps": true,
       "subcategory": "moving wall",
       "test_vector": "special-1-102",
-      "texture": "C7W0101",
       "value": 102,
       "values": [
         102
@@ -5220,8 +5202,7 @@
         "mutable",
         "animate",
         "force field",
-        "Wall_AnimateRemove",
-        "C7W0105"
+        "Wall_AnimateRemove"
       ],
       "category": "specials",
       "description": "Advances four texture frames and leaves the masked aperture open.",
@@ -5236,7 +5217,6 @@
       "safe_for_new_maps": true,
       "subcategory": "mutable wall",
       "test_vector": "special-1-106",
-      "texture": "C7W0105",
       "value": 106,
       "values": [
         106
@@ -5247,8 +5227,7 @@
         "energy",
         "dispenser",
         "charge",
-        "C7_Dispenser",
-        "C7W0109"
+        "C7_Dispenser"
       ],
       "category": "specials",
       "description": "Dispenses alien-weapon energy on use.",
@@ -5263,7 +5242,6 @@
       "safe_for_new_maps": true,
       "subcategory": "dispenser",
       "test_vector": "special-0-110",
-      "texture": "C7W0109",
       "value": 110,
       "values": [
         110
@@ -5274,8 +5252,7 @@
         "ammo",
         "dispenser",
         "bullets",
-        "C7_Dispenser",
-        "C7W0110"
+        "C7_Dispenser"
       ],
       "category": "specials",
       "description": "Dispenses standard rounds on use.",
@@ -5290,7 +5267,6 @@
       "safe_for_new_maps": true,
       "subcategory": "dispenser",
       "test_vector": "special-0-111",
-      "texture": "C7W0110",
       "value": 111,
       "values": [
         111
@@ -5299,8 +5275,7 @@
     {
       "aliases": [
         "door",
-        "Door_Open",
-        "C7W0254"
+        "Door_Open"
       ],
       "category": "specials",
       "description": "Opens on use. The axis is inferred from the map's topology.",
@@ -5315,7 +5290,6 @@
       "safe_for_new_maps": true,
       "subcategory": "door",
       "test_vector": "special-0-251",
-      "texture": "C7W0254",
       "value": 251,
       "values": [
         251
@@ -5326,8 +5300,7 @@
         "door",
         "blue",
         "locked",
-        "Door_Open",
-        "C7W0254"
+        "Door_Open"
       ],
       "category": "specials",
       "description": "Needs the BLUE access card.",
@@ -5342,7 +5315,6 @@
       "safe_for_new_maps": true,
       "subcategory": "door",
       "test_vector": "special-0-252",
-      "texture": "C7W0254",
       "value": 252,
       "values": [
         252
@@ -5353,8 +5325,7 @@
         "door",
         "red",
         "locked",
-        "Door_Open",
-        "C7W0254"
+        "Door_Open"
       ],
       "category": "specials",
       "description": "Needs the RED access card.",
@@ -5369,7 +5340,6 @@
       "safe_for_new_maps": true,
       "subcategory": "door",
       "test_vector": "special-0-253",
-      "texture": "C7W0254",
       "value": 253,
       "values": [
         253
@@ -5378,8 +5348,7 @@
     {
       "aliases": [
         "door",
-        "Door_Open",
-        "C7W0254"
+        "Door_Open"
       ],
       "category": "specials",
       "description": "Opens on use. The axis is inferred from the map's topology.",
@@ -5394,7 +5363,6 @@
       "safe_for_new_maps": true,
       "subcategory": "door",
       "test_vector": "special-0-254",
-      "texture": "C7W0254",
       "value": 254,
       "values": [
         254

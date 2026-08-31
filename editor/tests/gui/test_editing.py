@@ -358,9 +358,26 @@ class InspectorPreview(Base):
         self.stroke(Tool.PREFAB, [(x, y)])
         self.window.inspector.show_cell(self.document, x, y)
 
-    def test_the_wall_underneath_gets_its_own_tile(self):
+    def test_a_marker_shows_the_wall_it_sits_on(self):
+        # A pushwall marker has no page of its own: what it looks like is the
+        # wall it was put on, so that gets the large tile rather than a
+        # placeholder standing in for artwork that does not exist.
         self.with_assets()
         self.place_pushwall()
+        inspector = self.window.inspector
+        self.assertEqual(inspector.preview.pixmap().width(), PREVIEW_SIZE)
+        self.assertTrue(inspector.secondary.isHidden())
+        self.assertIn("pushwall", inspector.heading.text().lower())
+
+    def test_a_thing_on_a_wall_keeps_both_tiles(self):
+        # An alien has its own sprite, so the wall under it stays the small one.
+        self.with_assets()
+        self.choose(WALL_ENTRY)
+        self.stroke(Tool.BRUSH, [(4, 4)])
+        self.choose("thing.c7organiceye.stand.skill1")
+        self.stroke(Tool.BRUSH, [(4, 4)])
+        self.window.inspector.show_cell(self.document, 4, 4)
+        self.assertEqual(self.window.inspector.preview.pixmap().width(), PREVIEW_SIZE)
         self.assertFalse(self.window.inspector.secondary.isHidden())
         self.assertEqual(self.window.inspector.secondary.pixmap().width(), SECONDARY_SIZE)
 
@@ -377,6 +394,11 @@ class InspectorPreview(Base):
         self.window.inspector.show_cell(None, -1, -1)
         self.assertTrue(self.window.inspector.preview.pixmap().isNull())
         self.assertTrue(self.window.inspector.secondary.isHidden())
+
+    def test_nothing_selected_takes_up_no_room(self):
+        # A fixed hole above the heading reads as a broken panel.
+        self.window.inspector.show_cell(None, -1, -1)
+        self.assertTrue(self.window.inspector.preview.isHidden())
 
 
 class InspectorPanel(Base):
@@ -958,13 +980,37 @@ class MapsList(Base):
         self.assertEqual(len(self.window.project), 1)
         self.assertEqual(self.window.project.maps[0].name, "ROOM")
 
-    def test_a_row_that_is_not_there_has_no_menu(self):
-        self.assertIsNone(self.window.build_map_menu(99))
+    def test_a_row_that_is_not_there_offers_only_a_new_map(self):
+        # Below the last row there is no map to act on, and a menu that does
+        # nothing is a worse answer than the one thing worth offering there.
+        # Read off the menu rather than through _map_context_menu: that one
+        # calls exec(), and a test that opens a modal hangs offscreen.
+        menu = self.window.build_map_menu(99)
+        self.assertIsNotNone(menu)
+        self.assertEqual([a.text() for a in menu.actions()], ["&New map…"])
+        menu.deleteLater()
 
-    def test_right_clicking_empty_space_does_nothing(self):
-        from PySide6.QtCore import QPoint
+    def test_an_empty_project_still_offers_a_new_map(self):
+        # Where somebody is most likely to right-click: a project with nothing
+        # in it yet.
+        self.window.set_project(ProjectDocument.create())
+        menu = self.window.build_map_menu(-1)
+        self.assertIsNotNone(menu)
+        self.assertEqual([a.text() for a in menu.actions()], ["&New map…"])
+        menu.deleteLater()
 
-        self.window._map_context_menu(QPoint(0, 10000))
+    def test_a_row_menu_leads_with_a_new_map(self):
+        menu = self.window.build_map_menu(0)
+        self.assertEqual(menu.actions()[0].text(), "&New map…")
+        menu.deleteLater()
+
+    def test_the_dock_has_its_own_button(self):
+        # Neither the File menu nor Ctrl+M is discoverable from the maps list,
+        # which is where the question gets asked.
+        self.assertEqual(self.window.new_map_button.text(), "New map…")
+        before = len(self.window.project)
+        self.window.new_map(name="FROM BUTTON")
+        self.assertEqual(len(self.window.project), before + 1)
 
 
 class Playtest(Base):

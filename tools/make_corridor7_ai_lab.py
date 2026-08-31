@@ -12,8 +12,13 @@ The same construction drives the DOS-side DMA sound captures, where an empty
 room is the difference between "this sample belongs to the Rodex" and "this
 sample happened while a Rodex was on screen".
 
+A placement is either a plane-1 object number or the word `door`, which puts a
+plain door across the corridor at that x. A corridor with a door and nothing
+else in it is what the renderer gates want: a door on screen with no sprite
+drawn after it is the case where leftover door state reaches the view model.
+
 Usage:
-  make_corridor7_ai_lab.py SOURCE OUT OBJECT:X [OBJECT:X ...]
+  make_corridor7_ai_lab.py SOURCE OUT (OBJECT|door):X [(OBJECT|door):X ...]
 
 SOURCE is a pristine MAPTEMP.CO7. It is only ever read.
 
@@ -38,6 +43,7 @@ from ec7edit_core.planes import MapPlanes  # noqa: E402
 PLAYER_START = 20   # plane-1 value for a player start facing east
 EMPTY = 18          # plane-1 filler
 SOLID = 1           # plane-0 wall
+DOOR = 254          # plane-0 word for a plain door
 PLAYER_X = 4
 ROW = 32
 
@@ -49,11 +55,15 @@ def main() -> None:
     source, out = Path(sys.argv[1]), Path(sys.argv[2])
 
     placements = []
+    doors = []
     for spec in sys.argv[3:]:
         obj, _, x = spec.partition(":")
         if not x:
-            sys.exit(f"bad placement {spec!r}, expected OBJECT:X")
-        placements.append((int(obj), int(x)))
+            sys.exit(f"bad placement {spec!r}, expected OBJECT:X or door:X")
+        if obj == "door":
+            doors.append(int(x))
+        else:
+            placements.append((int(obj), int(x)))
 
     identity = SourceIdentity.probe(source)
     guard = OutputGuard.for_source(source)
@@ -77,6 +87,13 @@ def main() -> None:
         walls[(ROW - 1) * width + x] = SOLID
         walls[(ROW + 1) * width + x] = SOLID
 
+    # The corridor walls above and below mean the door's axis is inferred as
+    # east-west, which is the way the player walks through it.
+    for x in doors:
+        if not 1 <= x < width - 1 or x == PLAYER_X:
+            sys.exit(f"door x={x} is outside the corridor or on the player")
+        walls[ROW * width + x] = DOOR
+
     things[ROW * width + PLAYER_X] = PLAYER_START
     for obj, x in placements:
         if not 1 <= x < width - 1 or x == PLAYER_X:
@@ -91,8 +108,9 @@ def main() -> None:
     )
     atomic_write(output, encode_archive(records), guard=guard)
     identity.verify_unchanged()
-    placed = ", ".join(f"object {o} at {x - PLAYER_X} tiles" for o, x in placements)
-    print(f"wrote {output} ({placed})")
+    placed = ", ".join([f"object {o} at {x - PLAYER_X} tiles" for o, x in placements]
+                       + [f"a door at {x - PLAYER_X} tiles" for x in doors])
+    print(f"wrote {output} ({placed or 'an empty corridor'})")
 
 
 if __name__ == "__main__":

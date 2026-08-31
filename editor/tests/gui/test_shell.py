@@ -168,12 +168,91 @@ class ProjectFlow(Base):
         finally:
             self.close_quietly(other)
 
+    def test_the_menu_asks_for_a_file_rather_than_silently_returning(self):
+        # QAction.triggered carries a `checked` bool and PySide6 hands it to any
+        # slot that can take it, so File > Open project called
+        # open_project(False). That reads as an empty path -- what a cancelled
+        # dialog looks like -- and it returned without ever opening one.
+        from PySide6.QtWidgets import QFileDialog
+
+        asked = []
+        self.window._confirm_discard = lambda: True
+        original = QFileDialog.getOpenFileName
+        QFileDialog.getOpenFileName = staticmethod(
+            lambda *a, **k: (asked.append(True), ("", ""))[1]
+        )
+        try:
+            self.window.action_open.trigger()
+        finally:
+            QFileDialog.getOpenFileName = original
+        self.assertTrue(asked, "triggering Open project never opened a file dialog")
+
+    def test_no_command_action_takes_the_checked_flag(self):
+        # The same trap for every other one: New map would skip its name prompt,
+        # Import map its file dialog.
+        import inspect
+
+        for action in (self.window.action_open, self.window.action_new_map,
+                       self.window.action_import, self.window.action_export):
+            with self.subTest(action=action.text()):
+                self.assertFalse(action.isCheckable(),
+                                 "a checkable action would actually want the flag")
+
     def test_saving_records_the_project_as_recent(self):
         path = self.root / "recent.ec7project"
         self.window.set_project(synthetic_project(1))
         self.window.project_path = path
         self.window.save_project()
         self.assertIn(str(path.resolve()), self.settings.recent_projects)
+
+    def test_open_recent_lists_what_was_opened(self):
+        paths = []
+        for index in range(8):
+            path = self.root / f"p{index}.ec7project"
+            self.window.set_project(synthetic_project(1))
+            self.window.project_path = path
+            self.window.save_project()
+            paths.append(path)
+        self.window._rebuild_recent_menu()
+        names = [a.text() for a in self.window.recent_menu.actions()
+                 if not a.isSeparator()]
+        # Newest first, capped, and the clear entry on the end.
+        self.assertEqual(len(names), self.window.RECENT_SHOWN + 1)
+        self.assertIn(paths[-1].name, names[0])
+        self.assertEqual(names[-1], "Clear the list")
+
+    def test_open_recent_is_empty_until_something_is_opened(self):
+        self.window.clear_recent()
+        self.window._rebuild_recent_menu()
+        actions = self.window.recent_menu.actions()
+        self.assertEqual([a.text() for a in actions], ["No recent projects"])
+        self.assertFalse(actions[0].isEnabled())
+
+    def test_a_recent_project_that_is_gone_is_forgotten(self):
+        path = self.root / "vanished.ec7project"
+        self.window.set_project(synthetic_project(1))
+        self.window.project_path = path
+        self.window.save_project()
+        path.unlink()
+        errors = []
+        self.window._error = lambda title, body: errors.append(title)
+        self.window.open_recent(str(path))
+        self.assertTrue(errors)
+        self.assertNotIn(str(path.resolve()), self.settings.recent_projects)
+
+    def test_choosing_a_recent_entry_opens_it(self):
+        path = self.root / "again.ec7project"
+        self.window.set_project(synthetic_project(2))
+        self.window.project_path = path
+        self.window.save_project()
+        self.window.set_project(synthetic_project(1))
+        self.window._confirm_discard = lambda: True
+        self.window._rebuild_recent_menu()
+        entry = next(a for a in self.window.recent_menu.actions()
+                     if a.objectName() == "recent-1")
+        entry.trigger()
+        QApplication.processEvents()
+        self.assertEqual(len(self.window.project), 2)
 
     def test_the_title_shows_unsaved_changes(self):
         self.window.set_project(synthetic_project(1))

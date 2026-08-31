@@ -109,6 +109,7 @@ gl_frame
 gl_live
 gl_visibility
 gl_parity
+gl_viewmodel_door
 gl_filtering
 gl_hardening
 gl_bench

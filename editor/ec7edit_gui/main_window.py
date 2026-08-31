@@ -159,8 +159,67 @@ class MainWindow(QMainWindow):
         if shortcut:
             action.setShortcut(QKeySequence(shortcut))
         action.setObjectName(name or text.lower().replace("&", "").replace(" ", "-"))
-        action.triggered.connect(slot)
+        # QAction.triggered carries a `checked` bool, and PySide6 passes it to
+        # any slot whose signature can take it. Every command here reads its
+        # first parameter as "the caller already knows the answer" --
+        # open_project(path), new_map(name), import_map(archive_path) -- so the
+        # menu was handing them False. open_project treated that as an empty
+        # path, which is what a cancelled file dialog looks like, and returned
+        # without ever showing one. Drop the argument: nothing here is
+        # checkable, so nothing wants it.
+        action.triggered.connect(lambda _checked=False, call=slot: call())
         return action
+
+    #: How many recent projects the File menu offers. Settings keeps more than
+    #: this; a menu is for the ones you are actually moving between.
+    RECENT_SHOWN = 6
+
+    def _rebuild_recent_menu(self) -> None:
+        """Refill Open Recent from settings.
+
+        Rebuilt on every open rather than once at startup: the list changes
+        whenever a project is opened or saved, and a menu built at startup goes
+        stale the first time it is used.
+        """
+        self.recent_menu.clear()
+        entries = list(self.settings.recent_projects)[:self.RECENT_SHOWN]
+        if not entries:
+            empty = self.recent_menu.addAction("No recent projects")
+            empty.setEnabled(False)
+            return
+        for index, path in enumerate(entries, start=1):
+            name = Path(path).name
+            # &1..&9 so the keyboard reaches them, and the full path in the tip
+            # because two projects may well share a file name.
+            action = self.recent_menu.addAction(f"&{index}  {name}")
+            action.setObjectName(f"recent-{index}")
+            action.setStatusTip(path)
+            action.setToolTip(path)
+            action.triggered.connect(
+                lambda _checked=False, chosen=path: self.open_recent(chosen)
+            )
+        self.recent_menu.addSeparator()
+        clear = self.recent_menu.addAction("Clear the list")
+        clear.setObjectName("recent-clear")
+        clear.triggered.connect(lambda _checked=False: self.clear_recent())
+
+    def open_recent(self, path: str) -> None:
+        """Open a remembered project, forgetting it if it is no longer there.
+
+        A recent list that keeps offering a file somebody has moved or deleted
+        is worse than a short one, so a miss drops the entry rather than only
+        complaining about it.
+        """
+        if not Path(path).exists():
+            self.settings.forget_project(path)
+            self._error("That project is gone",
+                        f"{path}\n\nIt has been removed from the recent list.")
+            return
+        self.open_project(path)
+
+    def clear_recent(self) -> None:
+        for path in list(self.settings.recent_projects):
+            self.settings.forget_project(path)
 
     def _build_menus(self) -> None:
         file_menu = self.menuBar().addMenu("&File")
@@ -173,8 +232,13 @@ class MainWindow(QMainWindow):
         self.action_save_as = self._action("Save &As…", self.save_project_as, "Ctrl+Shift+S")
         self.action_export = self._action("&Export preview WAD…", self.export_preview, "Ctrl+E")
         self.action_quit = self._action("&Quit", self.close, QKeySequence.Quit)
-        for action in (self.action_new, self.action_open, self.action_new_map,
-                       self.action_import):
+        for action in (self.action_new, self.action_open):
+            file_menu.addAction(action)
+        self.recent_menu = file_menu.addMenu("Open &Recent")
+        self.recent_menu.setObjectName("open-recent-menu")
+        self.recent_menu.aboutToShow.connect(self._rebuild_recent_menu)
+        self._rebuild_recent_menu()
+        for action in (self.action_new_map, self.action_import):
             file_menu.addAction(action)
         file_menu.addSeparator()
         for action in (self.action_save, self.action_save_as, self.action_export):

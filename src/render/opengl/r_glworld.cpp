@@ -1372,6 +1372,14 @@ namespace
 		glUniform1i(w.su.uSprite, 1);
 		glUniform1i(w.su.uSpriteFullbright, 0);
 		glUniform1i(w.su.uHasOpacity, 0);
+		// Every uniform RenderMesh can set has to be answered here, and uSlide
+		// is the one that bites: a door leaf leaves it at 1 with the door's own
+		// slide amount, and the shader's door branch then discards the part of
+		// this quad the door has opened and shifts what is left. The weapon
+		// slides away in step with the door -- and only when a door is on
+		// screen with no sprite drawn after it, since a sprite pass would have
+		// set uSlide back to 0 on its way past.
+		glUniform1i(w.su.uSlide, 0);
 		glUniform1i(w.su.uViewModel, 1);
 		// Nearest, whatever the world is using: the software blit steps whole
 		// texels, so filtering here would not match anything.

@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Jason Tripp
-"""Catch the two PySide6 mistakes that parse, import, and then raise.
+"""Catch the PySide6 mistakes that parse, import, and then misbehave.
 
-Both of these shipped once, and neither is visible until the code path runs:
+All of these shipped once, and none is visible until the code path runs:
 
   * `dialog.Accepted` -- PySide6 puts enum values on the *class*, so reading
     one off an instance raises `AttributeError`. `QDialog.Accepted` is fine;
     the instance is not. This one only fires when the dialog closes, which is
     past the point most tests look.
   * `int(event.button())` -- Qt 6 flag enums have no `__int__`. `.value` does.
+  * `triggered.connect(self.command)` where `command` takes a first positional
+    parameter. `triggered` carries a `checked` bool and PySide6 passes it to
+    any slot that can take it, so the menu calls `open_project(False)`. That
+    read as an empty path -- what a cancelled file dialog looks like -- and
+    File > Open project returned without ever showing one. This one does not
+    raise at all; it just quietly does nothing. Connect a lambda that drops
+    the argument.
 
 This parses rather than greps, because a grep matches the comment explaining
 the bug as readily as the bug.
@@ -52,7 +59,27 @@ class Visitor(ast.NodeVisitor):
                 )
         self.generic_visit(node)
 
+    # `x.triggered.connect(...)` / `x.toggled.connect(...)`: the signals that
+    # carry a bool nobody here wants.
+    CHECKED_SIGNALS = ("triggered", "toggled")
+
     def visit_Call(self, node: ast.Call) -> None:
+        func = node.func
+        if (
+            isinstance(func, ast.Attribute)
+            and func.attr == "connect"
+            and isinstance(func.value, ast.Attribute)
+            and func.value.attr in self.CHECKED_SIGNALS
+            and len(node.args) == 1
+            and isinstance(node.args[0], ast.Attribute)
+        ):
+            slot = node.args[0]
+            self.problems.append(
+                f"{self.path}:{node.lineno}: {func.value.attr}.connect() is handed "
+                f"'{slot.attr}' directly; the signal's checked bool becomes its first "
+                f"argument. Wrap it: lambda _checked=False: ...{slot.attr}()"
+            )
+
         if (
             isinstance(node.func, ast.Name)
             and node.func.id == "int"

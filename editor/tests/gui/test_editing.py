@@ -75,6 +75,9 @@ class Base(unittest.TestCase):
         self.settings = Settings(
             QSettings(str(self.root / "s.ini"), QSettings.IniFormat)
         )
+        # Never the user's real ~/.local/share: a suite that autosaves there
+        # leaves work behind and reads other runs' leftovers.
+        self.settings.recovery_dir = self.root / "recovery"
         self.window = MainWindow(self.settings, catalog=CATALOG)
         self.window.set_project(ProjectDocument.create().added(open_map()))
         self.uuid = self.window.project.maps[0].uuid

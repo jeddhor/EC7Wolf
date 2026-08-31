@@ -71,7 +71,7 @@ done
 # gl_selftest is here rather than below because --gltest is handled before the
 # IWAD is opened: it needs no game data, and it is the only thing that proves the
 # shaders actually compile on the runner's driver. A broken shader still links.
-data_free_gates='definitions names ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3 ec7edit_e4 ec7edit_e5 ec7edit_e6 ec7edit_e7 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
+data_free_gates='definitions names ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3 ec7edit_e4 ec7edit_e5 ec7edit_e6 ec7edit_e7 ec7edit_e8 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
 
 data_gates='
 corridor7
@@ -257,6 +257,11 @@ for g in $data_free_gates; do
 			# E6's exit gate -- every semantic reachable or labelled.
 			run_gate "$g" "ec7edit E6 semantics" \
 				"$here/test_ec7edit_e6.sh" ;;
+		ec7edit_e8)
+			# The owned-data round trip needs the archive and is skipped
+			# without it; the persistence half runs either way.
+			run_gate "$g" "ec7edit E8 persistence" \
+				"$here/test_ec7edit_e8.sh" "$data_dir" ;;
 		ec7edit_e7)
 			# Mostly data-free. The false-positive review needs the archive
 			# and is skipped without it, so this runs either way and says

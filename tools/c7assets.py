@@ -82,6 +82,16 @@ class Diagnostic:
     #: Free-form location -- "map 3 plane 1", a file offset, a path. Display
     #: only; never parsed.
     where: str = ""
+    #: The cell this is about, when it is about one. The GUI used to recover
+    #: this by parsing `where` back apart, which meant the display text and the
+    #: navigation were the same string and neither could be improved alone.
+    cell: tuple[int, int] | None = None
+    #: The id of a repair that fixes this, from `validation.FIXES`. Empty when
+    #: there is no fix that can be applied without guessing what was meant --
+    #: which is most of them, and deliberately so.
+    fix: str = ""
+    #: Extra text the fix or the panel may want, never parsed for meaning.
+    detail: str = ""
 
     def __str__(self) -> str:
         location = f" [{self.where}]" if self.where else ""
@@ -915,6 +925,43 @@ def encode_archive(records) -> bytes:
 def read_archive(path: Path | str, *, log: DiagnosticLog | None = None) -> Archive:
     """Parse an archive from disk. Read-only: the source is never opened for writing."""
     return parse_archive(Path(path).read_bytes(), log=log)
+
+
+def replace_records(archive: "Archive", replacements) -> bytes:
+    """Re-encode an archive with some maps replaced and the rest untouched.
+
+    This is the private full-archive export: a complete `MAPTEMP.CO7` the
+    engine can load in place of the original, holding the user's edited floors
+    and every floor they did not touch exactly as it was.
+
+    "Exactly as it was" is the whole point and the whole risk. A map that was
+    not edited is re-encoded from the planes that were decoded from the source,
+    and the RLEW encoder is byte-exact against the original TED5 output -- the
+    run threshold is four, which is what makes the whole 298,090-byte archive
+    round-trip identically. That property is tested; without it this would
+    quietly rewrite fifty-nine maps to save one.
+
+    `replacements` maps a 1-based map number to the MapRecord to put there.
+    A number the archive does not have is an error rather than an append: this
+    writes a replacement for a retail archive, not a new archive of its own
+    shape, and silently growing one would produce a file the engine indexes
+    differently from the one the user thinks they have.
+    """
+    from dataclasses import replace as _replace
+
+    numbers = {record.number for record in archive.records}
+    unknown = sorted(set(replacements) - numbers)
+    if unknown:
+        raise native_error(
+            "C7E-NATIVE-001",
+            f"this archive has no map {unknown[0]}; it holds {len(numbers)}",
+        )
+    out = []
+    for record in archive.records:
+        wanted = replacements.get(record.number)
+        out.append(_replace(wanted, number=record.number, source=None)
+                   if wanted is not None else record)
+    return encode_archive(out)
 
 # --- ec7edit_core/assets.py ------------------------------------------
 

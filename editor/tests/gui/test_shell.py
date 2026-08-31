@@ -72,6 +72,11 @@ class Base(unittest.TestCase):
         self.root = Path(self._tmp.name)
         backend = QSettings(str(self.root / "settings.ini"), QSettings.IniFormat)
         self.settings = Settings(backend)
+        # Never the user's real ~/.local/share: a suite that autosaves there
+        # leaves work behind and reads other runs' leftovers, which is exactly
+        # how the recovery tests first failed -- each was offered the previous
+        # test's project.
+        self.settings.recovery_dir = self.root / "recovery"
         self.window = MainWindow(self.settings, catalog=CATALOG)
 
     def tearDown(self):
@@ -253,6 +258,133 @@ class ProjectFlow(Base):
         entry.trigger()
         QApplication.processEvents()
         self.assertEqual(len(self.window.project), 2)
+
+    def test_save_a_copy_leaves_this_project_alone(self):
+        # Save As moves where the project lives; a copy does not. The
+        # distinction matters because Save As silently changes what the next
+        # Ctrl+S overwrites.
+        from PySide6.QtWidgets import QFileDialog
+
+        here = self.root / "here.ec7project"
+        there = self.root / "there.ec7project"
+        self.window.set_project(synthetic_project(2))
+        self.window.project_path = here
+        self.window.save_project()
+        self.window.project = self.window.project.touched()
+
+        original = QFileDialog.getSaveFileName
+        QFileDialog.getSaveFileName = staticmethod(lambda *a, **k: (str(there), ""))
+        try:
+            self.assertTrue(self.window.save_copy())
+        finally:
+            QFileDialog.getSaveFileName = original
+
+        self.assertTrue(there.exists())
+        self.assertEqual(self.window.project_path, here)
+        self.assertTrue(self.window.project.dirty,
+                        "a copy is not a save; the project is still unsaved")
+
+    def test_a_copy_refuses_to_overwrite_this_project(self):
+        from PySide6.QtWidgets import QFileDialog
+
+        here = self.root / "same.ec7project"
+        self.window.set_project(synthetic_project(1))
+        self.window.project_path = here
+        self.window.save_project()
+        errors = []
+        self.window._error = lambda title, body: errors.append(title)
+        original = QFileDialog.getSaveFileName
+        QFileDialog.getSaveFileName = staticmethod(lambda *a, **k: (str(here), ""))
+        try:
+            self.assertFalse(self.window.save_copy())
+        finally:
+            QFileDialog.getSaveFileName = original
+        self.assertTrue(errors)
+
+    def test_a_file_changed_underneath_is_never_silently_overwritten(self):
+        from PySide6.QtWidgets import QMessageBox
+
+        path = self.root / "shared.ec7project"
+        self.window.set_project(synthetic_project(1))
+        self.window.project_path = path
+        self.window.save_project()
+
+        # Somebody else writes the file: another editor, a sync client, a text
+        # editor. The identity the window is holding is now stale.
+        path.write_text(path.read_text() + "\n")
+        self.window.project = self.window.project.touched()
+
+        asked = []
+        original = QMessageBox.question
+        QMessageBox.question = staticmethod(
+            lambda *a, **k: (asked.append(True),
+                             QMessageBox.StandardButton.Cancel)[1])
+        try:
+            self.assertFalse(self.window.save_project())
+        finally:
+            QMessageBox.question = original
+        self.assertTrue(asked, "it overwrote a changed file without asking")
+
+    def test_autosave_writes_only_when_there_is_something_to_recover(self):
+        self.window.set_project(synthetic_project(1))
+        self.window.project_path = self.root / "auto.ec7project"
+        self.window.save_project()
+        self.assertFalse(self.window.autosave(), "a saved project has nothing to recover")
+        self.window.project = self.window.project.touched()
+        self.assertTrue(self.window.autosave())
+
+    def test_saving_clears_the_recovery_copy(self):
+        self.window.set_project(synthetic_project(1))
+        self.window.project_path = self.root / "clear.ec7project"
+        self.window.project = self.window.project.touched()
+        self.window.autosave()
+        self.assertTrue([r for r in self.window.recovery.list_recoveries()
+                         if r.project_uuid == self.window.project.uuid])
+        self.window.save_project()
+        self.assertFalse([r for r in self.window.recovery.list_recoveries()
+                          if r.project_uuid == self.window.project.uuid])
+
+    def test_recovery_is_offered_and_can_be_declined(self):
+        from PySide6.QtWidgets import QMessageBox
+
+        self.window.set_project(synthetic_project(2))
+        self.window.project = self.window.project.touched()
+        self.window.autosave()
+        uuid = self.window.project.uuid
+
+        other = MainWindow(self.settings, catalog=CATALOG)
+        other.recovery = self.window.recovery
+        original = QMessageBox.question
+        QMessageBox.question = staticmethod(
+            lambda *a, **k: QMessageBox.StandardButton.No)
+        try:
+            self.assertEqual(other.offer_recovery(), 0)
+        finally:
+            QMessageBox.question = original
+            self.close_quietly(other)
+        # Declined means discarded: an offer that returns every launch is one
+        # people learn to dismiss without reading.
+        self.assertFalse([r for r in self.window.recovery.list_recoveries()
+                          if r.project_uuid == uuid])
+
+    def test_recovery_reopens_the_unsaved_work(self):
+        from PySide6.QtWidgets import QMessageBox
+
+        self.window.set_project(synthetic_project(3))
+        self.window.project = self.window.project.touched()
+        self.window.autosave()
+
+        other = MainWindow(self.settings, catalog=CATALOG)
+        other.recovery = self.window.recovery
+        original = QMessageBox.question
+        QMessageBox.question = staticmethod(
+            lambda *a, **k: QMessageBox.StandardButton.Yes)
+        try:
+            self.assertEqual(other.offer_recovery(), 1)
+            self.assertEqual(len(other.project), 3)
+        finally:
+            QMessageBox.question = original
+            self.close_quietly(other)
 
     def test_the_title_shows_unsaved_changes(self):
         self.window.set_project(synthetic_project(1))

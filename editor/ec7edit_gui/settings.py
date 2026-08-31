@@ -33,6 +33,23 @@ class Settings:
     def __init__(self, backend: QSettings | None = None) -> None:
         self._settings = backend or QSettings(ORGANISATION, APPLICATION)
 
+    # -- where the editor keeps its own files -----------------------------
+
+    #: Autosaves live here. Settable so a test can point it somewhere
+    #: disposable: a test suite that writes into the user's real
+    #: ~/.local/share is a test suite that leaves work behind and reads other
+    #: runs' leftovers, which is how two of these first failed.
+    @property
+    def recovery_dir(self) -> Path:
+        raw = self._settings.value("paths/recovery", "")
+        if raw:
+            return Path(raw)
+        return Path.home() / ".local" / "share" / "ec7edit" / "recovery"
+
+    @recovery_dir.setter
+    def recovery_dir(self, path: Path | str) -> None:
+        self._settings.setValue("paths/recovery", str(path))
+
     # -- profiles ---------------------------------------------------------
 
     @property

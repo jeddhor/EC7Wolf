@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QInputDialog,
     QMenu,
+    QDialog,
     QDockWidget,
     QFileDialog,
     QHBoxLayout,
@@ -44,7 +45,7 @@ from PySide6.QtWidgets import (
 
 from ec7edit_core.archive import read_archive
 from ec7edit_core.catalog import Catalog, load_catalog
-from ec7edit_core.commands import History
+from ec7edit_core.commands import History, add_maps
 from ec7edit_core.discovery import Profile, data_fingerprint
 from ec7edit_core.engine_runner import build_launch_plan
 from ec7edit_core.rules import (
@@ -70,12 +71,14 @@ from ec7edit_core.prefabs import PREFABS, by_key as prefab_by_key
 from ec7edit_core.project import (
     PROJECT_SUFFIX,
     RecoveryStore,
+    SaveConflict,
     load_project,
     new_project,
     project_identity,
     save_project,
 )
 
+from .import_dialog import ImportDialog
 from .inspector import Inspector
 from .map_canvas import MapCanvas
 from .palette_models import CatalogFilter, CatalogModel, EntryRole
@@ -149,7 +152,15 @@ class MainWindow(QMainWindow):
         self._validate_timer.setSingleShot(True)
         self._validate_timer.setInterval(400)
         self._validate_timer.timeout.connect(lambda: self.validate())
-        self.recovery = RecoveryStore(Path.home() / ".local" / "share" / "ec7edit" / "recovery")
+        self.recovery = RecoveryStore(settings.recovery_dir)
+        #: Autosave is a safety net, not a save: it writes a recovery copy into
+        #: the application's own directory and never clears the dirty flag,
+        #: because telling somebody their work is saved when it is somewhere
+        #: they have never heard of would be a lie.
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.setInterval(60_000)
+        self._autosave_timer.timeout.connect(lambda: self.autosave())
+        self._autosave_timer.start()
 
         self.tools = ToolController(self)
         self.tools.command_ready.connect(self.run_command)
@@ -256,7 +267,13 @@ class MainWindow(QMainWindow):
         self.action_import = self._action("&Import map from archive…", self.import_map, "Ctrl+I")
         self.action_save = self._action("&Save", self.save_project, QKeySequence.Save)
         self.action_save_as = self._action("Save &As…", self.save_project_as, "Ctrl+Shift+S")
+        self.action_save_copy = self._action(
+            "Save a &Copy…", self.save_copy,
+            tip="Write a copy elsewhere and keep editing this one")
         self.action_export = self._action("&Export preview WAD…", self.export_preview, "Ctrl+E")
+        self.action_export_archive = self._action(
+            "Export a full archive… (&private)", self.export_archive,
+            tip="A complete MAPTEMP.CO7 built on the game's own; not shareable")
         self.action_quit = self._action("&Quit", self.close, QKeySequence.Quit)
         for action in (self.action_new, self.action_open):
             file_menu.addAction(action)
@@ -267,7 +284,8 @@ class MainWindow(QMainWindow):
         for action in (self.action_new_map, self.action_import):
             file_menu.addAction(action)
         file_menu.addSeparator()
-        for action in (self.action_save, self.action_save_as, self.action_export):
+        for action in (self.action_save, self.action_save_as, self.action_save_copy,
+                       self.action_export, self.action_export_archive):
             file_menu.addAction(action)
         file_menu.addSeparator()
         file_menu.addAction(self.action_quit)
@@ -654,25 +672,42 @@ class MainWindow(QMainWindow):
             self._error("Could not read that archive", str(error))
             return
 
-        chosen = number if number is not None else 1
+        if number is not None:
+            wanted = [number]
+        else:
+            # Sixty maps in an archive and the old code took the first one.
+            dialog = ImportDialog(archive, str(archive_path), self)
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            wanted = dialog.chosen()
+        if not wanted:
+            return
+
+        # One command, whether it is one map or sixty: an import that lands as
+        # sixty separate undo steps is one nobody can back out of.
         try:
-            record = archive.by_number(chosen)
+            records = [archive.by_number(n) for n in wanted]
         except Ec7EditError as error:
             self._error("No such map", str(error))
             return
 
-        document = MapDocument.from_record(
-            record,
-            source=SourceReference(
-                display_path=str(archive_path), sha256=identity.digest,
-                map_number=chosen, imported_at=utc_now(),
-            ),
-        )
-        self.project = self.project.added(document)
-        self._refresh()
-        self.open_map(document.uuid)
+        documents = [
+            MapDocument.from_record(
+                record,
+                source=SourceReference(
+                    display_path=str(archive_path), sha256=identity.digest,
+                    map_number=record.number, imported_at=utc_now(),
+                ),
+            )
+            for record in records
+        ]
+        self.run_command(add_maps(documents, index=len(self.project.maps), label=(
+            f"Import {len(documents)} maps" if len(documents) > 1
+            else f"Import {records[0].name.text or records[0].lump_name}")))
+        self.open_map(documents[0].uuid)
         identity.verify_unchanged()
-        self.statusBar().showMessage(f"Imported {record.name.text}", 4000)
+        self.statusBar().showMessage(
+            f"Imported {len(documents)} map(s) from {Path(archive_path).name}", 4000)
 
     def save_project(self) -> bool:
         if self.project_path is None:
@@ -680,11 +715,32 @@ class MainWindow(QMainWindow):
         try:
             revision = save_project(self.project, self.project_path,
                                     expect_identity=self._identity)
+        except SaveConflict:
+            # Somebody -- another copy of the editor, a sync client, the user
+            # in a text editor -- changed the file since it was opened. The one
+            # thing that must not happen is a silent overwrite, so this asks,
+            # and the default is the answer that loses nothing.
+            answer = QMessageBox.question(
+                self, "The file changed underneath this project",
+                f"{self.project_path.name} has been modified since it was opened.\n\n"
+                "Overwrite it with what is in the editor, or save this copy "
+                "somewhere else?",
+                QMessageBox.StandardButton.SaveAll | QMessageBox.StandardButton.Save
+                | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.SaveAll,
+            )
+            if answer == QMessageBox.StandardButton.Save:
+                self._identity = project_identity(self.project_path)
+                return self.save_project()
+            if answer == QMessageBox.StandardButton.SaveAll:
+                return self.save_project_as()
+            return False
         except Exception as error:
             self._error("Could not save", str(error))
             return False
         self.project = self.project.marked_saved(revision)
         self._identity = project_identity(self.project_path)
+        self.recovery.discard(self.project.uuid)
         self.settings.remember_project(self.project_path)
         self._refresh()
         self.statusBar().showMessage(f"Saved {self.project_path.name}", 4000)
@@ -702,6 +758,89 @@ class MainWindow(QMainWindow):
         self.project_path = Path(path)
         self._identity = None
         return self.save_project()
+
+    def autosave(self) -> bool:
+        """Write a recovery copy if there is anything to recover."""
+        if not self.project.dirty:
+            return False
+        try:
+            self.recovery.autosave(self.project,
+                                   str(self.project_path or ""))
+        except Exception:
+            # A failed autosave must never interrupt editing, and must never
+            # be the thing that loses the work it was protecting.
+            return False
+        return True
+
+    def offer_recovery(self) -> int:
+        """At startup, offer back anything a previous run did not finish saving.
+
+        Only work that was *ahead* of its last save is worth offering: a
+        recovery copy whose revision matches what is on disk is a copy of a
+        file the user already has.
+        """
+        try:
+            records = [r for r in self.recovery.list_recoveries()
+                       if r.autosaved_revision > r.saved_revision]
+        except Exception:
+            return 0
+        if not records:
+            return 0
+        newest = max(records, key=lambda r: r.timestamp)
+        where = Path(newest.original_path).name if newest.original_path else "an unsaved project"
+        answer = QMessageBox.question(
+            self, "Unsaved work from a previous session",
+            f"EC7Edit has a recovery copy of {where} from {newest.timestamp}, "
+            "with changes that were never saved.\n\nOpen it?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            # Discarded deliberately: an offer that comes back every launch is
+            # one people learn to dismiss without reading.
+            self.recovery.discard(newest.project_uuid)
+            return 0
+        try:
+            self.set_project(self.recovery.load(newest.project_uuid),
+                             Path(newest.original_path) if newest.original_path else None)
+        except Exception as error:
+            self._error("Could not open the recovery copy", str(error))
+            return 0
+        self.statusBar().showMessage(
+            "Recovered unsaved work — this project has not been saved yet", 10_000)
+        return 1
+
+    def save_copy(self) -> bool:
+        """Write the project somewhere else and carry on editing this one.
+
+        Save As moves where the project lives; this does not. It is what you
+        want before trying something -- a snapshot you can go back to -- and
+        the distinction matters because Save As silently changes what the next
+        Ctrl+S overwrites.
+        """
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save a copy", self._start_directory(),
+            f"EC7Edit projects (*{PROJECT_SUFFIX})",
+        )
+        if not path:
+            return False
+        if not path.endswith(PROJECT_SUFFIX):
+            path += PROJECT_SUFFIX
+        if self.project_path is not None and Path(path) == self.project_path:
+            self._error("That is this project",
+                        "A copy has to go somewhere else. Use Save to write "
+                        "this one.")
+            return False
+        try:
+            save_project(self.project, Path(path))
+        except Exception as error:
+            self._error("Could not write the copy", str(error))
+            return False
+        # Deliberately not touched: project_path, the dirty flag, the identity.
+        # The copy is a copy.
+        self.settings.remember_project(path)
+        self.statusBar().showMessage(f"Wrote a copy to {Path(path).name}", 4000)
+        return True
 
     def preflight(self, maps) -> list:
         """Every error in the maps about to leave the editor.
@@ -762,6 +901,115 @@ class MainWindow(QMainWindow):
             self._error("Could not export", str(error))
             return
         self.statusBar().showMessage(f"Exported {written.name} ({len(blob)} bytes)", 6000)
+
+    def export_archive(self) -> bool:
+        """Write a complete MAPTEMP.CO7: your maps in their slots, the rest
+        of the game's untouched.
+
+        Explicitly private, and the editor says so before it writes anything.
+        The output is a copy of a retail archive with some floors swapped, so
+        it is the user's own game data and it is not shareable -- unlike a
+        preview WAD, which holds only what they made. Nothing about this is
+        automatic: it is a separate command, it names its output, and it
+        refuses to write anywhere near the data it read.
+        """
+        if not self.project.maps:
+            self._error("Nothing to export", "This project has no maps yet.")
+            return False
+        if self._preflight_refused(self.preflight(self.project.maps),
+                                   "This archive"):
+            return False
+
+        source, _ = QFileDialog.getOpenFileName(
+            self, "The archive to build on",
+            self.settings.profile.data_dir or self._start_directory(),
+            "Corridor 7 archives (MAPTEMP.CO7 *.CO7);;All files (*)")
+        if not source:
+            return False
+
+        if QMessageBox.warning(
+            self, "This output contains the game's own maps",
+            f"The file this writes is a copy of {Path(source).name} with "
+            f"{len(self.project.maps)} map(s) replaced. Every floor you did not "
+            "edit is copied from it unchanged.\n\n"
+            "That makes the result your own game data: keep it to yourself. "
+            "To share a map, export a preview WAD instead -- that holds only "
+            "what you made.",
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        ) != QMessageBox.StandardButton.Ok:
+            return False
+
+        try:
+            identity = SourceIdentity.probe(source)
+            archive = read_archive(source)
+        except (OSError, Ec7EditError) as error:
+            self._error("Could not read that archive", str(error))
+            return False
+
+        # A map imported from a different copy of the game is a map whose slot
+        # may mean something else here. Worth saying; not worth refusing.
+        strangers = {d.lump_name for d in self.project.maps
+                     if d.source is not None and d.source.sha256
+                     and d.source.sha256 != identity.digest}
+        if strangers and QMessageBox.question(
+            self, "These maps came from a different archive",
+            f"{', '.join(sorted(strangers))} were imported from an archive with "
+            "different contents. Their slots may not mean the same thing "
+            "here.\n\nGo ahead anyway?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        ) != QMessageBox.StandardButton.Yes:
+            return False
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Write the archive", self._start_directory(),
+            "Corridor 7 archives (*.CO7);;All files (*)")
+        if not path:
+            return False
+
+        from ec7edit_core.archive import replace_records
+        from ec7edit_core.paths import OutputGuard, atomic_write
+
+        try:
+            replacements = {d.slot: d.to_record() for d in self.project.maps}
+            blob = replace_records(archive, replacements)
+            guard = OutputGuard.for_source(source)
+            written = atomic_write(path, blob, guard=guard)
+            identity.verify_unchanged()
+            # Read it back before claiming it worked: an archive that does not
+            # parse is worse than no archive, because it is discovered by the
+            # engine hours later.
+            check = read_archive(written)
+        except (OSError, Ec7EditError) as error:
+            self._error("Could not write the archive", str(error))
+            return False
+
+        self._export_report(written, len(blob), archive, check, replacements)
+        return True
+
+    def _export_report(self, written, size, before, after, replacements) -> None:
+        """What the export changed, said once, in the panel and the status bar.
+
+        The plan calls this the minimal diff summary: not a byte report, just
+        enough to answer "did that do what I meant" without opening the file.
+        """
+        replaced = sorted(replacements)
+        untouched = len(before.records) - len(replaced)
+        lines = [
+            f"Wrote {written.name} — {size:,} bytes, {len(after.records)} maps.",
+            f"Replaced: {', '.join(f'MAP{n:02d}' for n in replaced)}.",
+            f"Copied unchanged: {untouched} map(s).",
+        ]
+        self.problems.clear()
+        for line in lines:
+            item = QListWidgetItem(line)
+            item.setToolTip("Export report")
+            self.problems.addItem(item)
+        self._problems = []
+        self._problems_revision = self.project.revision
+        self.problem_status.setText(lines[0])
+        self.statusBar().showMessage(lines[0], 8000)
 
     # -- maps -------------------------------------------------------------
 

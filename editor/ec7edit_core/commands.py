@@ -290,6 +290,21 @@ def add_map(document: MapDocument, index: int, *, label: str = "Add map") -> Com
     return Command(label, maps=(MapEdit(document, index, added=True),))
 
 
+def add_maps(documents, *, index: int | None = None,
+             label: str = "Add maps") -> Command:
+    """Several maps as one command.
+
+    An import of sixty maps that lands as sixty undo steps is one nobody can
+    back out of, so the whole batch is a single edit. `index` is where the
+    first one goes; the rest follow it, which keeps the archive's own order.
+    """
+    documents = list(documents)
+    start = 0 if index is None else index
+    return Command(label, maps=tuple(
+        MapEdit(document, start + offset, added=True)
+        for offset, document in enumerate(documents)))
+
+
 def set_slot(document: MapDocument, slot: int, *, label: str = "Change slot") -> Command:
     return Command(label, slots=(SlotEdit(document.uuid, document.slot, slot),))
 

@@ -300,3 +300,66 @@ class LumpNames(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)
+
+
+class ReplaceRecords(unittest.TestCase):
+    """E8's private full-archive export: your maps in their slots, every other
+    map copied through untouched."""
+
+    def archive(self, count=3):
+        from ec7edit_core.archive import Archive, MapRecord
+        from ec7edit_core.names import NativeName
+        from ec7edit_core.planes import MapPlanes
+
+        records = []
+        for number in range(1, count + 1):
+            cells = tuple(number for _ in range(4 * 4))
+            records.append(MapRecord(
+                number=number,
+                name=NativeName.from_text(f"MAP {number}"),
+                planes=MapPlanes(4, 4, (cells, cells, cells)),
+            ))
+        return Archive(tuple(records))
+
+    def test_replacing_nothing_is_a_faithful_copy(self):
+        from ec7edit_core.archive import encode_archive, replace_records
+
+        source = self.archive()
+        self.assertEqual(replace_records(source, {}),
+                         encode_archive(source.records))
+
+    def test_the_named_slot_is_replaced(self):
+        from ec7edit_core.archive import parse_archive, replace_records
+
+        source = self.archive()
+        blob = replace_records(source, {2: source.by_number(3)})
+        back = parse_archive(blob)
+        self.assertEqual(back.by_number(2).planes, source.by_number(3).planes)
+
+    def test_the_others_are_untouched(self):
+        from ec7edit_core.archive import parse_archive, replace_records
+
+        source = self.archive()
+        back = parse_archive(replace_records(source, {2: source.by_number(3)}))
+        for number in (1, 3):
+            self.assertEqual(back.by_number(number).planes,
+                             source.by_number(number).planes)
+
+    def test_a_replacement_keeps_the_slot_it_lands_in(self):
+        # The record being written in carries its own number; the slot it goes
+        # to is the one asked for, or the archive would come back reordered.
+        from ec7edit_core.archive import parse_archive, replace_records
+
+        source = self.archive()
+        back = parse_archive(replace_records(source, {2: source.by_number(3)}))
+        self.assertEqual([r.number for r in back.records], [1, 2, 3])
+
+    def test_a_slot_the_archive_does_not_have_is_refused(self):
+        # An append would produce a file the engine indexes differently from
+        # the one the user thinks they have.
+        from ec7edit_core.archive import replace_records
+        from ec7edit_core.errors import Ec7EditError
+
+        source = self.archive()
+        with self.assertRaises(Ec7EditError):
+            replace_records(source, {9: source.by_number(1)})

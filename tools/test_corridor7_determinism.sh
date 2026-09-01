@@ -48,15 +48,28 @@ trap cleanup EXIT HUP INT TERM
 
 run_capture() {
 	# $1 = output checksum path, $2 = config file to use
+	#
+	# The timeout is generous and its expiry is reported rather than fatal. At
+	# 120s this was tight for the OpenGL run on a machine also running the rest
+	# of the suite, and because `set -e` is on, a timeout aborted the whole gate
+	# between two passing checks with no message at all -- which reads as a
+	# mystery rather than as "the box was busy".
 	save=$(mktemp -d "$workdir/save.XXXXXX")
+	set +e
 	(
 		cd "$data_dir"
-		timeout 120s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 xvfb-run -a "$ec7wolf" \
+		timeout 300s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 xvfb-run -a "$ec7wolf" \
 			--data CO7 --no-upscale --config "$2" --savedir "$save" \
 			--nowait --tedlevel "$map" --skill 2 \
 			--capture-rngseed "$seed" --capture-checksum "$1" \
 			--capture-maxtics "$tics"
 	) >"$1.log" 2>&1
+	_rc=$?
+	set -e
+	if [ "$_rc" -eq 124 ]; then
+		printf 'FAIL: a capture run was still going after 300s (see %s.log)\n' "$1" >&2
+	fi
+	return 0
 }
 
 printf 'Determinism gate: map=%s seed=%s tics=%s\n' "$map" "$seed" "$tics"

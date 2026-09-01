@@ -39,6 +39,7 @@ done
 
 work=$(mktemp -d /tmp/ec7wolf-setup.XXXXXX)
 . "$here/xvfb_common.sh"
+. "$here/menu_common.sh"
 
 display=:153
 xvfb_start "$display" "$work/xvfb.log" 1280x800x24 || exit 1
@@ -81,73 +82,36 @@ done
 [ -n "$window" ] || { printf 'FAIL: the game never opened a window\n'; exit 1; }
 sleep 3
 
-press() {
-	DISPLAY=$display xdotool windowfocus --sync "$window" 2>/dev/null || true
-	DISPLAY=$display xdotool key --clearmodifiers "$1"
-	sleep "${2:-1}"
-}
 
 # Retried, because a screenshot taken during a menu fade catches the highlight
 # too dim to recognise and "no menu" is then indistinguishable from "not a
 # menu". Every wrong answer here costs a keystroke sent to the wrong screen.
-cursor() {
-	_c=0
-	while [ "$_c" -lt 6 ]; do
-		DISPLAY=$display import -window root "$work/nav.png" 2>/dev/null || true
-		_r=$(python3 "$here/menu_cursor.py" "$work/nav.png" 2>/dev/null || echo -1)
-		if [ "$_r" -ge 0 ]; then
-			printf '%s' "$_r"
-			return 0
-		fi
-		_c=$((_c + 1))
-		sleep 0.4
-	done
-	printf '%s' "-1"
-}
 
 # Walk to the last or first row rather than counting keystrokes to it: counting
 # assumes every keystroke arrives, and a measured pixel row goes stale the next
 # time the screen grows one. Both ends are facts about the menu instead.
-walk_to_end() {  # walk_to_end up|down WHAT
-	_dir=$1; _what=$2
-	if [ "$_dir" = down ]; then _prev=-1; else _prev=99999; fi
-	_try=0
-	while [ "$_try" -lt 12 ]; do
-		if ! kill -0 "$game" 2>/dev/null; then
-			printf '  FAIL the game died while looking for %s\n' "$_what"
-			sed 's/\x08//g' "$work/game.log" | grep -vE '^\s*$' | tail -3 | sed 's/^/         /'
-			return 1
-		fi
-		_y=$(cursor)
-		[ "$_y" -lt 0 ] && { printf '  FAIL no menu on screen looking for %s\n' "$_what"; return 1; }
-		if [ "$_dir" = down ] && [ "$_y" -lt "$_prev" ]; then press Up 0.8; return 0; fi
-		if [ "$_dir" = up ] && [ "$_y" -gt "$_prev" ]; then press Down 0.8; return 0; fi
-		_prev=$_y
-		if [ "$_dir" = down ]; then press Down 0.8; else press Up 0.8; fi
-		_try=$((_try + 1))
-	done
-	printf '  FAIL never found the %s of the menu holding %s\n' "$_dir" "$_what"
-	return 1
-}
 
 alive() { kill -0 "$game" 2>/dev/null; }
+# The walks call this each step, so a dead game is reported as a dead game
+# rather than as a menu that stopped responding.
+MENU_ALIVE=alive
 check() {
 	message=$1; shift
 	if "$@"; then printf '  ok   %s\n' "$message"
 	else printf '  FAIL %s\n' "$message"; status=1; fi
 }
 
-press Escape 2
-press Escape 3
-press Return 3
-walk_to_end down "Multiplayer" || exit 1
-press Return 3
+menu_press Escape 2
+menu_press Escape 3
+menu_press Return 3
+menu_walk_to_bottom "Multiplayer" || exit 1
+menu_press Return 3
 
 check "the setup screen is up" alive
 
 printf '\nStart, on a screen nobody has typed in\n'
-walk_to_end down "Start" || exit 1
-press Return 3
+menu_walk_to_bottom "Start" || exit 1
+menu_press Return 3
 if alive; then
 	printf '  ok   it survived, and asked for an address\n'
 else
@@ -160,13 +124,13 @@ fi
 # One Escape, not two: the first dismisses the "enter an address" box, and a
 # second would leave the setup screen altogether -- after which the walking
 # below happily rearranges the rank ladder instead.
-press Escape 2
+menu_press Escape 2
 
 printf '\nStart, hosting, which never has an address either\n'
-walk_to_end up "Role" || exit 1
-press Left 1.5
-walk_to_end down "Start" || exit 1
-press Return 4
+menu_walk_to_top "Role" || exit 1
+menu_press Left 1.5
+menu_walk_to_bottom "Start" || exit 1
+menu_press Return 4
 sleep 3
 
 if alive; then

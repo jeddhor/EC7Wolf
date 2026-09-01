@@ -78,14 +78,39 @@ run_with_cheat() {
 			--config "$work/cfg" --savedir "$work/sv" >"$work/$label.log" 2>&1 &
 		echo $! >"$work/pid"
 	)
-	sleep 5
 	game=$(cat "$work/pid")
 
-	win=$(DISPLAY=$display xdotool search --name "EC7Wolf" 2>/dev/null | tail -1 || true)
+	# Waited for, not slept through. Five seconds is plenty on an idle machine
+	# and not always enough on one running the rest of the suite, and the
+	# failure it produced -- "no game window appeared" -- reads like the engine
+	# is broken rather than like the box is busy.
+	win=""
+	_w=0
+	while [ "$_w" -lt 60 ]; do
+		win=$(DISPLAY=$display xdotool search --name "EC7Wolf" 2>/dev/null | tail -1 || true)
+		[ -n "$win" ] && break
+		kill -0 "$game" 2>/dev/null || break
+		sleep 0.5
+		_w=$((_w + 1))
+	done
 	if [ -z "$win" ]; then
 		printf 'FAIL: no game window appeared; see %s/%s.log\n' "$work" "$label" >&2
 		exit 1
 	fi
+
+	# And then wait for the level, which is the thing the cheat needs. The old
+	# `sleep 5` was doing both jobs at once, and replacing it with a window poll
+	# alone made this worse rather than better: the window appears well before
+	# the floor does, so the keys went to a game that was still loading and the
+	# cheat granted nothing.
+	_w=0
+	while [ "$_w" -lt 60 ]; do
+		grep -q "^MAP01 - " "$work/$label.log" 2>/dev/null && break
+		kill -0 "$game" 2>/dev/null || break
+		sleep 0.5
+		_w=$((_w + 1))
+	done
+	sleep 1
 
 	# W+A+X grants full equipment including both access cards. It must be held:
 	# the poll samples the three keys together, and a tap can land between polls.
@@ -97,13 +122,26 @@ run_with_cheat() {
 
 	# The tally screen blocks on input, so it has to be cleared for the run to
 	# reach the next level. Harmless when there is no transition.
+	# Cleared until the evidence appears or the game goes, rather than a fixed
+	# number of taps and a fixed wait afterwards. The capture line this gate
+	# reads is written when the chosen frame is rendered, and how long that
+	# takes depends on how busy the machine is -- so the old "ten taps, then
+	# sleep 6, then grep" reported "the run never reached the next level" on a
+	# run whose own log says it reached MAP02.
+	# Kept clearing until the game is GONE, not for a fixed number of taps.
+	# Both runs end on their own -- --capture-maxframes bounds them -- so the
+	# process exiting is the real "it is finished", and the evidence this gate
+	# reads is complete by then. Stopping early on the first capture line was
+	# worse than the fixed count it replaced: the carried run wants the line
+	# from AFTER the transition, and the taps are what gets it there.
 	i=0
-	while [ $i -lt 10 ]; do
-		DISPLAY=$display xdotool key --window "$win" space
-		sleep 1
+	while [ $i -lt 120 ]; do
+		kill -0 "$game" 2>/dev/null || break
+		DISPLAY=$display xdotool key --window "$win" space 2>/dev/null || true
+		sleep 0.5
 		i=$((i+1))
 	done
-	sleep 6
+	wait "$game" 2>/dev/null || true
 
 	grep -o "map [A-Z0-9]* player ([0-9-]*,[0-9-]*) cards [RB-][RB-]" "$work/$label.log" |
 		tail -1

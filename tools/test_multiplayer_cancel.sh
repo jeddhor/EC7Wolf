@@ -55,6 +55,7 @@ python3 -c 'import PIL' 2>/dev/null || { printf 'SKIP: PIL is missing\n'; exit 0
 
 work=$(mktemp -d /tmp/ec7wolf-mpcancel.XXXXXX)
 . "$here/xvfb_common.sh"
+. "$here/menu_common.sh"
 display=:176
 port=5041
 xvfb_start "$display" "$work/xvfb.log" 1280x800x24 || exit 1
@@ -76,12 +77,6 @@ check() {
 # windowfocus, not windowactivate: there is no window manager under bare Xvfb,
 # so activate fails with "claims not to support _NET_ACTIVE_WINDOW" and the
 # keystroke goes to the root window instead of the game.
-press() {
-	[ -n "${window:-}" ] || return 0
-	DISPLAY=$display xdotool windowfocus --sync "$window" 2>/dev/null || true
-	DISPLAY=$display xdotool key --clearmodifiers "$1"
-	sleep "${2:-1}"
-}
 
 # Screens are 1280x800, but the two being told apart share a backdrop, a
 # heading rule and a typeface -- only the text column changes. Measured, that
@@ -106,73 +101,15 @@ looks_the_same() {
 	[ "$_n" -lt 4000 ]
 }
 
-cursor_row() {  # -1 when the screen is not a menu
-	DISPLAY=$display import -window root "$work/look.png" 2>/dev/null || true
-	python3 "$here/menu_cursor.py" "$work/look.png" 2>/dev/null || echo -1
-}
 
 # These menus animate between screens, and a capture taken mid-transition has
 # no settled cursor on it. Waiting for one is not the same as sleeping longer:
 # it costs nothing when the screen is already up, and it does not run out on a
 # machine that is busy.
-wait_for_menu() {
-	_w=0
-	while [ "$_w" -lt 20 ]; do
-		[ "$(cursor_row)" -ge 0 ] && return 0
-		sleep 0.5
-		_w=$((_w + 1))
-	done
-	return 1
-}
 
 # Walking down wraps to the first row, which is how the top is reached without
 # assuming how many rows there are or where the cursor started.
-walk_to_top() {  # walk_to_top WHAT
-	_what=$1
-	_prev=-1
-	_try=0
-	wait_for_menu || { printf '  FAIL no menu appeared while looking for %s\n' "$_what"; return 1; }
-	while [ "$_try" -lt 14 ]; do
-		_y=$(cursor_row)
-		if [ "$_y" -lt 0 ]; then
-			printf '  FAIL no menu on screen while looking for %s\n' "$_what"
-			return 1
-		fi
-		if [ "$_y" -lt "$_prev" ]; then
-			printf '  ..   cursor on %s (top row)\n' "$_what"
-			return 0
-		fi
-		_prev=$_y
-		press Down 0.8
-		_try=$((_try + 1))
-	done
-	printf '  FAIL never wrapped round to %s\n' "$_what"
-	return 1
-}
 
-walk_to_bottom() {  # walk_to_bottom WHAT
-	_what=$1
-	_prev=-1
-	_try=0
-	wait_for_menu || { printf '  FAIL no menu appeared while looking for %s\n' "$_what"; return 1; }
-	while [ "$_try" -lt 12 ]; do
-		_y=$(cursor_row)
-		if [ "$_y" -lt 0 ]; then
-			printf '  FAIL no menu on screen while looking for %s\n' "$_what"
-			return 1
-		fi
-		if [ "$_y" -lt "$_prev" ]; then
-			press Up 0.8
-			printf '  ..   cursor on %s (bottom row)\n' "$_what"
-			return 0
-		fi
-		_prev=$_y
-		press Down 0.8
-		_try=$((_try + 1))
-	done
-	printf '  FAIL never found the bottom of the menu holding %s\n' "$_what"
-	return 1
-}
 
 printf 'A player who decides to host\n'
 (
@@ -205,13 +142,13 @@ done
 sleep 10
 
 # Two: the first stops the intro, the second opens the menu.
-press Escape 1.5
-press Escape 2
-press Return 2.5          # New Mission -> the rank ladder
-walk_to_bottom "Multiplayer" || exit 1
-press Return 2.5          # -> the multiplayer setup screen
+menu_press Escape 1.5
+menu_press Escape 2
+menu_press Return 2.5          # New Mission -> the rank ladder
+menu_walk_to_bottom "Multiplayer" || exit 1
+menu_press Return 2.5          # -> the multiplayer setup screen
 
-check "the setup screen is a menu" test "$(cursor_row)" -ge 0
+check "the setup screen is a menu" test "$(menu_cursor_row)" -ge 0
 
 # The screen opens on "Join a game" with the cursor on Server address, and
 # Start with an empty address only raises the "enter an address" prompt -- so
@@ -220,12 +157,14 @@ check "the setup screen is a menu" test "$(cursor_row)" -ge 0
 # starts, which is the one place on this screen worth counting rather than
 # walking: walking needs a wrap, and a wrap needs the disabled rows to behave,
 # which is more assumption than two Ups.
-press Up 1
-press Up 1
-press Left 1.5
+# Verified, not timed: a dropped Up leaves the cursor a row off and the Left
+# below then changes a different setting, which fails later and somewhere else.
+menu_press_moved Up || { printf '  FAIL the menu did not move up to Role\n'; exit 1; }
+menu_press_moved Up || { printf '  FAIL the menu did not move up to Role\n'; exit 1; }
+menu_press Left 1.5
 DISPLAY=$display import -window root "$work/role.png" 2>/dev/null || true
 
-walk_to_bottom "Start" || exit 1
+menu_walk_to_bottom "Start" || exit 1
 
 # The setup screen as the player last saw it. Coming back to something that
 # looks like this is what "got out of the waiting screen" means, and it is a
@@ -233,7 +172,7 @@ walk_to_bottom "Start" || exit 1
 # same shell, with the same yellow heading, so menu_cursor.py finds a cursor on
 # that too and cannot tell the two apart.
 DISPLAY=$display import -window root "$work/setup-before.png" 2>/dev/null || true
-press Return 4
+menu_press Return 4
 
 printf '\nWaiting for a player who never comes\n'
 check "it is hosting" grep -q "Waiting for" "$work/game.log"
@@ -242,7 +181,7 @@ check "the waiting screen replaced the setup screen" \
 	differs_a_lot "$work/setup-before.png" "$work/waiting.png"
 
 printf '\nEscape\n'
-press Escape 4
+menu_press Escape 4
 DISPLAY=$display import -window root "$work/after-escape.png" 2>/dev/null || true
 
 check "it went back to the setup screen" \

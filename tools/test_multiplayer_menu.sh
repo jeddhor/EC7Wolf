@@ -35,6 +35,7 @@ done
 
 work=$(mktemp -d /tmp/ec7wolf-mpmenu.XXXXXX)
 . "$here/xvfb_common.sh"
+. "$here/menu_common.sh"
 display=:173
 port=5029    # what the setup screen offers by default, so nothing is typed here
 xvfb_start "$display" "$work/xvfb.log" 1280x800x24 || exit 1
@@ -117,11 +118,6 @@ DISPLAY=$display xdotool mousemove --window "$window" 20 20 2>/dev/null || true
 # with no window manager, and the second one's window maps part way through
 # this sequence and takes the focus with it -- after which every keystroke goes
 # to a game that is not in a menu, silently.
-press() {
-	DISPLAY=$display xdotool windowfocus --sync "$window" 2>/dev/null || true
-	DISPLAY=$display xdotool key --clearmodifiers "$1"
-	sleep "${2:-1}"
-}
 
 # Walk the cursor to the bottom row instead of counting keystrokes to it.
 #
@@ -139,49 +135,25 @@ press() {
 # row of their menu, and "the last row" is a fact about the menu rather than
 # about its current height: walk down until the selection wraps to the top,
 # then step back up one.
-walk_to_bottom() {  # walk_to_bottom WHAT
-	_what=$1
-	_prev=-1
-	_try=0
-	while [ "$_try" -lt 12 ]; do
-		DISPLAY=$display import -window root "$work/nav.png" 2>/dev/null || true
-		_y=$(python3 "$here/menu_cursor.py" "$work/nav.png" 2>/dev/null || echo -1)
-		if [ "$_y" -lt 0 ]; then
-			printf '  FAIL no menu on screen while looking for %s\n' "$_what"
-			return 1
-		fi
-		if [ "$_y" -lt "$_prev" ]; then
-			# Wrapped round to the top, so the row before this one was the last.
-			press Up 0.8
-			printf '  ..   cursor on %s (bottom row, y=%s)\n' "$_what" "$_prev"
-			return 0
-		fi
-		_prev=$_y
-		press Down 0.8
-		_try=$((_try + 1))
-	done
-	printf '  FAIL never found the bottom of the menu holding %s\n' "$_what"
-	return 1
-}
 
-press Escape 1.5
-press Escape 2
-press Return 2.5          # New Mission -> the rank ladder
+menu_press Escape 1.5
+menu_press Escape 2
+menu_press Return 2.5          # New Mission -> the rank ladder
 
 DISPLAY=$display import -window root "$work/ranks.png" 2>/dev/null || true
 
 # Captain is preselected and the section label is skipped, so Multiplayer is
 # three steps down -- but get there by looking, not by counting.
-walk_to_bottom "Multiplayer" || exit 1
-press Return 2.5
+menu_walk_to_bottom "Multiplayer" || exit 1
+menu_press Return 2.5
 
 DISPLAY=$display import -window root "$work/setup.png" 2>/dev/null || true
 
 # The screen opens on the address, ready to type.
-press Return 1.5
+menu_press Return 1.5
 DISPLAY=$display xdotool type --delay 60 "127.0.0.1"
 sleep 1.5
-press Return 1.5
+menu_press Return 1.5
 
 DISPLAY=$display import -window root "$work/address.png" 2>/dev/null || true
 
@@ -189,9 +161,9 @@ DISPLAY=$display import -window root "$work/address.png" 2>/dev/null || true
 # joining leaves them disabled, and the list wraps, so counting too far comes
 # back round to the address. Walking to the row cannot overshoot, and does not
 # care how many rows the setup screen grows.
-walk_to_bottom "Start" || exit 1
+menu_walk_to_bottom "Start" || exit 1
 DISPLAY=$display import -window root "$work/before-start.png" 2>/dev/null || true
-press Return 3
+menu_press Return 3
 DISPLAY=$display import -window root "$work/after-start.png" 2>/dev/null || true
 
 wait "$host_pid" "$client_pid" 2>/dev/null || true

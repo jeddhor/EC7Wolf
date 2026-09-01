@@ -307,6 +307,15 @@ class Session:
         self.exit_code = exit_code
         if self.state in TERMINAL_STATES:
             return
+        if self.state is SessionState.STOPPING:
+            # Asked for. A playtest somebody closed on purpose is not a crash,
+            # and reporting "the engine exited before reaching the map" because
+            # they pressed Stop would be both wrong and alarming.
+            self.state = (SessionState.FINISHED if self.reached_the_map
+                          else SessionState.FAILED)
+            if self.state is SessionState.FAILED and not self.failure:
+                self.failure = "stopped before the map was reached"
+            return
         if self.reached_the_map and not self.failure:
             self.state = SessionState.FINISHED
             return
@@ -314,7 +323,7 @@ class Session:
         if not self.failure:
             # The engine died without saying why, which is its own diagnosis:
             # what it managed to do first is the most useful thing to report.
-            if self.state is SessionState.STARTING or not self.events:
+            if not self.events:
                 self.failure = (
                     f"the engine exited with code {exit_code} without answering. "
                     "It may be a different build, or one too old to speak the "

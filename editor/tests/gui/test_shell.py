@@ -1065,3 +1065,79 @@ class PlaytestSessions(Base):
         plan = self.plan_for(self.root / "not-here")
         self.assertFalse(self.window.start_session(plan, "X"))
         self.assertTrue(errors)
+
+    def test_each_playtest_gets_its_own_session(self):
+        # A stray counter reset made every launch after the first reuse
+        # ec7edit-0001 -- the same nonce AND the same session directory, so two
+        # playtests shared a config, a savedir and a log.
+        first = self.window._next_session_id()
+        engine = self.fake_engine('echo "EC7EDIT x hello y=1"\nexit 0\n')
+        self.run_to_end(engine, session="s-a")
+        self.run_to_end(engine, session="s-b")
+        self.assertNotEqual(self.window._next_session_id(), first)
+
+    def test_stopping_on_purpose_is_not_reported_as_a_crash(self):
+        from ec7edit_core.engine_runner import SessionState
+
+        engine = self.fake_engine("sleep 30\n")
+        self.window.start_session(self.plan_for(engine), "LONG")
+        self.window.stop_session()
+        QApplication.processEvents()
+        self.assertIsNot(self.window.session.state, SessionState.FINISHED)
+        self.assertNotIn("exited with code", self.window.session.failure)
+        self.assertIn("stopped", self.window.session.failure)
+
+    def test_an_orphan_is_stopped_even_when_the_session_looks_finished(self):
+        # The session goes terminal the moment the engine says session-result,
+        # which is BEFORE it has finished exiting. Trusting the session there
+        # calls a live process dead, which is the orphan itself.
+        from PySide6.QtCore import QProcess
+
+        engine = self.fake_engine(
+            'echo "EC7EDIT s1 session-result outcome=quit"\nsleep 30\n')
+        self.window.start_session(self.plan_for(engine), "LATE")
+        for _ in range(50):
+            QApplication.processEvents()
+            if self.window.session.events:
+                break
+            self.window.process.waitForReadyRead(100)
+        self.assertFalse(self.window.session.running, "the session should look done")
+        self.assertTrue(self.window.reconcile_orphan(), "a live engine was not stopped")
+        self.assertEqual(self.window.process.state(), QProcess.ProcessState.NotRunning)
+
+    def test_a_second_playtest_cannot_start_over_a_live_one(self):
+        engine = self.fake_engine(
+            'echo "EC7EDIT s1 session-result outcome=quit"\nsleep 30\n')
+        errors = []
+        self.window._error = lambda title, body: errors.append(title)
+        self.window.start_session(self.plan_for(engine), "A")
+        for _ in range(50):
+            QApplication.processEvents()
+            if self.window.session.events:
+                break
+            self.window.process.waitForReadyRead(100)
+        try:
+            self.assertFalse(self.window.start_session(self.plan_for(engine, "s2"), "B"))
+            self.assertTrue(errors)
+        finally:
+            self.window.reconcile_orphan()
+
+    def test_relaunching_after_one_finishes_works(self):
+        from ec7edit_core.engine_runner import SessionState
+
+        engine = self.fake_engine(
+            'echo "EC7EDIT s1 hello x=1"\n'
+            'echo "EC7EDIT s1 preview-load path=preview.wad loaded=yes lumps=9"\n'
+            'echo "EC7EDIT s1 map-entry marker=MAP01 name=Lab"\n'
+            'echo "EC7EDIT s1 session-result outcome=quit"\nexit 0\n')
+        self.assertIs(self.run_to_end(engine).state, SessionState.FINISHED)
+        self.assertIs(self.run_to_end(engine).state, SessionState.FINISHED)
+
+    def test_the_panel_log_is_bounded_too(self):
+        from ec7edit_core.engine_runner import Session
+
+        engine = self.fake_engine(
+            f'i=0; while [ $i -lt {Session.LOG_LIMIT + 200} ]; do echo "line $i"; '
+            'i=$((i+1)); done\nexit 0\n')
+        self.run_to_end(engine, timeout=20000)
+        self.assertLessEqual(len(self.window._session_lines), Session.LOG_LIMIT)

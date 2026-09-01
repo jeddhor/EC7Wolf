@@ -1779,10 +1779,22 @@ class MainWindow(QMainWindow):
         that worked from one that never found the map -- and left the engine
         running when the editor closed.
         """
-        if self.session is not None and self.session.running:
+        if self._engine_alive():
             self._error("A playtest is already running",
                         "Stop it first, or let it finish.")
             return False
+        # Let go of the previous one explicitly. Its finished() is connected to
+        # a handler that writes into self.session, and self.session is about to
+        # mean something else.
+        if self.process is not None:
+            try:
+                self.process.finished.disconnect()
+                self.process.readyReadStandardOutput.disconnect()
+                self.process.errorOccurred.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            self.process.deleteLater()
+            self.process = None
 
         self.session = Session(plan)
         self._session_log_path = (plan.session_dir / "playtest.log"
@@ -1807,6 +1819,9 @@ class MainWindow(QMainWindow):
         self._refresh_session_ui()
         process.start()
         if not process.waitForStarted(5000):
+            # It may yet appear; do not leave it to.
+            process.kill()
+            process.waitForFinished(2000)
             self.session.finished(-1)
             self._error("The engine did not start",
                         f"{plan.executable}\n\n{process.errorString()}")
@@ -1827,6 +1842,10 @@ class MainWindow(QMainWindow):
         for line in lines:
             self.session.feed(line)
             self._session_lines.append(line)
+        if len(self._session_lines) > Session.LOG_LIMIT:
+            # The same bound the Session keeps. A playtest prints for as long as
+            # somebody plays, and this list is what the log file is written from.
+            del self._session_lines[: len(self._session_lines) - Session.LOG_LIMIT]
         if lines:
             self._refresh_session_ui()
 
@@ -1841,7 +1860,6 @@ class MainWindow(QMainWindow):
             self.session.feed(self._session_tail)
             self._session_lines.append(self._session_tail)
             self._session_tail = ""
-        self._session_counter = 0
         self.session.finished(code)
         self._write_session_log()
         self._refresh_session_ui()
@@ -1877,9 +1895,10 @@ class MainWindow(QMainWindow):
 
     def stop_session(self) -> bool:
         """Ask the engine to close, and make sure it does."""
-        if self.process is None or self.session is None or not self.session.running:
+        if not self._engine_alive():
             return False
-        self.session.stopping()
+        if self.session is not None and self.session.running:
+            self.session.stopping()
         self._refresh_session_ui()
         self.process.terminate()
         if not self.process.waitForFinished(3000):
@@ -1890,6 +1909,18 @@ class MainWindow(QMainWindow):
             self.process.waitForFinished(2000)
         return True
 
+    def _engine_alive(self) -> bool:
+        """Whether a process is actually still there.
+
+        Asked of the process, never of the session: the session goes terminal
+        the moment the engine says session-result, which is before it has
+        finished exiting. Anything that trusted the session alone would call a
+        live process dead -- and that is the definition of the orphan this is
+        supposed to prevent.
+        """
+        return (self.process is not None
+                and self.process.state() != QProcess.ProcessState.NotRunning)
+
     def reconcile_orphan(self) -> bool:
         """At shutdown: never leave a playtest running without an editor.
 
@@ -1897,11 +1928,14 @@ class MainWindow(QMainWindow):
         it behind means a window nobody owns, still writing to a session
         directory the editor may reuse.
         """
-        if self.process is None:
+        if not self._engine_alive():
             return False
-        if self.process.state() == QProcess.ProcessState.NotRunning:
-            return False
-        self.stop_session()
+        if self.session is not None and self.session.running:
+            self.session.stopping()
+        self.process.terminate()
+        if not self.process.waitForFinished(3000):
+            self.process.kill()
+            self.process.waitForFinished(2000)
         return True
 
     def _refresh_session_ui(self) -> None:

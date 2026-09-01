@@ -1227,3 +1227,51 @@ class Playtest(Base):
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)
+
+
+class SnapshotDock(Base):
+    """E10: the camera tool and the snapshot controller, without an engine."""
+
+    def place_camera(self, x=5, y=5):
+        self.window.select_tool(Tool.CAMERA)
+        self.window._on_press(x, y, Qt.LeftButton.value)
+        self.window.tools.release(x, y)
+
+    def test_the_camera_tool_writes_nothing(self):
+        # A snapshot is a view of the map, not a thing in it: placing the
+        # camera must not become an edit or an undo step.
+        before = self.document.planes.planes
+        depth = self.window.history.depth
+        self.place_camera()
+        self.assertEqual(self.document.planes.planes, before)
+        self.assertEqual(self.window.history.depth, depth)
+
+    def test_the_camera_lands_in_the_middle_of_the_tile(self):
+        self.place_camera(5, 6)
+        self.assertEqual((self.window.camera.x, self.window.camera.y), (5.5, 6.5))
+
+    def test_turning_keeps_the_place(self):
+        self.place_camera(5, 5)
+        self.window.turn_camera()
+        self.assertEqual(self.window.camera.angle, 90)
+        self.assertEqual((self.window.camera.x, self.window.camera.y), (5.5, 5.5))
+
+    def test_turning_with_no_camera_says_so(self):
+        self.window.turn_camera()
+        self.assertIn("Place the camera first", self.window.snapshot_status.text())
+
+    def test_a_snapshot_without_a_camera_is_refused(self):
+        self.assertFalse(self.window.take_snapshot())
+        self.assertIn("Place the camera first", self.window.snapshot_status.text())
+
+    def test_a_camera_in_a_wall_is_refused_before_the_engine_runs(self):
+        # (0, 0) is the room's corner wall. The engine would happily draw the
+        # inside of it, and the cache would keep the result.
+        self.place_camera(0, 0)
+        self.assertFalse(self.window.take_snapshot())
+        self.assertIn("inside a wall", self.window.snapshot_status.text())
+
+    def test_no_engine_configured_is_reported_not_crashed(self):
+        self.place_camera(5, 5)
+        self.assertFalse(self.window.take_snapshot())
+        self.assertIn("Setup", self.window.snapshot_status.text())

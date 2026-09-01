@@ -18,7 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QProcess, QTimer, QSize, Qt, Signal
-from PySide6.QtGui import QAction, QActionGroup, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QInputDialog,
@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QApplication,
     QComboBox,
     QMessageBox,
     QPushButton,
@@ -52,6 +53,13 @@ from ec7edit_core.engine_runner import (
     Session,
     SessionState,
     build_launch_plan,
+)
+from ec7edit_core.snapshot import (
+    Camera,
+    check_camera,
+    looks_like_a_world,
+    snapshot_arguments,
+    snapshot_key,
 )
 from ec7edit_core.rules import (
     assign_sound_areas as sound_area_writes,
@@ -161,6 +169,10 @@ class MainWindow(QMainWindow):
         #: Whatever a read left mid-line, kept for the next one.
         self._session_tail = ""
         self._session_counter = 0
+        #: Where the next snapshot is taken from, and what was last shown.
+        self.camera = None
+        self._snapshot_revision = -1
+        self._snapshot_key = ""
         #: Coalesces the full pass: every edit restarts it, so the expensive
         #: rules run once after a stroke rather than once per cell of it.
         self._validate_timer = QTimer(self)
@@ -181,6 +193,7 @@ class MainWindow(QMainWindow):
         self.tools.command_ready.connect(self.run_command)
         self.tools.refused.connect(self._on_prefab_refused)
         self.tools.picked.connect(self._on_picked)
+        self.tools.camera_placed.connect(self.set_camera)
         self.tools.message.connect(lambda text: self.statusBar().showMessage(text, 3000))
 
         self._build_menus()
@@ -340,6 +353,9 @@ class MainWindow(QMainWindow):
             tip="Export the open map and launch the engine on it",
         )
         self.action_validate = self._action("&Check this map", self.validate, "F8")
+        self.action_snapshot = self._action(
+            "Take a &snapshot", self.take_snapshot, "F7",
+            tip="An exact EC7Wolf frame from the camera")
         self.action_stop_test = self._action(
             "S&top the playtest", self.stop_session, "Shift+F5",
             tip="Close the running engine")
@@ -352,6 +368,7 @@ class MainWindow(QMainWindow):
         self.action_setup = self._action("&Setup…", self.run_setup, tip="Engine, data, workspace")
         self.tools_menu.addAction(self.action_test)
         self.tools_menu.addAction(self.action_stop_test)
+        self.tools_menu.addAction(self.action_snapshot)
         self.tools_menu.addAction(self.action_validate)
         self.tools_menu.addAction(self.action_statistics)
         self.tools_menu.addAction(self.action_sound_areas)
@@ -557,6 +574,40 @@ class MainWindow(QMainWindow):
         problems_layout.setSpacing(2)
         problems_layout.addLayout(controls)
         problems_layout.addWidget(self.problems)
+
+        # Snapshot: an exact engine frame of the map, from a tile you pick.
+        self.snapshot_view = QLabel("No snapshot yet", self)
+        self.snapshot_view.setAccessibleName("Snapshot")
+        self.snapshot_view.setAlignment(Qt.AlignCenter)
+        self.snapshot_view.setMinimumHeight(120)
+        self.snapshot_status = QLabel(
+            "Pick the Camera tool, click a floor tile, then Take a snapshot", self)
+        self.snapshot_status.setAccessibleName("Snapshot state")
+        self.snapshot_status.setWordWrap(True)
+        self.snapshot_take = QPushButton("Take a snapshot", self)
+        self.snapshot_take.setAccessibleName("Take a snapshot")
+        self.snapshot_take.clicked.connect(lambda _checked=False: self.take_snapshot())
+        self.snapshot_turn = QPushButton("Turn 90°", self)
+        self.snapshot_turn.setAccessibleName("Turn the camera")
+        self.snapshot_turn.clicked.connect(lambda _checked=False: self.turn_camera())
+
+        snap_controls = QHBoxLayout()
+        snap_controls.setContentsMargins(4, 2, 4, 2)
+        snap_controls.addWidget(self.snapshot_take)
+        snap_controls.addWidget(self.snapshot_turn)
+        snap_controls.addStretch(1)
+        snap_panel = QWidget(self)
+        snap_layout = QVBoxLayout(snap_panel)
+        snap_layout.setContentsMargins(0, 0, 0, 0)
+        snap_layout.setSpacing(2)
+        snap_layout.addLayout(snap_controls)
+        snap_layout.addWidget(self.snapshot_status)
+        snap_layout.addWidget(self.snapshot_view, 1)
+        snap_dock = QDockWidget("Snapshot", self)
+        snap_dock.setObjectName("snapshot-dock")
+        snap_dock.setWidget(snap_panel)
+        self.addDockWidget(Qt.RightDockWidgetArea, snap_dock)
+        self.snapshot_dock = snap_dock
 
         self.test_log = QListWidget(self)
         self.test_log.setAccessibleName("Test log")
@@ -1413,6 +1464,7 @@ class MainWindow(QMainWindow):
         # flood, and a panel that only updates on F8 is a panel describing a
         # map that no longer exists.
         self._revalidate_soon()
+        self._refresh_snapshot_staleness()
         self.project_changed.emit()
 
     def _revalidate_soon(self) -> None:
@@ -1609,6 +1661,162 @@ class MainWindow(QMainWindow):
         """
         self._session_counter += 1
         return f"ec7edit-{self._session_counter:04d}"
+
+    # -- snapshot ---------------------------------------------------------
+
+    def set_camera(self, x: float, y: float) -> None:
+        """The Camera tool put the camera here. Keeps whatever angle it had."""
+        angle = self.camera.angle if self.camera is not None else 0.0
+        self.camera = Camera(x, y, angle)
+        self.snapshot_status.setText(
+            f"Camera at {self.camera.describe()} — Take a snapshot")
+
+    def turn_camera(self) -> None:
+        if self.camera is None:
+            self.snapshot_status.setText("Place the camera first: pick the Camera tool "
+                                         "and click a floor tile")
+            return
+        self.camera = Camera(self.camera.x, self.camera.y,
+                             (self.camera.angle + 90.0) % 360.0)
+        self.snapshot_status.setText(f"Camera at {self.camera.describe()}")
+
+    def _snapshot_cache_dir(self) -> Path:
+        """Derived, disposable, and inside the workspace.
+
+        A snapshot is a picture of the user's own game data, so it is theirs
+        and it stays on their machine -- never in the project file, which is a
+        thing people share.
+        """
+        root = Path(self.settings.profile.workspace_dir or Path.home())
+        return root / ".ec7edit-snapshots"
+
+    def take_snapshot(self) -> bool:
+        """Ask the engine for one frame from the camera, and show it."""
+        tab = self.current_tab
+        if tab is None:
+            self.snapshot_status.setText("Open a map first")
+            return False
+        if self.camera is None:
+            self.snapshot_status.setText("Place the camera first: pick the Camera tool "
+                                         "and click a floor tile")
+            return False
+        document = self.project.map_by_uuid(tab.map_uuid)
+        try:
+            check_camera(document, self.camera)
+        except Ec7EditError as error:
+            # Checked first, because it needs no engine and it is the thing the
+            # user just did. Refused here rather than launched: the engine
+            # would draw the inside of a wall without complaining, and the
+            # cache would keep the result.
+            self.snapshot_status.setText(str(error.diagnostic.message))
+            return False
+
+        profile = self.settings.profile
+        if not profile.engine_path or not profile.data_dir:
+            self.snapshot_status.setText("Tools -> Setup, and choose an engine and "
+                                         "your game data")
+            return False
+
+        import hashlib
+
+        from ec7edit_core.paths import OutputGuard, atomic_write
+        from ec7edit_core.wad import build_preview_wad
+
+        cache = self._snapshot_cache_dir()
+        try:
+            blob = build_preview_wad([(document.lump_name, document.to_record())])
+            export_digest = hashlib.sha256(blob).hexdigest()
+            key = snapshot_key(
+                engine=profile.engine_path,
+                pk3=Path(profile.engine_path).parent / "ec7wolf.pk3",
+                data_fingerprint=profile.data_fingerprint,
+                export_digest=export_digest,
+                camera=self.camera,
+            )
+            image = cache / f"{key}.png"
+            if image.is_file() and looks_like_a_world(image):
+                self._show_snapshot(image, key, cached=True)
+                return True
+
+            wad = cache / f"{key}.wad"
+            guard = OutputGuard(protected_roots=(Path(profile.data_dir),))
+            atomic_write(wad, blob, guard=guard)
+            plan = build_launch_plan(
+                executable=profile.engine_path,
+                data_dir=profile.data_dir,
+                preview_wad=wad,
+                marker=document.lump_name,
+                session_dir=cache / key,
+                extra=snapshot_arguments(self.camera, image),
+                export_digest=export_digest,
+                revision=self.project.revision,
+            )
+        except (OSError, Ec7EditError) as error:
+            self.snapshot_status.setText(f"Could not prepare a snapshot: {error}")
+            return False
+
+        self.snapshot_status.setText(f"Drawing {self.camera.describe()}…")
+        QApplication.processEvents()
+
+        import subprocess
+
+        try:
+            done = subprocess.run(plan.argv, cwd=str(plan.cwd), capture_output=True,
+                                  text=True, timeout=120)
+        except (OSError, subprocess.SubprocessError) as error:
+            self.snapshot_status.setText(f"The engine did not run: {error}")
+            return False
+
+        line = next((l for l in done.stdout.splitlines()
+                     if l.startswith("Capture: snapshot ")), "")
+        if not image.is_file() or not looks_like_a_world(image):
+            # Nothing is cached on failure. A blank frame kept under this key
+            # would be handed back for ever, and it is the exact failure this
+            # project has shipped before -- a gate that passed while comparing
+            # a black frame nobody had looked at.
+            image.unlink(missing_ok=True)
+            refused = next((l for l in done.stdout.splitlines()
+                            if "camera tile" in l or "--capture-warp" in l), "")
+            self.snapshot_status.setText(
+                "The engine drew no world. " + (refused or "See the Test Log."))
+            self._note_problem(f"Snapshot failed: {refused or done.stdout[-200:]}")
+            return False
+
+        self._show_snapshot(image, key, cached=False, detail=line)
+        return True
+
+    def _show_snapshot(self, image: Path, key: str, *, cached: bool,
+                       detail: str = "") -> None:
+        pixmap = QPixmap(str(image))
+        if not pixmap.isNull():
+            self.snapshot_view.setPixmap(pixmap.scaled(
+                self.snapshot_view.width() or pixmap.width(), pixmap.height(),
+                Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        self._snapshot_key = key
+        self._snapshot_revision = self.project.revision
+        tic = ""
+        for token in detail.split():
+            if token.startswith("tic="):
+                tic = token[4:]
+        self.snapshot_status.setText(
+            f"{self.camera.describe()}"
+            + (f", tic {tic}" if tic else "")
+            + (" (from the cache)" if cached else ""))
+        self.snapshot_dock.show()
+        self.snapshot_dock.raise_()
+
+    def _refresh_snapshot_staleness(self) -> None:
+        """Say when the picture is of an older version of the map.
+
+        It is not thrown away: an out-of-date snapshot is still useful to look
+        at, as long as nobody is told it is current.
+        """
+        if not self._snapshot_key:
+            return
+        if self._snapshot_revision != self.project.revision:
+            text = self.snapshot_status.text()
+            if "edited since" not in text:
+                self.snapshot_status.setText(text + " — edited since")
 
     def _map_profile(self, document) -> "Profile":
         """Which rules apply to this map, from the slot it is exported to."""

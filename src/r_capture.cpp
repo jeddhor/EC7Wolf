@@ -9,6 +9,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <string.h>
 #include <math.h>
 
@@ -170,6 +171,41 @@ namespace
 	FString  g_tallyPath;
 
 	bool     g_haveWarp       = false;   // --capture-warp: pin player to a tile+angle
+	// --capture-snapshot PATH TIC: the editor's Snapshot. Renders the frame at
+	// a given SIMULATION TIC, writes it, prints a result line and exits.
+	//
+	// Anchored to a tic rather than a frame because a frame number is not a
+	// property of the game: the tic-per-frame ratio moves with how fast the
+	// machine draws, so "frame 30" is a different moment on a busy box than on
+	// an idle one. The editor caches what comes back and must be able to say
+	// what it is a picture of.
+	FString  g_snapshotPath;
+	long     g_snapshotTic    = -1;
+	bool     g_snapshotDone   = false;
+
+	//: Kept as given so the camera can be checked against the map that
+	//: actually loaded, and reported back in the snapshot result.
+	double   g_warpTileX      = 0.0, g_warpTileY = 0.0, g_warpDegrees = 0.0;
+	bool     g_warpChecked    = false;
+
+	// A number, all of it, and finite. strtod alone accepts "1.5rubbish" and
+	// "nan"; neither is a camera position.
+	bool ParseFinite(const char *text, double &out)
+	{
+		if(text == NULL || *text == '\0')
+			return false;
+		char *end = NULL;
+		errno = 0;
+		const double value = strtod(text, &end);
+		if(end == text || *end != '\0' || errno == ERANGE)
+			return false;
+		// NaN is the only value not equal to itself; the comparison also
+		// rejects the infinities without needing <cmath> here.
+		if(value != value || value > 1.0e9 || value < -1.0e9)
+			return false;
+		out = value;
+		return true;
+	}
 	fixed    g_warpX = 0, g_warpY = 0;
 	angle_t  g_warpAngle = 0;
 
@@ -627,6 +663,14 @@ void ParseArgs(int argc, char **argv)
 				g_placeAngle = atof(argv[++i]);
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-snapshot") == 0 && i + 2 < argc)
+		{
+			g_snapshotPath = argv[++i];
+			g_snapshotTic = atol(argv[++i]);
+			if(g_snapshotTic < 0)
+				g_snapshotTic = 0;
+			g_armed = true;
+		}
 		else if(strcmp(arg, "--capture-trace") == 0)
 		{
 			g_traceFrom = (i + 1 < argc && argv[i+1][0] >= '0' && argv[i+1][0] <= '9')
@@ -660,15 +704,40 @@ void ParseArgs(int argc, char **argv)
 		}
 		else if(strcmp(arg, "--capture-warp") == 0 && i + 3 < argc)
 		{
-			const double tx = atof(argv[++i]);
-			const double ty = atof(argv[++i]);
-			const double deg = atof(argv[++i]);
-			g_warpX = (fixed)((tx + 0.5) * (double)TILEGLOBAL);
-			g_warpY = (fixed)((ty + 0.5) * (double)TILEGLOBAL);
-			double a = deg / 360.0; a -= (double)(long)a; if(a < 0) a += 1.0;
-			g_warpAngle = (angle_t)(a * 4294967296.0);
-			g_haveWarp = true;
-			g_armed = true;
+			// Strictly parsed. atof() answers 0 for "banana" and happily
+			// returns a NaN for "nan", and a camera at NaN moved the player to
+			// a coordinate no arithmetic recovers from -- silently, because
+			// there was nothing to notice it. A snapshot of the wrong place is
+			// worse than no snapshot, so anything that is not a plain finite
+			// number is refused here and the warp stays disarmed.
+			// All three tokens are taken first and judged afterwards. Doing
+			// it inside a && chain short-circuits on the first bad one, which
+			// leaves the other two unconsumed -- and an unconsumed token in
+			// this engine is a filename, so "--capture-warp banana 31 90"
+			// asked the wad loader for files called 31 and 90.
+			const char *ax = argv[++i];
+			const char *ay = argv[++i];
+			const char *ad = argv[++i];
+			double tx = 0, ty = 0, deg = 0;
+			const bool ok = ParseFinite(ax, tx) && ParseFinite(ay, ty)
+				&& ParseFinite(ad, deg);
+			if(!ok)
+			{
+				printf("Capture: --capture-warp needs three finite numbers "
+					"(tile x, tile y, degrees); ignoring it.\n");
+			}
+			else
+			{
+				g_warpTileX = tx;
+				g_warpTileY = ty;
+				g_warpX = (fixed)((tx + 0.5) * (double)TILEGLOBAL);
+				g_warpY = (fixed)((ty + 0.5) * (double)TILEGLOBAL);
+				double a = deg / 360.0; a -= (double)(long)a; if(a < 0) a += 1.0;
+				g_warpAngle = (angle_t)(a * 4294967296.0);
+				g_warpDegrees = deg;
+				g_haveWarp = true;
+				g_armed = true;
+			}
 		}
 		else if(strcmp(arg, "--capture-extralight") == 0 && i + 1 < argc)
 		{
@@ -1135,8 +1204,37 @@ void PreTic()
 
 	if(g_haveWarp)
 	{
+		// Checked against the map that actually loaded, once, before the player
+		// is moved anywhere. A tile outside the map, or one with a wall in it,
+		// is a camera that produces a picture of the inside of a wall or of
+		// nothing -- and the editor would cache that as this map's snapshot.
+		if(!g_warpChecked)
+		{
+			g_warpChecked = true;
+			const int tx = (int)g_warpTileX, ty = (int)g_warpTileY;
+			const int w = (int)map->GetHeader().width;
+			const int h = (int)map->GetHeader().height;
+			if(g_warpTileX < 0 || g_warpTileY < 0 || tx >= w || ty >= h)
+			{
+				printf("Capture: camera tile (%g, %g) is outside this %dx%d map; "
+					"not moving the player.\n", g_warpTileX, g_warpTileY, w, h);
+				g_haveWarp = false;
+			}
+			else if(map->GetSpot(tx, ty, 0)->tile != NULL)
+			{
+				printf("Capture: camera tile (%d, %d) is inside a wall; "
+					"not moving the player.\n", tx, ty);
+				g_haveWarp = false;
+			}
+			else
+			{
+				printf("Capture: camera at tile (%g, %g) facing %g degrees.\n",
+					g_warpTileX, g_warpTileY, g_warpDegrees);
+			}
+		}
+
 		AActor *pmo = players[ConsolePlayer].mo;
-		if(pmo)
+		if(g_haveWarp && pmo)
 		{
 			pmo->x = g_warpX;
 			pmo->y = g_warpY;
@@ -1332,6 +1430,23 @@ void PostFrame()
 		return;
 
 	++g_frameCount;
+
+	// The editor's Snapshot: first frame drawn at or after the chosen tic.
+	// One line of result, then out -- the editor is waiting on the process, and
+	// a snapshot run that carried on playing would be a window nobody asked for.
+	if(!g_snapshotDone && !g_snapshotPath.IsEmpty() && map != NULL
+		&& (long)g_ticCount >= g_snapshotTic)
+	{
+		g_snapshotDone = true;
+		WriteScreenshot(g_snapshotPath.GetChars());
+		printf("Capture: snapshot '%s' tic=%lu frame=%lu map=%s camera=%g,%g,%g\n",
+			g_snapshotPath.GetChars(), (unsigned long)g_ticCount,
+			(unsigned long)g_frameCount, gamestate.mapname,
+			g_warpTileX, g_warpTileY, g_warpDegrees);
+		fflush(stdout);
+		Finalize();
+		Quit();
+	}
 
 	if(g_captureFrame > 0 && (uint64_t)g_captureFrame == g_frameCount)
 	{

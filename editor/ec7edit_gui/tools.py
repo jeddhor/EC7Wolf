@@ -56,6 +56,7 @@ class Tool(Enum):
     EYEDROPPER = "eyedropper"
     PREFAB = "prefab"
     TRANSPORTER = "transporter"
+    CAMERA = "camera"
 
     @property
     def label(self) -> str:
@@ -69,6 +70,7 @@ class Tool(Enum):
             Tool.EYEDROPPER: "Pick",
             Tool.PREFAB: "Place",
             Tool.TRANSPORTER: "Transporter",
+            Tool.CAMERA: "Camera",
         }[self]
 
     @property
@@ -77,6 +79,7 @@ class Tool(Enum):
             Tool.POINTER: "S", Tool.BRUSH: "B", Tool.LINE: "L",
             Tool.RECTANGLE: "R", Tool.FILL: "F", Tool.ERASER: "E",
             Tool.EYEDROPPER: "I", Tool.PREFAB: "P", Tool.TRANSPORTER: "T",
+            Tool.CAMERA: "K",
         }[self]
 
 
@@ -112,6 +115,9 @@ class ToolController(QObject):
     selection_changed = Signal(object)
     #: Something worth saying in the status bar.
     message = Signal(str)
+    #: Where a snapshot should be taken from: tile centre, in tile units. Not a
+    #: document change -- the camera is a view of the map, not a thing in it.
+    camera_placed = Signal(float, float)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -311,6 +317,13 @@ class ToolController(QObject):
 
         if self.tool is Tool.TRANSPORTER:
             self._place_transporter(x, y)
+            return
+
+        if self.tool is Tool.CAMERA:
+            # Placing the camera writes nothing: the snapshot is a view of the
+            # map, not a thing in it, so this must not become an undo step or a
+            # change to the document.
+            self.camera_placed.emit(float(x) + 0.5, float(y) + 0.5)
             return
 
         if self.tool is Tool.FILL:

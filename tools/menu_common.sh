@@ -101,6 +101,13 @@ menu_press_moved() {  # menu_press_moved KEY
 	_key=$1
 	_from=$(menu_cursor_row)
 	_attempt=0
+	# What the screen actually said, kept for the failure message. "The menu
+	# stopped responding" is not a diagnosis, and a gate that only says that
+	# sends the reader back to run it again and hope -- which is how a 1-in-3
+	# flake stays a mystery. -1 is "no menu recognised", so a run of them means
+	# the screen went somewhere else, while a run of one steady number means the
+	# key never arrived.
+	MENU_PRESS_SEEN=""
 	while [ "$_attempt" -lt "$MENU_PRESS_RETRIES" ]; do
 		menu_send_key "$_key"
 		_step=0
@@ -109,11 +116,17 @@ menu_press_moved() {  # menu_press_moved KEY
 			if [ "$_now" -ge 0 ] && [ "$_now" -ne "$_from" ]; then
 				return 0
 			fi
+			MENU_PRESS_SEEN="$MENU_PRESS_SEEN $_now"
 			sleep 0.15
 			_step=$((_step + 1))
 		done
 		_attempt=$((_attempt + 1))
 	done
+	# The frame it gave up on, so a screen that is not the expected menu can be
+	# looked at rather than described.
+	[ -f "$work/menu-look.png" ] && cp "$work/menu-look.png" "$work/menu-stuck.png"
+	printf '  ..   %s went nowhere: cursor was %s, then saw%s\n' \
+		"$_key" "$_from" "$MENU_PRESS_SEEN" >&2
 	return 1
 }
 

@@ -90,7 +90,18 @@ wanted = build_mod.tree_version(repo_root)
 if wanted:
     engine = build_mod.find_existing(repo_root)
     if engine is None:
-        print("  reuse: nothing to reuse (nothing built yet), not checked")
+        # Two different situations, and telling them apart matters: nothing
+        # built at all is nothing to check, while builds that exist and were
+        # all refused is the check doing its job.
+        built = [d for d in (repo_root.parent / "builds" / "release-build",
+                             repo_root.parent / "builds" / "release",
+                             repo_root / "build", repo_root / "release")
+                 if (d / "ec7wolf").is_file()]
+        if built:
+            print(f"  reuse: none accepted; {len(built)} build(s) present are "
+                  f"from another revision, so it would compile")
+        else:
+            print("  reuse: nothing built yet, not checked")
     else:
         got = engine.version()
         if not got:
@@ -275,7 +286,12 @@ printf '  the installed game starts, and finds its music and cinematics\n'
 rm -rf "$work"/.ec7wolf-cache "$destination/../.ec7wolf-cache"
 tracks_before=$(cd "$destination/cdaudio" && ls -l track*.ogg | awk '{print $5,$9}' | sort)
 began=$(date +%s)
+# --engine again, for the same reason as the first install and one more: this
+# check is timed, and without it the second install goes looking for an engine,
+# finds none it will accept, and spends the budget on the build instead of on
+# the media step being measured.
 HOME="$fake_home" "$installer" --source "$disc" --dest "$destination" \
+	--engine "$build_dir" \
 	--log "$work/again.log" >"$work/again.txt" 2>&1 || {
 	printf 'FAIL: installing again over the top failed\n' >&2
 	tail -30 "$work/again.txt" >&2

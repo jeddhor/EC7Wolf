@@ -250,6 +250,10 @@ void FWadCollection::AddFile (const char *filename, FileReader *wadinfo)
 			{ // Didn't find file
 				Printf (TEXTCOLOR_RED "%s\n", err.GetMessage());
 				PrintLastError ();
+				// Same reason as the stat failure above: not fatal, so silence
+				// here means a launch that loaded nothing looks like one that
+				// worked. Every exit from this function says which it was.
+				EditorLink::PreviewLoaded(filename, false, LumpInfo.Size());
 				return;
 			}
 		}
@@ -307,6 +311,10 @@ void FWadCollection::AddFile (const char *filename, FileReader *wadinfo)
 		EditorLink::PreviewLoaded(filename, true, LumpInfo.Size());
 		return;
 	}
+	// Fell through: the file is there but nothing could make a resource of it.
+	// Reported for the same reason as the other two failures -- an editor that
+	// heard nothing would call this a successful load.
+	EditorLink::PreviewLoaded(filename, false, LumpInfo.Size());
 }
 
 //==========================================================================

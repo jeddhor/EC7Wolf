@@ -1087,10 +1087,11 @@ class PlaytestSessions(Base):
         self.assertNotIn("exited with code", self.window.session.failure)
         self.assertIn("stopped", self.window.session.failure)
 
-    def test_an_orphan_is_stopped_even_when_the_session_looks_finished(self):
-        # The session goes terminal the moment the engine says session-result,
-        # which is BEFORE it has finished exiting. Trusting the session there
-        # calls a live process dead, which is the orphan itself.
+    def test_an_orphan_is_stopped_after_the_engine_says_it_is_done(self):
+        # The engine says session-result on its way out and then keeps running
+        # for a while. Anything that took that as "the process is gone" would
+        # leave a live engine behind -- which is the orphan itself. Liveness is
+        # asked of the process, never of the session.
         from PySide6.QtCore import QProcess
 
         engine = self.fake_engine(
@@ -1101,9 +1102,24 @@ class PlaytestSessions(Base):
             if self.window.session.events:
                 break
             self.window.process.waitForReadyRead(100)
-        self.assertFalse(self.window.session.running, "the session should look done")
+        self.assertTrue(self.window.session.events, "the engine never reported")
         self.assertTrue(self.window.reconcile_orphan(), "a live engine was not stopped")
         self.assertEqual(self.window.process.state(), QProcess.ProcessState.NotRunning)
+
+    def test_a_crash_after_session_result_is_not_a_success(self):
+        # The verdict waits for the process. Freezing it on session-result
+        # reported a crash on the way out as a clean finish.
+        from ec7edit_core.engine_runner import SessionState
+
+        engine = self.fake_engine(
+            'echo "EC7EDIT s1 hello x=1"\n'
+            'echo "EC7EDIT s1 preview-load path=preview.wad loaded=yes lumps=9"\n'
+            'echo "EC7EDIT s1 map-entry marker=MAP01 name=Lab"\n'
+            'echo "EC7EDIT s1 session-result outcome=quit"\n'
+            'exit 3\n')
+        session = self.run_to_end(engine)
+        self.assertIs(session.state, SessionState.FAILED)
+        self.assertIn("exited with code 3", session.failure)
 
     def test_a_second_playtest_cannot_start_over_a_live_one(self):
         engine = self.fake_engine(

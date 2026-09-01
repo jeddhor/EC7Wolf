@@ -48,6 +48,7 @@ from ec7edit_core.catalog import Catalog, load_catalog
 from ec7edit_core.commands import History, add_maps
 from ec7edit_core.discovery import Profile, data_fingerprint
 from ec7edit_core.engine_runner import (
+    PROTOCOL_VERSION,
     Session,
     SessionState,
     build_launch_plan,
@@ -1741,8 +1742,24 @@ class MainWindow(QMainWindow):
 
         import hashlib
 
+        from ec7edit_core.engine_runner import probe_capabilities, protocol_supported
         from ec7edit_core.paths import OutputGuard, atomic_write
         from ec7edit_core.wad import build_preview_wad
+
+        # Ask before telling. The probe needs no game data and exits, so it is
+        # cheap and safe; an engine that does not speak the protocol is still
+        # perfectly good to play the map, it just cannot report what happened,
+        # and launching it with options it will treat as filenames would be
+        # worse than launching it without them.
+        capabilities = probe_capabilities(profile.engine_path)
+        speaks = protocol_supported(capabilities)
+        if not speaks:
+            self._note_problem(
+                "Playtest: this engine does not report what it is doing"
+                + (f" (it speaks protocol {capabilities['editor-protocol']}, "
+                   f"this editor speaks {PROTOCOL_VERSION})" if capabilities
+                   else "; it may be an older build")
+                + ". The map will still be launched.")
 
         try:
             blob = build_preview_wad([(document.lump_name, document.to_record())])
@@ -1753,7 +1770,7 @@ class MainWindow(QMainWindow):
                 data_dir=profile.data_dir,
                 preview_wad=target,
                 marker=document.lump_name,
-                session=session,
+                session=session if speaks else "",
                 session_dir=session_dir,
                 # What was tested, so the log can be matched back to it. A log
                 # that does not say which version of the map it describes is a

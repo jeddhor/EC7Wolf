@@ -48,10 +48,18 @@ command -v python3 >/dev/null 2>&1 || { printf 'SKIP: python3 is missing\n'; exi
 grep -q "editor-capabilities" "$repo/src/c7_editorlink.cpp" 2>/dev/null || {
 	printf 'SKIP: no editor link in this build\n'; exit 0; }
 
+[ -f "$data_dir/MAPTEMP.CO7" ] || { printf 'SKIP: no Corridor 7 data\n'; exit 0; }
+
+# Kept on failure: the FAIL messages point at these logs, and deleting them is
+# how a gate becomes unactionable. Removed on success.
 work=$(mktemp -d /tmp/ec7wolf-e9.XXXXXX)
-trap 'rm -rf "$work"' EXIT INT TERM
+cleanup() { [ "${status:-1}" -eq 0 ] && rm -rf "$work" || printf '  logs kept in %s\n' "$work"; }
+trap 'cleanup' EXIT
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
 
 status=0
+export status
 say() { printf '  %-5s %s\n' "$1" "$2"; }
 
 # --- 1. the data-free probe ----------------------------------------------
@@ -59,8 +67,8 @@ say() { printf '  %-5s %s\n' "$1" "$2"; }
 # a config or a display.
 if (cd "$work" && timeout 30s "$build_dir/ec7wolf" --editor-capabilities) \
 	>"$work/caps.txt" 2>&1; then
-	want=$(grep -c '^editor-protocol=1$' "$work/caps.txt" || true)
-	if [ "$want" -eq 1 ] && grep -q '^events=.*map-entry' "$work/caps.txt"; then
+	if grep -q '^editor-protocol=[0-9]' "$work/caps.txt" &&
+	   grep -q '^events=.*map-entry' "$work/caps.txt"; then
 		say "ok" "--editor-capabilities answers with no data present"
 	else
 		say "FAIL" "the capability probe did not name the protocol and its events"
@@ -91,7 +99,6 @@ cp "$build_dir/ec7wolf" "$build_dir/ec7wolf.pk3" "$lab/"
 for f in "$data_dir"/*.CO7 "$data_dir"/CORR7CD.EXE; do
 	[ -e "$f" ] && cp "$f" "$lab/" || true
 done
-[ -f "$lab/MAPTEMP.CO7" ] || { printf 'SKIP: no Corridor 7 data\n'; exit 0; }
 
 # Two preview WADs built by the editor's own exporter: one playable, one with
 # no player start.
@@ -117,8 +124,8 @@ launch() { # $1 session  $2 preview file  -> writes $work/$1.log, echoes exit co
 		timeout 90s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 \
 			xvfb-run -a -s '-screen 0 640x400x24' ./ec7wolf \
 			--data CO7 --no-upscale --nowait --res 320 200 \
-			--vid-renderer software --config "$work/$1.cfg" \
-			--savedir "$work/$1.saves" \
+			--vid-renderer software --config "$work/cfg-$1" \
+			--savedir "$work/saves-$1" \
 			--editor-protocol 1 --editor-session "$1" \
 			--tedlevel MAP01 --skill 2 --capture-maxtics 25 \
 			--file "$2"
@@ -138,10 +145,16 @@ if [ -n "$(event e9good map-entry)" ] &&
    printf '%s' "$(grep "^EC7EDIT e9good preview-load .*good.wad" "$work/e9good.log")" | grep -q 'loaded=yes'
 then
 	marker=$(event e9good map-entry | sed -n 's/.*marker=\([A-Z0-9]*\).*/\1/p')
-	if [ "$marker" = "MAP01" ]; then
-		say "ok" "a good launch loaded the editor's WAD and entered $marker (exit $code)"
+	name=$(event e9good map-entry | sed -n 's/.*mapname=\([^ ]*\).*/\1/p')
+	# The map's OWN name is the evidence, not the marker and not the display
+	# name. Both the editor's map and the shipped one are MAP01, and MAPINFO
+	# calls MAP01 "Corridor 7 Level 1" whichever file the data came from -- so
+	# only the name stored in the map record says which one was played. Before
+	# this, the assertion passed on a run of the game's own floor.
+	if [ "$marker" = "MAP01" ] && [ "$name" = "E9_LAB" ]; then
+		say "ok" "a good launch entered $marker holding the editor's map ($name), exit $code"
 	else
-		say "FAIL" "it entered $marker, not the MAP01 it was asked for"
+		say "FAIL" "it entered marker=$marker mapname=$name; expected MAP01 holding E9_LAB"
 		status=1
 	fi
 else
@@ -161,7 +174,12 @@ code=$(launch e9missing does-not-exist.wad)
 if printf '%s' "$(grep "^EC7EDIT e9missing preview-load .*does-not-exist" "$work/e9missing.log")" |
 	grep -q 'loaded=no'
 then
-	say "ok" "a missing preview WAD is reported as loaded=no (engine still exited $code)"
+	if [ "$code" -eq 0 ]; then
+		say "ok" "a missing preview WAD is reported as loaded=no, and the engine still exited 0 -- which is why the event is needed"
+	else
+		say "FAIL" "the engine exited $code; this assertion exists because it exits 0"
+		status=1
+	fi
 else
 	say "FAIL" "a missing preview WAD was not reported; this is the failure that looks like success"
 	status=1
@@ -203,10 +221,21 @@ else
 fi
 
 # --- 7. nothing of the player's was touched ------------------------------
-if [ -d "$work/e9good.saves" ] || [ -f "$work/e9good.cfg" ]; then
-	say "ok" "config and saves went to the session directory"
+# The claim is that the PLAYER'S files were not touched, so that is what is
+# checked -- the old version asserted the session directory existed, which the
+# gate created itself and which could never fail.
+touched=0
+for own in "$data_dir/ec7wolf.cfg" "$HOME/.config/ec7wolf" "$data_dir/savegame"; do
+	[ -e "$own" ] || continue
+	if [ "$own" -nt "$work/caps.txt" ]; then
+		say "FAIL" "the playtest wrote to $own, which belongs to the player"
+		touched=1
+	fi
+done
+if [ "$touched" -eq 0 ]; then
+	say "ok" "nothing of the player's own config or saves was written"
 else
-	say "..." "the engine wrote no config or saves this run"
+	status=1
 fi
 
 [ "$status" -eq 0 ] && printf 'PASS: E9 playtest launch and engine protocol\n'

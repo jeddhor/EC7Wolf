@@ -53,11 +53,30 @@ namespace
 	// Values go out as key=value on one line, so a value may not carry a
 	// separator or a line break. Replaced rather than dropped, so the length
 	// of what the engine saw is still visible to whoever is reading.
+	//: Longest value we will put on a line. A map supplies its own name, so a
+	//: value is attacker-influenced in length as well as content, and a line
+	//: over PIPE_BUF loses the single-write atomicity the whole format relies
+	//: on. Truncated rather than dropped: a shortened name still identifies
+	//: the map, and an absent one identifies nothing.
+	const unsigned int VALUE_LIMIT = 160;
+
 	FString Sanitised(const char *text)
 	{
 		FString out;
 		for(const char *c = (text ? text : ""); *c; ++c)
-			out += (*c == '\n' || *c == '\r' || *c == ' ' || *c == '=') ? '_' : *c;
+		{
+			if(out.Len() >= VALUE_LIMIT)
+			{
+				out += "...";
+				break;
+			}
+			// Anything that is not plainly printable becomes '_': the grammar
+			// is whitespace-separated key=value, so a space, an equals, a tab
+			// or a newline in a value would silently become another field.
+			const bool safe = (*c > 0x20 && (unsigned char)*c < 0x7f
+				&& *c != '=' );
+			out += safe ? *c : '_';
+		}
 		if(out.IsEmpty())
 			out = "-";
 		return out;
@@ -185,11 +204,13 @@ void PreviewLoaded(const char *path, bool loaded, unsigned int lumps)
 	Emit("preview-load", body.GetChars());
 }
 
-void MapEntered(const char *marker, const char *name, int spawnFilter)
+void MapEntered(const char *marker, const char *name, const char *mapName,
+	int spawnFilter)
 {
 	FString body;
-	body.Format("marker=%s name=%s spawnfilter=%d",
-		Sanitised(marker).GetChars(), Sanitised(name).GetChars(), spawnFilter);
+	body.Format("marker=%s name=%s mapname=%s spawnfilter=%d",
+		Sanitised(marker).GetChars(), Sanitised(name).GetChars(),
+		Sanitised(mapName).GetChars(), spawnFilter);
 	Emit("map-entry", body.GetChars());
 }
 

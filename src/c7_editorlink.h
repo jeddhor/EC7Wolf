@@ -67,7 +67,13 @@ namespace EditorLink
 	void PreviewLoaded(const char *path, bool loaded, unsigned int lumps);
 	// `spawnFilter` is the skill's own 0-based filter index, not the
 	// 1-based number --skill takes; the event says which it is.
-	void MapEntered(const char *marker, const char *name, int spawnFilter);
+	// `name` is the MAPINFO display name and `mapName` is the one stored in the
+	// map record itself. Both, because only the second one distinguishes the
+	// editor's map from the shipped map of the same number: MAPINFO names MAP01
+	// "Corridor 7 Level 1" whichever file the data came from, so a reader
+	// checking the display name cannot tell it played the wrong floor.
+	void MapEntered(const char *marker, const char *name, const char *mapName,
+		int spawnFilter);
 	void Fatal(const char *message);
 	void SessionResult(const char *outcome);
 }

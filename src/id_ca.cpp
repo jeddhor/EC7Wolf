@@ -88,6 +88,7 @@ void CA_CacheMap (const FString &mapname, bool loading)
 	// rather than the shipped map of the same number or the title screen.
 	EditorLink::MapEntered(mapname.GetChars(),
 		levelInfo->GetName(map).GetChars(),
+		map->GetHeader().name.GetChars(),
 		gamestate.difficulty ? (int)gamestate.difficulty->SpawnFilter : -1);
 
 	CalcVisibility(gLevelVisibility);

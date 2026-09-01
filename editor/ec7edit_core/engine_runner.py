@@ -251,6 +251,9 @@ class Session:
     log: list = field(default_factory=list)
     #: What the engine said went wrong, if it said anything.
     failure: str = ""
+    #: The outcome the engine reported on its way out, before it had finished
+    #: going. Evidence, not a verdict: the verdict waits for the process.
+    outcome: str = ""
     marker_entered: str = ""
     preview_loaded: bool = False
     exit_code: int | None = None
@@ -294,9 +297,12 @@ class Session:
         elif event.event == "fatal":
             self.failure = event.get("message", "").replace("_", " ")
         elif event.event == "session-result":
-            self.state = (SessionState.FINISHED
-                          if self.reached_the_map and not self.failure
-                          else SessionState.FAILED)
+            # Recorded, not decided. The engine says this on its way out and
+            # then keeps running for a while -- through CallTerminateFunctions
+            # and whatever the exit path does. Treating it as the verdict meant
+            # a crash after it was reported as a clean finish, because
+            # finished() then saw a terminal state and returned.
+            self.outcome = event.get("outcome")
         return event
 
     def stopping(self) -> None:
@@ -316,10 +322,16 @@ class Session:
             if self.state is SessionState.FAILED and not self.failure:
                 self.failure = "stopped before the map was reached"
             return
-        if self.reached_the_map and not self.failure:
+        if self.reached_the_map and not self.failure and exit_code == 0:
             self.state = SessionState.FINISHED
             return
         self.state = SessionState.FAILED
+        if self.reached_the_map and not self.failure:
+            # It got there and then died on the way out. Worth saying plainly:
+            # the map is probably fine and the engine is probably not.
+            self.failure = (f"the engine reached {self.marker_entered} but exited "
+                            f"with code {exit_code}")
+            return
         if not self.failure:
             # The engine died without saying why, which is its own diagnosis:
             # what it managed to do first is the most useful thing to report.
@@ -354,3 +366,43 @@ class Session:
             SessionState.PLAYING: f"Playing {self.marker_entered}",
             SessionState.STOPPING: "Stopping…",
         }[self.state]
+
+
+def probe_capabilities(executable: Path | str, *, timeout: float = 10.0) -> dict:
+    """Ask an engine what it supports, before asking it to do anything.
+
+    `--editor-capabilities` answers with no game data, no config and no display
+    and then exits, so this is safe to call against a path somebody has just
+    chosen in the setup dialog -- which is the point. An engine too old to know
+    the option prints its usage and exits non-zero; that is not an error here,
+    it is the answer.
+
+    Returns the key=value lines as a dict. An empty dict means "this build does
+    not speak the protocol", which the caller may treat as a reason to launch
+    without it rather than a reason to refuse.
+    """
+    import subprocess
+
+    try:
+        done = subprocess.run(
+            [str(Path(executable).expanduser()), "--editor-capabilities"],
+            capture_output=True, text=True, timeout=timeout,
+            # Somewhere harmless: an engine that decides to look for game data
+            # must not find the player's, and must not write beside it.
+            cwd=str(Path(executable).expanduser().parent),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    if done.returncode != 0:
+        return {}
+    found = {}
+    for line in done.stdout.splitlines():
+        key, sep, value = line.strip().partition("=")
+        if sep and key.replace("-", "").isalnum():
+            found[key] = value
+    return found if "editor-protocol" in found else {}
+
+
+def protocol_supported(capabilities: dict) -> bool:
+    """Whether an engine speaks the version this editor writes."""
+    return capabilities.get("editor-protocol") == str(PROTOCOL_VERSION)

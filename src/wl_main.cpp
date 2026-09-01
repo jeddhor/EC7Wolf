@@ -1081,7 +1081,10 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 				printf("The skill option is missing an argument!\n");
 				hasError = true;
 			}
-			param_difficulty = atoi(argv[i])-1; // 1-based indexing
+			else
+				// Guarded: without the else this read argv[argc] when --skill
+				// was the last token on the line, which is one past the end.
+				param_difficulty = atoi(argv[i])-1; // 1-based indexing
 		}
 		else IFARG("--nowait")
 			param_nowait = true;

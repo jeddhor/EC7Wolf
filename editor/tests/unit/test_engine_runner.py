@@ -15,6 +15,7 @@ sys.path.insert(0, str(EDITOR))
 
 from ec7edit_core.engine_runner import (
     DATA_EXTENSION,
+    PROTOCOL_VERSION,
     LaunchError,
     LaunchPlan,
     Session,
@@ -301,3 +302,58 @@ class SessionPlans(unittest.TestCase):
         self.assertEqual(summary["export_digest"], "abc123")
         self.assertEqual(summary["revision"], 7)
         self.assertEqual(summary["session"], "s1")
+
+
+class Capabilities(unittest.TestCase):
+    """E9: ask the engine what it supports before asking it to do anything."""
+
+    def engine(self, script: str) -> Path:
+        path = Path(self._tmp.name) / "probe-engine.sh"
+        path.write_text("#!/bin/sh\n" + script)
+        path.chmod(0o755)
+        return path
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_it_reads_the_answer(self):
+        from ec7edit_core.engine_runner import probe_capabilities
+
+        caps = probe_capabilities(self.engine(
+            'echo "engine=EC7Wolf"\necho "editor-protocol=1"\n'
+            'echo "events=hello,map-entry"\nexit 0\n'))
+        self.assertEqual(caps["editor-protocol"], "1")
+        self.assertEqual(caps["engine"], "EC7Wolf")
+
+    def test_an_engine_that_does_not_know_the_option_is_not_an_error(self):
+        # It prints its usage and exits non-zero. That is the answer, not a
+        # failure: the map can still be launched, just without reporting.
+        from ec7edit_core.engine_runner import probe_capabilities
+
+        self.assertEqual(probe_capabilities(self.engine('echo usage >&2\nexit 1\n')), {})
+
+    def test_output_that_is_not_the_protocol_is_ignored(self):
+        from ec7edit_core.engine_runner import probe_capabilities
+
+        self.assertEqual(probe_capabilities(self.engine('echo "hello world"\nexit 0\n')), {})
+
+    def test_a_missing_engine_is_not_an_exception(self):
+        from ec7edit_core.engine_runner import probe_capabilities
+
+        self.assertEqual(probe_capabilities(Path(self._tmp.name) / "nope"), {})
+
+    def test_a_hanging_engine_is_given_up_on(self):
+        from ec7edit_core.engine_runner import probe_capabilities
+
+        self.assertEqual(
+            probe_capabilities(self.engine("sleep 30\n"), timeout=1.0), {})
+
+    def test_a_different_version_is_not_supported(self):
+        from ec7edit_core.engine_runner import protocol_supported
+
+        self.assertFalse(protocol_supported({"editor-protocol": "99"}))
+        self.assertFalse(protocol_supported({}))
+        self.assertTrue(protocol_supported({"editor-protocol": str(PROTOCOL_VERSION)}))

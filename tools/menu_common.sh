@@ -149,6 +149,30 @@ menu_press() {  # menu_press KEY [SECONDS]
 	sleep "${2:-1}"
 }
 
+# Screenshot a page, retrying while it is still blank.
+#
+# A page that has not finished drawing photographs as a flat colour, and a gate
+# that then compares two flat colours is measuring nothing -- or, as happened
+# here, reports "the screen is blank or nearly so" on a run where the only
+# problem was that the shot came a moment early. Standard deviation is the
+# cheapest "is there anything on this" there is.
+menu_shot() {  # menu_shot FILE
+	_file=$1
+	_try=0
+	while [ "$_try" -lt 20 ]; do
+		DISPLAY=$display import -window root "$_file" 2>/dev/null || true
+		_sd=$(magick identify -format '%[fx:standard_deviation]' "$_file" 2>/dev/null \
+			|| identify -format '%[fx:standard_deviation]' "$_file" 2>/dev/null || echo 0)
+		# awk, because sh has no floating point.
+		if awk -v v="$_sd" 'BEGIN{exit !(v > 0.01)}'; then
+			return 0
+		fi
+		sleep 0.5
+		_try=$((_try + 1))
+	done
+	return 1
+}
+
 # Walking down wraps to the first row, which is how the bottom is found without
 # assuming how many rows there are or where the cursor started. Same going up.
 menu_walk_to_bottom() {  # menu_walk_to_bottom WHAT

@@ -59,6 +59,9 @@ for f in "$data_dir"/*.CO7 "$data_dir/CORR7CD.EXE" "$data_dir/ec7wolf.pk3"; do
 done
 
 export PG_BUILD="$build_dir" PG_WORK="$work" PG_DATA="$work/data"
+# tools/, so the inner shell can source the shared shot helper.
+PG_HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+export PG_HERE
 
 # One run per resolution collects both pages, so this costs two launches rather
 # than one per page.
@@ -73,6 +76,12 @@ shoot() { # $1 width  $2 height
 			--res "$PG_W" "$PG_H" --config "$PG_WORK/cfg-$PG_W" \
 			--savedir "$PG_WORK/sv" >"$PG_WORK/run-$PG_W.log" 2>&1 &
 		pid=$!
+		# Only the screenshots are shared with the menu gates. The NAVIGATION
+		# stays blind here on purpose: menu_cursor.py is calibrated for one
+		# screen size, and varying the screen size is the entire point of this
+		# gate, so the cursor it looks for is not reliably there.
+		display=$DISPLAY work=$PG_WORK here=$PG_HERE window=""
+		. "$PG_HERE/menu_common.sh"
 		sleep 10
 		# Past the title pages into the menu. Two presses: the first only
 		# interrupts whichever page is showing.
@@ -85,14 +94,17 @@ shoot() { # $1 width  $2 height
 		xdotool key --clearmodifiers Up; sleep 0.4
 		xdotool key --clearmodifiers Up; sleep 0.6
 		xdotool key --clearmodifiers Return; sleep 3
-		import -window root "$PG_WORK/scores-$PG_W.png"
+		# Retried until the page has actually drawn: a shot taken a moment
+		# early is a flat colour, and this gate then compares two flat
+		# colours and reports "the screen is blank or nearly so".
+		menu_shot "$PG_WORK/scores-$PG_W.png" || true
 		xdotool key --clearmodifiers Escape; sleep 2
 
 		# Back on the menu with High Scores selected; one Down reaches Exit.
 		xdotool key --clearmodifiers Down; sleep 0.6
 		xdotool key --clearmodifiers Return; sleep 2
 		xdotool key --clearmodifiers y; sleep 3
-		import -window root "$PG_WORK/exit-$PG_W.png"
+		menu_shot "$PG_WORK/exit-$PG_W.png" || true
 		kill "$pid" 2>/dev/null || true
 		wait "$pid" 2>/dev/null || true
 	'

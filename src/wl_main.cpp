@@ -40,6 +40,7 @@
 #include "c7_flic.h"
 #include "c7_upscale.h"
 #include "wl_play.h"
+#include "c7_editorlink.h"
 #include "r_capture.h"
 #include "render/r_renderer.h"
 #ifdef ECWOLF_RENDERER_OPENGL
@@ -768,6 +769,7 @@ void NewViewSize (int width, unsigned int scrWidth, unsigned int scrHeight)
 
 void Quit ()
 {
+	EditorLink::SessionResult("quit");
 	throw CNoRunExit();
 }
 
@@ -779,6 +781,10 @@ void I_FatalError (const char *format, ...)
 	error.VFormat(format, vlist);
 	va_end(vlist);
 
+	// Told to the editor before it is thrown: the parent needs to know WHY the
+	// process is about to end, and an exit code cannot say.
+	EditorLink::Fatal(error.GetChars());
+	EditorLink::SessionResult("fatal");
 	throw CFatalError(error);
 }
 
@@ -1308,31 +1314,43 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 		{
 			GameSave::param_foreginsave = true;
 		}
-		// Deterministic capture/checksum harness (see r_capture.*). Already
-		// parsed independently by Capture::ParseArgs; consume here (with the
-		// value token where present) so they are not misread as data files.
-		else IFARG("--capture-rngseed") { ++i; }
-		else IFARG("--capture-checksum") { ++i; }
-		else IFARG("--capture-duel")
+		else IFARG("--vid-renderer")
 		{
-			i += 2;
-			if(i + 1 < argc && argv[i+1][0] >= '0' && argv[i+1][0] <= '9') ++i;
+			// Read much earlier, before the first video mode is set, because
+			// SDLFB needs to know whether to make a GL-capable window. That
+			// scan only peeks; this is where the option and its value are
+			// consumed, and without it both of them were handed to the wad
+			// loader.
+			++i;
 		}
-		else IFARG("--capture-ammo") { }
-		else IFARG("--capture-scoreboard") { }
-		else IFARG("--capture-tally") { ++i; }
-		else IFARG("--capture-forward") { if(i + 1 < argc && argv[i+1][0] != (char)45) ++i; }
-		else IFARG("--capture-fire") { if(i + 1 < argc && argv[i+1][0] != (char)45) ++i; }
-		else IFARG("--capture-players") { ++i; }
-		else IFARG("--capture-actors") { ++i; }
-		else IFARG("--capture-frame") { ++i; }
-		else IFARG("--capture-file") { ++i; }
-		else IFARG("--capture-maxframes") { ++i; }
-		else IFARG("--capture-maxtics") { ++i; }
-		else IFARG("--capture-verbs") {}
-		else IFARG("--capture-glworld") { ++i; }
-		else IFARG("--capture-xbrz") { ++i; }
-		else IFARG("--capture-glxbrz") { ++i; }
+		else IFARG("--no-upscale") { /* also read early; peeked, not consumed */ }
+		// The rest of the early scans, for the same reason. Each is a loop of
+		// its own further up that reads argv without claiming anything, and
+		// every one of them printed "Could not stat --gl-debug" on any run
+		// that used it.
+		else IFARG("--gl-debug") {}
+		else IFARG("--gl-profile") {}
+		else IFARG("--vis-diff") {}
+		else IFARG("--gltest") { if(i + 1 < argc && argv[i+1][0] != '-') ++i; }
+		else IFARG("--flictest") { ++i; }
+		else IFARG("--editor-capabilities") {}
+		else if(EditorLink::ArgClaimed(i))
+		{
+			// --editor-protocol / --editor-session, read before anything is
+			// initialised. Same rule as the capture options: the parser that
+			// understood them records what it took, and this asks.
+		}
+		else if(Capture::ArgClaimed(i))
+		{
+			// The capture harness parsed this token, and its values, before we
+			// got here -- Capture::ParseArgs runs first and records what it
+			// took. This used to be a hand-written copy of that option list
+			// kept purely so the harness's arguments were not misread as data
+			// files, and it had drifted: fifteen of the thirty-three options
+			// were missing, so each of them and its value reached the wad
+			// loader and printed "Could not stat --capture-trace". Asking the
+			// parser cannot drift, because there is only one parser.
+		}
 		else
 			files.Push(argv[i]);
 	}
@@ -1498,6 +1516,15 @@ int WL_Main (int argc, char *argv[])
 
 		// Standalone FLIC decode. Runs before any game data is opened and
 		// exits, so it needs neither a Corridor 7 installation nor a window.
+		// Answers with no game data present, because the editor asks what this
+		// build supports before it knows whether the data it has is usable.
+		{
+			int probeExit = 0;
+			if(EditorLink::RunCapabilityProbe(argc, argv, probeExit))
+				return probeExit;
+		}
+		EditorLink::ParseArgs(argc, argv);
+
 		for(int fi = 1; fi + 1 < argc; ++fi)
 		{
 			if(strcmp(argv[fi], "--flictest") == 0)
@@ -1602,6 +1629,8 @@ int WL_Main (int argc, char *argv[])
 
 			Printf("IWad: Selecting base game data.\n");
 			const char* extension = CheckParameters(argc, argv, wadfiles);
+			EditorLink::DataSelected(extension ? extension : "-",
+				progdir.GetChars());
 			IWad::SelectGame(files, extension, MAIN_PK3, progdir);
 
 			for(unsigned int i = 0;i < wadfiles.Size();++i)
@@ -1612,6 +1641,10 @@ int WL_Main (int argc, char *argv[])
 				files[i].ReplaceChars('\\', '/');
 
 			printf("W_Init: Init WADfiles.\n");
+			// Every file that reached the loader reports itself from inside
+			// AddFile, success or failure -- "did it load MY map" is the
+			// question a playtest most needs answered, and only the loader
+			// knows the answer.
 			Wads.InitMultipleFiles(files);
 			LumpRemapper::RemapAll();
 			language.SetupStrings();
@@ -1646,11 +1679,22 @@ int WL_Main (int argc, char *argv[])
 	}
 	catch(CNoRunExit) // Normal exit from deep code
 	{
+		// Every ordinary exit converges here, so this is where the editor is
+		// told the session is over. Quit() says so too and says it earlier; a
+		// second one is harmless and the parent takes the first, whereas a
+		// session that ends with no closing event at all leaves it waiting.
+		EditorLink::SessionResult("exit");
 		CallTerminateFunctions();
 		return 0;
 	}
 	catch(CDoomError &error)
 	{
+		// A CRecoverableError that reached here killed the process -- "Could
+		// not find map MAP99!" is one, and it never passes through
+		// I_FatalError. Without this the stream simply stopped, which is the
+		// one thing a parent cannot tell apart from a hang.
+		EditorLink::Fatal(error.GetMessage());
+		EditorLink::SessionResult("error");
 		CallTerminateFunctions();
 
 #ifdef __ANDROID__

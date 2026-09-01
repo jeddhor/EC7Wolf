@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QTimer, QSize, Qt, Signal
+from PySide6.QtCore import QProcess, QTimer, QSize, Qt, Signal
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -47,7 +47,11 @@ from ec7edit_core.archive import read_archive
 from ec7edit_core.catalog import Catalog, load_catalog
 from ec7edit_core.commands import History, add_maps
 from ec7edit_core.discovery import Profile, data_fingerprint
-from ec7edit_core.engine_runner import build_launch_plan
+from ec7edit_core.engine_runner import (
+    Session,
+    SessionState,
+    build_launch_plan,
+)
 from ec7edit_core.rules import (
     assign_sound_areas as sound_area_writes,
     check_door,
@@ -146,6 +150,16 @@ class MainWindow(QMainWindow):
         #: instead of quietly showing an answer about an older map.
         self._problems: list = []
         self._problems_revision: int = -1
+        #: The playtest, if one has been run. One at a time, deliberately: two
+        #: engines sharing a session directory would overwrite each other's
+        #: config and saves.
+        self.session = None
+        self.process = None
+        self._session_lines: list = []
+        self._session_log_path = None
+        #: Whatever a read left mid-line, kept for the next one.
+        self._session_tail = ""
+        self._session_counter = 0
         #: Coalesces the full pass: every edit restarts it, so the expensive
         #: rules run once after a stroke rather than once per cell of it.
         self._validate_timer = QTimer(self)
@@ -325,6 +339,10 @@ class MainWindow(QMainWindow):
             tip="Export the open map and launch the engine on it",
         )
         self.action_validate = self._action("&Check this map", self.validate, "F8")
+        self.action_stop_test = self._action(
+            "S&top the playtest", self.stop_session, "Shift+F5",
+            tip="Close the running engine")
+        self.action_stop_test.setEnabled(False)
         self.action_statistics = self._action("Map &statistics", self.show_statistics)
         self.action_sound_areas = self._action(
             "Give the floor sound &areas", self.assign_sound_areas,
@@ -332,6 +350,7 @@ class MainWindow(QMainWindow):
         )
         self.action_setup = self._action("&Setup…", self.run_setup, tip="Engine, data, workspace")
         self.tools_menu.addAction(self.action_test)
+        self.tools_menu.addAction(self.action_stop_test)
         self.tools_menu.addAction(self.action_validate)
         self.tools_menu.addAction(self.action_statistics)
         self.tools_menu.addAction(self.action_sound_areas)
@@ -537,6 +556,22 @@ class MainWindow(QMainWindow):
         problems_layout.setSpacing(2)
         problems_layout.addLayout(controls)
         problems_layout.addWidget(self.problems)
+
+        self.test_log = QListWidget(self)
+        self.test_log.setAccessibleName("Test log")
+        self.test_log_status = QLabel("No playtest has been run yet", self)
+        self.test_log_status.setAccessibleName("Playtest state")
+        test_panel = QWidget(self)
+        test_layout = QVBoxLayout(test_panel)
+        test_layout.setContentsMargins(4, 2, 4, 2)
+        test_layout.setSpacing(2)
+        test_layout.addWidget(self.test_log_status)
+        test_layout.addWidget(self.test_log)
+        test_dock = QDockWidget("Test Log", self)
+        test_dock.setObjectName("test-log-dock")
+        test_dock.setWidget(test_panel)
+        self.addDockWidget(Qt.BottomDockWidgetArea, test_dock)
+        self.test_log_dock = test_dock
 
         problems_dock = QDockWidget("Problems", self)
         problems_dock.setObjectName("problems-dock")
@@ -1562,6 +1597,18 @@ class MainWindow(QMainWindow):
         self.validate()
         return len(writes)
 
+    def _next_session_id(self) -> str:
+        """A short id, unique within this run of the editor.
+
+        The engine echoes it on every event, which is what lets the reader tell
+        this launch's output from another's -- and from anything the map under
+        test decided to print. A counter is enough: two editors are two
+        workspaces, and a stale directory from a previous run is not a session
+        anything is still listening to.
+        """
+        self._session_counter += 1
+        return f"ec7edit-{self._session_counter:04d}"
+
     def _map_profile(self, document) -> "Profile":
         """Which rules apply to this map, from the slot it is exported to."""
         return profile_for_slot(document.slot)
@@ -1684,8 +1731,15 @@ class MainWindow(QMainWindow):
             )
             return False
 
+        # One directory per session, holding the export, the engine's config,
+        # its saves and the log. Never the player's own: a playtest that wrote
+        # into those would change the game somebody else plays here.
         workspace = Path(profile.workspace_dir or Path.home()) / ".ec7edit-playtest"
-        target = workspace / f"{document.lump_name.lower()}-preview.wad"
+        session = self._next_session_id()
+        session_dir = workspace / session
+        target = session_dir / f"{document.lump_name.lower()}-preview.wad"
+
+        import hashlib
 
         from ec7edit_core.paths import OutputGuard, atomic_write
         from ec7edit_core.wad import build_preview_wad
@@ -1699,28 +1753,169 @@ class MainWindow(QMainWindow):
                 data_dir=profile.data_dir,
                 preview_wad=target,
                 marker=document.lump_name,
+                session=session,
+                session_dir=session_dir,
+                # What was tested, so the log can be matched back to it. A log
+                # that does not say which version of the map it describes is a
+                # log you cannot trust a week later.
+                export_digest=hashlib.sha256(blob).hexdigest(),
+                revision=self.project.revision,
             )
         except (OSError, Ec7EditError) as error:
             self._error("Could not start a playtest", str(error))
             return False
 
-        self._note_problem(f"Playtest: {plan.described()}")
-        import subprocess
+        return self.start_session(plan, document.lump_name)
 
-        # Keep what the engine says. When it refuses a map it explains itself
-        # on stdout and then exits, and without this that explanation goes
-        # nowhere the user will ever look.
-        log = workspace / "playtest.log"
-        try:
-            with open(log, "w", encoding="utf-8") as stream:
-                subprocess.Popen(plan.argv, cwd=str(plan.cwd),
-                                 stdout=stream, stderr=subprocess.STDOUT)
-        except OSError as error:
-            self._error("The engine did not start", str(error))
+    # -- the playtest session ---------------------------------------------
+
+    def start_session(self, plan, label: str) -> bool:
+        """Run a launch plan under a QProcess and watch what it says.
+
+        QProcess rather than subprocess because the editor has to stay usable
+        while the game runs: output arrives on a signal, on the GUI thread,
+        with nobody blocked on a pipe. The old code handed the process a file
+        and forgot about it, which meant the editor could not tell a playtest
+        that worked from one that never found the map -- and left the engine
+        running when the editor closed.
+        """
+        if self.session is not None and self.session.running:
+            self._error("A playtest is already running",
+                        "Stop it first, or let it finish.")
             return False
-        self._note_problem(f"Engine output: {log}")
-        self.statusBar().showMessage(f"Testing {document.lump_name} in EC7Wolf", 6000)
+
+        self.session = Session(plan)
+        self._session_log_path = (plan.session_dir / "playtest.log"
+                                  if plan.session_dir else None)
+        self._session_lines = []
+
+        process = QProcess(self)
+        process.setProgram(str(plan.executable))
+        process.setArguments(list(plan.arguments))
+        process.setWorkingDirectory(str(plan.cwd))
+        # One channel: the engine reports some failures on stderr -- "No player
+        # 1 start!" among them -- and reading only stdout would lose exactly
+        # the messages a playtest exists to surface.
+        process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        process.readyReadStandardOutput.connect(self._on_session_output)
+        process.finished.connect(
+            lambda code, _status: self._on_session_finished(code))
+        process.errorOccurred.connect(self._on_session_error)
+
+        self.process = process
+        self.session.started()
+        self._refresh_session_ui()
+        process.start()
+        if not process.waitForStarted(5000):
+            self.session.finished(-1)
+            self._error("The engine did not start",
+                        f"{plan.executable}\n\n{process.errorString()}")
+            self._refresh_session_ui()
+            return False
+        self.statusBar().showMessage(f"Testing {label} in EC7Wolf", 6000)
         return True
+
+    def _on_session_output(self) -> None:
+        if self.process is None or self.session is None:
+            return
+        # Whole lines only. A read can land mid-line, and half of an event is
+        # not an event -- the tail is kept for the next read rather than
+        # parsed as if it were complete.
+        text = bytes(self.process.readAllStandardOutput()).decode("utf-8", "replace")
+        self._session_tail += text
+        *lines, self._session_tail = self._session_tail.split("\n")
+        for line in lines:
+            self.session.feed(line)
+            self._session_lines.append(line)
+        if lines:
+            self._refresh_session_ui()
+
+    def _on_session_error(self, _error) -> None:
+        if self.process is not None:
+            self._note_problem(f"Playtest: {self.process.errorString()}")
+
+    def _on_session_finished(self, code: int) -> None:
+        if self.session is None:
+            return
+        if self._session_tail:
+            self.session.feed(self._session_tail)
+            self._session_lines.append(self._session_tail)
+            self._session_tail = ""
+        self._session_counter = 0
+        self.session.finished(code)
+        self._write_session_log()
+        self._refresh_session_ui()
+        if self.session.state is SessionState.FAILED:
+            # Said in the Test Log, not in a modal. This arrives on a signal
+            # from a process ending, which can be at any moment -- including
+            # while the user is mid-gesture in the editor -- and a dialog that
+            # steals focus then is worse than a panel that is already showing
+            # the answer. The dock raises itself so it cannot be missed.
+            self._note_problem(f"Playtest failed: {self.session.describe()}")
+            self.test_log_dock.show()
+            self.test_log_dock.raise_()
+            self.statusBar().showMessage(
+                f"Playtest failed: {self.session.describe()}", 12000)
+
+    def _write_session_log(self) -> None:
+        """Keep the log beside the session, tagged with what was tested."""
+        if self._session_log_path is None or self.session is None:
+            return
+        try:
+            self._session_log_path.parent.mkdir(parents=True, exist_ok=True)
+            header = [
+                f"# session {self.session.plan.session}",
+                f"# revision {self.session.plan.revision}",
+                f"# export {self.session.plan.export_digest}",
+                f"# {self.session.plan.described()}",
+                "",
+            ]
+            self._session_log_path.write_text(
+                "\n".join(header + self._session_lines) + "\n", encoding="utf-8")
+        except OSError:
+            pass  # a log we could not write must not break the run it describes
+
+    def stop_session(self) -> bool:
+        """Ask the engine to close, and make sure it does."""
+        if self.process is None or self.session is None or not self.session.running:
+            return False
+        self.session.stopping()
+        self._refresh_session_ui()
+        self.process.terminate()
+        if not self.process.waitForFinished(3000):
+            # It did not go. A playtest left running is a window the user
+            # cannot get rid of and a process the next launch will refuse to
+            # start alongside.
+            self.process.kill()
+            self.process.waitForFinished(2000)
+        return True
+
+    def reconcile_orphan(self) -> bool:
+        """At shutdown: never leave a playtest running without an editor.
+
+        The engine is a child of this process. Closing the editor and leaving
+        it behind means a window nobody owns, still writing to a session
+        directory the editor may reuse.
+        """
+        if self.process is None:
+            return False
+        if self.process.state() == QProcess.ProcessState.NotRunning:
+            return False
+        self.stop_session()
+        return True
+
+    def _refresh_session_ui(self) -> None:
+        running = self.session is not None and self.session.running
+        self.action_stop_test.setEnabled(running)
+        if self.session is None:
+            self.test_log_status.setText("No playtest has been run yet")
+            return
+        self.test_log_status.setText(
+            f"{self.session.state.value}: {self.session.describe()}")
+        self.test_log.clear()
+        for line in self._session_lines[-400:]:
+            self.test_log.addItem(line)
+        self.test_log.scrollToBottom()
 
     def _sync_canvases(self) -> None:
         for index in range(self.tabs.count()):
@@ -1813,6 +2008,10 @@ class MainWindow(QMainWindow):
         self.settings.sync()
         self.pool.cancel_all()
         self.pool.wait(2000)
+        # Never leave a playtest running without an editor: the engine is a
+        # child of this process, and closing without it means a window nobody
+        # owns, still writing into a session directory the next launch reuses.
+        self.reconcile_orphan()
         event.accept()
 
     def about(self) -> None:

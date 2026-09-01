@@ -488,6 +488,24 @@ namespace
 			(unsigned long)g_frameCount,
 			(unsigned int)g_worldChecksum);
 	}
+
+	// Set for every argv index this harness consumed -- see ClaimArg in the
+	// header for why CheckParameters needs to know.
+	TArray<bool> g_claimed;
+}
+
+void ClaimArg(int index)
+{
+	if(index < 0)
+		return;
+	while((int)g_claimed.Size() <= index)
+		g_claimed.Push(false);
+	g_claimed[index] = true;
+}
+
+bool ArgClaimed(int index)
+{
+	return index >= 0 && index < (int)g_claimed.Size() && g_claimed[index];
 }
 
 void ParseArgs(int argc, char **argv)
@@ -495,6 +513,11 @@ void ParseArgs(int argc, char **argv)
 	for(int i = 1; i < argc; ++i)
 	{
 		const char *arg = argv[i];
+		// Where this option started. Every branch below advances i over the
+		// values it takes, so claiming first..i afterwards records the option
+		// and its values without a second table saying how many that is.
+		const int first = i;
+		bool unmatched = false;
 		if(strcmp(arg, "--capture-rngseed") == 0 && i + 1 < argc)
 		{
 			g_seed = (DWORD)strtoul(argv[++i], NULL, 0);
@@ -709,6 +732,22 @@ void ParseArgs(int argc, char **argv)
 			if(g_blendA > 256) g_blendA = 256;
 			g_haveBlend = true;
 			g_armed = true;
+		}
+		else
+			unmatched = true;
+
+		if(strncmp(arg, "--capture-", 10) == 0)
+		{
+			// Claimed whether or not a branch above recognised it. An option in
+			// this namespace that nothing matched is either a typo or one given
+			// without the value it needs, and saying so is better than silently
+			// ignoring it -- and far better than what used to happen, which was
+			// handing it to the wad loader to fail to stat.
+			if(unmatched)
+				printf("Capture: unrecognised option '%s' (or its value is "
+					"missing); ignored.\n", arg);
+			for(int taken = first; taken <= i; ++taken)
+				ClaimArg(taken);
 		}
 	}
 

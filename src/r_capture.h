@@ -49,6 +49,22 @@ namespace Capture
 	// game exist; only records intent.  Called once from the program entry.
 	void ParseArgs(int argc, char **argv);
 
+	// Which argv tokens this harness took, option and value alike.
+	//
+	// CheckParameters -- the parser that decides what is a *file* -- used to
+	// carry a hand-written copy of this list purely so the capture options were
+	// not handed to the wad loader as filenames. Two lists that must agree by
+	// hand do not: fifteen of the thirty-three options had been added here and
+	// not there, so every one of them, and its value, reached AddFile and
+	// printed "Could not stat --capture-trace". Harmless by luck, and exactly
+	// the kind of luck that runs out.
+	//
+	// ParseArgs is the only thing that knows the arity of each option, so it
+	// records what it consumed as it goes and CheckParameters asks. One parser,
+	// no second list to forget.
+	void ClaimArg(int index);
+	bool ArgClaimed(int index);
+
 	// True if any capture feature is armed.  Hot-path callers use this to skip
 	// all work in ordinary runs.
 	bool Active();

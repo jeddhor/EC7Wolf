@@ -951,3 +951,117 @@ class ExceptionReporting(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)
+
+
+class PlaytestSessions(Base):
+    """E9: the process controller, driven by a fake engine rather than the real
+    one, so the lifecycle is testable without a game or a display."""
+
+    def fake_engine(self, script: str) -> Path:
+        path = self.root / "fake-engine.sh"
+        path.write_text("#!/bin/sh\n" + script)
+        path.chmod(0o755)
+        return path
+
+    def plan_for(self, engine: Path, session="s1"):
+        from ec7edit_core.engine_runner import LaunchPlan
+
+        return LaunchPlan(engine, [], self.root, session=session,
+                          session_dir=self.root / "sess",
+                          preview=self.root / "preview.wad")
+
+    def run_to_end(self, engine, session="s1", timeout=8000):
+        from PySide6.QtCore import QProcess
+
+        self.assertTrue(self.window.start_session(self.plan_for(engine, session), "TEST"))
+        if self.window.process.state() != QProcess.ProcessState.NotRunning:
+            self.window.process.waitForFinished(timeout)
+        QApplication.processEvents()
+        return self.window.session
+
+    def test_a_good_run_is_reported_as_reaching_the_map(self):
+        from ec7edit_core.engine_runner import SessionState
+
+        engine = self.fake_engine(
+            'echo "EC7EDIT s1 hello engine=Fake"\n'
+            'echo "adding ./AUDIOT.CO7"\n'
+            'echo "EC7EDIT s1 preview-load path=preview.wad loaded=yes lumps=9"\n'
+            'echo "EC7EDIT s1 map-entry marker=MAP01 name=Lab"\n'
+            'echo "EC7EDIT s1 session-result outcome=quit"\n'
+            'exit 0\n')
+        session = self.run_to_end(engine)
+        self.assertIs(session.state, SessionState.FINISHED)
+        self.assertTrue(session.reached_the_map)
+
+    def test_a_silent_engine_is_reported_as_failed(self):
+        # In the Test Log and the status bar, not a modal: this arrives on a
+        # signal from a process ending, at any moment, including mid-gesture.
+        from ec7edit_core.engine_runner import SessionState
+
+        session = self.run_to_end(self.fake_engine("exit 1\n"))
+        self.assertIs(session.state, SessionState.FAILED)
+        self.assertIn("without answering",
+                      self.window.test_log_status.text())
+
+    def test_ordinary_output_reaches_the_test_log(self):
+        engine = self.fake_engine('echo "Could not stat something.wad"\nexit 0\n')
+        self.run_to_end(engine)
+        shown = [self.window.test_log.item(i).text()
+                 for i in range(self.window.test_log.count())]
+        self.assertIn("Could not stat something.wad", shown)
+
+    def test_stderr_is_captured_too(self):
+        # "No player 1 start!" goes to stderr, and it is the failure an
+        # editor-exported map hits most.
+        engine = self.fake_engine('echo "No player 1 start!" >&2\nexit 1\n')
+        self.window._error = lambda title, body: None
+        session = self.run_to_end(engine)
+        self.assertIn("No player 1 start!", session.log)
+
+    def test_a_log_is_written_beside_the_session(self):
+        engine = self.fake_engine('echo "EC7EDIT s1 hello x=1"\nexit 0\n')
+        self.window._error = lambda title, body: None
+        self.run_to_end(engine)
+        log = self.root / "sess" / "playtest.log"
+        self.assertTrue(log.exists())
+        self.assertIn("# session s1", log.read_text())
+
+    def test_two_playtests_at_once_are_refused(self):
+        from PySide6.QtCore import QProcess
+
+        engine = self.fake_engine("sleep 5\n")
+        errors = []
+        self.window._error = lambda title, body: errors.append(title)
+        self.assertTrue(self.window.start_session(self.plan_for(engine), "A"))
+        try:
+            self.assertFalse(self.window.start_session(self.plan_for(engine, "s2"), "B"))
+            self.assertTrue(errors)
+        finally:
+            self.window.stop_session()
+        self.assertEqual(self.window.process.state(), QProcess.ProcessState.NotRunning)
+
+    def test_stopping_ends_the_process(self):
+        from PySide6.QtCore import QProcess
+
+        engine = self.fake_engine("sleep 30\n")
+        self.window.start_session(self.plan_for(engine), "LONG")
+        self.assertTrue(self.window.stop_session())
+        self.assertEqual(self.window.process.state(), QProcess.ProcessState.NotRunning)
+
+    def test_a_running_playtest_is_not_orphaned_when_the_editor_closes(self):
+        from PySide6.QtCore import QProcess
+
+        engine = self.fake_engine("sleep 30\n")
+        self.window.start_session(self.plan_for(engine), "LONG")
+        self.assertTrue(self.window.reconcile_orphan())
+        self.assertEqual(self.window.process.state(), QProcess.ProcessState.NotRunning)
+
+    def test_reconciling_with_nothing_running_is_harmless(self):
+        self.assertFalse(self.window.reconcile_orphan())
+
+    def test_a_missing_engine_is_reported_rather_than_thrown(self):
+        errors = []
+        self.window._error = lambda title, body: errors.append(title)
+        plan = self.plan_for(self.root / "not-here")
+        self.assertFalse(self.window.start_session(plan, "X"))
+        self.assertTrue(errors)

@@ -124,6 +124,7 @@ initial_sources(
 	name.cpp
 	p_switch.cpp
 	r_artscale.cpp
+	c7_editorlink.cpp
 	r_capture.cpp
 	r_xbrz.cpp
 	render/r_renderer.cpp

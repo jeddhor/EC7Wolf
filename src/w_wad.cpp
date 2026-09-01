@@ -42,6 +42,7 @@
 #include <sys/stat.h>
 #include <string.h>
 
+#include "c7_editorlink.h"
 #include "w_wad.h"
 #include "w_zip.h"
 #include "m_crc32.h"
@@ -232,6 +233,9 @@ void FWadCollection::AddFile (const char *filename, FileReader *wadinfo)
 		{
 			Printf(TEXTCOLOR_RED "Could not stat %s\n", filename);
 			PrintLastError();
+			// Said out loud to the editor: this is not fatal, so a launch whose
+			// map failed to load looks exactly like one that worked.
+			EditorLink::PreviewLoaded(filename, false, LumpInfo.Size());
 			return;
 		}
 		isdir = info.isDirectory();
@@ -300,6 +304,7 @@ void FWadCollection::AddFile (const char *filename, FileReader *wadinfo)
 				lump_p->wadnum = Files.Size()-1;
 			}
 		}
+		EditorLink::PreviewLoaded(filename, true, LumpInfo.Size());
 		return;
 	}
 }

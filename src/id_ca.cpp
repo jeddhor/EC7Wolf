@@ -14,6 +14,7 @@ loaded into the data segment
 =============================================================================
 */
 
+#include "c7_editorlink.h"
 #include "actor.h"
 #include "g_mapinfo.h"
 #include "gamemap.h"
@@ -83,6 +84,11 @@ void CA_CacheMap (const FString &mapname, bool loading)
 	map->LoadMap(loading);
 
 	Printf("\n%s - %s\n\n", mapname.GetChars(), levelInfo->GetName(map).GetChars());
+	// The editor's proof that the engine reached the floor it was asked for,
+	// rather than the shipped map of the same number or the title screen.
+	EditorLink::MapEntered(mapname.GetChars(),
+		levelInfo->GetName(map).GetChars(),
+		gamestate.difficulty ? (int)gamestate.difficulty->SpawnFilter : -1);
 
 	CalcVisibility(gLevelVisibility);
 }

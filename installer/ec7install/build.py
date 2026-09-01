@@ -56,14 +56,42 @@ class Engine:
             blob = self.executable.read_bytes()
         except OSError:
             return ""
-        described = re.search(rb"\d+\.\d+[a-z0-9.]*-\d+-g[0-9a-f]{6,}", blob)
+        # The tag segment may itself contain dashes: EC7Wolf tags releases
+        # v1.0-beta188, so the description is 1.0-beta188-11-gHASH. A class
+        # without the dash matched upstream's 1.5pre-45-gHASH and nothing this
+        # project has ever built, which is why every EC7Wolf install has been
+        # registering itself with a blank version.
+        described = re.search(
+            rb"\d+\.\d+[-.A-Za-z0-9]*-\d+-g[0-9a-f]{6,}(?:-m)?", blob)
         if described:
             return described.group().decode("ascii", "replace")
         plain = re.search(rb"\d+\.\d+\.\d+pre", blob)
         return plain.group().decode("ascii", "replace") if plain else ""
 
 
-def find_existing(repo_root: Path, extra: list[Path] | None = None) -> Engine | None:
+def tree_version(repo_root: Path) -> str:
+    """What `git describe` calls the tree we would build, if it is a checkout.
+
+    The same command UpdateRevision.cmake bakes into the binary, so this and
+    Engine.version() are directly comparable. Empty when there is no git, no
+    repository, or no tag to describe from -- all of which are ordinary for an
+    installer that downloaded a source tarball, and none of which are grounds
+    for refusing a perfectly good engine.
+    """
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(repo_root), "describe", "--tags", "--first-parent"],
+            capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if done.returncode != 0:
+        return ""
+    # The binary carries the description without the tag's leading "v".
+    return done.stdout.strip().lstrip("v")
+
+
+def find_existing(repo_root: Path, extra: list[Path] | None = None,
+                  reporter: Reporter | None = None) -> Engine | None:
     """An already-built engine, if there is one.
 
     Both files have to be present and the pk3 has to be at least as new as the
@@ -71,8 +99,24 @@ def find_existing(repo_root: Path, extra: list[Path] | None = None) -> Engine | 
     to get a build that runs but behaves like an older one -- the project's own
     notes record losing time to exactly that -- so it is treated as "no usable
     engine" rather than quietly shipped.
+
+    The same reasoning applies to the build tree as a whole, and it took longer
+    to notice. This searches four directories, one of which is an untracked
+    "release" folder that a developer may have left behind months ago; whatever
+    it found first was installed, silently, with the report saying no more than
+    "already built in ...". A six-week-old engine shipped that way for weeks,
+    and the install test that was supposed to catch it was testing that same
+    old binary. So an engine that says it was built from a different revision
+    than the tree being installed is not used. The dirty marker is ignored --
+    uncommitted edits are normal while developing and are not on their own a
+    reason to spend ten minutes rebuilding.
     """
-    candidates: list[Path] = list(extra or [])
+    wanted = tree_version(repo_root)
+    # An engine the caller named is used as given -- --engine DIR is someone
+    # saying which build they mean, and second-guessing that is not this
+    # function's business. Only the directories guessed below are checked.
+    named: list[Path] = list(extra or [])
+    candidates: list[Path] = list(named)
     candidates += [
         repo_root.parent / "builds" / "release-build",
         repo_root.parent / "builds" / "release",
@@ -94,7 +138,15 @@ def find_existing(repo_root: Path, extra: list[Path] | None = None) -> Engine | 
             continue
         if not os.access(executable, os.X_OK) and not is_windows():
             continue
-        if pk3.stat().st_mtime < executable.stat().st_mtime - 1:
+        # One second of slack was not enough to describe one build. CMake
+        # packages the pk3 and then links the executable, so in a perfectly
+        # consistent build the pk3 is always the older of the two -- by 1.6s in
+        # this project's own release build, which this rule then threw out. It
+        # threw out every real build, fell through to a leftover directory, and
+        # installed a six-week-old engine instead. What it is meant to catch is
+        # a pk3 from an entirely different build session, which is minutes to
+        # days old, so five minutes separates the two cases with room to spare.
+        if pk3.stat().st_mtime < executable.stat().st_mtime - 300:
             continue
         # Whatever else is in that folder comes too. A downloaded release, or
         # an unpacked -full archive, has SDL2.dll and libepoxy-0.dll sitting
@@ -102,8 +154,24 @@ def find_existing(repo_root: Path, extra: list[Path] | None = None) -> Engine | 
         # .pk3 produced a game that could not start -- which is exactly what
         # happened to the first person to install from a release zip.
         extra = sorted(directory.glob("*.dll")) if is_windows() else []
-        return Engine(executable, pk3, f"already built in {directory}",
-                      extra_files=extra)
+        engine = Engine(executable, pk3, f"already built in {directory}",
+                        extra_files=extra)
+
+        built = engine.version()
+        guessed = directory not in named
+        if guessed and wanted and built and built.removesuffix("-m") != wanted:
+            if reporter is not None:
+                reporter.detail(f"engine: ignoring {directory} -- it was built "
+                                f"from {built}, and this is {wanted}")
+            continue
+
+        # Say which engine is being reused, not just where it came from. The
+        # version is the whole point of the check above, and a log that records
+        # it turns "why does the install behave like an old build" into one
+        # readable line.
+        if built:
+            engine.source = f"already built in {directory} ({built})"
+        return engine
     return None
 
 

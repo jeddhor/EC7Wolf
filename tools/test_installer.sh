@@ -25,6 +25,8 @@
 
 set -eu
 
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/xvfb_common.sh"
+
 if [ "$#" -lt 1 ]; then
 	printf 'usage: %s BUILD_DIR [DATA_DIR]\n' "$0" >&2
 	exit 2
@@ -73,6 +75,40 @@ if not str(destination).startswith(home):
     sys.exit(f"FAIL: the default destination {destination} is outside {home}")
 if "/snap/" in str(destination) or "/flatpak/" in str(destination):
     sys.exit(f"FAIL: the default destination {destination} is inside a sandbox")
+
+# Which engine a plain install would reuse. This gate spent weeks reporting on
+# a six-week-old binary because find_existing rejected every current build (its
+# pk3 is packaged seconds BEFORE the executable is linked, and the rule allowed
+# one second of that) and fell through to a leftover ECWolf/release from an
+# upstream 1.5pre. Both halves are checked here: the right directory is picked,
+# and a build from another revision is refused.
+from ec7install import build as build_mod
+from pathlib import Path as _Path
+
+repo_root = _Path(sys.argv[1])
+wanted = build_mod.tree_version(repo_root)
+if wanted:
+    engine = build_mod.find_existing(repo_root)
+    if engine is None:
+        print("  reuse: nothing to reuse (nothing built yet), not checked")
+    else:
+        got = engine.version()
+        if not got:
+            sys.exit(f"FAIL: {engine.executable} reports no version at all -- "
+                     "the version regex cannot read this project's own tags")
+        if got.removesuffix("-m") != wanted:
+            sys.exit(f"FAIL: a plain install would reuse {engine.executable}, "
+                     f"built from {got}, while this tree is {wanted}")
+        print(f"  reuse: {engine.source}")
+
+    class _Quiet:
+        def detail(self, message): pass
+
+    stale = repo_root / "release"
+    if (stale / "ec7wolf").is_file():
+        picked = build_mod.find_existing(repo_root, reporter=_Quiet())
+        if picked is not None and picked.executable.parent == stale:
+            sys.exit(f"FAIL: {stale} is from another revision and was reused anyway")
 
 print(f"  dependency scan: {len(list(report))} build requirements, remedies present")
 print(f"  default destination: {destination}")
@@ -138,7 +174,13 @@ fake_home="$work/home"
 mkdir -p "$fake_home/Desktop"
 destination="$work/install"
 
+# --engine "$build_dir": install the engine this suite just built, not one the
+# installer went looking for. Without it this gate searched four directories
+# and packaged whatever turned up first, which for weeks was a stale untracked
+# ECWolf/release from six weeks earlier -- so the gate was testing an engine
+# nobody had built, and reported on features that binary did not have.
 HOME="$fake_home" "$installer" --source "$disc" --dest "$destination" \
+	--engine "$build_dir" \
 	--log "$work/install.log" >"$work/install.txt" 2>&1 || {
 	printf 'FAIL: the install failed\n' >&2
 	tail -30 "$work/install.txt" >&2
@@ -157,23 +199,47 @@ printf '  installed %s\n' "$(du -sh "$destination" | cut -f1)"
 
 # The only check that really matters: does the thing it produced run?
 run_log="$work/run.txt"
+# Its own display, started and waited for, rather than `xvfb-run -a`.
+#
+# `-a` picks a free display number and races every other gate doing the same.
+# Under a full suite this gate hung for the whole 300s having printed NOTHING
+# -- the engine never started, because the display never arrived. A fixed
+# number of our own, and xvfb_start's poll for the server actually accepting
+# connections, removes the race and the guess together.
+display=:181
+xvfb_start "$display" "$work/xvfb.log" 900x600x24 || {
+	printf 'SKIP: no Xvfb available\n'; exit 0; }
+
+# No --capture-* options here, deliberately.
+#
+# The installer downloads a RELEASED source archive and builds it, so this
+# binary is whatever that release was -- not this working tree. Handing it this
+# build's test-harness options is unsound, and it showed: the version it
+# installs does not consume them, so they fell through to the wad loader
+# ("Could not stat --capture-maxtics"), --capture-maxtics never armed, and the
+# game ran until the timeout killed it. EVERY run. The old code hid that behind
+# `|| true` and then grepped the log, which found MAP01 and passed -- so this
+# gate was green for a run that never once ended the way it claimed to.
+#
+# What it actually wants to know is whether the thing the installer produced
+# runs and reaches the first floor. So: start it, give it long enough to get
+# there, and stop it. Being killed is the expected ending, and the log is the
+# evidence.
+#
+# stdbuf -oL because the kill is a SIGTERM and the engine's stdout is a file,
+# so libc block-buffers it: whatever is in the unflushed tail dies with the
+# process. That is not hypothetical -- without it this run reached MAP01 and
+# then "lost" the CD audio and cinematics lines that init had already printed,
+# and the gate reported the installed game could not find its soundtrack.
 set +e
 ( cd "$destination"
-  # Generous, and its expiry is told apart from a game that ran and failed.
-  # At 120s this timed out on a machine already busy building the installer
-  # this test just made, and the gate then said "the installed game did not
-  # reach MAP01" -- blaming the game for the clock.
-  timeout 300s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 xvfb-run -a \
-	./ec7wolf --data CO7 --nowait --tedlevel MAP01 --skill 2 \
-	--capture-rngseed 1 --capture-maxtics 60 \
+  timeout 90s env DISPLAY="$display" SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 \
+	stdbuf -oL -eL ./ec7wolf --data CO7 --nowait --tedlevel MAP01 --skill 2 \
 	--config "$work/cfg" --savedir "$work/sv"
 ) >"$run_log" 2>&1
 run_rc=$?
 set -e
-[ "$run_rc" -eq 124 ] && {
-	printf 'FAIL: the installed game was still going after 300s\n' >&2
-	exit 1
-}
+xvfb_stop 2>/dev/null || kill "${xvfb:-0}" 2>/dev/null || true
 
 grep -q "MAP01 - Corridor 7 Level 1" "$run_log" || {
 	printf 'FAIL: the installed game did not reach MAP01 (exit %s)\n' "$run_rc" >&2
@@ -182,10 +248,14 @@ grep -q "MAP01 - Corridor 7 Level 1" "$run_log" || {
 }
 grep -q "CD audio: 4 of 4" "$run_log" || {
 	printf 'FAIL: the installed game did not find the ripped soundtrack\n' >&2
+	printf '       what it said about CD audio (exit %s):\n' "$run_rc" >&2
+	grep -i "cd audio" "$run_log" | sed 's/^/       /' >&2 || printf '       nothing\n' >&2
 	exit 1
 }
 grep -q "Cinematics: 3 of 3" "$run_log" || {
 	printf 'FAIL: the installed game did not find the cinematics\n' >&2
+	printf '       what it said about cinematics (exit %s):\n' "$run_rc" >&2
+	grep -i "cinematics" "$run_log" | sed 's/^/       /' >&2 || printf '       nothing\n' >&2
 	exit 1
 }
 printf '  the installed game starts, and finds its music and cinematics\n'

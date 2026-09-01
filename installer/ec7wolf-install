@@ -93,7 +93,7 @@ def main() -> int:
             return 0
 
         engine = None if args.force_build else build.find_existing(
-            REPO, extra=[args.engine] if args.engine else [])
+            REPO, extra=[args.engine] if args.engine else [], reporter=reporter)
 
         if args.check or not args.source:
             print("EC7Wolf installer\n" + "=" * 17)

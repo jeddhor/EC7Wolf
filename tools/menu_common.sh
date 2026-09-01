@@ -117,6 +117,30 @@ menu_press_moved() {  # menu_press_moved KEY
 	return 1
 }
 
+# Press a key until a menu is on screen, which is how the title sequence is
+# escaped without guessing how long it takes.
+#
+# The walks were made to verify each press, but the approach to the menu was
+# still `Escape, sleep 1.5, Escape, sleep 2` -- and if the game had not finished
+# loading when the first Escape went out, the key was lost and no menu ever
+# appeared. Under a full suite that is exactly what happened: "no menu appeared
+# while looking for Multiplayer", 20 seconds after a game that was still
+# starting.
+menu_open() {  # menu_open [KEY]
+	_key=${1:-Escape}
+	_attempt=0
+	while [ "$_attempt" -lt 20 ]; do
+		[ "$(menu_cursor_row)" -ge 0 ] && return 0
+		if [ -n "$MENU_ALIVE" ] && ! $MENU_ALIVE; then
+			return 1
+		fi
+		menu_send_key "$_key"
+		sleep 1
+		_attempt=$((_attempt + 1))
+	done
+	return 1
+}
+
 # Press a key that is not expected to move the cursor -- Return, Escape -- and
 # give the screen a moment to change. There is nothing to verify here, so this
 # is the one place a sleep is still the honest answer.

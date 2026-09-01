@@ -1439,6 +1439,20 @@ void PostFrame()
 	{
 		g_snapshotDone = true;
 		WriteScreenshot(g_snapshotPath.GetChars());
+#ifdef ECWOLF_RENDERER_OPENGL
+		// The same GL captures the frame-anchored shot does. Not because a
+		// snapshot needs them, but because a caller that asked for one asked
+		// for it on purpose -- and the GL world capture prints how many
+		// textures carried an opacity plane, which is the only way the upscale
+		// gate can see that masked walls kept their transparency. Leaving them
+		// out silently removed a check's evidence rather than its subject.
+		if(!g_glWorldPath.IsEmpty())
+			R_GLWorldCapture(g_glWorldPath.GetChars());
+		if(!g_glFramePath.IsEmpty())
+			R_GLFrameCapture(g_glFramePath.GetChars());
+		if(!g_glPresentPath.IsEmpty())
+			R_GLLiveWriteCapture();
+#endif
 		printf("Capture: snapshot '%s' tic=%lu frame=%lu map=%s camera=%g,%g,%g\n",
 			g_snapshotPath.GetChars(), (unsigned long)g_ticCount,
 			(unsigned long)g_frameCount, gamestate.mapname,

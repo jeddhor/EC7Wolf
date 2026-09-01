@@ -141,9 +141,10 @@ done
 [ -n "${window:-}" ] || { printf '  FAIL the game never opened a window\n'; exit 1; }
 sleep 10
 
-# Two: the first stops the intro, the second opens the menu.
-menu_press Escape 1.5
-menu_press Escape 2
+# Escape until a menu is actually on screen. A fixed pair of presses is lost
+# entirely if the game is still loading when the first one goes out, and then
+# nothing that follows can work.
+menu_open Escape || { printf '  FAIL the game never reached a menu\n'; exit 1; }
 menu_press Return 2.5          # New Mission -> the rank ladder
 menu_walk_to_bottom "Multiplayer" || exit 1
 menu_press Return 2.5          # -> the multiplayer setup screen

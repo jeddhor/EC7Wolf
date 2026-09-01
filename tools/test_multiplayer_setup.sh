@@ -101,8 +101,9 @@ check() {
 	else printf '  FAIL %s\n' "$message"; status=1; fi
 }
 
-menu_press Escape 2
-menu_press Escape 3
+# Escape until a menu is actually on screen; a fixed pair is lost entirely if
+# the game is still loading when the first one goes out.
+menu_open Escape || { printf '  FAIL the game never reached a menu\n'; exit 1; }
 menu_press Return 3
 menu_walk_to_bottom "Multiplayer" || exit 1
 menu_press Return 3

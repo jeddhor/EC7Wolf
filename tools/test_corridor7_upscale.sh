@@ -101,6 +101,20 @@ PY
 # lands on a different tic and the doors are caught mid-slide.
 #
 # $1 = case name, $2 = pack file to install (empty for none), $3 = config body
+# Anchored to a simulation tic, not a frame.
+#
+# This gate compares two captures byte for byte, and --capture-frame 4 meant
+# "the fourth frame drawn" -- which lands on a different TIC depending on how
+# fast the machine is drawing. Two runs on a busy box therefore photographed
+# two different moments, the weapon bob and the palette cycle had moved, and
+# "a rejected pack changes nothing on screen" failed on a run where nothing
+# was wrong. --capture-snapshot shoots at a tic, which is the same moment
+# everywhere, and exits.
+#
+# --capture-glframe stays: its .ppm is never read, but the GL world capture
+# prints how many textures carried an opacity plane, and that line is the only
+# evidence the masked-wall check has. Removing it took away a check's evidence
+# rather than its subject, and the check then failed with two empty numbers.
 run_case() {
 	name=$1
 	pack=$2
@@ -117,8 +131,8 @@ run_case() {
 		--savedir "$work" --nowait --tedlevel MAP07 --skill 2 \
 		--vid-renderer software --res 640 400 --capture-rngseed 1 \
 		--capture-warp 34 44 90 --capture-open-doors 65535 \
-		--capture-frame 4 --capture-file "$work/$name.png" \
-		--capture-glframe "$work/$name.gl.ppm" --capture-maxframes 20
+		--capture-glframe "$work/$name.gl.ppm" \
+		--capture-snapshot "$work/$name.png" 5
 	) >"$work/$name.log" 2>&1 || true
 
 	if [ ! -s "$work/$name.png" ]; then

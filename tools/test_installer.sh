@@ -157,15 +157,26 @@ printf '  installed %s\n' "$(du -sh "$destination" | cut -f1)"
 
 # The only check that really matters: does the thing it produced run?
 run_log="$work/run.txt"
+set +e
 ( cd "$destination"
-  timeout 120s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 xvfb-run -a \
+  # Generous, and its expiry is told apart from a game that ran and failed.
+  # At 120s this timed out on a machine already busy building the installer
+  # this test just made, and the gate then said "the installed game did not
+  # reach MAP01" -- blaming the game for the clock.
+  timeout 300s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 xvfb-run -a \
 	./ec7wolf --data CO7 --nowait --tedlevel MAP01 --skill 2 \
 	--capture-rngseed 1 --capture-maxtics 60 \
 	--config "$work/cfg" --savedir "$work/sv"
-) >"$run_log" 2>&1 || true
+) >"$run_log" 2>&1
+run_rc=$?
+set -e
+[ "$run_rc" -eq 124 ] && {
+	printf 'FAIL: the installed game was still going after 300s\n' >&2
+	exit 1
+}
 
 grep -q "MAP01 - Corridor 7 Level 1" "$run_log" || {
-	printf 'FAIL: the installed game did not reach MAP01\n' >&2
+	printf 'FAIL: the installed game did not reach MAP01 (exit %s)\n' "$run_rc" >&2
 	tail -20 "$run_log" >&2
 	exit 1
 }

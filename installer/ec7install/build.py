@@ -65,6 +65,17 @@ class Engine:
             rb"\d+\.\d+[-.A-Za-z0-9]*-\d+-g[0-9a-f]{6,}(?:-m)?", blob)
         if described:
             return described.group().decode("ascii", "replace")
+
+        # A build made exactly ON a tag has no -N-gHASH to find: `git describe`
+        # answers "v1.0-beta202" and nothing more. That is not an edge case, it
+        # is every release, and the pattern above returns nothing for all of
+        # them. So fall back to the banner, where the product name anchors the
+        # version well enough to read it out of three megabytes of binary
+        # without guessing.
+        banner = re.search(rb"(?:EC7Wolf|ECWolf) (\d+\.\d+[-.A-Za-z0-9]*)", blob)
+        if banner:
+            return banner.group(1).decode("ascii", "replace")
+
         plain = re.search(rb"\d+\.\d+\.\d+pre", blob)
         return plain.group().decode("ascii", "replace") if plain else ""
 

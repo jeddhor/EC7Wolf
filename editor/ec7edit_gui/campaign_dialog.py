@@ -170,8 +170,12 @@ class CampaignDialog(QDialog):
         enabled.setChecked(entry.secret is not None)
         destination = self._route_box(entry.secret)
         destination.setEnabled(entry.secret is not None)
-        enabled.toggled.connect(destination.setEnabled)
-        enabled.toggled.connect(self._revalidate)
+        # Both wrapped, for opposite reasons. setEnabled genuinely wants the
+        # checked bool, so the lambda says so rather than leaving a reader to
+        # work out whether the argument was intended. _revalidate does not want
+        # it at all, and would silently receive it as its first parameter.
+        enabled.toggled.connect(lambda on, box=destination: box.setEnabled(on))
+        enabled.toggled.connect(lambda _checked=False: self._revalidate())
         secret_layout.addWidget(enabled)
         secret_layout.addWidget(destination, 1)
         secret.setProperty("enabled_box", enabled)
@@ -193,7 +197,7 @@ class CampaignDialog(QDialog):
 
         tally = QCheckBox()
         tally.setChecked(entry.intermission)
-        tally.toggled.connect(self._revalidate)
+        tally.toggled.connect(lambda _checked=False: self._revalidate())
         self.table.setCellWidget(row, 6, tally)
 
     def _add_level(self) -> None:

@@ -57,6 +57,8 @@ data_dir=$(cd "$2" && pwd)
 repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 editor="$repo/editor"
 
+. "$repo/tools/xvfb_common.sh"
+
 command -v python3 >/dev/null 2>&1 || { printf 'SKIP: python3 is missing\n'; exit 0; }
 [ -f "$editor/ec7edit_core/campaign.py" ] || { printf 'SKIP: no map packs yet\n'; exit 0; }
 [ -f "$data_dir/MAPTEMP.CO7" ] || { printf 'SKIP: no Corridor 7 data\n'; exit 0; }
@@ -65,7 +67,17 @@ grep -q "secretnext=" "$repo/src/c7_editorlink.cpp" 2>/dev/null || {
 
 status=0
 work=$(mktemp -d /tmp/ec7wolf-e11.XXXXXX)
-cleanup() { [ "$status" -eq 0 ] && rm -rf "$work" || printf '  logs kept in %s\n' "$work"; }
+game=""
+cleanup() {
+	# The engine first, and by its own pid. An earlier version ran it under
+	# `xvfb-run` and killed the pid it got back -- which is the wrapper, not the
+	# game, so every run that reached the end of the campaign left an ec7wolf
+	# and an Xvfb behind for good. Three of each per gate run, and they were
+	# still there an hour later, competing for CPU with whatever ran next.
+	[ -n "$game" ] && kill "$game" 2>/dev/null
+	xvfb_stop 2>/dev/null || true
+	[ "$status" -eq 0 ] && rm -rf "$work" || printf '  logs kept in %s\n' "$work"
+}
 trap 'cleanup' EXIT
 trap 'cleanup; exit 130' INT
 trap 'cleanup; exit 143' TERM
@@ -158,6 +170,14 @@ PYTHONPATH="$editor" python3 -m ec7edit_core project-pack "$work/trial.ec7projec
 say ok "$(head -1 "$work/pack.log" | sed 's|.*/||')"
 
 # --- run the campaign ------------------------------------------------------
+#
+# One display of our own, started once. `xvfb-run -a` picks a free number and
+# races every other gate doing the same, and it also hides the game behind a
+# wrapper process -- which is what made the leak above possible at all.
+display=:182
+xvfb_start "$display" "$work/xvfb.log" 640x400x24 || {
+	printf 'SKIP: no Xvfb available\n'; exit 0; }
+
 
 # Runs the game and waits for the evidence, not for a clock.
 #
@@ -174,8 +194,8 @@ play() { # $1 label  $2 marker  $3.. extra args
 	shift 2
 	(
 		cd "$lab"
-		exec env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 \
-			xvfb-run -a -s '-screen 0 640x400x24' ./ec7wolf \
+		exec env DISPLAY="$display" SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 \
+			./ec7wolf \
 			--data CO7 --nowait --file trial.wad \
 			--editor-protocol 2 --editor-session e11 \
 			--tedlevel "$marker" --skill 2 --capture-rngseed 1 \
@@ -196,6 +216,7 @@ play() { # $1 label  $2 marker  $3.. extra args
 
 	kill "$game" 2>/dev/null || true
 	wait "$game" 2>/dev/null || true
+	game=""
 	sed -i 's/\x08//g' "$work/$label.log" 2>/dev/null || true
 }
 

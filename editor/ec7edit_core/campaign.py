@@ -451,7 +451,7 @@ def _reaches_end(campaign: Campaign) -> bool:
 GENERATOR_VERSION = 1
 
 
-def generate_mapinfo(campaign: Campaign) -> str:
+def generate_mapinfo(campaign: Campaign, translator: str = "") -> str:
     """The MAPINFO lump for a pack. Deterministic, so a pack has one digest.
 
     `clearepisodes` before the episode is the difference between a pack that
@@ -486,6 +486,11 @@ def generate_mapinfo(campaign: Campaign) -> str:
         # written only when the author turned the tally off.
         if not entry.intermission:
             lines.append("\tnointermission")
+        if translator:
+            # Per map, never in gameinfo: a translator named there would apply
+            # to the whole game, and the point of a generated one is that it
+            # applies to this floor and leaves Corridor 7 alone.
+            lines.append(f"\ttranslator = {quote(translator)}")
         lines.append("\tcluster = 1")
         lines.append("}")
         lines.append("")

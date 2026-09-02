@@ -29,6 +29,8 @@ from .paths import OutputGuard, SourceIdentity, atomic_write, digest_bytes, dige
 from .planes import PLANE_COUNT
 from .project import PROJECT_SUFFIX, load_project, new_project, save_project, serialize
 from .campaign import Campaign, audit_pack, build_pack
+from .errors import Severity
+from .resources import Resource
 from .campaign import validate as campaign_validate
 from .wad import build_preview_wad, read_preview_wad
 
@@ -306,6 +308,9 @@ def command_project_pack(args) -> int:
     for problem in problems:
         print(f"  {problem}", file=sys.stderr)
 
+    if project.resources:
+        return _pack_with_resources(args, project, campaign)
+
     pack = build_pack(campaign, project.maps, project_name=project.name,
                       author=project.author, allow_warnings=not args.strict)
 
@@ -331,6 +336,126 @@ def command_project_pack(args) -> int:
             secret = ("  secret -> end of campaign" if entry.secret.ends
                       else f"  secret -> MAP{entry.secret.slot:02d}")
         print(f"  {entry.lump_name}  {entry.name!r} -> {route}{secret}")
+    return EXIT_OK
+
+
+def command_resource_add(args) -> int:
+    """Attach a resource pack to a project, and allocate its map words."""
+    from .custom import allocate, load as load_allocations, store
+    from .resources import inspect as inspect_resource
+
+    project = load_project(args.project)
+    resource = inspect_resource(args.resource)
+
+    attached = [Resource.from_json(r) for r in project.resources]
+    if any(r.sha256 == resource.sha256 for r in attached):
+        print(f"{resource.name} is already attached ({resource.sha256[:16]})")
+        return EXIT_OK
+    attached.append(resource)
+
+    allocations, problems = allocate(load_allocations(project.allocations),
+                                    attached, project.maps)
+    for problem in problems:
+        print(f"  {problem}", file=sys.stderr)
+    if any(p.severity >= Severity.ERROR for p in problems):
+        return EXIT_ERROR
+
+    project = project.with_resources([r.to_json() for r in attached],
+                                     store(allocations))
+    save_project(project, args.project)
+
+    print(f"{args.project}: attached {resource.name} -- {resource.describe()}")
+    for allocation in allocations:
+        if allocation.resource == resource.sha256:
+            plane = "object" if allocation.plane == 1 else "wall"
+            print(f"  {plane} word {allocation.word}  {allocation.name}")
+    for problem in resource.problems:
+        print(f"  {problem}")
+    return EXIT_OK
+
+
+def command_resource_inspect(args) -> int:
+    """Say what is in a resource pack, without attaching it to anything."""
+    from .resources import inspect as inspect_resource
+
+    resource = inspect_resource(args.resource)
+    print(f"{resource.name}: {resource.describe()}")
+    print(f"  sha256 {resource.sha256[:16]}, {resource.total_bytes / 1e3:.0f} kB "
+          f"in {resource.entries} entries")
+    for actor in resource.actors:
+        line = f"  actor {actor.name}"
+        if actor.parent:
+            line += f" : {actor.parent}"
+        if actor.replaces:
+            line += f" (replaces {actor.replaces})"
+        line += f"  sprite {actor.sprite or '-'}"
+        if not actor.placeable:
+            line += "  [not placeable]"
+        print(line)
+    for label, names in (("sprites", resource.sprites), ("textures", resource.textures),
+                         ("music", resource.music), ("graphics", resource.graphics)):
+        if names:
+            shown = ", ".join(names[:6]) + ("..." if len(names) > 6 else "")
+            print(f"  {label}: {shown}")
+    if resource.ignored:
+        print(f"  carried by the author, not read by the engine: "
+              f"{len(resource.ignored)} file(s)")
+    for problem in resource.problems:
+        print(f"  {problem}")
+    return EXIT_OK
+
+
+def _pack_with_resources(args, project, campaign) -> int:
+    """The pk3 route: a pack that carries somebody's art cannot be a WAD.
+
+    A WAD has flat eight-character lump names and no folders, and the engine
+    decides what a resource IS from the folder it is in.
+    """
+    from .custom import load as load_allocations
+    from .packfile import build_resource_pack
+
+    attached = [Resource.from_json(r) for r in project.resources]
+    files = {}
+    for resource in attached:
+        candidate = Path(resource.display_path)
+        # The stored path is inert text until a digest says it is the right
+        # file. A shared project naming /home/someone/pack.pk3 must not make
+        # this open whatever happens to be there.
+        if candidate.is_file() and digest_bytes(candidate.read_bytes()) == resource.sha256:
+            files[resource.sha256] = candidate
+        else:
+            print(f"  {resource.name}: not found at {resource.display_path}, "
+                  "or the file there is a different one", file=sys.stderr)
+
+    pack = build_resource_pack(
+        campaign, project.maps, attached, load_allocations(project.allocations),
+        project_name=project.name, author=project.author,
+        allow_warnings=not args.strict, resource_files=files)
+
+    for problem in pack.problems:
+        if problem.severity >= Severity.ERROR:
+            print(f"  {problem}", file=sys.stderr)
+    if any(p.severity >= Severity.ERROR for p in pack.problems):
+        return EXIT_ERROR
+    if not pack.audit.clean:
+        print("internal error: the built pack holds entries this tool did not "
+              f"expect: {', '.join(pack.audit.unexpected)}", file=sys.stderr)
+        return EXIT_ERROR
+
+    output = args.output
+    if output.suffix.lower() != ".pk3":
+        output = output.with_suffix(".pk3")
+    guard = OutputGuard(protected_roots=tuple(args.protect))
+    written = atomic_write(output, pack.pk3, guard=guard)
+    print(f"{written}: {pack.audit.describe()}, sha256 "
+          f"{digest_bytes(pack.pk3)[:16]}")
+
+    manifest_path = args.manifest or Path(str(output) + ".txt")
+    atomic_write(manifest_path, pack.manifest.encode("ascii"), guard=guard)
+    print(f"{manifest_path}: manifest, {len(pack.manifest)} characters")
+    for entry in campaign.entries:
+        route = "end of campaign" if entry.next.ends else f"MAP{entry.next.slot:02d}"
+        print(f"  {entry.lump_name}  {entry.name!r} -> {route}")
     return EXIT_OK
 
 
@@ -432,6 +557,19 @@ def build_parser() -> argparse.ArgumentParser:
                               help="treat campaign warnings as reasons not to build")
     project_pack.add_argument("--protect", type=Path, action="append", default=[])
     project_pack.set_defaults(handler=command_project_pack)
+
+    resource_add = verbs.add_parser(
+        "resource-add", help="attach a resource pack and allocate its map words"
+    )
+    resource_add.add_argument("project", type=Path)
+    resource_add.add_argument("resource", type=Path)
+    resource_add.set_defaults(handler=command_resource_add)
+
+    resource_inspect = verbs.add_parser(
+        "resource-inspect", help="say what is inside a resource pack"
+    )
+    resource_inspect.add_argument("resource", type=Path)
+    resource_inspect.set_defaults(handler=command_resource_inspect)
 
     pack_audit = verbs.add_parser(
         "pack-audit", help="list what a map pack contains and flag anything else"

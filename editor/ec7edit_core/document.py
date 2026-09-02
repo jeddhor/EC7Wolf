@@ -36,7 +36,7 @@ from .names import NativeName
 from .planes import MapPlanes
 
 #: Bumped only for changes the on-disk schema notices. See `project.py`.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def new_uuid() -> str:
@@ -245,6 +245,16 @@ class ProjectDocument:
     #: schema, and a project that never builds a pack carries an empty dict and
     #: pays nothing for it.
     campaign: dict = field(default_factory=dict)
+    #: Attached resource packs, as raw JSON, in the order they were added.
+    #: Stored like a map's source: the digest identifies it, the path is inert
+    #: text, and opening a project someone shared never touches either.
+    #: `resources.Resource` owns the schema; this holds it and no opinion.
+    resources: tuple[dict, ...] = ()
+    #: `"plane:word" -> {"resource": digest, "kind": ..., "name": ...}`, the
+    #: map words allocated to custom content. Kept in the project because
+    #: allocation has to be STABLE: a word that moved between sessions would
+    #: silently change what a map already containing it spawns.
+    allocations: dict = field(default_factory=dict)
 
     @property
     def dirty(self) -> bool:
@@ -289,6 +299,13 @@ class ProjectDocument:
         maps = list(self.maps)
         del maps[index]
         return replace(self, maps=tuple(maps), revision=self.revision + 1)
+
+    def with_resources(self, resources, allocations: dict | None = None) -> "ProjectDocument":
+        """A new project with this set of resource packs, counted as an edit."""
+        return replace(self, resources=tuple(dict(r) for r in resources),
+                       allocations=dict(allocations if allocations is not None
+                                        else self.allocations),
+                       revision=self.revision + 1)
 
     def with_campaign(self, campaign: dict) -> "ProjectDocument":
         """A new project carrying this campaign, counted as an edit.

@@ -4527,6 +4527,122 @@ Outstanding, and not claimed:
   somebody who has not seen the source to complete the core workflow, and no
   automated check substitutes for that.
 
+### E13 — Custom resource packs
+
+**Dependencies:** E11 (map packs); E12 (packaging). Approved 2026-09-02.
+
+**The problem.** Everything up to here ships Corridor 7's own content. A map
+pack carries maps and generated metadata and, by E11's explicit non-goal,
+nothing else -- so a custom monster, a custom wall or a custom track has
+nowhere to come from. Authors want a campaign of their own, not a rearrangement
+of this one.
+
+**What the engine already does, verified rather than assumed.** No engine work
+is required for anything in this milestone:
+
+- A `.pk3` is a zip and `--file` loads one. Which folder an entry sits in
+  decides what the engine does with it -- `sprites/`, `textures/`, `graphics/`,
+  `patches/`, `music/`, `sounds/`, `flats/`, and the root as ordinary lumps
+  (`resourcefiles/resourcefile.cpp`). A pack produced by
+  [corridor7-monster-sprite-workflow.md](corridor7-monster-sprite-workflow.md)
+  is already in exactly this shape.
+- **Maps inside a pk3 go in `maps/MAPxx.wad`**, not at the root. Archive
+  entries are sorted alphabetically (`PostProcessArchive`), so a root `MAP61`
+  is followed by `MAPINFO` rather than `PLANES` and the load fails with
+  "Invalid map format". `gamemap.cpp` looks for `maps/<map>.wad` first and
+  opens it as an embedded resource file. Confirmed working.
+- **MAPINFO's per-map `translator` is honoured** at load
+  (`gamemap_planes.cpp`), and **a translator may `include` another and keeps
+  its tables** (`LoadXlat(..., included=true)` does not clear them). So a
+  generated translator can ADD a word to Corridor 7's table rather than
+  replacing it, and does so for one floor only.
+- `DECORATE` supports `#include`, so several resource packs can be merged into
+  one distributable without their actor files colliding.
+- Per-map `music`, `Sky1`, `TitlePatch`, `HighScoresGraphic` and
+  `CompletionString` already exist, and `intermission` blocks (`Image`,
+  `Fader`, `Cast`, `Link`, `GotoTitle`) can be defined by a pack and reached
+  with `next = EndSequence, "Name"`.
+
+Proven end to end against a real resource pack before any of this was designed:
+a map with object word 900 at tile (7,7), a generated translator including
+`xlat/corridor7.txt` and mapping 900 to a custom actor, and the engine spawns
+it at (7,7) on a pack-only floor with no stock behaviour changed.
+
+**Work:**
+
+- `ec7edit_core/resources.py`: open a `.pk3`, describe what is in it -- actors
+  with what they inherit, replace and draw; sprites, textures, music, graphics;
+  and the entries the engine ignores but the pack should still carry. Refuse a
+  hostile one: names that escape the archive, absolute paths, Corridor 7's own
+  data, absurd entry counts or sizes.
+- Project schema: attached resources, stored the way map sources are -- the
+  digest identifies it, the path is inert text, and opening a shared project
+  never touches either.
+- **Word allocation.** Custom things need map words. Object words are allocated
+  from a high band Corridor 7 never uses; a custom wall re-textures a wall ID
+  the map does not otherwise use, which the per-map translator confines to that
+  floor. Allocation is recorded in the project so a word does not move under a
+  map that already uses it.
+- Translator generation: one `xlat/` lump per pack, `include`-ing the game's.
+- Palette: custom actors and textures appear as placeable entries, marked as
+  belonging to a resource, and disappear when it is detached.
+- Pack export becomes a **single `.pk3`** when resources are attached -- maps
+  as `maps/MAPxx.wad`, generated `MAPINFO` and translator, the resources merged
+  in with their DECORATE `#include`d from the root, and the manifest. One file
+  to hand somebody.
+- Campaign: per-map music from an attached resource, and custom `intermission`
+  screens for the ending.
+- Validation: two resources declaring one actor name; a map using a word whose
+  resource has been detached; `replaces` announced as the global switch it is.
+
+**Deliverables:** resource import and inspection, custom placement, a
+single-file pk3 pack, the campaign extras, documentation, and a gate that
+builds a pack from a real resource and plays it.
+
+**Non-goals:** authoring art or DECORATE in the editor (that is what the sprite
+workflow is for); arbitrary XLAT scripting beyond generated placement entries;
+sound effects; **custom videos, which are E14** because they need engine work.
+
+**Tests:** pack reading and refusal; allocation stability across edits;
+generated translator and MAPINFO; the pk3 layout; an end-to-end engine run
+placing a custom actor from a real pack; no stock behaviour regression;
+public-artifact audit of the built pack.
+
+**Exit gate:** a project with an attached resource pack exports one `.pk3`
+which, loaded beside nothing else, starts a campaign whose floors contain the
+resource's actors at the tiles the editor placed them, with the stock game
+unchanged.
+
+### E14 — Custom cinematics
+
+**Dependencies:** E13. **Not started.**
+
+**The problem.** `C7Flic_Play` takes hard-coded names -- `SEQONE`, `SEQTHREE`,
+`SEQFOUR` -- and reads `<name>.CO7` from a `video/` directory beside the game
+data (`c7_flic.cpp`). A campaign cannot supply its own cinematic, and a
+resource pack cannot carry one at all, because that path never looks in a
+loaded archive.
+
+**The two questions, and the answers this plan proposes:**
+
+*Where does a video come from?* The engine gains the ability to play a
+cinematic from a loaded resource, and MAPINFO gains a way to name it, so a
+campaign's ending can be its own animation rather than Corridor 7's.
+
+*What format?* **FLIC, and the editor learns to write it.** The engine already
+decodes FLIC and has been doing so reliably since the cinematics work; adding a
+modern container would mean bundling a video decoder, with its dependencies and
+its licences, to play a fifteen-second animation. FLIC is 8-bit paletted, which
+is what this game is, and the palette discipline the sprite workflow already
+enforces applies unchanged. So the conversion belongs in the editor: frames in,
+`.CO7` out, no new engine dependency and no new format. A modern video becomes
+frames with one ffmpeg command, or the editor takes a folder of PNGs directly.
+
+**Non-goals:** audio in cinematics; a general video player; replacing the CD's
+own animations.
+
+---
+
 ---
 
 ## 22. Concrete work breakdown and change management

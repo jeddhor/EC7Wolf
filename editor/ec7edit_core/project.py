@@ -52,7 +52,8 @@ RECOVERY_SUFFIX = ".ec7recovery"
 #: migration, which is a decision, not a cleanup.
 OLDEST_SUPPORTED_SCHEMA = 1
 
-_PROJECT_KEYS = {"schema_version", "project", "maps", "export_defaults", "campaign"}
+_PROJECT_KEYS = {"schema_version", "project", "maps", "export_defaults",
+                 "campaign", "resources", "allocations"}
 _META_KEYS = {"uuid", "name", "author", "notes", "created_at", "catalog_version"}
 _MAP_KEYS = {
     "uuid", "slot", "native_name", "native_name_raw_hex", "width", "height",
@@ -105,6 +106,8 @@ def serialize(project: ProjectDocument) -> str:
         },
         "export_defaults": project.export_defaults,
         "campaign": project.campaign,
+        "resources": [dict(r) for r in project.resources],
+        "allocations": project.allocations,
         "maps": [
             {
                 "uuid": document.uuid,
@@ -273,6 +276,14 @@ def deserialize(text: str) -> ProjectDocument:
     if not isinstance(raw_campaign, dict):
         raise _schema_error("campaign must be an object")
 
+    raw_resources = payload.get("resources") or []
+    if not isinstance(raw_resources, list) or not all(
+            isinstance(r, dict) for r in raw_resources):
+        raise _schema_error("resources must be a list of objects")
+    raw_allocations = payload.get("allocations") or {}
+    if not isinstance(raw_allocations, dict):
+        raise _schema_error("allocations must be an object")
+
     revision = len(maps)
     return ProjectDocument(
         uuid=meta["uuid"],
@@ -287,6 +298,8 @@ def deserialize(text: str) -> ProjectDocument:
         catalog_version=meta.get("catalog_version", 0),
         export_defaults=export_defaults,
         campaign=raw_campaign,
+        resources=tuple(raw_resources),
+        allocations=raw_allocations,
     )
 
 
@@ -305,8 +318,18 @@ def _add_campaign(payload: dict) -> dict:
     return {**payload, "campaign": {}}
 
 
+def _add_resources(payload: dict) -> dict:
+    """2 -> 3: projects gained attached resource packs and their allocations.
+
+    Both empty, and both meaning the same as absent -- this project uses only
+    Corridor 7's own content. Every schema-2 project exports exactly what it
+    did before, because neither path consults these.
+    """
+    return {**payload, "resources": [], "allocations": {}}
+
+
 #: `version -> pure function from payload to the next version's payload`.
-MIGRATIONS: dict[int, callable] = {1: _add_campaign}
+MIGRATIONS: dict[int, callable] = {1: _add_campaign, 2: _add_resources}
 
 
 def migrate(payload: dict) -> dict:

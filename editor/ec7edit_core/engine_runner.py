@@ -43,7 +43,7 @@ def _error(message: str) -> LaunchError:
 #: The editor event protocol this build of the editor speaks. The engine is
 #: asked for the same number and refuses if it speaks another, rather than
 #: sending events the reader may interpret differently.
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
 
 #: Lines the engine emits for us look like `EC7EDIT <session> <event> k=v ...`.
 #: Anchored on the session id, not on the prefix: the engine prints plenty of
@@ -255,6 +255,11 @@ class Session:
     #: going. Evidence, not a verdict: the verdict waits for the process.
     outcome: str = ""
     marker_entered: str = ""
+    #: `(marker, next, secretnext)` per map entered, oldest first.
+    route_taken: list = field(default_factory=list)
+    #: What the campaign ended through -- "EndTitle" or "EndSequence:NAME" --
+    #: or empty if it never reached an ending.
+    campaign_ended: str = ""
     preview_loaded: bool = False
     exit_code: int | None = None
 
@@ -293,7 +298,17 @@ class Session:
                         "have played the shipped map of that number instead.")
         elif event.event == "map-entry":
             self.marker_entered = event.get("marker")
+            # Protocol 2. Recorded in the order the engine entered them, so a
+            # pack's routing can be checked against what MAPINFO resolved
+            # rather than against the text that was generated: those are the
+            # same thing only if the generator is right, which is the claim.
+            self.route_taken.append((
+                event.get("marker"), event.get("next"), event.get("secretnext")))
             self.state = SessionState.PLAYING
+        elif event.event == "campaign-end":
+            # The victory page waits for a keypress, so from outside, finishing
+            # the game and hanging look the same. This is the difference.
+            self.campaign_ended = event.get("via")
         elif event.event == "fatal":
             self.failure = event.get("message", "").replace("_", " ")
         elif event.event == "session-result":
@@ -356,6 +371,13 @@ class Session:
 
     def describe(self) -> str:
         if self.state is SessionState.FINISHED:
+            if self.campaign_ended:
+                # Worth saying, and not derivable from the exit code: a pack
+                # author testing a campaign wants to know it reached its
+                # ending, which otherwise looks exactly like quitting.
+                return (f"Played {self.marker_entered} to the end of the "
+                        f"campaign ({self.campaign_ended}), exit code "
+                        f"{self.exit_code}")
             return f"Played {self.marker_entered}, exit code {self.exit_code}"
         if self.state is SessionState.FAILED:
             return self.failure or "The engine did not reach the map"

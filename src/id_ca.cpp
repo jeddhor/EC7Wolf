@@ -89,7 +89,8 @@ void CA_CacheMap (const FString &mapname, bool loading)
 	EditorLink::MapEntered(mapname.GetChars(),
 		levelInfo->GetName(map).GetChars(),
 		map->GetHeader().name.GetChars(),
-		gamestate.difficulty ? (int)gamestate.difficulty->SpawnFilter : -1);
+		gamestate.difficulty ? (int)gamestate.difficulty->SpawnFilter : -1,
+		levelInfo->NextMap.GetChars(), levelInfo->NextSecret.GetChars());
 
 	CalcVisibility(gLevelVisibility);
 }

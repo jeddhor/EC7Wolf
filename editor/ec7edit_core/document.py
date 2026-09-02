@@ -36,7 +36,7 @@ from .names import NativeName
 from .planes import MapPlanes
 
 #: Bumped only for changes the on-disk schema notices. See `project.py`.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def new_uuid() -> str:
@@ -240,6 +240,11 @@ class ProjectDocument:
     #: rather than acted on: a catalogue change must never rewrite raw words.
     catalog_version: int = 0
     export_defaults: dict = field(default_factory=dict)
+    #: The map-pack campaign, as raw JSON. Kept unparsed here so `document` has
+    #: no opinion about pack metadata: `campaign.Campaign.from_json` owns the
+    #: schema, and a project that never builds a pack carries an empty dict and
+    #: pays nothing for it.
+    campaign: dict = field(default_factory=dict)
 
     @property
     def dirty(self) -> bool:
@@ -284,6 +289,16 @@ class ProjectDocument:
         maps = list(self.maps)
         del maps[index]
         return replace(self, maps=tuple(maps), revision=self.revision + 1)
+
+    def with_campaign(self, campaign: dict) -> "ProjectDocument":
+        """A new project carrying this campaign, counted as an edit.
+
+        Bumping `revision` is the point: a campaign is part of the project, so
+        changing one leaves unsaved work exactly like painting a cell does. A
+        pack's running order that quietly failed to save would be discovered by
+        rebuilding the pack and finding the old one.
+        """
+        return replace(self, campaign=dict(campaign), revision=self.revision + 1)
 
     def marked_saved(self, revision: int) -> "ProjectDocument":
         """Record that `revision` reached disk.

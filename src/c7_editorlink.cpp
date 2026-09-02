@@ -175,7 +175,7 @@ bool RunCapabilityProbe(int argc, char **argv, int &exitCode)
 	printf("engine=%s\n", GAMENAME);
 	printf("version=%s\n", DOTVERSIONSTR_NOREV);
 	printf("editor-protocol=%d\n", PROTOCOL_VERSION);
-	printf("events=hello,data-selection,preview-load,map-entry,fatal,session-result\n");
+	printf("events=hello,data-selection,preview-load,map-entry,campaign-end,fatal,session-result\n");
 	printf("options=--editor-protocol,--editor-session,--data,--file,--tedlevel,"
 		"--skill,--config,--savedir,--res,--vid-renderer,--nowait,--no-upscale\n");
 #ifdef ECWOLF_RENDERER_OPENGL
@@ -205,13 +205,22 @@ void PreviewLoaded(const char *path, bool loaded, unsigned int lumps)
 }
 
 void MapEntered(const char *marker, const char *name, const char *mapName,
-	int spawnFilter)
+	int spawnFilter, const char *next, const char *secretNext)
 {
 	FString body;
-	body.Format("marker=%s name=%s mapname=%s spawnfilter=%d",
+	body.Format("marker=%s name=%s mapname=%s spawnfilter=%d next=%s secretnext=%s",
 		Sanitised(marker).GetChars(), Sanitised(name).GetChars(),
-		Sanitised(mapName).GetChars(), spawnFilter);
+		Sanitised(mapName).GetChars(), spawnFilter,
+		Sanitised(next && *next ? next : "-").GetChars(),
+		Sanitised(secretNext && *secretNext ? secretNext : "-").GetChars());
 	Emit("map-entry", body.GetChars());
+}
+
+void CampaignEnded(const char *via)
+{
+	FString body;
+	body.Format("via=%s", Sanitised(via).GetChars());
+	Emit("campaign-end", body.GetChars());
 }
 
 void Fatal(const char *message)

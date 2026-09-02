@@ -4424,6 +4424,32 @@ package manifest, security/content scan, and UX review.
 **Decision:** E11 is optional and cannot block version 1 unless product scope is
 deliberately revised.
 
+**Status: shipped.** Approved 2026-09-01 and built. See
+[ec7edit-mappack.md](ec7edit-mappack.md) for the surface and the engine
+behaviour behind it; `ec7edit_e11` is the gate.
+
+The audit's three load-bearing findings:
+
+- A `map` block **replaces** the level record rather than merging into it
+  (`LevelInfoBlockParser` assigns `existing = newMap`), so a block for a stock
+  slot is a replacement. Packs therefore default to MAP61 and up, above the
+  MAP01-MAP60 the stock mapinfo defines, and a stock slot warns.
+- `next = "EndTitle"` is the ending. Corridor 7 defines exactly one
+  intermission (`DemoLoop`), so the `EndSequence, "..."` form has nothing to
+  name in this game and is not offered.
+- **Corridor 7 has no secret-exit tile.** `Exit_Normal` takes `ex_secretlevel`
+  only when `arg0` is 2, and no translator entry sets that; what does is plane
+  1, where `gamemap_planes.cpp` promotes a wall-63 cell's trigger when object
+  99 sits on it. `secretnext` is therefore real but reachable only through that
+  marker, which the validator asks for.
+
+Two things the milestone listed are deliberately not built. Colours and skills
+are not in the schema: `defaultfloor`/`defaultceiling` are palette-index
+decisions that belong to a map rather than to a campaign, and a `skill` block
+is global, so a pack that carried one would change the stock game's difficulty
+levels -- the opposite of "no stock behaviour regression". Both can be added
+later without moving anything already written.
+
 ### E12 — Hardening, accessibility, documentation, CI, and release
 
 **Dependencies:** all chosen release milestones; E11 optional.
@@ -5010,7 +5036,7 @@ Stop the affected work immediately and do not claim milestone completion if:
 These do not block initial planning but remain visible:
 
 - plane-2 authored semantics are incomplete; preservation is the resolution;
-- target-slot/MAPINFO scope beyond stock behavior waits for E11;
+- target-slot/MAPINFO scope beyond stock behavior: settled by E11 (map packs);
 - arbitrary dimensions wait behind 64×64 product default and engine tests;
 - exact hidden snapshot behavior needs E10 platform evidence;
 - approximate interactive layout view may receive a no-go decision;
@@ -5181,7 +5207,7 @@ optional and must include the recorded decision.
 | Exact interactive 3D | Test Map | A supported embeddable engine renderer is deliberately built |
 | In-editor 3D | Attempt exact external Snapshot after core; ship only if E10 passes; approximate live view separately gated | E10 evidence changes cost/utility |
 | UWMF | Not needed for MVP | A later interoperability requirement justifies a lossless writer |
-| MAPINFO | Stock slot context in v1; custom editor optional E11 | Custom campaign scope is approved and tested |
+| MAPINFO | Stock slot context for previews; generated campaign metadata for packs (E11) | Superseded: approved and tested |
 | Plane 2 | Preserve, Advanced raw only | Source/runtime research establishes complete authoring semantics |
 | Commercial data | Local/read-only/no public derivatives | Never weakened by convenience |
 | Gate entry | `tools/run_gates.sh` | Project-wide test policy changes |
@@ -5274,7 +5300,7 @@ and commercial-content guidance.
 | Exact key/rank reachability semantics | E7 | Source-backed subset and advisory warnings |
 | Stable machine-readable engine map-entry output | E9 | Versioned log parser plus raw log |
 | Clean fixed-tic software snapshot on Windows/Linux; optional GL-specific adapter | E10 | Ship software only, or defer Snapshot if even that path is unreliable |
-| Custom MAPINFO grammar/export surface | E11 | Use stock target-slot context only |
+| Custom MAPINFO grammar/export surface | E11 | Settled: bounded schema, MAP61+ by default, no colours or skills |
 | Linux frozen versus system-PySide6 package | E4/E12 | Source/system package with precise dependency check |
 
 ---

@@ -19,8 +19,8 @@ Everything below exists so the editor can tell that apart from success.
 $ ec7wolf --editor-capabilities
 engine=EC7Wolf
 version=1.0-beta191
-editor-protocol=1
-events=hello,data-selection,preview-load,map-entry,fatal,session-result
+editor-protocol=2
+events=hello,data-selection,preview-load,map-entry,campaign-end,fatal,session-result
 options=--editor-protocol,--editor-session,--data,--file,--tedlevel,--skill,...
 renderers=software,opengl
 ```
@@ -31,7 +31,7 @@ before anything is initialised and exits.
 
 ## The event stream
 
-Add `--editor-protocol 1 --editor-session NONCE` and the engine writes lines of
+Add `--editor-protocol 2 --editor-session NONCE` and the engine writes lines of
 
 ```
 EC7EDIT <nonce> <event> key=value key=value
@@ -46,9 +46,32 @@ use for "did it get into the map".
 | `hello` | the option was accepted | `engine`, `version` |
 | `data-selection` | the base game data was chosen | `extension`, `directory` |
 | `preview-load` | each resource reached the loader | `path`, `loaded=yes\|no`, `lumps` |
-| `map-entry` | a floor was entered | `marker`, `name`, `spawnfilter` |
+| `map-entry` | a floor was entered | `marker`, `name`, `mapname`, `spawnfilter`, `next`, `secretnext` |
+| `campaign-end` | the campaign reached its ending | `via=EndTitle\|EndSequence:NAME` |
 | `fatal` | the engine is about to die | `message` |
 | `session-result` | last line, always | `outcome=quit\|exit\|error\|fatal` |
+
+`name` is the MAPINFO display name and `mapname` is the one stored in the map
+record itself. Both, because only the second distinguishes the editor's map from
+the shipped map of that number: MAPINFO names MAP01 "Corridor 7 Level 1"
+whichever file the data came from, so a reader checking the display name cannot
+tell it played the wrong floor.
+
+`next` and `secretnext` are what MAPINFO resolved for the level, reported as
+`-` when there is none. They arrived with **protocol 2**, for map packs: a
+generated campaign's routing has to be checkable against what the engine read,
+not against the text that was written, because those are the same thing only if
+the generator is right — which is the claim under test. The version match stays
+exact in both directions; a reader that ignores keys it does not know is a
+reader that silently accepts a protocol it cannot check.
+
+`campaign-end` is sent before the fade, and it is the only way to tell a
+finished campaign from a hung one: what follows is the victory page, which
+waits for a keypress. Nothing a test can send reaches that page --
+`--capture-maxtics` and `--capture-maxframes` are both checked inside the play
+loop, and the page is not in it -- so a run that finished the game and a run
+that stopped responding look identical from outside. They are not the same
+thing, and the editor's Test Log says which one happened.
 
 `loaded=no` is the whole point: it is reported from inside the loader, which is
 the only place that knows, and it is what turns the silent failure above into a

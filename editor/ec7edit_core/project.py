@@ -52,7 +52,7 @@ RECOVERY_SUFFIX = ".ec7recovery"
 #: migration, which is a decision, not a cleanup.
 OLDEST_SUPPORTED_SCHEMA = 1
 
-_PROJECT_KEYS = {"schema_version", "project", "maps", "export_defaults"}
+_PROJECT_KEYS = {"schema_version", "project", "maps", "export_defaults", "campaign"}
 _META_KEYS = {"uuid", "name", "author", "notes", "created_at", "catalog_version"}
 _MAP_KEYS = {
     "uuid", "slot", "native_name", "native_name_raw_hex", "width", "height",
@@ -104,6 +104,7 @@ def serialize(project: ProjectDocument) -> str:
             "catalog_version": project.catalog_version,
         },
         "export_defaults": project.export_defaults,
+        "campaign": project.campaign,
         "maps": [
             {
                 "uuid": document.uuid,
@@ -265,6 +266,13 @@ def deserialize(text: str) -> ProjectDocument:
     if not isinstance(export_defaults, dict):
         raise _schema_error("export_defaults must be an object")
 
+    # Structure only, here. Whether the campaign makes sense is
+    # `campaign.validate`'s question and is asked when a pack is built, not
+    # when a file is opened -- a project is allowed to be saved mid-thought.
+    raw_campaign = payload.get("campaign") or {}
+    if not isinstance(raw_campaign, dict):
+        raise _schema_error("campaign must be an object")
+
     revision = len(maps)
     return ProjectDocument(
         uuid=meta["uuid"],
@@ -278,6 +286,7 @@ def deserialize(text: str) -> ProjectDocument:
         saved_revision=revision,
         catalog_version=meta.get("catalog_version", 0),
         export_defaults=export_defaults,
+        campaign=raw_campaign,
     )
 
 
@@ -285,11 +294,19 @@ def deserialize(text: str) -> ProjectDocument:
 # Migration
 # ---------------------------------------------------------------------------
 
+def _add_campaign(payload: dict) -> dict:
+    """1 -> 2: projects gained a map-pack campaign.
+
+    An absent campaign and an empty one mean the same thing -- this project
+    does not build a pack -- so the migration is an insertion with no decision
+    in it. Every schema-1 project keeps exporting exactly the preview WAD it
+    did before, because that path never consults this block.
+    """
+    return {**payload, "campaign": {}}
+
+
 #: `version -> pure function from payload to the next version's payload`.
-#: Empty at schema 1 because there is nothing older; the harness and its tests
-#: exist now so that the first real migration is a data change and not also an
-#: infrastructure change.
-MIGRATIONS: dict[int, callable] = {}
+MIGRATIONS: dict[int, callable] = {1: _add_campaign}
 
 
 def migrate(payload: dict) -> dict:

@@ -26,6 +26,7 @@ sys.path.insert(0, str(EDITOR))
 from ec7edit_core.document import DocumentError, MapDocument, ProjectDocument, SourceReference
 from ec7edit_core.names import NativeName
 from ec7edit_core.planes import MapPlanes
+from ec7edit_core.document import SCHEMA_VERSION
 from ec7edit_core.project import (
     OLDEST_SUPPORTED_SCHEMA,
     SAVE_STAGES,
@@ -200,7 +201,11 @@ class Migration(unittest.TestCase):
             payload = json.loads(serialize(sample_project()))
             payload["schema_version"] = 0
             migrated = migrate(payload)
-            self.assertEqual(migrated["schema_version"], 1)
+            # Up to the current schema, not to 1: this asserts the harness runs
+            # a registered step and keeps going, and pinning the destination to
+            # a literal made it a test of what the schema number happened to be
+            # the day it was written.
+            self.assertEqual(migrated["schema_version"], SCHEMA_VERSION)
             self.assertEqual(migrated["project"]["notes"], "migrated")
         finally:
             module.MIGRATIONS.clear()

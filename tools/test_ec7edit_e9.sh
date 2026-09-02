@@ -89,6 +89,10 @@ else
 	status=1
 fi
 
+# From here on the runs ask for $editor_version rather than a literal. The
+# engine refuses a version that is not its own and then sends no events at all,
+# so a hardcoded 1 here would have turned every assertion below into "no event
+# arrived" the moment the protocol moved -- which it did, at 2.
 # --- the lab ---------------------------------------------------------------
 lab="$work/lab"
 mkdir -p "$lab"
@@ -126,7 +130,7 @@ launch() { # $1 session  $2 preview file  -> writes $work/$1.log, echoes exit co
 			--data CO7 --no-upscale --nowait --res 320 200 \
 			--vid-renderer software --config "$work/cfg-$1" \
 			--savedir "$work/saves-$1" \
-			--editor-protocol 1 --editor-session "$1" \
+			--editor-protocol "$editor_version" --editor-session "$1" \
 			--tedlevel MAP01 --skill 2 --capture-maxtics 25 \
 			--file "$2"
 	) >"$work/$1.log" 2>&1

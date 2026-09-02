@@ -24,6 +24,7 @@ sys.path.insert(0, str(EDITOR))
 
 from ec7edit_core.archive import MapRecord, encode_archive
 from ec7edit_core.cli import EXIT_ERROR, EXIT_OK, EXIT_USAGE, main
+from ec7edit_core.document import MapDocument
 from ec7edit_core.names import NativeName
 from ec7edit_core.planes import MapPlanes
 from ec7edit_core.wad import read_preview_wad
@@ -287,6 +288,111 @@ class Projects(Fixture):
         code, _, err = run("project-inspect", str(broken))
         self.assertEqual(code, EXIT_ERROR)
         self.assertIn("C7E-SCHEMA", err)
+
+
+class Packs(Fixture):
+    """`project-pack` and `pack-audit`, through main() like everything else."""
+
+    def a_project(self, campaign=None, *, source=None):
+        from ec7edit_core.campaign import Campaign, CampaignEntry, Route
+        from ec7edit_core.document import ProjectDocument
+        from ec7edit_core.project import save_project
+
+        width = height = 8
+        walls = [1] * (width * height)
+        objects = [0] * (width * height)
+        for y in range(1, height - 1):
+            for x in range(1, width - 1):
+                walls[y * width + x] = 256
+        objects[1 * width + 1] = 19
+
+        project = ProjectDocument.create("Pack")
+        for slot in (61, 62):
+            project = project.added(MapDocument(
+                uuid=f"u{slot}", slot=slot,
+                native_name=NativeName.from_text(f"M{slot}"),
+                planes=MapPlanes(width, height, (tuple(walls), tuple(objects),
+                                                 tuple([0] * (width * height)))),
+                source=source))
+
+        campaign = campaign or Campaign(title="Trial", key="T", entries=(
+            CampaignEntry(61, "One", next=Route(62)),
+            CampaignEntry(62, "Two", next=Route(None)),
+        ))
+        project = project.with_campaign(campaign.to_json())
+        path = self.work / "p.ec7project"
+        save_project(project, path)
+        return path
+
+    def test_a_pack_is_written_with_its_manifest(self):
+        project = self.a_project()
+        pack = self.work / "pack.wad"
+        code, out, err = run("project-pack", str(project), "--output", str(pack))
+        self.assertEqual(code, 0, err)
+        self.assertTrue(pack.is_file())
+        # The manifest lands beside it without being asked for.
+        self.assertTrue((self.work / "pack.wad.txt").is_file())
+        self.assertIn("MAP61", out)
+        self.assertIn("end of campaign", out)
+
+    def test_a_project_with_no_campaign_is_a_usage_error(self):
+        from ec7edit_core.document import ProjectDocument
+        from ec7edit_core.project import save_project
+
+        path = self.work / "empty.ec7project"
+        save_project(ProjectDocument.create("None"), path)
+        code, _, err = run("project-pack", str(path), "--output", str(self.work / "x.wad"))
+        self.assertEqual(code, EXIT_USAGE)
+        self.assertIn("campaign", err)
+
+    def test_a_retail_map_stops_the_build(self):
+        from ec7edit_core.document import SourceReference
+
+        source = SourceReference(display_path="MAPTEMP.CO7", sha256="c" * 64,
+                                 map_number=1, imported_at="2026-01-01T00:00:00Z")
+        pack = self.work / "pack.wad"
+        code, _, err = run("project-pack", str(self.a_project(source=source)),
+                           "--output", str(pack))
+        self.assertNotEqual(code, 0)
+        self.assertIn("C7E-PACK-009", err)
+        self.assertFalse(pack.exists())
+
+    def test_strict_makes_a_warning_block_the_build(self):
+        from ec7edit_core.campaign import Campaign, CampaignEntry, Route
+
+        # A secret route with nothing in the map that can fire one: a warning,
+        # so it builds by default and does not build under --strict.
+        campaign = Campaign(title="T", key="T", entries=(
+            CampaignEntry(61, "One", next=Route(62), secret=Route(62)),
+            CampaignEntry(62, "Two", next=Route(None)),
+        ))
+        project = self.a_project(campaign)
+        loose = run("project-pack", str(project), "--output", str(self.work / "a.wad"))
+        self.assertEqual(loose[0], 0, loose[2])
+        strict = run("project-pack", str(project), "--output", str(self.work / "b.wad"),
+                     "--strict")
+        self.assertNotEqual(strict[0], 0)
+        self.assertIn("C7E-PACK-008", strict[2])
+
+    def test_audit_accounts_for_every_lump(self):
+        pack = self.work / "pack.wad"
+        run("project-pack", str(self.a_project()), "--output", str(pack))
+        code, out, _ = run("pack-audit", str(pack))
+        self.assertEqual(code, 0)
+        self.assertIn("MAPINFO", out)
+        self.assertIn("no game content", out)
+
+    def test_audit_reports_a_pack_carrying_something_else(self):
+        from ec7edit_core.wad import WadLump, decode_wad, encode_wad
+
+        pack = self.work / "pack.wad"
+        run("project-pack", str(self.a_project()), "--output", str(pack))
+        smuggled = self.work / "smuggled.wad"
+        smuggled.write_bytes(encode_wad(
+            list(decode_wad(pack.read_bytes())) + [WadLump("C7W0000", b"art")]))
+        code, _, err = run("pack-audit", str(smuggled))
+        self.assertNotEqual(code, 0)
+        self.assertIn("C7W0000", err)
 
 
 class Usage(unittest.TestCase):

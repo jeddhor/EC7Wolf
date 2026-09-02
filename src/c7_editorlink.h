@@ -37,7 +37,12 @@ namespace EditorLink
 	//: The protocol version this build speaks. A parent asks for a version and
 	//: is refused if it is not this one, rather than being handed events it may
 	//: read differently.
-	const int PROTOCOL_VERSION = 1;
+	//:
+	//: 2 added next= and secretnext= to map-entry, for checking a generated map
+	//: pack's routing against what MAPINFO actually resolved. An exact match is
+	//: still required in both directions: a reader that ignores keys it does
+	//: not know is a reader that silently accepts a protocol it cannot check.
+	const int PROTOCOL_VERSION = 2;
 
 	// Reads --editor-protocol and --editor-session out of argv and claims both
 	// tokens and their values, so normal parameter dispatch never sees them.
@@ -72,8 +77,19 @@ namespace EditorLink
 	// editor's map from the shipped map of the same number: MAPINFO names MAP01
 	// "Corridor 7 Level 1" whichever file the data came from, so a reader
 	// checking the display name cannot tell it played the wrong floor.
+	// `next` and `secretnext` are what MAPINFO resolved for this level, so a
+	// pack's generated routing can be checked against what the engine actually
+	// read rather than against the text that was written. An empty secret is
+	// reported as "-": a level with no secret exit and a level whose secret
+	// exit goes nowhere are different, and an absent key would read as either.
 	void MapEntered(const char *marker, const char *name, const char *mapName,
-		int spawnFilter);
+		int spawnFilter, const char *next, const char *secretNext);
+	// The campaign reached its ending -- MAPINFO's next resolved to EndTitle or
+	// an EndSequence rather than to another level. Worth its own event because
+	// what follows is the victory page, which waits for a keypress: to anything
+	// watching from outside, "finished the game" and "stopped responding" look
+	// identical without this.
+	void CampaignEnded(const char *via);
 	void Fatal(const char *message);
 	void SessionResult(const char *outcome);
 }

@@ -10,6 +10,7 @@
 #include "c7_automap.h"
 #include "c7_flic.h"
 #include "wl_def.h"
+#include "c7_editorlink.h"
 #include "wl_menu.h"
 #include "render/r_dynamicwalls.h"
 #include "id_ca.h"
@@ -929,6 +930,13 @@ restartgame:
 					if(next.IndexOf("EndSequence:") == 0 || next.CompareNoCase("EndTitle") == 0)
 					{
 						bool endSequence = next.IndexOf("EndSequence:") == 0;
+
+						// Said here, before the fade: everything after this
+						// point either waits for a keypress or plays a
+						// cinematic, so a parent watching the run would
+						// otherwise see the game go quiet and have to guess
+						// whether that was the ending or a hang.
+						EditorLink::CampaignEnded(next.GetChars());
 
 						VL_FadeOut(0, 255, RPART(levelInfo->ExitFadeColor), GPART(levelInfo->ExitFadeColor), BPART(levelInfo->ExitFadeColor), levelInfo->ExitFadeDuration);
 

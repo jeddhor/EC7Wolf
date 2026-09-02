@@ -202,6 +202,40 @@ class Sessions(unittest.TestCase):
         self.assertTrue(state.reached_the_map)
         self.assertEqual(state.marker_entered, "MAP01")
 
+    def test_the_route_a_run_took_is_recorded_in_order(self):
+        state = self.drive([
+            "EC7EDIT s1 hello engine=EC7Wolf version=1.0",
+            "EC7EDIT s1 preview-load path=/w/preview.wad loaded=yes lumps=9",
+            "EC7EDIT s1 map-entry marker=MAP61 name=In mapname=A spawnfilter=1 "
+            "next=MAP62 secretnext=MAP63",
+            "EC7EDIT s1 map-entry marker=MAP63 name=Bonus mapname=C spawnfilter=1 "
+            "next=MAP62 secretnext=-",
+            "EC7EDIT s1 session-result outcome=quit",
+        ])
+        self.assertEqual(state.route_taken, [
+            ("MAP61", "MAP62", "MAP63"),
+            ("MAP63", "MAP62", "-"),
+        ])
+
+    def test_reaching_the_end_of_a_campaign_is_said_out_loud(self):
+        # The victory page waits for a keypress, so a finished campaign and a
+        # hung one are the same from outside without this event.
+        state = self.drive([
+            "EC7EDIT s1 hello engine=EC7Wolf version=1.0",
+            "EC7EDIT s1 preview-load path=/w/preview.wad loaded=yes lumps=9",
+            "EC7EDIT s1 map-entry marker=MAP62 name=Out mapname=B spawnfilter=1 "
+            "next=EndTitle secretnext=-",
+            "EC7EDIT s1 campaign-end via=EndTitle",
+            "EC7EDIT s1 session-result outcome=quit",
+        ])
+        self.assertEqual(state.campaign_ended, "EndTitle")
+        self.assertIn("end of the campaign", state.describe())
+
+    def test_a_run_that_did_not_end_says_nothing_about_an_ending(self):
+        state = self.drive(self.GOOD)
+        self.assertEqual(state.campaign_ended, "")
+        self.assertNotIn("campaign", state.describe())
+
     def test_a_missing_preview_is_a_failure_even_though_the_engine_is_happy(self):
         # The trap this whole protocol exists for: AddFile prints and returns
         # rather than failing, so the engine exits 0 having played the SHIPPED

@@ -94,6 +94,7 @@ corridor7_upscale
 corridor7_controls
 ec7edit_e9
 ec7edit_e10
+ec7edit_e11
 ec7edit_override
 ec7edit_assets
 ec7edit_slice

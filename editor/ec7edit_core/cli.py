@@ -28,6 +28,8 @@ from .errors import DiagnosticLog, Ec7EditError, Severity
 from .paths import OutputGuard, SourceIdentity, atomic_write, digest_bytes, digest_file
 from .planes import PLANE_COUNT
 from .project import PROJECT_SUFFIX, load_project, new_project, save_project, serialize
+from .campaign import Campaign, audit_pack, build_pack
+from .campaign import validate as campaign_validate
 from .wad import build_preview_wad, read_preview_wad
 
 EXIT_OK = 0
@@ -290,6 +292,63 @@ def command_project_export(args) -> int:
     return EXIT_OK
 
 
+def command_project_pack(args) -> int:
+    """Build a distributable map pack: maps, generated MAPINFO, and a manifest."""
+    project = load_project(args.project)
+    campaign = Campaign.from_json(project.campaign or None)
+
+    if not campaign.entries:
+        print("this project has no campaign; add one before building a pack",
+              file=sys.stderr)
+        return EXIT_USAGE
+
+    problems = campaign_validate(campaign, project.maps)
+    for problem in problems:
+        print(f"  {problem}", file=sys.stderr)
+
+    pack = build_pack(campaign, project.maps, project_name=project.name,
+                      author=project.author, allow_warnings=not args.strict)
+
+    if not pack.audit.clean:
+        # Never write a file whose contents could not be accounted for. The
+        # audit exists to be believed, which means acting on it.
+        print("internal error: the built pack holds lumps this tool did not "
+              f"expect: {', '.join(pack.audit.unexpected)}", file=sys.stderr)
+        return EXIT_ERROR
+
+    guard = OutputGuard(protected_roots=tuple(args.protect))
+    written = atomic_write(args.output, pack.wad, guard=guard)
+    print(f"{written}: {pack.audit.describe()}, sha256 {digest_bytes(pack.wad)[:16]}")
+
+    manifest_path = args.manifest or Path(str(args.output) + ".txt")
+    written_manifest = atomic_write(manifest_path, pack.manifest.encode("ascii"), guard=guard)
+    print(f"{written_manifest}: manifest, {len(pack.manifest)} characters")
+
+    for entry in campaign.entries:
+        route = "end of campaign" if entry.next.ends else f"MAP{entry.next.slot:02d}"
+        secret = ""
+        if entry.secret is not None:
+            secret = ("  secret -> end of campaign" if entry.secret.ends
+                      else f"  secret -> MAP{entry.secret.slot:02d}")
+        print(f"  {entry.lump_name}  {entry.name!r} -> {route}{secret}")
+    return EXIT_OK
+
+
+def command_pack_audit(args) -> int:
+    """Account for every lump in a pack, including one this tool did not write."""
+    blob = args.pack.read_bytes()
+    report = audit_pack(blob)
+    print(f"{args.pack}: {report.describe()}")
+    for name in report.lump_names:
+        print(f"  {name}")
+    if not report.clean:
+        for name in report.unexpected:
+            print(f"  unexpected: {name}", file=sys.stderr)
+        return EXIT_ERROR
+    print("  only markers, PLANES and metadata: no game content")
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ec7edit",
@@ -361,6 +420,24 @@ def build_parser() -> argparse.ArgumentParser:
     project_export.add_argument("--map-uuid", action="append", default=[], metavar="ID")
     project_export.add_argument("--protect", type=Path, action="append", default=[])
     project_export.set_defaults(handler=command_project_export)
+
+    project_pack = verbs.add_parser(
+        "project-pack", help="build a distributable map pack with generated MAPINFO"
+    )
+    project_pack.add_argument("project", type=Path)
+    project_pack.add_argument("--output", type=Path, required=True)
+    project_pack.add_argument("--manifest", type=Path, default=None,
+                              help="where to write the manifest (default: OUTPUT.txt)")
+    project_pack.add_argument("--strict", action="store_true",
+                              help="treat campaign warnings as reasons not to build")
+    project_pack.add_argument("--protect", type=Path, action="append", default=[])
+    project_pack.set_defaults(handler=command_project_pack)
+
+    pack_audit = verbs.add_parser(
+        "pack-audit", help="list what a map pack contains and flag anything else"
+    )
+    pack_audit.add_argument("pack", type=Path)
+    pack_audit.set_defaults(handler=command_pack_audit)
     return parser
 
 

@@ -302,6 +302,12 @@ class MainWindow(QMainWindow):
         self.action_export_archive = self._action(
             "Export a full archive… (&private)", self.export_archive,
             tip="A complete MAPTEMP.CO7 built on the game's own; not shareable")
+        self.action_campaign = self._action(
+            "Campai&gn…", self.edit_campaign,
+            tip="Name the levels of a map pack and say where each exit goes")
+        self.action_export_pack = self._action(
+            "Export a map &pack…", self.export_pack, "Ctrl+Shift+E",
+            tip="Your maps plus generated MAPINFO, for someone else to play")
         self.action_quit = self._action("&Quit", self.close, QKeySequence.Quit)
         for action in (self.action_new, self.action_open):
             file_menu.addAction(action)
@@ -314,6 +320,9 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         for action in (self.action_save, self.action_save_as, self.action_save_copy,
                        self.action_export, self.action_export_archive):
+            file_menu.addAction(action)
+        file_menu.addSeparator()
+        for action in (self.action_campaign, self.action_export_pack):
             file_menu.addAction(action)
         file_menu.addSeparator()
         file_menu.addAction(self.action_quit)
@@ -988,6 +997,120 @@ class MainWindow(QMainWindow):
             self._error("Could not export", str(error))
             return
         self.statusBar().showMessage(f"Exported {written.name} ({len(blob)} bytes)", 6000)
+
+    def edit_campaign(self) -> bool:
+        """Name the levels of a pack and say where each exit goes.
+
+        Kept out of the map editor entirely: a campaign is about the project,
+        not about any one map, and nothing here can change a plane word.
+        """
+        if not self.project.maps:
+            self._error("Nothing to arrange",
+                        "A campaign is a running order for the maps in a "
+                        "project, and this one has none yet.")
+            return False
+
+        from ec7edit_core.campaign import Campaign
+        from .campaign_dialog import CampaignDialog
+
+        try:
+            current = Campaign.from_json(self.project.campaign or None)
+        except Ec7EditError as error:
+            self._error("That campaign cannot be read", str(error))
+            return False
+
+        dialog = CampaignDialog(current, self.project.maps, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return False
+
+        campaign = dialog.campaign()
+        if campaign == current:
+            return False
+        # A campaign is part of the project, so changing it makes the project
+        # dirty like any other edit. It is not a setting that quietly persists.
+        self.project = self.project.with_campaign(campaign.to_json())
+        self._refresh_title()
+        self.statusBar().showMessage(
+            f"Campaign: {len(campaign.entries)} level(s), "
+            f"starting at MAP{campaign.start:02d}" if campaign.entries
+            else "Campaign: no levels", 6000)
+        return True
+
+    def export_pack(self) -> bool:
+        """Write a map pack: the maps, the generated MAPINFO, and a manifest.
+
+        Unlike the private archive export, this one IS meant to be handed to
+        other people -- which is exactly why it refuses to include a map that
+        came out of the retail archive, and why it writes the manifest whether
+        or not anyone asked for it. A file that travels needs to say what it is
+        and what it needs.
+        """
+        from ec7edit_core.campaign import Campaign, build_pack
+        from ec7edit_core.campaign import validate as validate_campaign
+        from ec7edit_core.errors import export_error
+        from ec7edit_core.paths import atomic_write
+
+        try:
+            campaign = Campaign.from_json(self.project.campaign or None)
+        except Ec7EditError as error:
+            self._error("That campaign cannot be read", str(error))
+            return False
+
+        if not campaign.entries:
+            self._error("There is no campaign yet",
+                        "A pack needs a running order. Use File > Campaign to "
+                        "say which maps it holds and where each exit goes.")
+            return False
+
+        problems = validate_campaign(campaign, self.project.maps)
+        blocking = [p for p in problems if p.severity >= Severity.ERROR]
+        if blocking:
+            self._error(
+                "This campaign cannot be built",
+                "\n".join(f"{p.code}: {p.message}" for p in blocking[:6]) +
+                "\n\nFile > Campaign shows these as you fix them.")
+            return False
+
+        warnings = [p for p in problems if p.severity == Severity.WARNING]
+        if warnings and QMessageBox.warning(
+            self, "Build this pack anyway?",
+            "\n".join(f"{p.message}" for p in warnings[:6]) +
+            "\n\nNone of these stop the pack being built.",
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        ) != QMessageBox.StandardButton.Ok:
+            return False
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Write the map pack", self._start_directory(),
+            "Map packs (*.wad);;All files (*)")
+        if not path:
+            return False
+        if not path.lower().endswith(".wad"):
+            path += ".wad"
+
+        try:
+            pack = build_pack(campaign, self.project.maps,
+                              project_name=self.project.name,
+                              author=self.project.author)
+            if not pack.audit.clean:
+                # The audit reads the built file back. If it does not recognise
+                # something in there, that file does not leave this machine.
+                raise export_error(
+                    "C7E-PACK-010",
+                    "the built pack holds lumps this editor did not expect: "
+                    + ", ".join(pack.audit.unexpected))
+            manifest = Path(path).with_suffix(".txt")
+            atomic_write(Path(path), pack.wad)
+            atomic_write(manifest, pack.manifest.encode("ascii"))
+        except (OSError, Ec7EditError) as error:
+            self._error("Could not write the pack", str(error))
+            return False
+
+        self.statusBar().showMessage(
+            f"{Path(path).name}: {pack.audit.describe()}; manifest in "
+            f"{manifest.name}", 8000)
+        return True
 
     def export_archive(self) -> bool:
         """Write a complete MAPTEMP.CO7: your maps in their slots, the rest

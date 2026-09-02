@@ -12,7 +12,13 @@
 # words, that saved games would be kept. Nothing caught that, because nothing
 # had ever installed twice.
 #
-# Usage: test_installer_lifecycle.sh [DISC]
+# Usage: test_installer_lifecycle.sh [DISC] [BUILD_DIR]
+#
+# BUILD_DIR names the engine to install. Without it this asked find_existing to
+# guess, which refuses a build made at a different revision than the tree -- so
+# the gate skipped itself, silently, from the moment anyone committed until the
+# next rebuild. A gate that stops testing exactly when the code changed is
+# worse than no gate.
 
 set -eu
 
@@ -20,6 +26,7 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo=$(CDPATH= cd -- "$here/.." && pwd)
 
 disc=${1:-${CORRIDOR7_DISC:-}}
+build_dir=${2:-}
 if [ -z "$disc" ]; then
 	for candidate in "$repo/../corr7/Corridor7.cue" "$repo/../corr7/corridor7.cue"; do
 		[ -f "$candidate" ] && { disc=$candidate; break; }
@@ -36,11 +43,12 @@ mkdir -p "$work/home"
 
 HOME="$work/home" XDG_DATA_HOME="$work/home/.local/share" \
 QT_QPA_PLATFORM=offscreen QT_LOGGING_RULES='*.debug=false;qt.qpa.*=false' \
-python3 - "$repo" "$work" "$disc" <<'PY'
+python3 - "$repo" "$work" "$disc" "$build_dir" <<'PY'
 import shutil, sys, time
 from pathlib import Path
 
 repo, work, disc = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
+named = [Path(sys.argv[4])] if len(sys.argv) > 4 and sys.argv[4] else []
 sys.path.insert(0, str(repo / "installer"))
 sys.path.insert(0, str(repo / "tools"))
 
@@ -56,7 +64,9 @@ def check(condition, message):
     if not condition:
         failures.append(message)
 
-engine = build.find_existing(repo)
+# The build this suite was pointed at, used as given. Guessing is for a user
+# running the installer by hand; a test knows which engine it means.
+engine = build.find_existing(repo, extra=named)
 if engine is None:
     print("SKIP: no built engine, so there is nothing to install")
     sys.exit(0)

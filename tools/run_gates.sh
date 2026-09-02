@@ -392,7 +392,8 @@ for g in $data_free_gates; do
 			if [ ! -x "$build_dir/ec7wolf" ]; then
 				skip_gate "$g" "no ec7wolf in $build_dir"
 			else
-				run_gate "$g" "install lifecycle" "$here/test_installer_lifecycle.sh"
+				run_gate "$g" "install lifecycle" \
+					"$here/test_installer_lifecycle.sh" "" "$build_dir"
 			fi ;;
 		corridor7_flic)
 			# Needs a build and nothing else: --flictest decodes before any game

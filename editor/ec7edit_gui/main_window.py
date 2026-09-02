@@ -172,6 +172,11 @@ class MainWindow(QMainWindow):
         self._session_counter = 0
         #: Where the next snapshot is taken from, and what was last shown.
         self.camera = None
+        #: Which map the camera is on. There is one camera, and it belongs to
+        #: a floor -- without this it was a pair of coordinates with no map,
+        #: so opening another floor left it apparently pointing into that one,
+        #: and check_camera would then judge it against the wrong geometry.
+        self.camera_map = ""
         self._snapshot_revision = -1
         self._snapshot_key = ""
         #: Coalesces the full pass: every edit restarts it, so the expensive
@@ -1238,6 +1243,7 @@ class MainWindow(QMainWindow):
         index = self.tabs.addTab(tab, f"{document.lump_name} {document.name}")
         self.tabs.setCurrentIndex(index)
         self._apply_wall_colours()
+        self._show_camera()
         return tab
 
     @property
@@ -1252,6 +1258,7 @@ class MainWindow(QMainWindow):
         tab = self.current_tab
         if tab is not None:
             self.tools.set_document(self.project.map_by_uuid(tab.map_uuid))
+        self._show_camera()
         self._refresh_title()
 
     def _on_press(self, x: int, y: int, button: int) -> None:
@@ -1789,11 +1796,35 @@ class MainWindow(QMainWindow):
     # -- snapshot ---------------------------------------------------------
 
     def set_camera(self, x: float, y: float) -> None:
-        """The Camera tool put the camera here. Keeps whatever angle it had."""
-        angle = self.camera.angle if self.camera is not None else 0.0
+        """The Camera tool put the camera here. Keeps whatever angle it had.
+
+        There is exactly one camera. Placing it again moves it rather than
+        adding a second, which is what a single viewpoint should do -- and now
+        that it is drawn, moving it is something you can see happen.
+        """
+        tab = self.current_tab
+        # A camera placed on another floor keeps its angle but not its place.
+        same_map = tab is not None and self.camera_map == tab.map_uuid
+        angle = self.camera.angle if (self.camera is not None and same_map) else 0.0
         self.camera = Camera(x, y, angle)
+        self.camera_map = tab.map_uuid if tab is not None else ""
+        self._show_camera()
         self.snapshot_status.setText(
             f"Camera at {self.camera.describe()} — Take a snapshot")
+
+    def _show_camera(self) -> None:
+        """Draw the camera on the floor it is on, and on no other.
+
+        Called from everywhere the camera or the open map can change. Every
+        canvas is told, rather than only the current one, so switching tabs
+        cannot leave a camera drawn on a floor it is not on.
+        """
+        for index in range(self.tabs.count()):
+            tab = self.tabs.widget(index)
+            if not isinstance(tab, MapTab):
+                continue
+            here = self.camera if tab.map_uuid == self.camera_map else None
+            tab.canvas.set_camera(here)
 
     def turn_camera(self) -> None:
         if self.camera is None:
@@ -1802,6 +1833,7 @@ class MainWindow(QMainWindow):
             return
         self.camera = Camera(self.camera.x, self.camera.y,
                              (self.camera.angle + 90.0) % 360.0)
+        self._show_camera()
         self.snapshot_status.setText(f"Camera at {self.camera.describe()}")
 
     def _snapshot_cache_dir(self) -> Path:
@@ -1823,6 +1855,16 @@ class MainWindow(QMainWindow):
         if self.camera is None:
             self.snapshot_status.setText("Place the camera first: pick the Camera tool "
                                          "and click a floor tile")
+            return False
+        if self.camera_map != tab.map_uuid:
+            # One camera, and it is on a floor. Snapshotting the map in front
+            # of you using a camera placed on a different one would draw
+            # somewhere nobody asked about, and check_camera below would judge
+            # the coordinates against the wrong geometry -- passing or failing
+            # for reasons that have nothing to do with either map.
+            self.snapshot_status.setText(
+                "The camera is on another floor. Click here with the Camera "
+                "tool to move it to this one.")
             return False
         document = self.project.map_by_uuid(tab.map_uuid)
         try:
@@ -1922,8 +1964,11 @@ class MainWindow(QMainWindow):
         for token in detail.split():
             if token.startswith("tic="):
                 tic = token[4:]
+        # Still "Camera at ...". Dropping those two words after a snapshot
+        # made a working camera read as a forgotten one, which is most of what
+        # "the camera disappears after taking a snapshot" turned out to be.
         self.snapshot_status.setText(
-            f"{self.camera.describe()}"
+            f"Camera at {self.camera.describe()}"
             + (f", tic {tic}" if tic else "")
             + (" (from the cache)" if cached else ""))
         self.snapshot_dock.show()

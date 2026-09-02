@@ -256,7 +256,7 @@ The toolbar, and the single keys that select them.
 | `I` | **Pick** | Take whatever is under the cursor and make it the current palette selection. Much faster than finding it in a list. |
 | `P` | **Place** | Prefabs: a door, a pushwall, a force-field door — several cells that only make sense together, placed as one unit. |
 | `T` | **Transporter** | The two ends of a transporter pair, which have to agree with each other. |
-| `K` | **Camera** | Choose the viewpoint for a snapshot. Section 9. |
+| `K` | **Camera** | Place the single snapshot viewpoint, drawn on the map as a ring and a cone. Clicking again moves it. Section 9. |
 
 Every edit is undoable (`Ctrl+Z`), including a whole drag stroke, which counts
 as one action rather than forty.
@@ -382,6 +382,19 @@ The full protocol is documented in
 
 Pick the **Camera** tool (`K`), click a floor tile, and press **Take a
 snapshot** (`F7`). *Turn 90°* re-aims without moving.
+
+![The camera on the map](images/manual/camera.png)
+
+There is **one** camera. It is drawn on the map as a ring with a cone showing
+which way it faces, clicking again moves it rather than adding a second, and
+moving it keeps the angle you chose. It is a marker, not a change to the floor:
+it writes nothing, it is not an undo step, and it never appears in anything you
+export.
+
+It belongs to the floor you placed it on. Open another map and it is not drawn
+there, and taking a snapshot of that map asks you to move the camera to it
+first, rather than photographing coordinates that mean something else on a
+different floor.
 
 What comes back is not the editor's impression of your map. It is a frame
 rendered by EC7Wolf, from that tile, at a fixed simulation tic, through the

@@ -222,5 +222,71 @@ class ProjectState(Base):
         self.assertEqual(again, campaign)
 
 
+class SnapshotCamera(Base):
+    """One camera, on one floor, visible, and replaceable.
+
+    All of which was true of the model already and none of which was visible:
+    the canvas never drew it, so placing it looked like nothing had happened,
+    taking a snapshot looked like it had been forgotten, and placing a second
+    one looked like it had failed too.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from ec7edit_gui.tools import Tool
+        self.window.project = a_project(slots=(61, 62))
+        self.tab = self.window.open_map(self.window.project.maps[0].uuid)
+        self.window.tools.set_tool(Tool.CAMERA)
+        QApplication.processEvents()
+
+    def canvas_camera(self, tab=None):
+        return (tab or self.tab).canvas._camera
+
+    def test_placing_it_draws_it(self):
+        self.window.tools.press(3, 3, 1)
+        self.assertEqual(self.canvas_camera(), (3.5, 3.5, 0.0))
+
+    def test_placing_again_moves_it_rather_than_adding_one(self):
+        self.window.tools.press(3, 3, 1)
+        self.window.tools.press(4, 5, 1)
+        self.assertEqual(self.canvas_camera(), (4.5, 5.5, 0.0))
+        self.assertEqual(self.window.camera.x, 4.5)
+
+    def test_moving_it_keeps_the_angle_you_chose(self):
+        self.window.tools.press(3, 3, 1)
+        self.window.turn_camera()
+        self.window.tools.press(4, 5, 1)
+        self.assertEqual(self.canvas_camera(), (4.5, 5.5, 90.0))
+
+    def test_turning_it_redraws_it(self):
+        self.window.tools.press(3, 3, 1)
+        self.window.turn_camera()
+        self.assertEqual(self.canvas_camera(), (3.5, 3.5, 90.0))
+
+    def test_it_is_drawn_only_on_the_floor_it_is_on(self):
+        self.window.tools.press(3, 3, 1)
+        other = self.window.open_map(self.window.project.maps[1].uuid)
+        QApplication.processEvents()
+        self.assertIsNone(self.canvas_camera(other))
+        self.assertEqual(self.canvas_camera(self.tab), (3.5, 3.5, 0.0))
+
+    def test_a_snapshot_of_another_floor_is_refused_rather_than_drawn(self):
+        # Not "it happens not to work": the camera's coordinates would be
+        # judged against the wrong map, passing or failing for reasons to do
+        # with neither.
+        self.window.tools.press(3, 3, 1)
+        self.window.open_map(self.window.project.maps[1].uuid)
+        QApplication.processEvents()
+        self.assertFalse(self.window.take_snapshot())
+        self.assertIn("another floor", self.window.snapshot_status.text())
+
+    def test_the_status_keeps_saying_camera_after_a_snapshot(self):
+        # The words "Camera at" going missing is most of what "the camera
+        # disappears after taking a snapshot" was.
+        self.window.tools.press(3, 3, 1)
+        self.window._show_snapshot(self.root / "nothing.png", "k", cached=True)
+        self.assertIn("Camera at", self.window.snapshot_status.text())
+
+
 if __name__ == "__main__":
     unittest.main()

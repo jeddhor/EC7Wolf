@@ -59,7 +59,44 @@ def install_exception_hook(window=None, *, show_dialog: bool = True) -> None:
     sys.excepthook = hook
 
 
+#: Messages from the Qt platform plugin that describe the platform rather than
+#: anything this program did, and that nobody can act on.
+#:
+#: Wayland does not let an ordinary window grab the mouse -- only popups may,
+#: by design -- so Qt says so and carries on. It comes up when Qt asks for a
+#: grab internally, which dragging a dock panel does, and it names a plugin
+#: nobody was thinking about in the middle of doing something else. The
+#: offscreen plugin's two are the same kind of thing, and they turn a test
+#: run's output into a wall of noise.
+#:
+#: Deliberately an exact list. A pattern like "starts with 'This plugin'" would
+#: grow to cover messages that do matter.
+_PLATFORM_NOISE = (
+    "This plugin supports grabbing the mouse only for popup windows",
+    "This plugin does not support propagateSizeHints()",
+    "This plugin does not support raise()",
+)
+
+
+def _quieten_platform_noise() -> None:
+    """Drop the messages above, and pass every other one through untouched."""
+    from PySide6.QtCore import QtMsgType, qInstallMessageHandler
+
+    def handler(kind, context, message):
+        if message.strip() in _PLATFORM_NOISE:
+            return
+        stream = sys.stderr
+        label = {QtMsgType.QtDebugMsg: "debug", QtMsgType.QtInfoMsg: "info",
+                 QtMsgType.QtWarningMsg: "warning",
+                 QtMsgType.QtCriticalMsg: "critical",
+                 QtMsgType.QtFatalMsg: "fatal"}.get(kind, "qt")
+        print(f"Qt {label}: {message}", file=stream)
+
+    qInstallMessageHandler(handler)
+
+
 def build_application(argv=None) -> QApplication:
+    _quieten_platform_noise()
     application = QApplication.instance()
     if application is None:
         application = QApplication(argv if argv is not None else sys.argv)

@@ -209,6 +209,21 @@ def main(argv=None) -> int:
         dock.setFloating(False)
         QApplication.processEvents()
 
+    # The camera on the map, which is the only way to show what the Camera
+    # tool does: it is a marker rather than a change to the floor, so a
+    # screenshot of the panel alone would not show it at all.
+    from ec7edit_gui.tools import Tool
+    window.tools.set_tool(Tool.CAMERA)
+    window.tools.press(5, 5, 1)
+    window.turn_camera()
+    QApplication.processEvents()
+    tab.canvas.set_zoom(26)
+    QApplication.processEvents()
+    grab(tab.canvas, out / "camera.png")
+    tab.canvas.set_zoom(20)
+    window.tools.set_tool(Tool.BRUSH)
+    QApplication.processEvents()
+
     # The Problems dock, photographed against a map that HAS a problem. The
     # hero shot above is of a floor that validates clean, which is what a
     # manual's first picture should show; a panel documented with an empty box

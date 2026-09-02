@@ -22,7 +22,7 @@ artwork.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
@@ -71,6 +71,10 @@ class MapCanvas(QWidget):
         self._show_grid = True
         self._show_objects = True
         self._hover = (-1, -1)
+        #: The snapshot camera, when it belongs to the map this canvas shows.
+        #: `(x, y, angle)` in map coordinates -- a view of the map rather than
+        #: anything in it, so it is drawn and never written.
+        self._camera: tuple[float, float, float] | None = None
         self._swatches: dict[int, QColor] = {}
         self._button = Qt.NoButton
 
@@ -89,6 +93,20 @@ class MapCanvas(QWidget):
     def set_document(self, document: MapDocument | None) -> None:
         self._document = document
         self._resize_to_document()
+        self.update()
+
+    def set_camera(self, camera) -> None:
+        """Show the snapshot camera here, or nowhere if `camera` is None.
+
+        Placing the camera used to be completely invisible: nothing was drawn,
+        so a click did its job and looked like it had done nothing, taking a
+        snapshot looked like it had lost the camera, and placing a second one
+        looked like it had failed as well. All three were working.
+        """
+        value = None if camera is None else (camera.x, camera.y, camera.angle)
+        if value == self._camera:
+            return
+        self._camera = value
         self.update()
 
     def set_catalog(self, catalog: Catalog | None) -> None:
@@ -253,6 +271,45 @@ class MapCanvas(QWidget):
         if self._hover != (-1, -1):
             painter.setPen(QPen(QColor(255, 255, 255, 200), 2))
             painter.drawRect(self.cell_rect(*self._hover).adjusted(0, 0, -1, -1))
+
+        if self._camera is not None:
+            self._paint_camera(painter)
+
+    def _paint_camera(self, painter) -> None:
+        """A ring where the camera stands, and a cone showing where it looks.
+
+        Drawn over everything and in a colour nothing else uses, because it has
+        to be findable on a busy map -- and drawn as a direction rather than a
+        dot, because the angle is half of what a snapshot is of and turning the
+        camera has to visibly do something.
+        """
+        x, y, angle = self._camera
+        zoom = self._zoom
+        centre = QPointF(x * zoom, y * zoom)
+        radius = max(4.0, zoom * 0.32)
+
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, True)
+
+        # The cone first, so the ring sits on top of its point.
+        #
+        # Qt takes sixteenths of a degree counter-clockwise from east, and it
+        # already accounts for the downward y axis -- so a positive angle goes
+        # visually up, which is the engine's convention too: 0 is east and 90
+        # is north. Negating it, which the flipped axis makes tempting, drew
+        # every camera facing the opposite way, and the only angle that looked
+        # right was zero.
+        reach = max(radius * 2.2, zoom * 0.95)
+        painter.setBrush(QColor(255, 214, 0, 70))
+        painter.setPen(Qt.NoPen)
+        painter.drawPie(QRectF(centre.x() - reach, centre.y() - reach,
+                               reach * 2, reach * 2),
+                        int((angle - 26) * 16), int(52 * 16))
+
+        painter.setBrush(QColor(255, 214, 0, 190))
+        painter.setPen(QPen(QColor(40, 30, 0), max(1.0, zoom / 16.0)))
+        painter.drawEllipse(centre, radius, radius)
+        painter.restore()
 
     # -- input ------------------------------------------------------------
 

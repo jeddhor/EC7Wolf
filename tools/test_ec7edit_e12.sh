@@ -82,13 +82,13 @@ if [ ! -d "$shots" ]; then
 else
 	missing=""
 	for image in window dock-maps dock-palette dock-inspector dock-problems \
-		dock-testlog dock-snapshot campaign first-run; do
+		dock-testlog dock-snapshot camera campaign first-run; do
 		[ -f "$shots/$image.png" ] || missing="$missing $image.png"
 	done
 	if [ -n "$missing" ]; then
 		fail "the manual is missing:$missing"
 	else
-		say ok "nine screenshots, all present"
+		say ok "ten screenshots, all present"
 	fi
 fi
 

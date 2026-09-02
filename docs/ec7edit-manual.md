@@ -35,6 +35,7 @@ formats, and if you ever *do* need to, that is a bug in this document.
 11. [Importing a map from the game](#11-importing-a-map-from-the-game)
 12. [Sharing what you made](#12-sharing-what-you-made)
 13. [Campaigns and map packs](#13-campaigns-and-map-packs)
+13a. [Custom monsters, walls and music](#13a-custom-monsters-walls-and-music)
 14. [Keyboard reference](#14-keyboard-reference)
 15. [The command line](#15-the-command-line)
 16. [Where the editor keeps things](#16-where-the-editor-keeps-things)
@@ -525,6 +526,101 @@ The engine-side details are in [ec7edit-mappack.md](ec7edit-mappack.md).
 
 ---
 
+## 13a. Custom monsters, walls and music
+
+A resource pack is a **`.pk3`** — a zip — holding art the game never had, and
+the DECORATE that turns it into actors. The layout is the engine's:
+
+```text
+mypack.pk3
+├── DECORATE          the actors
+├── sprites/          their art, one file per frame
+├── textures/         wall textures
+├── music/            tracks
+└── graphics/         anything else drawn
+```
+
+A pack made with
+[corridor7-monster-sprite-workflow.md](corridor7-monster-sprite-workflow.md) is
+already in exactly this shape and needs no conversion. Anything else in the zip
+— previews, notes, working files — is left where it is; the editor does not
+ship it.
+
+**File → Resource packs…** attaches one. The dialog shows what is in it and,
+once attached, which map word each thing was given. Everything placeable then
+appears in the palette's **Custom** tab, grouped by the pack it came from, and
+you paint with it exactly like anything else.
+
+### What a map word is, and why it never moves
+
+Corridor 7's own things all have numbers, and its translator says what each one
+means. Something from a pack does not, so the editor allocates one — objects
+from 900 up, which Corridor 7 never reaches — and generates the translator
+entry that gives it meaning.
+
+**That number is written into your map the moment you paint with it.** So the
+editor never reuses or renumbers one: a word that changed between sessions
+would silently make a map spawn something else, with the map file unchanged and
+looking perfectly correct. Attaching a pack twice, or attaching another one
+first, leaves every existing word where it was.
+
+A custom *wall* works differently, because plane 0 has no spare high numbers —
+256 and up is a floor cell carrying a sound area. A custom texture therefore
+re-points a wall ID your maps do not otherwise use, and the generated
+translator confines that to your campaign's floors.
+
+### What it does to the base game: nothing
+
+The generated translator `include`s Corridor 7's rather than replacing it, and
+is named by each of your maps individually. Load your pack and the rest of the
+game is exactly as it was.
+
+The one exception is not the editor's doing. If a pack's DECORATE says
+`replaces C7Semaj`, that is a **global** switch: every Semaj in the whole game
+becomes that actor while the pack is loaded, and you cannot have both. The
+editor says so when you attach it. Placing from the Custom tab does not use
+`replaces` and is unaffected.
+
+### Detaching
+
+Detaching a pack does **not** remove things already placed from it. Those words
+stay in your maps and stop meaning anything, so the engine spawns nothing where
+they are. The editor tells you how many before it does it.
+
+### The pack you export
+
+Once a project has resources, **File → Export a map pack…** writes a `.pk3`
+instead of a `.wad` — a WAD has flat eight-character names and no folders, and
+the engine works out what a resource is from the folder it is in. One file:
+
+```text
+yourpack.pk3
+├── maps/MAP61.wad      one per floor
+├── MAPINFO             your campaign
+├── xlat/ec7edit.txt    the generated placement translator
+├── DECORATE            one #include per attached pack
+├── decorate/…          each pack's own actors, kept apart
+├── sprites/ textures/  their art, copied byte for byte
+└── PACKINFO            the manifest
+```
+
+Your recipient loads that one file and needs nothing else but their own copy of
+Corridor 7.
+
+### Custom music
+
+Put a track in the pack's `music/` folder and name it in **File → Campaign…**
+against the level that should play it.
+
+### Custom videos
+
+Not yet. `C7Flic_Play` takes fixed names from a folder beside the game data, so
+a pack cannot carry a cinematic. That is E14 in
+[the plan](corridor7-level-editor.md), and it needs engine work rather than
+editor work.
+
+---
+
 ## 14. Keyboard reference
 
 ### Tools
@@ -545,6 +641,7 @@ The engine-side details are in [ec7edit-mappack.md](ec7edit-mappack.md).
 | `Ctrl+S` / `Ctrl+Shift+S` | Save / Save As |
 | `Ctrl+E` | Export preview WAD |
 | `Ctrl+Shift+E` | Export a map pack |
+| — | File → Resource packs… |
 | `Ctrl+Z` / `Ctrl+Y` | Undo / Redo |
 | `Ctrl+C` / `Ctrl+V` | Copy / Paste selection |
 | `Ctrl+Shift+R` | Rotate the selection |
@@ -567,9 +664,14 @@ python3 -m ec7edit_core validate MAPTEMP.CO7          # check them
 python3 -m ec7edit_core project-new  mine.ec7project
 python3 -m ec7edit_core project-import mine.ec7project MAPTEMP.CO7 --map 1
 python3 -m ec7edit_core project-export mine.ec7project --output preview.wad
+python3 -m ec7edit_core resource-inspect mypack.pk3   # what is in this pack?
+python3 -m ec7edit_core resource-add  mine.ec7project mypack.pk3
 python3 -m ec7edit_core project-pack   mine.ec7project --output pack.wad
 python3 -m ec7edit_core pack-audit     pack.wad        # what is in this file?
 ```
+
+`project-pack` writes a `.pk3` instead of a `.wad`, and names it so, once the
+project has resources attached.
 
 `--protect DIR` may be given to any command that writes, and refuses to write
 anywhere inside it. `pack-audit` works on a pack this editor did not build,
@@ -632,9 +734,8 @@ Stated plainly, because a manual that hides them wastes your time instead.
   transporters and pushwalls — not a proof that the floor is playable, and not
   a simulation of combat or ammunition.
 * **No live 3D view.** Snapshot instead; the reasoning is in section 9.
-* **Packs carry metadata and maps only.** No custom textures, sounds, music or
-  DECORATE. A pack changes which levels the game offers and their order, and
-  nothing about how the game behaves.
+* **A pack carries maps, metadata and attached resources.** Sound effects are
+  not offered, and custom videos are not possible yet — see 13a.
 * **Campaign metadata is deliberately bounded**: names, routing, music, par,
   floor number, the tally screen. Colors and skills are not offered — a skill
   block is global and would change the stock game's difficulty levels.

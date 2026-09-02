@@ -243,8 +243,61 @@ def generate_translator(allocations) -> str:
     return "\n".join(lines)
 
 
+#: Where custom entries appear in the palette. Their own tab rather than mixed
+#: into Enemies and Walls: an author needs to see at a glance what came from a
+#: pack, because detaching it makes every one of these stop working.
+CUSTOM_CATEGORY = "custom"
+
+
+def catalog_entries(allocations, resources):
+    """Palette entries for the allocated words, for the running session only.
+
+    Never written to `editor_catalog.json`. That file is generated from the
+    game's own tables and is the same for everybody; these depend on which
+    packs this project has attached, and belong to the project.
+    """
+    from .catalog import CatalogEntry
+
+    described = {}
+    for resource in resources:
+        for actor in resource.actors:
+            described[("actor", actor.name)] = (resource, actor)
+        for texture in resource.textures:
+            described.setdefault(("texture", texture), (resource, None))
+
+    entries = []
+    for allocation in sorted(allocations, key=lambda a: (a.plane, a.word)):
+        found = described.get((allocation.kind, allocation.name))
+        if found is None:
+            continue                       # its pack is detached; not offered
+        resource, actor = found
+        if allocation.kind == "actor":
+            note = (f"{actor.name} from {resource.name}. "
+                    + (f"Inherits {actor.parent}. " if actor.parent else "")
+                    + (f"Replaces {actor.replaces} everywhere while the pack is "
+                       f"loaded. " if actor.replaces else "")
+                    + f"Placed as object word {allocation.word}.")
+            entries.append(CatalogEntry(
+                key=f"custom.actor.{allocation.name.lower()}",
+                category=CUSTOM_CATEGORY, subcategory=resource.name, rank=0,
+                name=allocation.name, plane=1, value=allocation.word,
+                values=(allocation.word,), description=note,
+                actor=allocation.name))
+        else:
+            entries.append(CatalogEntry(
+                key=f"custom.texture.{allocation.name.lower()}",
+                category=CUSTOM_CATEGORY, subcategory=resource.name, rank=0,
+                name=allocation.name, plane=0, value=allocation.word,
+                values=(allocation.word,),
+                description=(f"{allocation.name} from {resource.name}, drawn on "
+                             f"wall {allocation.word} for this campaign's floors "
+                             "only."),
+                texture=allocation.name))
+    return entries
+
+
 __all__ = [
-    "Allocation", "BASE_TRANSLATOR", "OBJECT_BASE", "OBJECT_LAST",
+    "Allocation", "CUSTOM_CATEGORY", "catalog_entries", "BASE_TRANSLATOR", "OBJECT_BASE", "OBJECT_LAST",
     "TRANSLATOR_LUMP", "WALL_FIRST", "WALL_LAST", "allocate",
     "generate_translator", "load", "store", "used_by",
 ]

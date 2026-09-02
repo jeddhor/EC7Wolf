@@ -532,9 +532,46 @@ class Palette(Base):
             if category == "prefabs":
                 self.assertGreater(self.window.prefab_list.count(), 0, "Structures is empty")
                 continue
+            if category == "custom":
+                # Empty until a resource pack is attached, and correctly so:
+                # its entries come from the project, not from the game's
+                # tables. `test_the_custom_tab_fills_when_a_pack_is_attached`
+                # covers the other half.
+                self.show_tab(category)
+                self.assertEqual(self.window.palette_models[category].rowCount(), 0,
+                                 "Custom should be empty with no pack attached")
+                continue
             self.show_tab(category)
             model = self.window.palette_models[category]
             self.assertGreater(model.rowCount(), 0, f"{title} is empty")
+
+    def test_the_custom_tab_fills_when_a_pack_is_attached(self):
+        import zipfile
+
+        from ec7edit_core.custom import allocate, store
+        from ec7edit_core.resources import inspect as inspect_resource
+
+        pack = self.root / "bloom.pk3"
+        with zipfile.ZipFile(pack, "w") as archive:
+            archive.writestr("DECORATE", 'actor TestBloom : C7Rodex\n{\nstates\n{\nSpawn:\nTBLM A -1\nstop\n}\n}\n')
+            archive.writestr("sprites/TBLMA0.png", b'\x89PNG\r\n\x1a\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+
+        resource = inspect_resource(pack)
+        allocations, _ = allocate([], [resource], self.window.project.maps)
+        self.window.project = self.window.project.with_resources(
+            [resource.to_json()], store(allocations))
+        self.window._refresh_custom_palette()
+        self.show_tab("custom")
+        self.assertEqual(self.window.palette_models["custom"].rowCount(), 1)
+
+    def test_detaching_a_pack_takes_its_entries_away_again(self):
+        # An entry left behind would paint a word the engine can no longer
+        # translate -- a map that looks right and spawns nothing.
+        self.test_the_custom_tab_fills_when_a_pack_is_attached()
+        self.window.project = self.window.project.with_resources([], {})
+        self.window._refresh_custom_palette()
+        self.show_tab("custom")
+        self.assertEqual(self.window.palette_models["custom"].rowCount(), 0)
 
     def test_search_narrows_the_list(self):
         self.show_tab("enemies")

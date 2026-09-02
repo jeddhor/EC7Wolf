@@ -114,6 +114,10 @@ PALETTE_TABS = (
     ("Enemies", "enemies"),
     ("Starts and Paths", "starts"),
     ("Zones", "zones"),
+    # Its own tab rather than mixed into Enemies and Walls: an author needs to
+    # see at a glance what came from a pack, because detaching one makes every
+    # entry here stop meaning anything.
+    ("Custom", "custom"),
     ("Raw", "raw"),
 )
 
@@ -172,6 +176,9 @@ class MainWindow(QMainWindow):
         self._session_counter = 0
         #: Where the next snapshot is taken from, and what was last shown.
         self.camera = None
+        #: The catalogue without any resource pack's entries. Kept so
+        #: `_refresh_custom_palette` can rebuild rather than accumulate.
+        self._base_catalog = None
         #: Which map the camera is on. There is one camera, and it belongs to
         #: a floor -- without this it was a pair of coordinates with no map,
         #: so opening another floor left it apparently pointing into that one,
@@ -308,6 +315,9 @@ class MainWindow(QMainWindow):
         self.action_export_archive = self._action(
             "Export a full archive… (&private)", self.export_archive,
             tip="A complete MAPTEMP.CO7 built on the game's own; not shareable")
+        self.action_resources = self._action(
+            "&Resource packs…", self.edit_resources,
+            tip="Sprites, textures and actors the game never had")
         self.action_campaign = self._action(
             "Campai&gn…", self.edit_campaign,
             tip="Name the levels of a map pack and say where each exit goes")
@@ -328,7 +338,8 @@ class MainWindow(QMainWindow):
                        self.action_export, self.action_export_archive):
             file_menu.addAction(action)
         file_menu.addSeparator()
-        for action in (self.action_campaign, self.action_export_pack):
+        for action in (self.action_resources, self.action_campaign,
+                       self.action_export_pack):
             file_menu.addAction(action)
         file_menu.addSeparator()
         file_menu.addAction(self.action_quit)
@@ -716,6 +727,7 @@ class MainWindow(QMainWindow):
             return
         self.set_project(project, Path(path))
         self.settings.remember_project(path)
+        self._refresh_custom_palette()
         self.statusBar().showMessage(f"Opened {Path(path).name}", 4000)
 
     def new_map(self, name: str | None = None, slot: int | None = None,
@@ -1003,6 +1015,60 @@ class MainWindow(QMainWindow):
             self._error("Could not export", str(error))
             return
         self.statusBar().showMessage(f"Exported {written.name} ({len(blob)} bytes)", 6000)
+
+    def edit_resources(self) -> bool:
+        """Attach and detach resource packs, and re-offer what they hold."""
+        from .resource_dialog import ResourceDialog
+
+        try:
+            dialog = ResourceDialog(self.project, self)
+        except Ec7EditError as error:
+            self._error("Those resource packs cannot be read", str(error))
+            return False
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return False
+
+        resources, allocations = dialog.resources(), dialog.allocations()
+        if (list(self.project.resources) == resources
+                and self.project.allocations == allocations):
+            return False
+        self.project = self.project.with_resources(resources, allocations)
+        self._refresh_custom_palette()
+        self._refresh_title()
+        self.statusBar().showMessage(
+            f"{len(resources)} resource pack(s) attached", 6000)
+        return True
+
+    def _refresh_custom_palette(self) -> None:
+        """Put the attached packs' placeable things in the palette.
+
+        Rebuilt from the project rather than accumulated, so detaching a pack
+        removes its entries in the same breath: an entry left behind would
+        paint a word the engine can no longer translate.
+        """
+        from ec7edit_core.catalog import Catalog
+        from ec7edit_core.custom import catalog_entries, load as load_allocations
+        from ec7edit_core.resources import Resource
+
+        if self._base_catalog is None:
+            self._base_catalog = self.catalog
+        base = self._base_catalog
+        if base is None:
+            return
+        try:
+            resources = [Resource.from_json(raw) for raw in self.project.resources]
+            extra = catalog_entries(load_allocations(self.project.allocations),
+                                    resources)
+        except Ec7EditError:
+            extra = []
+        self.catalog = (base if not extra
+                        else Catalog(entries=base.entries + tuple(extra),
+                                     unresolved=base.unresolved, schema=base.schema))
+        for index in range(self.tabs.count()):
+            tab = self.tabs.widget(index)
+            if isinstance(tab, MapTab):
+                tab.canvas.set_catalog(self.catalog)
+        self._refresh_palette()
 
     def edit_campaign(self) -> bool:
         """Name the levels of a pack and say where each exit goes.

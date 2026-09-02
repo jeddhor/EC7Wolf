@@ -459,6 +459,27 @@ def _pack_with_resources(args, project, campaign) -> int:
     return EXIT_OK
 
 
+def command_video_encode(args) -> int:
+    """Turn a video, or a folder of frames, into a cinematic the game plays."""
+    from . import video
+
+    def note(message: str) -> None:
+        print(f"  {message}")
+
+    result = video.encode(args.source, fps=args.fps, colors=args.colors,
+                          progress=note)
+    guard = OutputGuard(protected_roots=tuple(args.protect))
+    output = args.output
+    if output.suffix.upper() != ".CO7":
+        output = output.with_suffix(".CO7")
+    written = atomic_write(output, result.data, guard=guard)
+    print(f"{written}: {result.describe()}, sha256 "
+          f"{digest_bytes(result.data)[:16]}")
+    print(f"  put it in a resource pack as video/{output.stem.upper()}.CO7, and "
+          "name it in your campaign's ending")
+    return EXIT_OK
+
+
 def command_pack_audit(args) -> int:
     """Account for every lump in a pack, including one this tool did not write."""
     blob = args.pack.read_bytes()
@@ -570,6 +591,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     resource_inspect.add_argument("resource", type=Path)
     resource_inspect.set_defaults(handler=command_resource_inspect)
+
+    video_encode = verbs.add_parser(
+        "video-encode",
+        help="convert a video or a folder of PNG frames into a cinematic"
+    )
+    video_encode.add_argument("source", type=Path,
+                              help="a video file, or a folder of PNG frames")
+    video_encode.add_argument("--output", type=Path, required=True)
+    video_encode.add_argument("--fps", type=int, default=14,
+                              help="frames a second (default 14, as the game's own)")
+    video_encode.add_argument("--colors", type=int, default=256,
+                              help="palette size, 2..256")
+    video_encode.add_argument("--protect", type=Path, action="append", default=[])
+    video_encode.set_defaults(handler=command_video_encode)
 
     pack_audit = verbs.add_parser(
         "pack-audit", help="list what a map pack contains and flag anything else"

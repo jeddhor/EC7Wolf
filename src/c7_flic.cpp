@@ -24,6 +24,7 @@
 #include "v_palette.h"
 #include "textures/textures.h"
 #include "wl_iwad.h"
+#include "w_wad.h"
 #include "filesys.h"
 #include "wl_main.h"
 #include "tarray.h"
@@ -132,6 +133,46 @@ namespace
 		unsigned int firstFrameOffset;
 	};
 
+	// Where a cinematic may live, in the order it is looked for.
+	//
+	// A LOADED RESOURCE FIRST. The CD's three animations sit in a directory
+	// beside the game data because that is where the disc leaves them, and
+	// until now that was the only place this looked -- so a campaign could not
+	// carry one at all, however it was packaged. A pack's `video/NAME.CO7` is
+	// tried before the directory, which means a resource pack can supply its
+	// own ending and cannot accidentally shadow the game's unless it names it
+	// the same thing on purpose.
+	int FindFlicLump(const char *name)
+	{
+		if(name == NULL || *name == '\0')
+			return -1;
+		FString full;
+		full.Format("video/%s.CO7", name);
+		int lump = Wads.CheckNumForFullName(full);
+		if(lump == -1)
+		{
+			full.Format("video/%s.co7", name);
+			lump = Wads.CheckNumForFullName(full);
+		}
+		return lump;
+	}
+
+	bool LoadFlicData(Flic &out);
+
+	bool LoadFlicLump(int lump, Flic &out)
+	{
+		if(lump == -1)
+			return false;
+		const int length = Wads.LumpLength(lump);
+		if(length < 128)
+			return false;
+		out.data.Resize((unsigned int)length);
+		FWadLump reader = Wads.OpenLumpNum(lump);
+		if(reader.Read(&out.data[0], length) != length)
+			return false;
+		return LoadFlicData(out);
+	}
+
 	bool LoadFlic(const char *path, Flic &out)
 	{
 		FileReader reader;
@@ -144,6 +185,14 @@ namespace
 		out.data.Resize((unsigned int)length);
 		if(reader.Read(&out.data[0], length) != length)
 			return false;
+		return LoadFlicData(out);
+	}
+
+	// Everything after the bytes are in hand, shared by both routes so a
+	// cinematic from a pack is validated exactly as one from the disc is.
+	bool LoadFlicData(Flic &out)
+	{
+		const unsigned int length = out.data.Size();
 
 		const BYTE *h = &out.data[0];
 		const unsigned int size   = GetU32(h);
@@ -479,7 +528,11 @@ void C7Flic_Init()
 
 bool C7Flic_Have(const char *name)
 {
-	if(gVideoDir.IsEmpty() || name == NULL)
+	if(name == NULL)
+		return false;
+	if(FindFlicLump(name) != -1)
+		return true;
+	if(gVideoDir.IsEmpty())
 		return false;
 	FString path;
 	path.Format("%s" PATH_SEPARATOR "%s.CO7", gVideoDir.GetChars(), name);
@@ -489,15 +542,29 @@ bool C7Flic_Have(const char *name)
 
 bool C7Flic_Play(const char *name)
 {
-	if(gVideoDir.IsEmpty() || name == NULL || screen == NULL)
+	if(name == NULL || screen == NULL)
 		return false;
 
-	FString path;
-	path.Format("%s" PATH_SEPARATOR "%s.CO7", gVideoDir.GetChars(), name);
-
+	// A loaded resource first, then the disc's own directory. A campaign that
+	// ships its own ending is the whole point of looking in a lump at all.
 	Flic flic;
-	if(!LoadFlic(path, flic))
-		return false;
+	const char *from = "a loaded resource";
+	if(!LoadFlicLump(FindFlicLump(name), flic))
+	{
+		if(gVideoDir.IsEmpty())
+			return false;
+		FString path;
+		path.Format("%s" PATH_SEPARATOR "%s.CO7", gVideoDir.GetChars(), name);
+		if(!LoadFlic(path, flic))
+			return false;
+		from = gVideoDir.GetChars();
+	}
+
+	// Said out loud, because "which animation played, and where did it come
+	// from" is otherwise unanswerable: the thing on screen is a picture, and
+	// a campaign's own ending and the game's look equally plausible.
+	Printf("Cinematic: playing %s from %s, %u frames at %u ms.\n",
+		name, from, flic.frames, flic.speedMs);
 
 	TArray<BYTE> pixels(FLIC_PIXELS);
 	pixels.Resize(FLIC_PIXELS);

@@ -1154,6 +1154,27 @@ protected:
 			if(!ParseFader(fader))
 				return false;
 		}
+		else if(key.CompareNoCase("Flic") == 0)
+		{
+			// Flic { Name = "MYENDING" } -- the animation a campaign ends on.
+			// The name is a lump, `video/NAME.CO7` in a loaded resource, or a
+			// file of that name in the game's video directory; c7_flic.cpp
+			// looks in that order.
+			FlicIntermissionAction *cinematic = new FlicIntermissionAction();
+
+			action.type = IntermissionInfo::FLIC;
+			action.action = cinematic;
+
+			sc.MustGetToken('{');
+			while(!sc.CheckToken('}'))
+			{
+				sc.MustGetToken(TK_Identifier);
+				if(sc->str.CompareNoCase("Name") == 0)
+					ParseStringAssignment(cinematic->Name);
+				else if(!CheckStandardKey(action.action, sc->str))
+					return false;
+			}
+		}
 		else if(key.CompareNoCase("GotoTitle") == 0)
 		{
 			action.type = IntermissionInfo::GOTOTITLE;

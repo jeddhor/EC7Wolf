@@ -622,12 +622,49 @@ Corridor 7.
 Put a track in the pack's `music/` folder and name it in **File → Campaign…**
 against the level that should play it.
 
-### Custom videos
+### Custom cinematics
 
-Not yet. `C7Flic_Play` takes fixed names from a folder beside the game data, so
-a pack cannot carry a cinematic. That is E14 in
-[the plan](corridor7-level-editor.md), and it needs engine work rather than
-editor work.
+A campaign can end on an animation of its own. Two steps.
+
+**Convert it.** From a video, or from a folder of PNG frames:
+
+```sh
+python3 -m ec7edit_core video-encode myending.mp4 --output MYENDING.CO7
+python3 -m ec7edit_core video-encode frames/      --output MYENDING.CO7 --fps 14
+```
+
+The format is FLIC — 320×200, 8-bit, one palette for the whole animation —
+which is what this engine has always played. Given a video file the editor
+calls **ffmpeg** to get frames, scaled and letterboxed to fit rather than
+stretched. ffmpeg is not required: without it the editor says so and quotes the
+one command that produces the frames itself.
+
+Everything after the frames needs nothing installed. Fourteen frames a second
+is the game's own rate and a sensible default.
+
+**Ship it.** Put the result in a resource pack as `video/MYENDING.CO7`, and
+name it in your campaign's ending:
+
+```
+intermission MyEnding
+{
+    Flic { Name = "MYENDING" }
+    GotoTitle { }
+}
+
+map "MAP62" "The Last Floor"
+{
+    next = EndSequence, "MyEnding"
+}
+```
+
+The engine looks in loaded packs before the disc's own `video/` folder, so your
+cinematic plays without anything being installed beside the game. If it names
+an animation nothing carries, the engine says which one rather than showing
+nothing — an ending that silently did nothing would look like a crash.
+
+There is no sound: FLIC has no audio chunk, and the game's own cinematics get
+theirs from effects fired at fixed frame numbers.
 
 ---
 
@@ -674,6 +711,7 @@ python3 -m ec7edit_core validate MAPTEMP.CO7          # check them
 python3 -m ec7edit_core project-new  mine.ec7project
 python3 -m ec7edit_core project-import mine.ec7project MAPTEMP.CO7 --map 1
 python3 -m ec7edit_core project-export mine.ec7project --output preview.wad
+python3 -m ec7edit_core video-encode    clip.mp4 --output MYENDING.CO7
 python3 -m ec7edit_core resource-inspect mypack.pk3   # what is in this pack?
 python3 -m ec7edit_core resource-add  mine.ec7project mypack.pk3
 python3 -m ec7edit_core project-pack   mine.ec7project --output pack.wad
@@ -744,8 +782,8 @@ Stated plainly, because a manual that hides them wastes your time instead.
   transporters and pushwalls — not a proof that the floor is playable, and not
   a simulation of combat or ammunition.
 * **No live 3D view.** Snapshot instead; the reasoning is in section 9.
-* **A pack carries maps, metadata and attached resources.** Sound effects are
-  not offered, and custom videos are not possible yet — see 13a.
+* **A pack carries maps, metadata and attached resources**, including a
+  cinematic. Sound effects are not offered, and cinematics have no audio.
 * **Campaign metadata is deliberately bounded**: names, routing, music, par,
   floor number, the tally screen. Colors and skills are not offered — a skill
   block is global and would change the stock game's difficulty levels.

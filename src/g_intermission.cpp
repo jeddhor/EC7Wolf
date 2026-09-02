@@ -33,6 +33,7 @@
 */
 
 #include "wl_def.h"
+#include "c7_flic.h"
 #include "id_ca.h"
 #include "id_in.h"
 #include "id_sd.h"
@@ -338,6 +339,19 @@ bool ShowIntermission(const IntermissionInfo *intermission, bool demoMode)
 					break;
 				case IntermissionInfo::VICTORYSTATS:
 					Victory(true);
+					break;
+				case IntermissionInfo::FLIC:
+					// Nothing to fall back to if it is missing: an ending that
+					// silently showed the previous screen instead would look
+					// like the game had stopped. The message says which name
+					// was not found, which is the only useful thing to say.
+					{
+						const FlicIntermissionAction *cinematic =
+							(const FlicIntermissionAction*)intermission->Actions[i].action.Get();
+						if(!C7Flic_Play(cinematic->Name))
+							Printf("Cinematic '%s' was not found.\n",
+								cinematic->Name.GetChars());
+					}
 					break;
 			}
 

@@ -4641,6 +4641,33 @@ frames with one ffmpeg command, or the editor takes a folder of PNGs directly.
 **Non-goals:** audio in cinematics; a general video player; replacing the CD's
 own animations.
 
+**Status: shipped.** Both halves built and gated by `ec7edit_e14`.
+
+*The engine* looks for a cinematic in a loaded resource before the disc's
+`video/` directory -- `video/NAME.CO7` in any loaded pk3 -- and MAPINFO's
+`intermission` grammar gained a `Flic { Name = "..." }` action, so a campaign
+ending on `next = EndSequence, "MyEnding"` can play its own animation. A name
+nothing carries reports itself rather than passing silently, because an ending
+that quietly showed the previous screen would look like the game had stopped.
+`C7Flic_Play` now says which animation it played and where it came from, which
+is otherwise unanswerable: the thing on screen is a picture, and a campaign's
+ending and the game's look equally plausible.
+
+*The editor* writes FLIC. `ec7edit_core/flic.py` emits COLOR256, BRUN and LC;
+`imagery.py` reads PNG and reduces an animation to one shared palette;
+`video.py` joins them and shells out to ffmpeg when handed a video file rather
+than a folder of frames. All standard library: PNG's decompression is zlib,
+and ffmpeg is used if present rather than required, with its absence a message
+quoting the command that would produce the frames.
+
+One thing is worth recording because it cost an afternoon and would cost the
+next person the same: **BRUN and LC use opposite sign conventions.** In BRUN a
+positive count is a run and a negative one is literals; in LC it is the other
+way round. Writing BRUN's convention into LC produces a file whose first frame
+is perfect and whose every frame after it is noise -- it plays, it does not
+error, and it is wrong. The gate compares the engine's per-frame checksums
+against checksums computed from the source frames, which is what caught it.
+
 ---
 
 ---

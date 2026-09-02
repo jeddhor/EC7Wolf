@@ -119,6 +119,16 @@ public:
 	unsigned int	TextSpeed;
 };
 
+//: A cinematic, played from a loaded resource or the disc's video directory.
+//: Its own action rather than a key on an image, because it is not an image:
+//: it owns the screen and the palette for as long as it runs, and the player
+//: may skip it.
+class FlicIntermissionAction : public IntermissionAction
+{
+public:
+	FString Name;
+};
+
 class IntermissionInfo
 {
 public:
@@ -136,7 +146,8 @@ public:
 		CAST,
 		GOTOTITLE,
 		TEXTSCREEN,
-		VICTORYSTATS
+		VICTORYSTATS,
+		FLIC
 	};
 
 	struct Action

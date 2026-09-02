@@ -45,6 +45,7 @@ from PySide6.QtWidgets import (
 )
 
 from ec7edit_core.archive import read_archive
+from ec7edit_core.bundle import catalog_path
 from ec7edit_core.catalog import Catalog, load_catalog
 from ec7edit_core.commands import History, add_maps
 from ec7edit_core.discovery import Profile, data_fingerprint
@@ -100,7 +101,7 @@ from .thumbnails import AssetSource, ThumbnailFactory
 from .tools import Tool, ToolController
 from .workers import WorkerPool
 
-CATALOG_PATH = Path(__file__).resolve().parents[1] / "resources" / "editor_catalog.json"
+CATALOG_PATH = catalog_path()
 
 #: Section 8.6's tabs. "Doors and Specials" holds the compound *tools* rather
 #: than the raw words behind them: offering both was offering two things that

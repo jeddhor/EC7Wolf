@@ -32,6 +32,7 @@ from pathlib import Path
 
 from .archive import parse_archive
 from .assets import PALETTE_OFFSET, PALETTE_SIZE, AssetError, load_palette, parse_gfx_header
+from .bundle import workspace_root
 from .paths import canonical, digest_file, looks_like_game_data
 
 #: The minimum a Corridor 7 installation must have for the editor to work.
@@ -366,7 +367,7 @@ def candidate_engines(start: Path | str | None = None) -> list[Path]:
     editor suggesting three paths that might be right is helpful; the editor
     walking somebody's home directory is not.
     """
-    root = Path(start) if start else Path(__file__).resolve().parents[3]
+    root = Path(start) if start else workspace_root()
     names = ("ec7wolf", "ec7wolf.exe")
     places = [
         root / "builds" / "release",
@@ -385,7 +386,7 @@ def candidate_engines(start: Path | str | None = None) -> list[Path]:
 
 def candidate_data_dirs(start: Path | str | None = None) -> list[Path]:
     """Likewise for the game data: named places, never a scan."""
-    root = Path(start) if start else Path(__file__).resolve().parents[3]
+    root = Path(start) if start else workspace_root()
     places = [
         root / "corr7" / "CORR7CD",
         root / "builds" / "release",

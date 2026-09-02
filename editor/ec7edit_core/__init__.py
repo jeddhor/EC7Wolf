@@ -13,5 +13,18 @@ The byte formats implemented here are documented in
 
 from __future__ import annotations
 
-__version__ = "0.1.0"
 __all__ = ["__version__"]
+
+
+def __getattr__(name: str) -> str:
+    """`__version__`, computed the first time anybody reads it.
+
+    PEP 562. The version is the engine's -- `1.0-betaN`, counted from the same
+    commit -- and in a checkout that means asking git. Doing it at import time
+    would put a subprocess in front of every `import ec7edit_core`, including
+    the several hundred a test run does.
+    """
+    if name in ("__version__", "__pep440__"):
+        from .version import pep440, version
+        return pep440() if name == "__pep440__" else version()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

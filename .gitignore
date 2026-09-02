@@ -21,3 +21,4 @@ builds/ec7wolf-debug.keystore
 
 # EC7Edit's local Qt runtime; created by 'uv venv --python 3.12 editor/.venv'
 editor/.venv/
+editor/ec7edit_core/_build_version.py

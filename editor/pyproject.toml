@@ -7,7 +7,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ec7edit"
-version = "0.1.0"
+# The engine's number, computed the same way from the same commit. See
+# ec7edit_core/version.py: shipping one product under two version schemes made
+# every bug report carry a relationship the reader had to guess.
+dynamic = ["version"]
 description = "A level editor for Corridor 7: Alien Invasion, built alongside EC7Wolf"
 readme = "README.md"
 license = "GPL-3.0-or-later"
@@ -42,6 +45,11 @@ ec7edit = "ec7edit_core.cli:main"
 [project.urls]
 Homepage = "https://github.com/jeddhor/EC7Wolf"
 Documentation = "https://github.com/jeddhor/EC7Wolf/blob/main/ECWolf/docs/corridor7-level-editor.md"
+
+[tool.setuptools.dynamic]
+# The PEP 440 spelling -- 1.0b209 for 1.0-beta209 -- because build backends
+# reject the readable one. Nothing but packaging tools sees it.
+version = { attr = "ec7edit_core.__pep440__" }
 
 [tool.setuptools]
 packages = ["ec7edit_core"]

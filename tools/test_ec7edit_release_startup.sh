@@ -187,6 +187,23 @@ if leaks:
 print("  ok    no path from the machine that built it")
 PY
 
+# --- 4b. what a package owes the person who downloaded it ------------------
+#
+# It bundles a Qt and a Python, so it owes their licences: "it is only a
+# dependency" stops being true the moment the libraries are inside the file
+# being distributed. And a manual is not much use left on a website.
+for required in LICENSE.txt THIRD-PARTY.txt README.txt MANUAL.md; do
+	if [ -f "$copy/editor/$required" ]; then
+		say ok "it carries $required"
+	else
+		fail "the package has no $required"
+	fi
+done
+grep -q "LGPL" "$copy/editor/THIRD-PARTY.txt" 2>/dev/null ||
+	fail "THIRD-PARTY.txt does not mention Qt's terms"
+grep -qi "no part of corridor 7" "$copy/editor/THIRD-PARTY.txt" 2>/dev/null ||
+	fail "THIRD-PARTY.txt does not say the game is not included"
+
 # --- 5. it can see an engine put beside it ---------------------------------
 #
 # Not required to run, and deliberately not fatal: this checks the packaged

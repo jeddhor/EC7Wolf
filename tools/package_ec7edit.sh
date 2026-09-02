@@ -138,6 +138,60 @@ staging="$work/$name"
 mv "$work/dist/ec7edit" "$staging"
 
 cp "$repo/docs/license-gpl.txt" "$staging/LICENSE.txt"
+
+# What else is in the box, and under what terms. A package that bundles a Qt
+# and a Python owes their licences too, and "it is only a dependency" stops
+# being true the moment the libraries are inside the file being distributed.
+# Versions are read from the environment that was frozen rather than typed
+# here, so this cannot describe a Qt the package does not contain.
+"$python" - "$staging/THIRD-PARTY.txt" "$runtime" <<'PY' || true
+import sys
+from pathlib import Path
+
+try:
+    import importlib.metadata as metadata
+except ImportError:                                   # pragma: no cover
+    metadata = None
+
+lines = [
+    "Third-party software inside this package",
+    "========================================",
+    "",
+    "EC7Edit itself is GPL-3.0-or-later; see LICENSE.txt. This package also",
+    "contains the following, which are not ours and keep their own terms.",
+    "",
+]
+
+if metadata is not None:
+    for name in ("PySide6", "PySide6-Essentials", "PySide6-Addons", "shiboken6"):
+        try:
+            md = metadata.metadata(name)
+        except Exception:
+            continue
+        licence = md.get("License-Expression") or md.get("License") or "see the project"
+        lines.append(f"  {name} {md.get('Version')}")
+        lines.append(f"      {licence}")
+        lines.append("      Qt itself is included, under the same terms.")
+        lines.append("      https://www.qt.io/licensing  https://pypi.org/project/PySide6/")
+        lines.append("")
+
+lines += [
+    f"  CPython {sys.argv[2]}",
+    "      Python Software Foundation License 2.0",
+    "      https://docs.python.org/3/license.html",
+    "",
+    "  PyInstaller runtime (the bootloader in this executable)",
+    "      GPL-2.0-or-later with the bootloader exception, which permits",
+    "      shipping frozen applications under any licence.",
+    "      https://pyinstaller.org/en/stable/license.html",
+    "",
+    "No part of Corridor 7: Alien Invasion is in this package. That game",
+    "remains the property of its owners and must be obtained separately.",
+    "",
+]
+Path(sys.argv[1]).write_text("\n".join(lines))
+print(f"  licenses: {Path(sys.argv[1]).name}")
+PY
 [ -f "$repo/docs/ec7edit-manual.md" ] && cp "$repo/docs/ec7edit-manual.md" "$staging/MANUAL.md"
 
 cat >"$staging/README.txt" <<EOF

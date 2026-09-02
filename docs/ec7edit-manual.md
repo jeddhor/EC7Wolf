@@ -387,7 +387,9 @@ snapshot** (`F7`). *Turn 90°* re-aims without moving.
 
 There is **one** camera. It is drawn on the map as a ring with a cone showing
 which way it faces, clicking again moves it rather than adding a second, and
-moving it keeps the angle you chose. It is a marker, not a change to the floor:
+moving it keeps the angle you chose. The panel names the direction — *facing
+90° (north)* — using the engine's convention, where 0° is east and the angle
+increases anticlockwise. It is a marker, not a change to the floor:
 it writes nothing, it is not an undo step, and it never appears in anything you
 export.
 

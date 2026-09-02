@@ -148,5 +148,34 @@ class BlankFrames(unittest.TestCase):
         self.assertTrue(looks_like_a_world(path))
 
 
+class Facing(unittest.TestCase):
+    """The angle convention, written down where it can be checked.
+
+    0 east, 90 north -- the engine's, not a clock's. `--capture-warp` maps
+    these degrees onto angle_t and assigns them to the player, and the engine
+    sends an angle between 45 and 135 to `tiley - 1`, which is north.
+    """
+
+    def test_the_four_right_angles_are_named(self):
+        self.assertIn("east", Camera(1.5, 1.5, 0).describe())
+        self.assertIn("north", Camera(1.5, 1.5, 90).describe())
+        self.assertIn("west", Camera(1.5, 1.5, 180).describe())
+        self.assertIn("south", Camera(1.5, 1.5, 270).describe())
+
+    def test_an_angle_between_them_keeps_its_number_and_invents_nothing(self):
+        described = Camera(1.5, 1.5, 45).describe()
+        self.assertIn("45", described)
+        self.assertNotIn("(", described.split("facing")[1])
+
+    def test_the_angle_reaches_the_engine_unchanged(self):
+        self.assertIn("90", Camera(3, 4, 90).arguments())
+
+    def test_turning_four_times_comes_back(self):
+        angle = 0.0
+        for _ in range(4):
+            angle = (angle + 90.0) % 360.0
+        self.assertEqual(Camera(1, 1, angle).normalised().angle, 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()

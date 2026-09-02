@@ -66,7 +66,16 @@ def _error(message: str) -> Ec7EditError:
 
 @dataclass(frozen=True)
 class Camera:
-    """Where the picture is taken from. Tile coordinates, degrees clockwise."""
+    """Where the picture is taken from, and which way it looks.
+
+    Tile coordinates, and degrees **counter-clockwise from east** -- 0 east,
+    90 north, 180 west, 270 south. That is the engine's own convention: an
+    angle between 45 and 135 sends `Cmd_Use` to `tiley - 1`, and
+    `--capture-warp` maps these degrees straight onto `angle_t` and assigns
+    them to the player. This docstring said "clockwise" for a while and cost an
+    afternoon: the canvas drew every camera facing backwards, and zero was the
+    only angle that looked right.
+    """
 
     x: float
     y: float
@@ -80,9 +89,16 @@ class Camera:
         camera = self.normalised()
         return ["--capture-warp", f"{camera.x:g}", f"{camera.y:g}", f"{camera.angle:g}"]
 
+    #: The compass name for each right angle. Only the four the Turn button
+    #: can reach are named; anything else keeps its number, because inventing
+    #: "north-ish" for 87 degrees would be worse than saying 87.
+    _COMPASS = {0.0: "east", 90.0: "north", 180.0: "west", 270.0: "south"}
+
     def describe(self) -> str:
         camera = self.normalised()
-        return f"({camera.x:g}, {camera.y:g}) facing {camera.angle:g}°"
+        compass = self._COMPASS.get(camera.angle)
+        facing = f"{camera.angle:g}°" + (f" ({compass})" if compass else "")
+        return f"({camera.x:g}, {camera.y:g}) facing {facing}"
 
 
 def check_camera(document: MapDocument, camera: Camera) -> None:

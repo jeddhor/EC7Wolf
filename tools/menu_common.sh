@@ -139,6 +139,49 @@ menu_press_moved() {  # menu_press_moved KEY
 # appeared. Under a full suite that is exactly what happened: "no menu appeared
 # while looking for Multiplayer", 20 seconds after a game that was still
 # starting.
+#: Press a key and wait for it to have DONE something, retrying the press.
+#:
+#: menu_press_moved covers the case where the effect is the cursor moving. This
+#: covers the rest: a value that changes on the row the cursor is already on, a
+#: key that opens a different screen, a Start that begins hosting. The caller
+#: supplies the test, which is run as a command, and the press is repeated
+#: while it keeps failing.
+#:
+#: Timing a press and hoping is what these gates used to do, and it is why
+#: multiplayer_cancel failed about one run in twenty with "0 pixels changed":
+#: the key was simply dropped, and every later assertion was then about a
+#: screen nobody had left.
+menu_press_until() {  # menu_press_until KEY CONDITION...
+	_key=$1
+	shift
+	_attempt=0
+	while [ "$_attempt" -lt "$MENU_PRESS_RETRIES" ]; do
+		menu_send_key "$_key"
+		_step=0
+		while [ "$_step" -lt "$MENU_SETTLE_STEPS" ]; do
+			if "$@"; then
+				return 0
+			fi
+			sleep 0.15
+			_step=$((_step + 1))
+		done
+		_attempt=$((_attempt + 1))
+	done
+	return 1
+}
+
+#: The screen is not the one in FILE any more. A companion for
+#: menu_press_until when the only evidence is that something was redrawn.
+menu_screen_changed() {  # menu_screen_changed FILE [MINIMUM]
+	_before=$1
+	_least=${2:-200}
+	DISPLAY=$display import -window root "$work/menu-changed.png" 2>/dev/null || return 1
+	_differ=$(compare -metric AE "$_before" "$work/menu-changed.png" null: 2>&1 |
+		tr -d '\n' | sed 's/ .*//' | sed 's/[^0-9].*//')
+	[ -n "$_differ" ] || return 1
+	[ "$_differ" -ge "$_least" ]
+}
+
 menu_open() {  # menu_open [KEY]
 	_key=${1:-Escape}
 	_attempt=0

@@ -162,7 +162,13 @@ check "the setup screen is a menu" test "$(menu_cursor_row)" -ge 0
 # below then changes a different setting, which fails later and somewhere else.
 menu_press_moved Up || { printf '  FAIL the menu did not move up to Role\n'; exit 1; }
 menu_press_moved Up || { printf '  FAIL the menu did not move up to Role\n'; exit 1; }
-menu_press Left 1.5
+# Verified by its effect, like the two Ups above. A dropped Left leaves the role
+# on "Join", and Start then raises the "enter an address" prompt instead of
+# hosting -- which fails four assertions later, describing the waiting screen
+# rather than the key that never arrived.
+DISPLAY=$display import -window root "$work/role-before.png" 2>/dev/null || true
+menu_press_until Left menu_screen_changed "$work/role-before.png" 40 || {
+	printf '  FAIL the role never changed from Join to Host\n'; exit 1; }
 DISPLAY=$display import -window root "$work/role.png" 2>/dev/null || true
 
 menu_walk_to_bottom "Start" || exit 1
@@ -173,7 +179,9 @@ menu_walk_to_bottom "Start" || exit 1
 # same shell, with the same yellow heading, so menu_cursor.py finds a cursor on
 # that too and cannot tell the two apart.
 DISPLAY=$display import -window root "$work/setup-before.png" 2>/dev/null || true
-menu_press Return 4
+# The engine says when it is hosting, so that is what the press waits for
+# rather than a number of seconds.
+menu_press_until Return grep -q "Waiting for" "$work/game.log" || true
 
 printf '\nWaiting for a player who never comes\n'
 check "it is hosting" grep -q "Waiting for" "$work/game.log"

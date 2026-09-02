@@ -306,6 +306,7 @@ behavior for other games was preserved wherever possible; these are the deltas.
 | Document | What it is |
 | --- | --- |
 | [`docs/corridor7.md`](docs/corridor7.md) | The exhaustive feature list, every reconstruction and how it was established, and the honest list of deviations. |
+| [`docs/corridor7-monster-sprite-workflow.md`](docs/corridor7-monster-sprite-workflow.md) | The master AI workflow for turning a short monster idea into a complete, palette-correct set of Corridor 7 sprite angles, states, previews, and an EC7Wolf companion mod. |
 | [`docs/corridor7-level-editor.md`](docs/corridor7-level-editor.md) | The complete product design, native-format contract, validation and test strategy, and phased AI-agent implementation plan for a simple point-and-click Corridor 7 level editor. |
 | [`docs/ec7edit-manual.md`](docs/ec7edit-manual.md) | **The EC7Edit manual.** Everything from first run to map packs, illustrated with screenshots generated from the editor itself. |
 | [`editor/`](editor/) | EC7Edit, the level editor built to that plan: a Qt application, the native codec, the preview-WAD and map-pack exporters, and the `ec7edit` command line, with the byte layouts documented in [`editor/docs/native-formats.md`](editor/docs/native-formats.md). It ships as a self-contained package holding its own Python and Qt. |

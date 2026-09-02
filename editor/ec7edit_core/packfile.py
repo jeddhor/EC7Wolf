@@ -43,7 +43,7 @@ from .campaign import (
     validate as validate_campaign,
 )
 from .errors import Diagnostic, Severity, export_error
-from .resources import NAMESPACES, Resource
+from .resources import NAMESPACES, Resource, make_additive
 from .wad import build_preview_wad
 
 #: Folders whose contents are copied into the pack. Anything else in a resource
@@ -176,7 +176,15 @@ def build_resource_pack(campaign: Campaign, documents, resources,
                     buffer.write(name, archive.read(name))
                 elif "/" not in lowered and Path(lowered).name == "decorate":
                     target = f"{DECORATE_DIR}/{slug}.txt"
-                    buffer.write(target, archive.read(name))
+                    text = archive.read(name).decode("latin-1")
+                    if resource.additive:
+                        # The one thing in a pack the editor rewrites, and only
+                        # this one word. `replaces X` makes every X in the game
+                        # become this actor, which defeats giving it a map word
+                        # -- both words would then spawn the same thing and the
+                        # original could not be placed at all.
+                        text = make_additive(text)
+                    buffer.write(target, text.encode("latin-1"))
                     includes.append(target)
 
     if includes:

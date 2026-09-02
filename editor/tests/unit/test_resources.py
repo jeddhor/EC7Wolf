@@ -19,7 +19,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from ec7edit_core.errors import ExportError, Severity
 from ec7edit_core.resources import (
-    MAX_ENTRIES, Resource, ResourceActor, inspect, read_decorate,
+    MAX_ENTRIES, Resource, ResourceActor, inspect, make_additive,
+    read_decorate,
 )
 
 DECORATE = """\
@@ -97,10 +98,12 @@ class Reading(unittest.TestCase):
         self.assertFalse(base.placeable)
 
     def test_replacing_a_stock_class_is_said_out_loud(self):
-        # It is a global switch -- every map in the game, not only yours -- and
-        # somebody who did not mean it should find out from the editor.
+        # It is a global switch -- every map in the game, not only yours -- so
+        # the editor says both that the pack asks for it and that it will not
+        # be doing it unless told to.
         problems = inspect(self.pack).problems
-        self.assertTrue(any("replaces C7Rodex" in p.message for p in problems))
+        self.assertTrue(any("replace C7Rodex" in p.message for p in problems),
+                        [p.message for p in problems])
 
     def test_art_an_actor_needs_but_the_pack_lacks_is_a_warning(self):
         pack = a_pack(self.root / "bare.pk3", sprites=("SHRDA0",))
@@ -114,6 +117,62 @@ class Reading(unittest.TestCase):
         resource = inspect(pack)
         self.assertIn("docs/brief.md", resource.ignored)
         self.assertIn("previews/all.png", resource.ignored)
+
+
+class Additive(unittest.TestCase):
+    """`replaces` and placing something on a map contradict each other.
+
+    A pack written to replace a stock class turns every one of them into its
+    own actor while it is loaded -- so the word the editor allocated and the
+    word the game already had both spawn the same thing, and the original
+    cannot be placed at all. Proven against the engine in
+    `tools/test_ec7edit_e13.sh`; this is the transformation behind it.
+    """
+
+    def test_replaces_comes_off_the_declaration(self):
+        self.assertEqual(
+            make_additive("actor A : B replaces B\n{\n}\n"),
+            "actor A : B\n{\n}\n")
+
+    def test_an_actor_with_no_parent_too(self):
+        self.assertEqual(make_additive("actor A replaces B\n{\n}\n"),
+                         "actor A\n{\n}\n")
+
+    def test_everything_else_is_left_exactly_alone(self):
+        # Including the comments, which are the author's explanation of what
+        # the actor is, and the states, which are the whole file.
+        before = ("// A rooted ambusher.\n"
+                  "actor Flower : C7Semaj replaces C7Semaj\n"
+                  "{\n    speed 0, 0\n"
+                  "    // replaces nothing here; this is prose\n"
+                  "    states\n    {\n    Spawn:\n        FLWR A -1\n"
+                  "        stop\n    }\n}\n")
+        after = make_additive(before)
+        self.assertNotIn("replaces C7Semaj", after)
+        self.assertIn("// replaces nothing here; this is prose", after)
+        self.assertIn("FLWR A -1", after)
+        self.assertEqual(len(before.splitlines()), len(after.splitlines()))
+
+    def test_a_file_with_nothing_to_change_is_unchanged(self):
+        text = "actor A : B\n{\n}\n"
+        self.assertEqual(make_additive(text), text)
+
+    def test_a_pack_says_what_it_would_replace(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = a_pack(Path(tmp) / "p.pk3")
+            self.assertEqual(inspect(pack).replacements, ("C7Rodex",))
+
+    def test_additive_is_the_default(self):
+        # Placing something from the palette is supposed to mean placing it,
+        # not swapping it for every instance of something else.
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertTrue(inspect(a_pack(Path(tmp) / "p.pk3")).additive)
+
+    def test_the_choice_survives_the_project_file(self):
+        from dataclasses import replace as dc_replace
+        with tempfile.TemporaryDirectory() as tmp:
+            resource = dc_replace(inspect(a_pack(Path(tmp) / "p.pk3")), additive=False)
+            self.assertFalse(Resource.from_json(resource.to_json()).additive)
 
 
 class Refusing(unittest.TestCase):

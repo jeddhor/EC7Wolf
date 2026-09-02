@@ -118,6 +118,20 @@ class Resource:
     #: Carried into the pack but not read by the engine -- previews, notes.
     ignored: tuple[str, ...] = ()
     problems: tuple[Diagnostic, ...] = ()
+    #: Whether to drop `replaces` from this pack's actors when building.
+    #:
+    #: A project-level choice rather than anything the pack says. `replaces X`
+    #: is a global switch: every X in the game becomes this actor while the
+    #: pack is loaded, which silently defeats the whole point of giving the
+    #: actor a map word -- both words then spawn the same thing and you cannot
+    #: have the original at all. Additive is the default because it is what
+    #: placing something from the palette is supposed to mean.
+    additive: bool = True
+
+    @property
+    def replacements(self) -> tuple[str, ...]:
+        """Stock classes this pack would replace if it were left alone."""
+        return tuple(sorted({a.replaces for a in self.actors if a.replaces}))
 
     @property
     def name(self) -> str:
@@ -148,6 +162,7 @@ class Resource:
             "textures": list(self.textures),
             "music": list(self.music),
             "graphics": list(self.graphics),
+            "additive": self.additive,
         }
 
     @classmethod
@@ -156,7 +171,7 @@ class Resource:
             raise export_error("C7E-RES-001", "a resource record is an object", where)
         unknown = sorted(set(raw) - {
             "display_path", "sha256", "entries", "total_bytes", "actors",
-            "sprites", "textures", "music", "graphics"})
+            "sprites", "textures", "music", "graphics", "additive"})
         if unknown:
             raise export_error("C7E-RES-001", f"unknown resource keys {unknown}", where)
         actors = tuple(
@@ -174,6 +189,7 @@ class Resource:
             textures=tuple(str(s) for s in raw.get("textures", [])),
             music=tuple(str(s) for s in raw.get("music", [])),
             graphics=tuple(str(s) for s in raw.get("graphics", [])),
+            additive=bool(raw.get("additive", True)),
         )
 
 
@@ -222,6 +238,20 @@ def _sprite_of(body: str) -> str:
             return frame.group("sprite").upper()
     frame = _FRAME.search(body)
     return frame.group("sprite").upper() if frame else ""
+
+
+def make_additive(text: str) -> str:
+    """The same DECORATE with `replaces` taken off every actor.
+
+    A surgical edit of one word on the declaration line, leaving every other
+    byte alone -- including the comments, which are the author's explanation of
+    what the actor is. Everything else in a pack is copied untouched; this is
+    the one thing the editor rewrites, because `replaces` and the editor's
+    placement model contradict each other and the file cannot say both.
+    """
+    return re.sub(r"(^\s*actor\s+[A-Za-z_]\w*(?:\s*:\s*[A-Za-z_]\w*)?)"
+                  r"\s+replaces\s+[A-Za-z_]\w*",
+                  r"\1", text, flags=re.IGNORECASE | re.MULTILINE)
 
 
 def read_decorate(text: str, lump: str) -> list[ResourceActor]:
@@ -355,8 +385,11 @@ def inspect(path: Path | str) -> Resource:
         if actor.replaces:
             problems.append(Diagnostic(
                 "C7E-RES-007", Severity.INFORMATION,
-                f"{actor.name} replaces {actor.replaces} everywhere while this "
-                "pack is loaded, not only on your maps.", actor.name))
+                f"{actor.name} is written to replace {actor.replaces}. The "
+                f"editor drops that when it builds, so you can place both "
+                f"{actor.name} and {actor.replaces} on one map; turn it off in "
+                "Resource packs to keep the author's global replacement "
+                "instead.", actor.name))
 
     return Resource(
         display_path=str(path),
@@ -375,5 +408,6 @@ def inspect(path: Path | str) -> Resource:
 
 __all__ = [
     "MAX_ENTRIES", "MAX_SINGLE_BYTES", "MAX_TOTAL_BYTES", "NAMESPACES",
-    "Resource", "ResourceActor", "ROOT_LUMPS", "inspect", "read_decorate",
+    "Resource", "ResourceActor", "ROOT_LUMPS", "inspect", "make_additive",
+    "read_decorate",
 ]

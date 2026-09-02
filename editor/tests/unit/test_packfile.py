@@ -148,6 +148,33 @@ class Building(unittest.TestCase):
         self.assertTrue(any(p.code == "C7E-RES-008" for p in pack.problems))
         self.assertNotIn("sprites/FLWRA0.png", set(pack.audit.lump_names))
 
+    def test_replaces_is_dropped_from_the_decorate_that_ships(self):
+        import io
+        from dataclasses import replace as dc_replace
+
+        with zipfile.ZipFile(self.root / "rep.pk3", "w") as archive:
+            archive.writestr("DECORATE", "actor Flower : C7Rodex replaces C7Rodex\n"
+                                         "{\nstates\n{\nSpawn:\nFLWR A -1\nstop\n}\n}\n")
+            archive.writestr("sprites/FLWRA0.png", b"\x89PNG\r\n\x1a\n" + b"\0" * 40)
+        resource = inspect(self.root / "rep.pk3")
+        allocations, _ = allocate([], [resource])
+
+        pack = build_resource_pack(
+            self.campaign, [a_map(allocations[0].word)], [resource], allocations,
+            resource_files={resource.sha256: self.root / "rep.pk3"})
+        with zipfile.ZipFile(io.BytesIO(pack.pk3)) as archive:
+            shipped = archive.read("decorate/rep.txt").decode()
+        self.assertNotIn("replaces", shipped)
+        self.assertIn("FLWR A -1", shipped)
+
+        kept = build_resource_pack(
+            self.campaign, [a_map(allocations[0].word)],
+            [dc_replace(resource, additive=False)], allocations,
+            resource_files={resource.sha256: self.root / "rep.pk3"})
+        with zipfile.ZipFile(io.BytesIO(kept.pk3)) as archive:
+            self.assertIn("replaces C7Rodex",
+                          archive.read("decorate/rep.txt").decode())
+
     def test_a_campaign_that_cannot_be_built_is_refused(self):
         broken = Campaign(title="T", key="T", entries=(
             CampaignEntry(61, "Loop", next=Route(61)),))

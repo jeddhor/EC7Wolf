@@ -16,12 +16,14 @@ stops spawning them.
 
 from __future__ import annotations
 
+from dataclasses import replace as dc_replace
 from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView, QDialog, QDialogButtonBox, QFileDialog, QHBoxLayout,
-    QLabel, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QVBoxLayout,
+    QAbstractItemView, QCheckBox, QDialog, QDialogButtonBox, QFileDialog,
+    QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMessageBox, QPushButton,
+    QVBoxLayout,
 )
 
 from ec7edit_core.custom import allocate, load as load_allocations, store, used_by
@@ -59,6 +61,18 @@ class ResourceDialog(QDialog):
         self.detail.setMinimumHeight(90)
         self.detail.setAlignment(Qt.AlignmentFlag.AlignTop)
         layout.addWidget(self.detail)
+
+        self.additive = QCheckBox(
+            "Place these alongside the game's own actors "
+            "(drop \u201creplaces\u201d from this pack)")
+        self.additive.setObjectName("resource-additive")
+        self.additive.setToolTip(
+            "A pack written with \u201creplaces C7Semaj\u201d turns every Semaj "
+            "in the game into its own actor while it is loaded, so you cannot "
+            "have both. With this ticked the editor drops that when it builds, "
+            "and the actor is placed only where you put it.")
+        self.additive.toggled.connect(lambda on: self._set_additive(on))
+        layout.addWidget(self.additive)
 
         buttons = QHBoxLayout()
         self.add = QPushButton("Attach a pack…")
@@ -111,8 +125,22 @@ class ResourceDialog(QDialog):
         row = self.list.currentRow()
         return self._resources[row] if 0 <= row < len(self._resources) else None
 
+    def _set_additive(self, on: bool) -> None:
+        row = self.list.currentRow()
+        if not 0 <= row < len(self._resources):
+            return
+        if self._resources[row].additive == on:
+            return
+        self._resources[row] = dc_replace(self._resources[row], additive=on)
+        self._describe()
+
     def _describe(self) -> None:
         resource = self._current()
+        self.additive.setEnabled(resource is not None and bool(resource.replacements))
+        if resource is not None:
+            blocked = self.additive.blockSignals(True)
+            self.additive.setChecked(resource.additive)
+            self.additive.blockSignals(blocked)
         if resource is None:
             self.detail.setText("No pack attached. Attach one to use art the "
                                 "game never had.")
@@ -122,6 +150,13 @@ class ResourceDialog(QDialog):
         for allocation in mine:
             kind = "object word" if allocation.plane == 1 else "wall"
             lines.append(f"  {allocation.name}: {kind} {allocation.word}")
+        if resource.replacements:
+            names = ", ".join(resource.replacements)
+            lines.append(
+                f"  written to replace {names}; "
+                + ("dropped when building, so both can be placed"
+                   if resource.additive else
+                   f"KEPT, so every {names} in the game becomes this pack's actor"))
         for problem in resource.problems:
             lines.append(f"  {problem.severity.name.lower()}: {problem.message}")
         self.detail.setText("\n".join(lines))

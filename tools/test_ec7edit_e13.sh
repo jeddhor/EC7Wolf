@@ -102,7 +102,7 @@ def png(width: int, height: int, rgb: tuple) -> bytes:
 
 DECORATE = """\
 // A test actor: stands still, is visible, and does nothing else.
-actor EC7TestBloom : C7Rodex
+actor EC7TestBloom : C7Rodex replaces C7Rodex
 {
     health 40
     speed 0, 0
@@ -175,6 +175,7 @@ for y in range(1, H - 1):
 at = lambda x, y: y * W + x
 objects[at(3, 3)] = 19          # player start
 walls[at(3, 2)] = 63            # a way out
+objects[at(15, 15)] = 216       # a stock C7Rodex, the class the pack replaces
 
 path = work / "garden.ec7project"
 project = load_project(path).added(MapDocument(
@@ -299,6 +300,19 @@ if [ "$placed" = "12,5 6,14 8,8 " ]; then
 else
 	fail "the custom actor spawned at '$placed', expected '12,5 6,14 8,8 '"
 	tail -5 "$work/custom.log" >&2 || true
+fi
+
+# The pack's DECORATE says `replaces C7Rodex`, and the map has a stock Rodex on
+# it. That combination is the one way additive placement silently fails: with
+# the replacement left in, BOTH words spawn the custom actor and the original
+# cannot be placed at all. The editor drops it when building, so both are here.
+stock_actor=$(awk 'NR > 1 && $1 == 1 && $3 == 15 && $4 == 15 {print $2}' \
+	"$work/actors.txt" 2>/dev/null | head -1)
+if [ "$stock_actor" = "C7Rodex" ]; then
+	say ok "and the stock C7Rodex beside them is still a C7Rodex"
+else
+	fail "the stock actor at (15,15) is '$stock_actor', not C7Rodex --"
+	fail "  the pack's 'replaces' reached the build and swallowed it"
 fi
 grep -q "MAP61 - The Garden" "$work/custom.log" ||
 	fail "the pack's own floor was not entered"

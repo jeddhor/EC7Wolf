@@ -575,11 +575,21 @@ The generated translator `include`s Corridor 7's rather than replacing it, and
 is named by each of your maps individually. Load your pack and the rest of the
 game is exactly as it was.
 
-The one exception is not the editor's doing. If a pack's DECORATE says
-`replaces C7Semaj`, that is a **global** switch: every Semaj in the whole game
-becomes that actor while the pack is loaded, and you cannot have both. The
-editor says so when you attach it. Placing from the Custom tab does not use
-`replaces` and is unaffected.
+### "replaces", and using both
+
+A pack's DECORATE may say `replaces C7Semaj`. That is a **global** switch: every
+Semaj in the whole game becomes that actor while the pack is loaded — so the
+word the editor allocated and the word the game already had would both spawn
+the same thing, and you could not place a real Semaj at all.
+
+**The editor drops it when it builds**, so you can put the custom actor and the
+one it was written to replace on the same map and get both. Nothing in your
+pack file is changed; only the copy inside the pack the editor exports, and
+only that one word — the comments, the states and the art are untouched.
+
+If you *wanted* the global replacement — "make every Semaj in my campaign a
+flower" is a reasonable thing to want — untick **Place these alongside the
+game's own actors** in *Resource packs…*, and the author's `replaces` is kept.
 
 ### Detaching
 

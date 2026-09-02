@@ -155,6 +155,20 @@ def main(argv=None) -> int:
     settings = Settings(QSettings(str(scratch / "settings.ini"), QSettings.IniFormat))
     settings.recovery_dir = scratch / "recovery"
 
+    # THE GUARD. These images are committed to a public repository, so not one
+    # pixel of Corridor 7 may be in them -- and "I was careful" is not a
+    # property anything can check later. This is: with no data directory
+    # configured, the palette and the canvas take their no-artwork paths and
+    # draw labelled tiles and flat colours, and there is no artwork in the
+    # process to leak. A fresh QSettings file in a scratch directory cannot
+    # have one, and if some future change gives it one, this stops rather than
+    # writing a picture nobody would look at twice.
+    if settings.profile.data_dir:
+        raise SystemExit(
+            "refusing to generate: a game data directory is configured "
+            f"({settings.profile.data_dir}). These pictures are published, and "
+            "with data configured they would contain Corridor 7's artwork.")
+
     window = MainWindow(settings, catalog=CATALOG)
     window.resize(*WINDOW)
     window.project = demo_project()

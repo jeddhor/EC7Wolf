@@ -219,6 +219,29 @@ def check_opengl(executable: Path) -> None:
 # ---------------------------------------------------------------------------
 
 INSTALL_TEXT = {
+    "editor": """\
+EC7Edit {version} for {platform}
+=================================
+
+A level editor for Corridor 7: Alien Invasion.
+
+Run ./ec7edit (ec7edit.exe on Windows) from this folder. Everything it needs is
+in here -- a Python and a Qt of its own -- so nothing has to be installed
+first, and nothing on your machine can conflict with it.
+
+THIS DOWNLOAD CONTAINS NO PART OF CORRIDOR 7. It is an editor and nothing else:
+no maps, no artwork, no sounds. You need your own copy of the game, and EC7Wolf
+to play what you make. The editor asks for both the first time it starts, and
+runs without them if you would rather look around first.
+
+MANUAL.md is the full manual. If it will not start, run
+
+    ./ec7edit --selftest
+
+which reports what this build is and where it stopped, and is the thing to
+paste into a bug report.
+""",
+
     "binaries": """\
 EC7Wolf {version} -- {platform}
 
@@ -357,7 +380,8 @@ def installer_files() -> list[tuple[Path, str]]:
 
 
 def package(engine_dir: Path | None, out: Path, kinds: list[str],
-            setup_exe: Path | None = None) -> list[Path]:
+            setup_exe: Path | None = None,
+            editor_dir: Path | None = None) -> list[Path]:
     tag = platform_tag()
     release = version()
     windows = tag.startswith("windows")
@@ -391,8 +415,25 @@ def package(engine_dir: Path | None, out: Path, kinds: list[str],
                         archive.write(source, target)
                     else:
                         archive.add(source, target)
+            # The editor travels with -full, which is the download for
+            # somebody who wants the whole thing rather than just the game.
+            if editor_dir and Path(editor_dir).is_dir():
+                _add_tree(archive, Path(editor_dir), f"{name}/EC7Edit")
             _add_text(archive, f"{name}/INSTALL.txt",
                       _install_text("full", tag, release))
+        made.append(path)
+
+    if "editor" in kinds and editor_dir and Path(editor_dir).is_dir():
+        # EC7Edit on its own. Someone who wants the level editor does not want
+        # to download the engine to get it, and someone who wants the engine
+        # usually does not want a 74 MB editor attached -- so it is a download
+        # of its own as well as travelling inside -full below.
+        name = f"EC7Edit-{release}-{tag}"
+        path, archive = _make(out, name, windows)
+        with archive:
+            _add_tree(archive, Path(editor_dir), name)
+            _add_text(archive, f"{name}/INSTALL.txt",
+                      _install_text("editor", tag, release))
         made.append(path)
 
     if "installer" in kinds:
@@ -438,7 +479,12 @@ def main() -> int:
     package_parser = sub.add_parser("package", help="make the release archives")
     package_parser.add_argument("--engine", type=Path)
     package_parser.add_argument("--out", type=Path, default=REPO / "dist")
-    package_parser.add_argument("--kinds", default="binaries,full,installer,source")
+    package_parser.add_argument("--kinds",
+                                default="binaries,full,editor,installer,source")
+    package_parser.add_argument("--editor", type=Path, default=None,
+                                metavar="DIR",
+                                help="a packaged EC7Edit to ship beside and "
+                                     "inside the engine archives")
     package_parser.add_argument("--setup-exe", type=Path,
                                 help="the frozen EC7Wolf-Setup.exe, to put in "
                                      "the Windows -full archive")
@@ -450,7 +496,7 @@ def main() -> int:
     else:
         package(arguments.engine, arguments.out,
                 [k.strip() for k in arguments.kinds.split(",") if k.strip()],
-                arguments.setup_exe)
+                arguments.setup_exe, arguments.editor)
     return 0
 
 

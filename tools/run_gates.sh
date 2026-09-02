@@ -25,7 +25,7 @@
 #
 # Usage:
 #   run_gates.sh [-b BUILD_DIR] [-d DATA_DIR] [-r RELEASE_DIR]
-#                [--require-data] [--list] [GATE...]
+#                [--editor-package DIR] [--require-data] [--list] [GATE...]
 #
 # GATE names are matched as substrings, so `run_gates.sh gl_` runs the OpenGL
 # gates and `run_gates.sh laser` runs both laser ones.
@@ -38,6 +38,7 @@ root=$(cd "$here/.." && pwd)
 build_dir=""
 data_dir=""
 release_dir=""
+editor_package=""
 require_data=0
 list_only=0
 selected=""
@@ -47,6 +48,7 @@ while [ "$#" -gt 0 ]; do
 		-b) build_dir=$2; shift 2 ;;
 		-d) data_dir=$2; shift 2 ;;
 		-r) release_dir=$2; shift 2 ;;
+		--editor-package) editor_package=$2; shift 2 ;;
 		--require-data) require_data=1; shift ;;
 		--list) list_only=1; shift ;;
 		-h|--help)
@@ -71,7 +73,7 @@ done
 # gl_selftest is here rather than below because --gltest is handled before the
 # IWAD is opened: it needs no game data, and it is the only thing that proves the
 # shaders actually compile on the runner's driver. A broken shader still links.
-data_free_gates='definitions names ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3 ec7edit_e4 ec7edit_e5 ec7edit_e6 ec7edit_e7 ec7edit_e8 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle'
+data_free_gates='definitions names ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3 ec7edit_e4 ec7edit_e5 ec7edit_e6 ec7edit_e7 ec7edit_e8 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle ec7edit_e12 ec7edit_package'
 
 data_gates='
 corridor7
@@ -384,6 +386,20 @@ for g in $data_free_gates; do
 				skip_gate "$g" "wine is missing"
 			else
 				run_gate "$g" "windows install" "$here/test_installer_windows.sh"
+			fi ;;
+		ec7edit_e12)
+			run_gate "$g" "editor release consistency" \
+				"$here/test_ec7edit_e12.sh" "$build_dir" ;;
+		ec7edit_package)
+			# The packaged editor. Skips itself when no package has been
+			# built, which is the ordinary state during development: this
+			# is a release check, and building one takes half a minute.
+			if [ -z "$editor_package" ]; then
+				skip_gate "$g" "no --editor-package given"
+			else
+				run_gate "$g" "packaged editor startup" \
+					"$here/test_ec7edit_release_startup.sh" \
+					"$editor_package" "$release_dir" ;
 			fi ;;
 		installer_lifecycle)
 			# Installing twice, removing, resuming, and the unattended

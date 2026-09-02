@@ -73,6 +73,18 @@ jobs:
           pip install pyinstaller PySide6
           python installer/windows/build_setup.py
 
+      # EC7Edit is frozen on the same runner as the engine it ships beside, so
+      # each platform's editor is built by that platform. It goes out twice: as
+      # a download of its own, for somebody who wants the editor and not the
+      # engine, and inside -full, which is the download for somebody who wants
+      # the lot.
+      - name: Package the editor
+        shell: bash
+        run: |
+          pip install pyinstaller PySide6
+          tools/package_ec7edit.sh --output staging/editor --no-archive \
+            --python "$(command -v python || command -v python3)"
+
       - name: Package
         shell: bash
         run: |
@@ -80,8 +92,16 @@ jobs:
           if [ -f dist/EC7Wolf-Setup.exe ]; then
             extra="--setup-exe dist/EC7Wolf-Setup.exe"
           fi
+          editor=""
+          # One directory inside staging/editor, named for the version and the
+          # platform. Found rather than spelled out, so the naming can change
+          # without this file having to be edited in step.
+          for candidate in staging/editor/*/; do
+            [ -x "$candidate/ec7edit" ] || [ -f "$candidate/ec7edit.exe" ] || continue
+            editor="--editor $candidate"
+          done
           python tools/make_release.py package --engine staging/engine \
-            --out packages --kinds binaries,full $extra
+            --out packages --kinds binaries,full,editor $extra $editor
           cp dist/EC7Wolf-Setup.exe packages/ 2>/dev/null || true
 
       - uses: actions/upload-artifact@v7

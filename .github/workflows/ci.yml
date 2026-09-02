@@ -52,7 +52,14 @@ jobs:
             libsdl2-dev libsdl2-mixer-dev libsdl2-net-dev \
             zlib1g-dev libbz2-dev libjpeg-dev libgtk-3-dev libepoxy-dev \
             xvfb x11-utils imagemagick libgl1-mesa-dri mesa-utils python3 \
-            desktop-file-utils ffmpeg
+            python3-pip desktop-file-utils ffmpeg
+
+      - name: Install the editor's own dependencies
+        # PySide6 for the GUI gates and the manual's screenshots, PyInstaller
+        # so the packaged-editor gate has a package to test. Both belong to the
+        # editor, not the engine: the engine still builds from the apt list
+        # above and nothing else.
+        run: pip install --break-system-packages PySide6 pyinstaller
 
       - name: Configure
         run: |
@@ -68,10 +75,23 @@ jobs:
           cmake --build build
           cmake --build build
 
+      - name: Package the editor
+        # Before the gates, not after, because one of them tests it. A failure
+        # here is a release failure rather than a warning: the editor package
+        # is a shipped artifact.
+        run: tools/package_ec7edit.sh --output builds/ec7edit-release --no-archive
+
       - name: Data-free gates
         env:
           GATE_LOG_DIR: ${{ github.workspace }}/gate-logs
-        run: tools/run_gates.sh -b build -d /nonexistent
+        run: tools/run_gates.sh -b build -d /nonexistent \
+          --editor-package builds/ec7edit-release
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ec7edit-linux
+          path: builds/ec7edit-release
+          if-no-files-found: error
 
       - name: Upload gate logs
         if: failure()

@@ -131,6 +131,12 @@ for pair in "version:$expected_version" "schema:$expected_schema" \
 	fi
 	if [ "$got" = "$want" ]; then
 		say ok "$key $got matches the source tree"
+	elif [ "$key" = version ]; then
+		# Almost always this, and the message should say so rather than
+		# leaving the reader to work out that a commit moved the tree
+		# underneath a package built five minutes ago.
+		fail "the package is $got and this tree is $want -- rebuild it:"
+		printf '       tools/package_ec7edit.sh --output %s\n' "$(dirname "$package")" >&2
 	else
 		fail "the package reports $key=$got; this tree says $want"
 	fi

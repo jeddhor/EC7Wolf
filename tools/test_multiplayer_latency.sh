@@ -122,16 +122,28 @@ printf 'a %sms round trip with %s%% loss, %s tics each way\n' \
 # makes it several times faster, and neither of those questions is answered by
 # a link that stalled.
 #
-# A real regression fails both attempts. The retry is reported either way, so a
+# A real regression fails every attempt. Each try is reported either way, so a
 # run that needed one is never mistaken for a run that did not.
-match delayed 8 0
-delayed_host=$(cat "$work/delayed.tics")
-delayed_client=$(cat "$work/delayed.client-tics")
-if [ "$delayed_host" -lt "$tics" ] || [ "$delayed_client" -lt "$tics" ]; then
-	printf '  ..   the delayed run stalled (host %s, client %s of %s); trying once more\n' \
-		"$delayed_host" "$delayed_client" "$tics"
+#
+# Four attempts, not two. At a one-in-three stall rate two of them still fail
+# together about one run in nine, which is what happened: a full-suite run went
+# red on a link that stalled twice, with both attempts printed above the
+# failure saying so. Four brings that to about one in eighty, and a genuine
+# regression -- input delay not working at all -- still fails all four.
+attempt=1
+while [ "$attempt" -le 4 ]; do
 	match delayed 8 0
-fi
+	delayed_host=$(cat "$work/delayed.tics")
+	delayed_client=$(cat "$work/delayed.client-tics")
+	if [ "$delayed_host" -ge "$tics" ] && [ "$delayed_client" -ge "$tics" ]; then
+		break
+	fi
+	if [ "$attempt" -lt 4 ]; then
+		printf '  ..   the delayed run stalled (host %s, client %s of %s); attempt %s of 4\n' \
+			"$delayed_host" "$delayed_client" "$tics" "$((attempt + 1))"
+	fi
+	attempt=$((attempt + 1))
+done
 
 match immediate 0 1
 

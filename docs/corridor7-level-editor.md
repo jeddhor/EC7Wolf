@@ -4489,6 +4489,44 @@ source-format knowledge.
 report, manual test record, performance baseline, fresh package/startup output,
 review signoffs, and final git status/diff check.
 
+**Status: shipped, with two items explicitly outstanding.**
+
+Built:
+
+- `tools/package_ec7edit.sh` freezes the editor -- onedir, per the E4
+  measurement -- into a directory that runs with no Python and no Qt on the
+  machine. 74 MB compressed, 204 MB unpacked.
+- `tools/test_ec7edit_release_startup.sh` runs that package from a copy
+  elsewhere under `env -i`, with no python3 on PATH and a HOME of its own, and
+  audits it for game data and for absolute paths from the build machine.
+- `ec7edit --selftest` reports the build's identity -- version, Python, Qt,
+  catalogue, schema and protocol -- without a display or game data. It is the
+  capability probe the plan asked for, and the thing to paste into a report.
+- `docs/ec7edit-manual.md`: eighteen sections covering the whole product, with
+  nine screenshots generated from the real editor by
+  `editor/scripts/manual_shots.py` and regenerated on demand. The generator
+  refuses to run with a data directory configured, which is what makes the
+  images publishable.
+- Gates `ec7edit_e12` (release consistency, data-free) and `ec7edit_package`
+  (the packaged editor), both in `run_gates.sh` and in CI.
+- CI builds and uploads the editor package. `make_release.py` emits it as its
+  own download and inside the `-full` archive; the publish job's game-data
+  audit already covers both.
+- **EC7Edit carries the engine's version**, `1.0-betaN`, counted from the same
+  commit by the same rule. This supersedes the plan's "freeze and report
+  EC7Edit 0.1.0": one product under two version schemes made every report
+  carry a relationship the reader had to work out.
+
+Outstanding, and not claimed:
+
+- **Windows and macOS packages are wired but unbuilt here.** The release
+  workflow freezes the editor on each platform's own runner, and the packager
+  handles the `.exe`/`.zip` cases, but only Linux x64 has actually been built
+  and started. The first Windows release is the test.
+- **The first-time-tester run has not happened.** The exit gate asks for
+  somebody who has not seen the source to complete the core workflow, and no
+  automated check substitutes for that.
+
 ---
 
 ## 22. Concrete work breakdown and change management
@@ -5169,14 +5207,22 @@ optional and must include the recorded decision.
 
 ### 25.8 Tests and release
 
-- [ ] `editor_core`, `editor_gui`, and synthetic package gates pass.
+- [x] `editor_core`, `editor_gui`, and synthetic package gates pass.
+  *(`ec7edit_e0`..`e12`, `ec7edit_package`; 841 unit/GUI tests.)*
 - [ ] Owned-data import of all 60 maps passes with source hashes unchanged.
 - [ ] Engine export-load and playtest gates pass.
 - [ ] Snapshot gate passes if feature ships.
 - [ ] Existing noneditor Corridor 7 gates remain green.
-- [ ] Catalog regeneration and public artifact audit pass.
+- [x] Catalog regeneration and public artifact audit pass.
+  *(`ec7edit_e12`: no game data in 1230 tracked files, and the manual's
+  screenshot generator refuses to run with a data directory configured.)*
 - [ ] Windows x64 and Linux supported packages start on clean systems.
-- [ ] Documentation and validation references match current behavior.
+  *Linux x64 evidenced by `ec7edit_package`, which starts the package from a
+  copy under `env -i` with no Python on PATH. Windows is wired into the release
+  workflow and not yet built.*
+- [x] Documentation and validation references match current behavior.
+  *(`ec7edit_e12` regenerates both and compares; the manual's tools, commands
+  and panels are checked against the code that implements them.)*
 - [ ] Format, UX/accessibility, security/legal, and runtime/release reviews have
   no unresolved stop-line finding.
 - [ ] Fresh release build was built twice as required.

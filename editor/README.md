@@ -2,18 +2,29 @@
 
 A point-and-click level editor for Corridor 7, built alongside EC7Wolf.
 
+**[The manual](../docs/ec7edit-manual.md) is the place to start** if you want
+to use the editor. This file is about the source tree.
+
 The design and the milestone plan live in
-[`docs/corridor7-level-editor.md`](../docs/corridor7-level-editor.md). This
-directory holds the implementation as it arrives.
+[`docs/corridor7-level-editor.md`](../docs/corridor7-level-editor.md).
 
 ## State
 
-**Milestone E6 — the complete semantic palette.** EC7Edit opens a Corridor 7
-map, lets you change it, and plays what you changed. Paint walls from a palette
-of real thumbnails, place doors and dispensers and pushwalls as single clicks,
+**Milestone E12 — packaged and documented.** EC7Edit opens a Corridor 7 map,
+lets you change it, plays what you changed, photographs it through the engine,
+and builds a campaign of your own out of several. Paint walls from a palette of
+real thumbnails, place doors and dispensers and pushwalls as single clicks,
 pair a transporter in two, turn aliens to face where you want, copy and rotate
 a whole region, undo anything, save, and press **F5** to watch EC7Wolf load
 your edit.
+
+It ships as a self-contained package -- `tools/package_ec7edit.sh` -- holding
+its own Python and Qt, so it needs nothing installed. `./ec7edit --selftest`
+reports what a build is, without a display or game data.
+
+Its version is the engine's: `1.0-betaN`, counted from the same commit by the
+same rule, because one product under two version schemes made every bug report
+carry a relationship the reader had to work out.
 
 ```console
 $ editor/ec7edit

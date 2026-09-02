@@ -17,7 +17,7 @@
 #
 #   * Nothing falls over. The host and a joining client are both shot at with
 #     a fixed battery of empty, truncated, oversized, mistyped and lying
-#     packets, and both have to still be running afterwards.
+#     packets, and both have to still be running afterward.
 #   * The game still works. A real client then joins the host that was just
 #     shot at, and the two play a match and agree on every tic of it. Surviving
 #     is easy if the survivor is a wreck; this says it is not.

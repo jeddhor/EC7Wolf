@@ -46,7 +46,7 @@ because it never leaves the CD.
 
 ### 1. Extraction (`tools/extract_c7_video.py`)
 
-Modelled on `tools/make_cdaudio.py`, which does the same job for the redbook
+Modeled on `tools/make_cdaudio.py`, which does the same job for the redbook
 audio: point it at the disc, get playable files beside the game data.
 
 * Accept a `.cue` (finding its `.bin`), a plain `.iso`, or an already-mounted
@@ -78,7 +78,7 @@ A FLIC decoder and a player, self-contained.
   already composite a full-screen 2D page correctly — so this needs no renderer
   work at all, and works under software and OpenGL alike.
 * Set the screen palette to the animation's own while it plays and restore the
-  game's afterwards. FLIC carries palette changes as chunks, so this updates
+  game's afterward. FLIC carries palette changes as chunks, so this updates
   mid-playback.
 * Pace on the header's frame duration against the real clock, so a slow machine
   drops behind rather than playing in slow motion.
@@ -159,7 +159,7 @@ calibration came out at 19,997,349.)
 
 Every one of those is an **ordinary in-game effect**. The logo is scored out of
 the apparition shriek, a monster morph, a door and a teleport — which is why a
-player recognises the first one as "the sound the floating skull makes". That
+player recognizes the first one as "the sound the floating skull makes". That
 observation is what started this investigation, and it turned out to be exactly
 right.
 
@@ -201,7 +201,7 @@ Two more traps, both found by playing it rather than by reading it:
 **Restore the palette on a black screen, never on a picture.** The animation's
 last image is still in the framebuffer when playback ends, and those 256 indices
 mean something only under the animation's own palette. Handing the game's
-palette back first showed that image in the wrong colours for one present --
+palette back first showed that image in the wrong colors for one present --
 a psychedelic flash at the end of every cinematic. Playback now fades to black
 while the palette still matches its pixels, and swaps on black.
 
@@ -218,5 +218,5 @@ One trap worth recording: `PG13()` and the attract loop's faders leave the scree
 blended to black, and anything presented while that is true is invisible. Moving
 the cinematics into the loop put them behind that blend — they ran correctly,
 onto a black screen. `C7Flic_Play` now clears the fade before playing and
-restores it afterwards, because the next thing the loop does is fade the title
+restores it afterward, because the next thing the loop does is fade the title
 page in.

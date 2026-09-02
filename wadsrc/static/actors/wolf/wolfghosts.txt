@@ -46,7 +46,7 @@ actor Clyde 30
 	}
 }
 
-actor Spectre 28
+actor Specter 28
 {
 	damage (2)
 	radius 42
@@ -73,7 +73,7 @@ actor Spectre 28
 			wait
 	}
 }
-actor GhoulishGhost : Spectre 104
+actor GhoulishGhost : Specter 104
 {
 	states
 	{
@@ -92,7 +92,7 @@ actor GhoulishGhost : Spectre 104
 	}
 }
 
-actor RadioactiveMist : Spectre 157
+actor RadioactiveMist : Specter 157
 {
 	states
 	{

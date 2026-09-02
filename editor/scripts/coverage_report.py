@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Jason Tripp
-"""E6's exit gate, as a report: is every semantic reachable, or labelled?
+"""E6's exit gate, as a report: is every semantic reachable, or labeled?
 
 The milestone's promise is not "every word has a tool" -- some words are
 preserved-only by design, and one or two are Advanced. The promise is that
@@ -33,7 +33,7 @@ from ec7edit_core.prefabs import PREFABS, TRANSPORTER_CHANNELS  # noqa: E402
 
 CATALOG = EDITOR / "resources" / "editor_catalog.json"
 
-#: Categories whose entries are a single word with no compound behaviour. The
+#: Categories whose entries are a single word with no compound behavior. The
 #: ordinary brush places these correctly by construction.
 SIMPLE_CATEGORIES = ("walls", "objects", "enemies", "starts", "zones")
 
@@ -74,7 +74,7 @@ def report() -> tuple[list[str], list[str]]:
 
     lines.append("EC7Edit semantic coverage")
     lines.append("")
-    lines.append(f"  {len(catalog)} catalogue entries")
+    lines.append(f"  {len(catalog)} catalog entries")
     lines.append(f"    {counts['prefab']:4d} placed by a compound tool")
     lines.append(f"    {counts['simple']:4d} single-word items the brush places directly")
     lines.append(f"    {counts['imported-only']:4d} preserved from imported maps, not offered for new work")
@@ -98,7 +98,7 @@ def main(argv: list[str]) -> int:
         for line in unaccounted[:20]:
             print(f"    {line}")
         return 1 if "--check" in argv else 0
-    print("\n  every entry is either tool-covered or labelled")
+    print("\n  every entry is either tool-covered or labeled")
     return 0
 
 

@@ -338,7 +338,7 @@ class FaultInjector:
     Testing durability by unplugging a machine does not scale; testing it by
     asserting the code looks careful proves nothing. This is the middle: each
     stage has a name, a test asks for a failure at that name, and the assertion
-    is that the destination afterwards is a valid old, new, or recovery state.
+    is that the destination afterward is a valid old, new, or recovery state.
     """
 
     stage: str = ""

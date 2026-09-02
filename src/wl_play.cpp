@@ -1314,7 +1314,7 @@ static void DrawPausedOverlay()
 	// TexMan("PAUSED") found nothing. co7map.txt now names it, so both games
 	// take the same path -- and the DOS release happens to put it at the same
 	// place this always did: a DOSBox capture of the CD version matches the
-	// 64x32 picture at exactly (128, 64), centred in the view above the status
+	// 64x32 picture at exactly (128, 64), centered in the view above the status
 	// bar.
 	VWB_DrawGraphic(TexMan("PAUSED"), (20 - 4)*8, 80 - 2*8);
 }

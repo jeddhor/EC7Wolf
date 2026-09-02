@@ -28,7 +28,7 @@ to get right.
 ## 2. Eleven injected save failures
 
 `save_project` has eleven named stages and `FaultInjector` fails at any one.
-The test fails at each in turn and asserts that what is on disk afterwards
+The test fails at each in turn and asserts that what is on disk afterward
 parses, and is either the old project or the new one — never a truncated file,
 never a mixture, and never with a temporary file left behind.
 
@@ -42,7 +42,7 @@ never a mixture, and never with a temporary file left behind.
 | replace, dirsync | the rename is atomic, and itself durable |
 
 Grade **A**. The claim is scoped: this is tested on local filesystems. SMB,
-NFS, removable media and cloud-synchronised folders may not honour sibling
+NFS, removable media and cloud-synchronised folders may not honor sibling
 replace, directory fsync or stable identities, and the design says so rather
 than pretending otherwise.
 
@@ -59,7 +59,7 @@ itself, so it was always the newest and the supersession check could never
 fire. A background autosave has to take its generation *before* it starts
 serialising, or finishing late is indistinguishable from being current, so the
 generation is now a parameter. The test that exposed this was written asserting
-behaviour the API could not deliver.
+behavior the API could not deliver.
 
 ## 4. A rule that was too strong
 
@@ -74,7 +74,7 @@ The directory is now protected when it *looks like game data*: it holds a
 neither appears by accident in a directory of somebody's own work. Callers
 wanting a directory protected for another reason pass `--protect`.
 
-## 5. Facings are catalogue-driven, never arithmetic
+## 5. Facings are catalog-driven, never arithmetic
 
 Rotating a selection has to rewrite the raw word of anything that faces a
 direction. The tempting way — add one, since the four facings are consecutive
@@ -83,8 +83,8 @@ not all four long, they do not all start on the same rotation, patrol markers
 have eight, and nothing in the numbering says which value means which way.
 Adjacency is a coincidence of the table.
 
-So rotation reads the value's direction *by name* from the catalogue, turns the
-name, and looks the new name back up. A word the catalogue does not describe as
+So rotation reads the value's direction *by name* from the catalog, turns the
+name, and looks the new name back up. A word the catalog does not describe as
 directional is carried through untouched — right for a wall, and right for an
 imported word nobody has identified. Tested on all four facings, on the
 eight-way patrol markers, on a plane-0 word that shares a number with a

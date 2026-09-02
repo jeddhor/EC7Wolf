@@ -11,7 +11,7 @@ A drag is one undo step. The controller opens a gesture on press, tags every
 command with it, and closes it on release, so the history coalesces the stroke.
 Ctrl+Z takes back the line you drew, not the last cell of it.
 
-Which plane a tool writes is the *catalogue's* decision, not the tool's. A wall
+Which plane a tool writes is the *catalog's* decision, not the tool's. A wall
 brush and an enemy brush are the same code; the difference is that the entry
 says plane 0 or plane 1, which is why placing a door and placing an alien did
 not need two implementations.
@@ -115,7 +115,7 @@ class ToolController(QObject):
     selection_changed = Signal(object)
     #: Something worth saying in the status bar.
     message = Signal(str)
-    #: Where a snapshot should be taken from: tile centre, in tile units. Not a
+    #: Where a snapshot should be taken from: tile center, in tile units. Not a
     #: document change -- the camera is a view of the map, not a thing in it.
     camera_placed = Signal(float, float)
 
@@ -229,7 +229,7 @@ class ToolController(QObject):
     def cancel_pending(self) -> None:
         if self.pending_transporter is not None:
             self.pending_transporter = None
-            self.message.emit("Transporter cancelled")
+            self.message.emit("Transporter canceled")
 
     def set_document(self, document: MapDocument | None) -> None:
         """Point at a map, or at a newer snapshot of the one already open.

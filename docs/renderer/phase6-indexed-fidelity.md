@@ -1,7 +1,7 @@
 # Phase 6 — Indexed palette + colormap shader fidelity
 
 The "looks like ECWolf" phase. Phase 5 drew the static world geometry with a
-debug pseudo-colour shader; Phase 6 replaces that with real fidelity by resolving
+debug pseudo-color shader; Phase 6 replaces that with real fidelity by resolving
 every world pixel exactly the way the software renderer does — through the 8-bit
 indexed palette and distance colormap — still rendered offscreen and verified
 headlessly against software screenshots. The live game window is unchanged.
@@ -26,8 +26,8 @@ headlessly against software screenshots. The live game window is unchanged.
   * *Floors/ceilings* use the Corridor 7 screen-space VGA band pattern
     (`c7PlaneShades`: `firstShade + band` from the horizon, with the four-pixel
     alternation dither), or the generic distance-row plane formula for non-C7.
-* **Corridor 7 colour rules, wall-only** (matching `ShadeWallColor`): the
-  208–239 colour-cycle by `TimeCount`, and full-bright reserved indices
+* **Corridor 7 color rules, wall-only** (matching `ShadeWallColor`): the
+  208–239 color-cycle by `TimeCount`, and full-bright reserved indices
   (`Remap[15]`, `Remap[254]`, `Remap[208..239]`) that ignore distance shading.
   Planes deliberately apply neither, matching `R_DrawPlane`.
 * **Explicit opacity.** Corridor 7's see-through wall art (grates/fences) carries
@@ -41,7 +41,7 @@ headlessly against software screenshots. The live game window is unchanged.
   change. The offscreen capture reads the live `BaseColors`, so any active shift
   is reflected for free.
 * **Shade-row debug mode** (exit-gate requirement): a second render pass writes
-  `<out>.shaderow.ppm`, visualizing the per-pixel shade row as greyscale.
+  `<out>.shaderow.ppm`, visualizing the per-pixel shade row as grayscale.
 
 ## Verification (headless, Xvfb + Mesa)
 
@@ -64,7 +64,7 @@ render the same way (blue banded walls, yellow/black hazard bank, drip walls).
 
 * **Exact C7 plane VGA banding.** The plane shade is a faithful reconstruction of
   `c7PlaneShades` (`firstShade`, band stepping, 4-px alternation) but omits the
-  per-colour duplicate-run compression the software renderer walks in
+  per-color duplicate-run compression the software renderer walks in
   `NormalLight.Maps`; C7 planes therefore read slightly brighter than software.
   Exact plane parity is a Phase 11 (parity/hardening) item.
 * **Exact framing/aspect** against the raycaster is still refined in Phase 11.
@@ -75,7 +75,7 @@ render the same way (blue banded walls, yellow/black hazard bank, drip walls).
 ## Exit gate — met (offscreen level)
 
 Static-world GL screenshots closely match the software renderer — real indexed
-textures resolved through the palette and distance colormap, C7 colour-cycle,
+textures resolved through the palette and distance colormap, C7 color-cycle,
 full-bright, and see-through opacity all reproduced — with a debug shader mode
 that outputs the shade row. Determinism gate remains green (Phase 6 touches only
 the offscreen GL path; the simulation is untouched, run-to-run stable, and

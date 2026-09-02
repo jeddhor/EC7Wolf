@@ -435,10 +435,10 @@ namespace
 		}
 
 		// Resolve through the framebuffer's CURRENT palette, not GPalette's base
-		// colours. They are the same in ordinary play, but Corridor 7 rewrites the
+		// colors. They are the same in ordinary play, but Corridor 7 rewrites the
 		// DAC for the visor modes (V_SetCorridor7PaletteMode) and V_ForceBlend
 		// adds a full-screen flash on top -- and a screenshot that ignores both
-		// shows a grey scene where the game is displaying green or red, which
+		// shows a gray scene where the game is displaying green or red, which
 		// makes the visor impossible to compare against the original.
 		PalEntry shotPal[256];
 		screen->GetFlashedPalette(shotPal);
@@ -550,7 +550,7 @@ void ParseArgs(int argc, char **argv)
 	{
 		const char *arg = argv[i];
 		// Where this option started. Every branch below advances i over the
-		// values it takes, so claiming first..i afterwards records the option
+		// values it takes, so claiming first..i afterward records the option
 		// and its values without a second table saying how many that is.
 		const int first = i;
 		bool unmatched = false;
@@ -710,7 +710,7 @@ void ParseArgs(int argc, char **argv)
 			// there was nothing to notice it. A snapshot of the wrong place is
 			// worse than no snapshot, so anything that is not a plain finite
 			// number is refused here and the warp stays disarmed.
-			// All three tokens are taken first and judged afterwards. Doing
+			// All three tokens are taken first and judged afterward. Doing
 			// it inside a && chain short-circuits on the first bad one, which
 			// leaves the other two unconsumed -- and an unconsumed token in
 			// this engine is a filename, so "--capture-warp banana 31 90"
@@ -807,7 +807,7 @@ void ParseArgs(int argc, char **argv)
 
 		if(strncmp(arg, "--capture-", 10) == 0)
 		{
-			// Claimed whether or not a branch above recognised it. An option in
+			// Claimed whether or not a branch above recognized it. An option in
 			// this namespace that nothing matched is either a typo or one given
 			// without the value it needs, and saying so is better than silently
 			// ignoring it -- and far better than what used to happen, which was
@@ -880,7 +880,7 @@ bool OverrideRNGSeed(DWORD &seed)
 }
 
 	// Choose (once) the solid, non-door wall cell nearest the player that has an
-	// open neighbour, and wire it up as a mid-move pushwall exactly the way
+	// open neighbor, and wire it up as a mid-move pushwall exactly the way
 	// EVPushwall does (SetTile the destination, point pushReceptor back). The
 	// raycaster and the GL dynamic builder both read this state, so the same
 	// moving block appears in each renderer. Test-only; never in the gate.
@@ -920,7 +920,7 @@ bool OverrideRNGSeed(DWORD &seed)
 				const double fwd = (cx*fdx + cy*fdy) / dist;	// cos(angle off view)
 				if(fwd < 0.6)			// keep it well inside the forward cone
 					break;
-				const double score = fwd / dist;	// near + centred wins
+				const double score = fwd / dist;	// near + centered wins
 				if(score > bestScore)
 				{
 					bestScore = score;
@@ -1083,7 +1083,7 @@ namespace Capture
 //
 // Deliberately injected into the command before it is exchanged rather than
 // applied to the pawn directly: the point of the gate this exists for is that
-// two machines agree about a fight, and a shot that never travelled over the
+// two machines agree about a fight, and a shot that never traveled over the
 // wire would prove nothing about that.
 void InjectControls(TicCmd_t &cmd)
 {
@@ -1172,7 +1172,7 @@ void PreTic()
 		{
 			if(players[i].mo == NULL || g_duelX[i] == 0)
 				continue;
-			// The dead are left where they fell. A corpse turns towards the
+			// The dead are left where they fell. A corpse turns toward the
 			// angle it died facing, and only once it has arrived does the
 			// player become eligible to respawn -- so pinning the angle of a
 			// dead player holds them dead for ever. It cost a long detour:

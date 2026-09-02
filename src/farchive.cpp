@@ -1187,7 +1187,7 @@ FArchive &FArchive::ReadObject (DObject* &obj, const ClassDef *wanttype)
 		operator<< (playerNum);
 		if (m_HubTravel)
 		{
-			// If travelling inside a hub, use the existing player actor
+			// If traveling inside a hub, use the existing player actor
 			type = ReadClass (wanttype);
 //			Printf ("New player class: %s (%u)\n", type->Name, m_File->Tell());
 			obj = players[playerNum].mo;
@@ -1218,7 +1218,7 @@ FArchive &FArchive::ReadObject (DObject* &obj, const ClassDef *wanttype)
 			}
 			break;
 		}
-		/* fallthrough when not travelling to a previous level */
+		/* fallthrough when not traveling to a previous level */
 	case NEW_CLS_OBJ:
 		type = ReadClass (wanttype);
 //		Printf ("New class: %s (%u)\n", type->Name, m_File->Tell());
@@ -1258,7 +1258,7 @@ FArchive &FArchive::ReadObject (DObject* &obj, const ClassDef *wanttype)
 			}
 			break;
 		}
-		/* fallthrough when not travelling to a previous level */
+		/* fallthrough when not traveling to a previous level */
 	case NEW_OBJ:
 		type = ReadStoredClass (wanttype);
 //		Printf ("Use class: %s (%u)\n", type->Name, m_File->Tell());

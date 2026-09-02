@@ -40,12 +40,12 @@ namespace
 	const double kFadeIn  = 0.38;	// art fully opaque left of here
 	const double kFadeOut = 0.66;	// fully black right of here
 
-	// Accent colours land on palette entries the game already uses: the status
-	// bar's amber readouts and its greys.
+	// Accent colors land on palette entries the game already uses: the status
+	// bar's amber readouts and its grays.
 	const int kAmberR = 255, kAmberG = 190, kAmberB = 40;
 	const int kAmberDimR = 150, kAmberDimG = 108, kAmberDimB = 20;
 	const int kWhiteR = 222, kWhiteG = 222, kWhiteB = 222;
-	const int kGreyR = 150, kGreyG = 150, kGreyB = 150;
+	const int kGrayR = 150, kGrayG = 150, kGrayB = 150;
 	const int kDimR = 96, kDimG = 96, kDimB = 96;
 
 	FTTFont *g_regular = NULL;
@@ -322,9 +322,9 @@ bool C7Menu_Draw(const Menu *menu)
 		if(value.IsNotEmpty())
 		{
 			const int vw = V_TTTextWidth(g_regular, valueSize, value);
-			const int vr = active ? kAmberR : (usable ? kGreyR : kDimR);
-			const int vg = active ? kAmberG : (usable ? kGreyG : kDimG);
-			const int vb = active ? kAmberB : (usable ? kGreyB : kDimB);
+			const int vr = active ? kAmberR : (usable ? kGrayR : kDimR);
+			const int vg = active ? kAmberG : (usable ? kGrayG : kDimG);
+			const int vb = active ? kAmberB : (usable ? kGrayB : kDimB);
 			V_TTDrawText(g_regular, valueSize, valueX - vw, y + Scaled(1),
 				value, vr, vg, vb);
 		}
@@ -409,7 +409,7 @@ bool C7Menu_DrawWaiting(const char *heading, const char *detail,
 	if(detail && *detail)
 	{
 		V_TTDrawText(g_regular, Scaled(23), labelX, y, detail,
-			kGreyR, kGreyG, kGreyB);
+			kGrayR, kGrayG, kGrayB);
 		y += Scaled(46);
 	}
 
@@ -456,7 +456,7 @@ bool C7Menu_DrawWaiting(const char *heading, const char *detail,
 		{
 			const int w = V_TTTextWidth(g_regular, Scaled(21), rows[i].value);
 			V_TTDrawText(g_regular, Scaled(21), valueX - w, y, rows[i].value,
-				kGreyR, kGreyG, kGreyB);
+				kGrayR, kGrayG, kGrayB);
 		}
 		y += Scaled(32);
 	}

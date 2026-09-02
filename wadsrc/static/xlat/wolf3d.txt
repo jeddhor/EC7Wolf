@@ -749,7 +749,7 @@ things
 	{73,  TruckRear,         0, 0, 0}
 	{74,  SpearOfDestiny,    0, 0, 0}
 	{90,  PatrolPoint,       8, 0, 0}
-	{106, Spectre,           0, HOLOWALL, 0}
+	{106, Specter,           0, HOLOWALL, 0}
 	{107, AngelOfDeath,      0, HOLOWALL, 0}
 	{108, Guard,             4, HOLOWALL, 1}
 	{112, Guard,             4, PATHING|HOLOWALL, 1}

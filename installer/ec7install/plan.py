@@ -13,7 +13,7 @@ from pathlib import Path
 
 from . import audio, build, controls, install, shortcuts, verify, windows
 from . import source as source_code
-from .progress import Cancelled, Reporter
+from .progress import Canceled, Reporter
 
 # Rough share of the wall clock each step takes, so one bar can move smoothly
 # across very unequal work. Building dominates everything else by an order of
@@ -78,7 +78,7 @@ class InstallPlan:
         self.build_dir = Path(build_dir) if build_dir else \
             self.destination.parent / ".ec7wolf-build"
         # Encoded music, kept only while it is worth keeping: a failed or
-        # cancelled run leaves it behind so the next attempt does not spend
+        # canceled run leaves it behind so the next attempt does not spend
         # another minute on tracks it has already encoded, and a successful one
         # takes it away again rather than leaving 40 MB of it in someone's home
         # directory forever.
@@ -95,7 +95,7 @@ class InstallPlan:
         produce them can skip the ones already in hand.
 
         Each file is checked before it is trusted, with the same tests the
-        verifier applies afterwards -- a cinematic has to have a FLIC header
+        verifier applies afterward -- a cinematic has to have a FLIC header
         that agrees with its size, a track has to be big enough to be music.
         A truncated file from an interrupted run is worth less than nothing:
         it would be adopted, pass through the install, and fail at the point
@@ -182,7 +182,7 @@ class InstallPlan:
                 def step(self, n, d=""): outer.step(n, d)
                 def detail(self, line): outer.detail(line)
                 def warn(self, message): outer.warn(message)
-                def cancelled(self): return outer.cancelled()
+                def canceled(self): return outer.canceled()
                 def progress(self, fraction):
                     outer.progress(base + max(0.0, min(1.0, fraction)) * share)
             return Scoped()
@@ -294,7 +294,7 @@ class InstallPlan:
             reporter.progress(done / total)
 
             destination = staging.commit(reporter)
-        except Cancelled:
+        except Canceled:
             staging.abandon()
             raise
         except Exception:

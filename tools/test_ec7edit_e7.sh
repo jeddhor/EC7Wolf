@@ -16,7 +16,7 @@
 #   3. it is fast enough to run while somebody is drawing. A full pass over a
 #      64x64 map and the incremental pass that runs on every edit both have a
 #      budget here; the first honest implementation was eighteen times over it
-#      because the catalogue lookup was a linear scan.
+#      because the catalog lookup was a linear scan.
 #
 # The validation-code reference is generated from the validator, so it is
 # checked rather than trusted.

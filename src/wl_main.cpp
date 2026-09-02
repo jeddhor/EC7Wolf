@@ -373,7 +373,7 @@ static void CollectGC()
 //
 // DrawStartupConsole cannot serve: for Corridor 7 it draws the signon splash
 // and returns before printing anything, which was a deliberate decision -- the
-// splash is the game's own opening and ECWolf's initialisation chatter has no
+// splash is the game's own opening and ECWolf's initialization chatter has no
 // business over it. That is right for the eight lines of startup and wrong for
 // the one screen where the game is waiting on somebody else, which without a
 // word on it is indistinguishable from a hang.
@@ -1340,7 +1340,7 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 		else if(EditorLink::ArgClaimed(i))
 		{
 			// --editor-protocol / --editor-session, read before anything is
-			// initialised. Same rule as the capture options: the parser that
+			// initialized. Same rule as the capture options: the parser that
 			// understood them records what it took, and this asks.
 		}
 		else if(Capture::ArgClaimed(i))

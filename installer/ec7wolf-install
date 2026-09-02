@@ -24,7 +24,7 @@ sys.path.insert(0, str(REPO / "tools"))
 
 from c7disc import DiscError, GameSource                    # noqa: E402
 from ec7install import build, deps, install, plan           # noqa: E402
-from ec7install.progress import (Cancelled, ConsoleReporter,  # noqa: E402
+from ec7install.progress import (Canceled, ConsoleReporter,  # noqa: E402
                                  LogFile)
 
 
@@ -158,7 +158,7 @@ def main() -> int:
         print(f"Start it with {manifest.get('launcher', destination)}")
         return 0
 
-    except Cancelled:
+    except Canceled:
         print("\n\nCancelled; nothing was installed.")
         return 130
     except (DiscError, plan.PlanError, build.BuildError, install.InstallError) as error:

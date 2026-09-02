@@ -377,7 +377,7 @@ ACTION_FUNCTION(A_CustomMissile)
 }
 
 //
-// spectre
+// specter
 //
 
 

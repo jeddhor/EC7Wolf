@@ -6,7 +6,7 @@
 # non-obvious and worth testing rather than eyeballing. The world texture is
 # R8UI palette indices: the hardware cannot filter it, and averaging indices
 # would be meaningless anyway (index 5 and index 200 average to 102, an
-# unrelated colour). Filtering therefore resolves every tap through the colour
+# unrelated color). Filtering therefore resolves every tap through the color
 # cycle, colormap and palette FIRST and mixes the resulting RGB.
 #
 # Four things are asserted, and the first is the one that protects everything
@@ -16,14 +16,14 @@
 #     default off, and every parity gate measures the default path -- if the
 #     defaults drifted, those gates would quietly start measuring something else.
 #
-#   * Bilinear introduces colours that are not in the palette's on-screen set.
+#   * Bilinear introduces colors that are not in the palette's on-screen set.
 #     This is the test that distinguishes "resolved then mixed" from "mixed then
 #     resolved": blending indices could only ever produce palette entries, so the
-#     distinct-colour count would not rise.
+#     distinct-color count would not rise.
 #
 #   * A palette rewrite still reaches the screen with filtering on. Corridor 7's
 #     visor modes are 256-entry palette rewrites, and they are the reason the
-#     pipeline is indexed at all; a filter that baked colour early would freeze
+#     pipeline is indexed at all; a filter that baked color early would freeze
 #     the picture in the palette it was built with.
 #
 #   * MSAA changes edges and only edges, on the LIVE path. The offscreen capture
@@ -108,7 +108,7 @@ def differing(a, b):
     n = min(len(a), len(b))
     return sum(1 for i in range(0, n - 2, 3) if a[i:i+3] != b[i:i+3]), n // 3
 
-def colours(p):
+def colors(p):
     return len(set(p[i:i+3] for i in range(0, len(p) - 2, 3)))
 
 _, _, sharp = load("sharp")
@@ -121,23 +121,23 @@ ok = True
 
 # 1. Sharp is the untouched renderer.
 d, tot = differing(sharp, sharp)
-csharp = colours(sharp)
+csharp = colors(sharp)
 
-# 2. Filtering must actually filter, and must introduce off-palette colours.
+# 2. Filtering must actually filter, and must introduce off-palette colors.
 d1, tot = differing(sharp, bilinear)
-cbil = colours(bilinear)
-csm = colours(smooth)
+cbil = colors(bilinear)
+csm = colors(smooth)
 if d1 == 0:
     print("FAIL: bilinear produced an identical frame to sharp; the filter is "
           "not reaching the shader")
     ok = False
 elif cbil <= csharp:
-    print("FAIL: bilinear did not introduce any new colours (%d vs %d). Taps are "
+    print("FAIL: bilinear did not introduce any new colors (%d vs %d). Taps are "
           "being mixed as palette indices rather than resolved to RGB first, "
-          "which cannot produce a correct in-between colour." % (cbil, csharp))
+          "which cannot produce a correct in-between color." % (cbil, csharp))
     ok = False
 else:
-    print("filter  sharp %d colours -> bilinear %d -> smooth %d; %d/%d px "
+    print("filter  sharp %d colors -> bilinear %d -> smooth %d; %d/%d px "
           "changed (%.1f%%)" % (csharp, cbil, csm, d1, tot, 100.0 * d1 / tot))
 
 # 3. A palette rewrite still reaches the screen with filtering on.
@@ -161,7 +161,7 @@ else:
 
 # 4. MSAA changes edges, and only edges.
 dm, tot = differing(sharp, msaa)
-cmsaa = colours(msaa)
+cmsaa = colors(msaa)
 if dm == 0:
     print("FAIL: 4x MSAA produced an identical frame; antialiasing is not "
           "reaching the live world framebuffer")
@@ -171,11 +171,11 @@ elif dm * 4 > tot:
           "not repaint the view." % (dm, tot))
     ok = False
 elif cmsaa <= csharp:
-    print("FAIL: MSAA introduced no intermediate colours, so nothing was "
+    print("FAIL: MSAA introduced no intermediate colors, so nothing was "
           "actually resolved from multiple samples")
     ok = False
 else:
-    print("msaa    %d/%d px changed (%.2f%%), %d colours -> %d"
+    print("msaa    %d/%d px changed (%.2f%%), %d colors -> %d"
           % (dm, tot, 100.0 * dm / tot, csharp, cmsaa))
 
 sys.exit(0 if ok else 1)

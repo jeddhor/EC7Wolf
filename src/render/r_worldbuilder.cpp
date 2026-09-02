@@ -94,7 +94,7 @@ namespace
 	// One wall face of a 1x1 cell whose base (min) corner is at (bx,by). The base
 	// is a float so a moving pushwall block can sit at a fractional position;
 	// static walls pass integer tile coordinates. kind is WSURF_Wall for solid
-	// walls or WSURF_Masked for colour-keyed (alpha-tested) walls -- the geometry
+	// walls or WSURF_Masked for color-keyed (alpha-tested) walls -- the geometry
 	// is identical; only the backend's transparency handling differs.
 	//
 	// The corner ORDER fixes the U direction (PushQuad puts u=0 on a/d, u=1 on b/c),
@@ -167,14 +167,14 @@ namespace
 		return texture;
 	}
 
-	// --- masked (colour-keyed) wall classification, mirroring wl_draw.cpp ---
+	// --- masked (color-keyed) wall classification, mirroring wl_draw.cpp ---
 
 	bool MaskedRaw(MapSpot s)
 	{
 		return s && s->tile && (s->maskedWallType || s->tile->renderMasked);
 	}
 
-	// A solid, opaque tile that fully occludes the neighbouring face. Doors,
+	// A solid, opaque tile that fully occludes the neighboring face. Doors,
 	// pushwalls, and masked walls do NOT occlude (they are see-through or move
 	// away), so a wall bordering them must still emit its face.
 	bool IsSolidOccluder(MapSpot s)
@@ -243,14 +243,14 @@ namespace
 	// --- Corridor 7 force-field door helpers (kept in sync with wl_draw.cpp) ---
 
 	// 106 = active barrier, 107 = its permanently-open aperture. Both render as a
-	// single centre pane on a track and carry no offset flag.
+	// single center pane on a track and carry no offset flag.
 	bool IsForceFieldDoor(MapSpot spot)
 	{
 		return spot && spot->tile &&
 			(spot->corridor7WallMarker == 106 || spot->corridor7WallMarker == 107);
 	}
 
-	// The axis is not stored, so derive it from open-neighbour topology (the pane
+	// The axis is not stored, so derive it from open-neighbor topology (the pane
 	// blocks the passage, so it sits perpendicular to whichever way the floor runs).
 	bool ForceFieldDoorHorizontal(MapSpot spot)
 	{
@@ -260,7 +260,7 @@ namespace
 		const MapSpot e = spot->GetAdjacent(MapTile::East);
 		const int openNS = (!n || !n->tile) + (!s || !s->tile);
 		const int openWE = (!ww || !ww->tile) + (!e || !e->tile);
-		return openNS > openWE;	// passage N/S -> pane spans X, centred in Y
+		return openNS > openWE;	// passage N/S -> pane spans X, centered in Y
 	}
 
 	// C7's door track/jamb graphic (C7W0254), used on the jamb sides of every normal
@@ -307,8 +307,8 @@ void BuildStatic(GameMap *gm, WorldMesh &out)
 				continue;
 			}
 
-			// Solid wall cell: emit each face not fully occluded by its neighbour.
-			// Only an opaque solid neighbour hides a face; doors, pushwalls, and
+			// Solid wall cell: emit each face not fully occluded by its neighbor.
+			// Only an opaque solid neighbor hides a face; doors, pushwalls, and
 			// masked panes are see-through or move away, so the face behind them
 			// (e.g. a doorjamb, or a wall seen through glass) is still drawn.
 			for(int side = 0; side < 4; ++side)
@@ -318,7 +318,7 @@ void BuildStatic(GameMap *gm, WorldMesh &out)
 					continue;	// neighbor is opaque solid: face hidden
 
 				// Doorjamb texture, mirroring wl_draw.cpp HitVertWall /
-				// HitHorizWall: when the neighbour across this face is a door of
+				// HitHorizWall: when the neighbor across this face is a door of
 				// the perpendicular orientation, the jamb shows the door track
 				// texture, not the frame tile's own wall texture. A normal door
 				// carries the track (C7W0254) on its own jamb sides; a force-field
@@ -366,7 +366,7 @@ void BuildDynamic(GameMap *gm, WorldMesh &out, float alpha)
 	TArray<DynamicWalls::PushRender> pushes;
 	DynamicWalls::GetRender(alpha, doors, pushes);
 
-	// Door leaves: a single quad in the tile-centre plane. The shader reproduces
+	// Door leaves: a single quad in the tile-center plane. The shader reproduces
 	// the software CheckSlidePass()/SlideTextureOffset() slide along the quad's
 	// U axis (the axis the door opens along), so the leaf recedes into its pocket
 	// exactly as the raycaster draws it.
@@ -445,12 +445,12 @@ void BuildMasked(GameMap *gm, WorldMesh &out, float camX, float camY)
 		const float fx = (float)x;
 		const float fy = (float)y;
 
-		// Force-field door: a single centre pane on a track (mirrors the software
-		// GetMaskedWallEndpoints centre plane), not the four edge faces of a box.
+		// Force-field door: a single center pane on a track (mirrors the software
+		// GetMaskedWallEndpoints center plane), not the four edge faces of a box.
 		// 106 = active barrier, 107 = its permanently-open aperture (post animate).
 		if(spot->corridor7WallMarker == 106 || spot->corridor7WallMarker == 107)
 		{
-			// A centre pane collapses its two opposite faces onto one plane, and
+			// A center pane collapses its two opposite faces onto one plane, and
 			// those faces carry OPPOSITE U directions (GetMaskedWallEndpoints), so
 			// the raycaster mirrors the artwork depending on which side the ray
 			// arrives from -- that is how the door's handle swaps sides as you walk
@@ -488,7 +488,7 @@ void BuildMasked(GameMap *gm, WorldMesh &out, float camX, float camY)
 		// a solid wall (the same planes GetMaskedWallEndpoints uses for a
 		// non-offset masked wall), but only on sides that survive the
 		// connected-glass merge, and tagged WSURF_Masked so the backend alpha-
-		// tests the colour key. The texture resolves the force-field animation.
+		// tests the color key. The texture resolves the force-field animation.
 		for(int side = 0; side < 4; ++side)
 		{
 			if(!MaskedRenderSide(spot, side))

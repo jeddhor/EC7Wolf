@@ -130,9 +130,9 @@ is unchanged.
 `C7E-SOURCE-002` / `C7E-EXPORT-001` refuse an output that resolves to the
 source or into a protected root. The alias cases are the point: a different
 spelling, a symlink, a symlinked parent directory, and a **hard link**, which
-no amount of string normalisation finds — that one needs the inode, and
+no amount of string normalization finds — that one needs the inode, and
 `same_file` uses `os.path.samefile`. Every write is atomic and read back
-(`C7E-EXPORT-002`), and the source digest is re-checked afterwards
+(`C7E-EXPORT-002`), and the source digest is re-checked afterward
 (`C7E-SOURCE-001`).
 
 Both lab tools previously guarded this with `if out.is_symlink()`, which
@@ -169,7 +169,7 @@ the CD read it only, and prove it.
 
 ## 10. What E1 did not do
 
-No GUI, no semantic catalogue, no asset decoders, no MAPINFO generation, no
+No GUI, no semantic catalog, no asset decoders, no MAPINFO generation, no
 project schema. `Archive`/`MapRecord` are the file's model, not the editor's
 document model; E5 layers the document, undo and identity on top.
 

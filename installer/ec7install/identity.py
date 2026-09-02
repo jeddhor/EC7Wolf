@@ -2,7 +2,7 @@
 
 These five strings are one fact wearing different hats, and the moment two of
 them disagree the symptom is silent: a window that will not pair with its
-launcher, a task manager showing a grey cog, an icon the menu cannot find. They
+launcher, a task manager showing a gray cog, an icon the menu cannot find. They
 live here so that no module can change one without seeing the rest.
 
 The value is the project's own AppStream id, from
@@ -77,7 +77,7 @@ def bundled_root():
     """Where the files that travel with the installer are, frozen or not.
 
     A frozen setup.exe unpacks its data to a temporary directory, and that
-    directory is the closest thing it has to a source tree: the licence, the
+    directory is the closest thing it has to a source tree: the license, the
     icons and engine.desktop.in are all in there, laid out at the same relative
     paths so nothing else has to know the difference.
     """

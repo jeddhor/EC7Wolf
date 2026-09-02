@@ -40,7 +40,7 @@ public:
 	// top-message overlay). The software backend just draws. A backend that
 	// composites the view from its own framebuffer needs to know which texels
 	// this painted -- it cannot recover that from the 8-bit frame alone, because
-	// 2D drawn in the compositor's transparent key colour (C7's black text drop
+	// 2D drawn in the compositor's transparent key color (C7's black text drop
 	// shadow) is indistinguishable from untouched view background. Such a backend
 	// may call `draw` more than once, so it must be a pure drawing function.
 	virtual void DrawViewOverlay(void (*draw)()) { if(draw) draw(); }

@@ -1,13 +1,13 @@
 #!/bin/sh
 
-# Regression test: EC7Edit's asset decoders and semantic catalogue hold.
+# Regression test: EC7Edit's asset decoders and semantic catalog hold.
 #
 # Milestone E2 of docs/corridor7-level-editor.md. Three things are guarded:
 #
 #   * the graphics decoders, on inputs generated to the documented format --
 #     including the hostile ones, since GFXTILES and its column-post sprites
 #     are made of offsets and every offset is an index into a buffer;
-#   * the catalogue, which is generated from the engine's own translation and
+#   * the catalog, which is generated from the engine's own translation and
 #     actor definitions and is committed. A stale one is the failure that shows
 #     up as the editor describing a game the engine no longer plays, so the
 #     gate regenerates and diffs;
@@ -65,7 +65,7 @@ for suite in test_assets test_catalog; do
 	fi
 done
 
-printf '\nThe catalogue matches the engine it describes\n'
+printf '\nThe catalog matches the engine it describes\n'
 if "$python" "$editor/scripts/generate_catalog.py" verify >/dev/null 2>&1; then
 	printf '  ok   editor_catalog.json is current\n'
 else
@@ -78,7 +78,7 @@ from collections import Counter
 c = load_catalog('$editor/resources/editor_catalog.json')
 print(len(c), ' '.join(f'{k}={v}' for k, v in sorted(Counter(e.category for e in c).items())))
 " 2>/dev/null || echo "")
-printf '  ..   %s\n' "${entries:-could not load the catalogue}"
+printf '  ..   %s\n' "${entries:-could not load the catalog}"
 [ -n "$entries" ] || status=1
 
 # An entry nobody can place is worse than no entry, so every raw value the
@@ -93,7 +93,7 @@ missing = [v for v in xlat.thing_values() if catalog.for_value(1, v) is None]
 missing += [('tile', v) for v in xlat.tiles if catalog.for_value(0, v) is None]
 sys.exit(1 if missing else 0)"
 
-check "no catalogue entry carries image data" \
+check "no catalog entry carries image data" \
 	sh -c "! grep -qE 'data:image|iVBOR' '$editor/resources/editor_catalog.json'"
 
 printf '\nThe unresolved joins are reported, not hidden\n'
@@ -121,7 +121,7 @@ cp "$repo/tools/c7assets.py" "$work/first"
 check "rebuilding is byte-for-byte reproducible" cmp -s "$work/first" "$repo/tools/c7assets.py"
 
 if [ "$status" -eq 0 ]; then
-	printf '\nPASS: E2 decoders and catalogue intact.\n'
+	printf '\nPASS: E2 decoders and catalog intact.\n'
 else
 	printf '\nFAIL: see above.\n'
 fi

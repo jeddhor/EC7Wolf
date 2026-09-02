@@ -24,7 +24,7 @@ analysis = Analysis(
     pathex=[str(repo / "installer"), str(repo / "tools")],
     binaries=[],
     datas=[
-        # The licence is shown on a page of the wizard, so it has to travel
+        # The license is shown on a page of the wizard, so it has to travel
         # with it -- there is no source tree beside a frozen installer.
         (str(repo / "docs" / "license-gpl.txt"), "docs"),
         (str(repo / "docs" / "org.ec7wolf.EC7Wolf.metainfo.xml"), "docs"),

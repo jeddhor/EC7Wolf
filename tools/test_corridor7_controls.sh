@@ -7,7 +7,7 @@
 # of them is guaranteed by anything else here:
 #
 #   - the engine's defaults really are the modern ones the installer claims
-#   - a partial config is honoured rather than ignored or rejected
+#   - a partial config is honored rather than ignored or rejected
 #   - the values mean what the installer thinks they mean
 #
 # The last is the one worth testing hardest. The numbers are SDL 1.2 keysyms

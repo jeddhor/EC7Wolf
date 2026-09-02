@@ -105,21 +105,21 @@ static void R_DrawPlane(byte *vbuf, unsigned vbufPitch, int min_wallheight, int 
 
 			// Corridor 7 does not shade its planes through a colormap at all: it
 			// walks the PALETTE, one index darker per band, and stops at the bottom
-			// of the colour's own ramp. Read straight off the released game,
+			// of the color's own ramp. Read straight off the released game,
 			// MAP23's green ceiling from the screen edge inward:
 			//
 			//   122 121 122 120 121 120 119 120 118 119 118 117 ...
 			//
 			// which is band N alternating with band N+1 while N counts down by one
 			// index per band. The ramps are neither uniformly sized nor aligned
-			// (grey 16-39, red 64-79, green 112-127, purple 184-207), so each
-			// colour's floor comes from V_GetC7RampFloors, which derives them from
+			// (gray 16-39, red 64-79, green 112-127, purple 184-207), so each
+			// color's floor comes from V_GetC7RampFloors, which derives them from
 			// the palette by descending while luminance does not rise.
 			//
 			// This replaces a walk of NormalLight.Maps looking for the next
 			// visually distinct row. That walk could not match the original on any
-			// saturated colour: Corridor 7's palette holds three overlapping red
-			// ramps, so the colour matcher legitimately hops between them
+			// saturated color: Corridor 7's palette holds three overlapping red
+			// ramps, so the color matcher legitimately hops between them
 			// (71 -> 241, 73 -> 242) and the step sequence came out erratic.
 			const BYTE *const rampFloor = V_GetC7RampFloors();
 			for(unsigned int color = 0;color < 256;++color)

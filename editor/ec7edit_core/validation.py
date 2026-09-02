@@ -38,7 +38,7 @@ from .catalog import Catalog
 from .document import MapDocument
 from .errors import Diagnostic, Severity
 from .planes import coordinates, linear_index
-from .reachability import analyse, unreachable_floor
+from .reachability import analyze, unreachable_floor
 
 #: Corridor 7's empty object-plane marker. Not zero.
 EMPTY_OBJECT = 18
@@ -215,7 +215,7 @@ def validate_map(document: MapDocument, catalog: Catalog | None = None, *,
             for value, cell in sorted(unknown)[:5]:
                 problems.append(Diagnostic(
                     "C7E-CELL-002", Severity.WARNING,
-                    f"plane {plane} word {value} is not in the catalogue; it is "
+                    f"plane {plane} word {value} is not in the catalog; it is "
                     "preserved exactly and spawns nothing the editor knows about",
                     _where(*cell),
                 ))
@@ -290,11 +290,11 @@ def validate_map(document: MapDocument, catalog: Catalog | None = None, *,
         for index, value in enumerate(plane0):
             entry = catalog.for_value(0, value)
             if entry is not None and entry.subcategory == "door" and "locked" in entry.aliases:
-                colour = "RED" if "red" in entry.aliases else "BLUE"
-                locks.setdefault(colour, coordinates(index, width))
+                color = "RED" if "red" in entry.aliases else "BLUE"
+                locks.setdefault(color, coordinates(index, width))
         if locks:
             # A card reaches the player two ways: lying on the floor, or handed
-            # over by the wall terminal of that colour. Corridor 7 mostly uses
+            # over by the wall terminal of that color. Corridor 7 mostly uses
             # the terminal, so counting only floor cards would warn about the
             # ordinary case.
             keys = set()
@@ -307,12 +307,12 @@ def validate_map(document: MapDocument, catalog: Catalog | None = None, *,
                 if entry is not None and entry.subcategory == "terminal" \
                         and "keycard" in entry.aliases:
                     keys.add("RED" if "red" in entry.aliases else "BLUE")
-            for colour, cell in locks.items():
-                if colour not in keys:
+            for color, cell in locks.items():
+                if color not in keys:
                     problems.append(Diagnostic(
                         "C7E-DOOR-003", Severity.WARNING,
-                        f"a {colour}-locked door has no {colour} access card on this "
-                        f"floor and no {colour} terminal to grant one",
+                        f"a {color}-locked door has no {color} access card on this "
+                        f"floor and no {color} terminal to grant one",
                         _where(*cell),
                     ))
 
@@ -322,20 +322,20 @@ def validate_map(document: MapDocument, catalog: Catalog | None = None, *,
     # than inventing routes, and the plan is explicit that this is not a proof
     # that a floor can be finished.
     if catalog is not None and starts and (only is None or (GLOBAL_CODES & only)):
-        reach = analyse(document, catalog)
+        reach = analyze(document, catalog)
 
         # A key behind the only door it opens. The flood is a fixpoint, so a
-        # colour still blocking when it stops is a colour whose key the player
+        # color still blocking when it stops is a color whose key the player
         # can never hold -- which is the one shape of key puzzle that is always
         # a mistake rather than a design.
-        for colour, cells in sorted(reach.blocked.items()):
-            if colour in reach.keys:
+        for color, cells in sorted(reach.blocked.items()):
+            if color in reach.keys:
                 continue
             cell = coordinates(cells[0], width)
             problems.append(Diagnostic(
                 "C7E-DOOR-004", Severity.WARNING,
-                f"the {colour} access card cannot be reached without the "
-                f"{colour} card; the route through this door is closed to the player",
+                f"the {color} access card cannot be reached without the "
+                f"{color} card; the route through this door is closed to the player",
                 _where(*cell), cell,
             ))
 
@@ -449,7 +449,7 @@ def fix_label(fix: str) -> str:
     return entry[0] if entry else ""
 
 
-def summarise(problems) -> str:
+def summarize(problems) -> str:
     """One line for a status bar."""
     errors = sum(1 for problem in problems if problem.severity is Severity.ERROR)
     warnings = sum(1 for problem in problems if problem.severity is Severity.WARNING)

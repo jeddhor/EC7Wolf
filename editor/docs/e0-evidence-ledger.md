@@ -73,7 +73,7 @@ fixture.
 | --- | --- |
 | Path | `../../tools/python/corridor7_map.py` — **outside the ECWolf git root** |
 | Version control | none: the containing directory is not a git repository |
-| Licence / copyright / author | **absent** — no SPDX tag, no header, no attribution anywhere in the file |
+| License / copyright / author | **absent** — no SPDX tag, no header, no attribution anywhere in the file |
 | Grade | C — it works, and nothing states where it came from |
 
 **It is already a dependency.** Two *tracked* tools import it:
@@ -88,14 +88,14 @@ tools was written during the multiplayer work and copied the idiom from the
 first without noticing what it implied.
 
 **Resolved, 2026-08-29.** The owner confirms the file is his own work and that
-everything in this project carries one licence: *"Everything is under the same
+everything in this project carries one license: *"Everything is under the same
 license -- the map editor will be the same license as EC7Wolf."* The editor is
-therefore **GPL-3.0-or-later**, matching the engine's effective licence, and
+therefore **GPL-3.0-or-later**, matching the engine's effective license, and
 every new file carries an SPDX tag saying so. Reuse is authorised.
 
 What E1 did with that permission is worth recording, because "authorised" and
 "correct to reuse" are different questions. The reference codec is sound on
-structure and was used as behavioural evidence throughout, but it is lossy in
+structure and was used as behavioral evidence throughout, but it is lossy in
 two ways the editor cannot afford:
 
 - it decodes a name to the text before the first NUL and re-encodes from that,
@@ -109,7 +109,7 @@ adapting the reference. The out-of-root dependency is gone either way: both lab
 tools now import the in-repository package, and the E1 gate checks that no
 `tools/python` path escape comes back.
 
-Grade **A**: licence stated by the owner, reuse authorised, and the production
+Grade **A**: license stated by the owner, reuse authorised, and the production
 code independent of the question.
 
 ## 4. Runtime and platform matrix
@@ -155,6 +155,6 @@ in the name field, which is why A10 keeps the raw 16 bytes.
 
 ## 7. What E0 deliberately did not do
 
-No production GUI, no codec, no parser rewrite, no engine change, no catalogue.
+No production GUI, no codec, no parser rewrite, no engine change, no catalog.
 No production code was moved. The two strictness gaps in §2 are recorded, not
 fixed; they belong to E1.

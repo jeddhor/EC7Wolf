@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Jason Tripp
-"""The semantic catalogue: raw map words to things a person can recognise.
+"""The semantic catalog: raw map words to things a person can recognize.
 
 A map cell is a number. `23` is a filing cabinet, `108` is an alien facing
-east, `251` is a door, and `1` is a wall painted with page 0. The catalogue is
+east, `251` is a door, and `1` is a wall painted with page 0. The catalog is
 what lets a palette show those as pictures with names instead of as a list of
 integers, and what lets the editor write the right number back.
 
@@ -23,7 +23,7 @@ quietly describing a game that no longer exists.
 Two rules hold the honesty line:
 
 * **an unresolved join is reported, never guessed.** If XLAT spawns a class
-  DECORATE does not define, that is a defect somewhere and the catalogue says
+  DECORATE does not define, that is a defect somewhere and the catalog says
   so rather than inventing a plausible entry;
 * **only entries with a complete raw write mapping are offered in the normal
   palette.** Everything else is reachable through Raw, where the user can see
@@ -488,7 +488,7 @@ def _thing_entry(
 def build_catalog(
     xlat: Xlat, actors: dict[str, ActorInfo], curation: Curation | None = None
 ) -> Catalog:
-    """Join the three inputs into one catalogue, reporting what will not join."""
+    """Join the three inputs into one catalog, reporting what will not join."""
     curation = curation or Curation()
     unresolved: list[str] = []
 
@@ -561,7 +561,7 @@ def build_catalog(
 def catalog_to_json(catalog: Catalog) -> str:
     """Deterministic JSON. Sorted keys, fixed separators, trailing newline.
 
-    No image data of any kind: the catalogue says *which* sprite page to draw,
+    No image data of any kind: the catalog says *which* sprite page to draw,
     and the pixels are decoded from the user's own copy at runtime. That is the
     difference between a distributable file and one that is not.
     """

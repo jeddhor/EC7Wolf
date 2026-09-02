@@ -1,6 +1,6 @@
 # EC7Edit — E2 evidence ledger
 
-Milestone E2: shared asset decoders and the semantic catalogue. Grades as in
+Milestone E2: shared asset decoders and the semantic catalog. Grades as in
 [E0](e0-evidence-ledger.md): **A** proven against running code or the shipped
 data, **B** owned-data fact, **C** inferred, **D** unresolved.
 
@@ -37,9 +37,9 @@ PNGs render.
 The map codec inside it is gone too — the gallery now calls E1's
 `parse_archive` through a five-line adapter rather than carrying its own RLEW.
 
-## 2. Three findings from making the catalogue
+## 2. Three findings from making the catalog
 
-The catalogue is generated from the engine's own translation and actor
+The catalog is generated from the engine's own translation and actor
 definitions. Building it surfaced three things about the data that a
 hand-written table would have quietly encoded wrong.
 
@@ -65,7 +65,7 @@ and not offered for new work.
 All three were found by a test asserting that every value in the shipped maps
 resolves to exactly one entry. Before that test, all three looked fine.
 
-## 3. The catalogue
+## 3. The catalog
 
 457 entries across the tabs §8.6 defines:
 
@@ -112,9 +112,9 @@ visible. Grade **D**, owned by whoever next touches the translation.
 
 ## 5. Commercial content
 
-No pixels are serialised anywhere. The catalogue records *which* sprite or wall
+No pixels are serialised anywhere. The catalog records *which* sprite or wall
 page to draw; the artwork is decoded from the user's own copy at run time,
-which is exactly what makes the catalogue distributable when the artwork is
+which is exactly what makes the catalog distributable when the artwork is
 not. A test greps the committed file for image markers.
 
 Every fixture is generated — a synthetic executable carrying a six-bit palette,

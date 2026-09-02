@@ -5,14 +5,14 @@
 # render/opengl/r_glxbrz.cpp reimplements deps/xbrz in GLSL so the OpenGL present
 # path gets the same filter the software path has. A shader that got the rules
 # subtly wrong -- a rotation mapped the wrong way, blend weights applied out of
-# order, the colour distance idealised instead of copied -- would still produce a
+# order, the color distance idealised instead of copied -- would still produce a
 # smooth, plausible-looking picture. So it is not judged by eye: the game writes
 # the shader's output and the CPU filter's output for the same frame, and they
 # are compared pixel for pixel.
 #
 # Two things are asserted, and either one alone passes for the wrong reason:
 #
-#   * the two outputs agree. Not exactly -- GLSL has no doubles, so a colour
+#   * the two outputs agree. Not exactly -- GLSL has no doubles, so a color
 #     distance that lands within a hair of a threshold can fall the other way in
 #     the shader, changing that source pixel's whole block. Measured at 28 source
 #     pixels in 256000 on the title page, so the bar is set well inside what a
@@ -20,7 +20,7 @@
 #     too so the disagreements have to stay small as well as rare.
 #
 #   * the output is actually filtered. Both paths degenerating to a plain
-#     nearest-neighbour blow-up would agree perfectly. A blow-up leaves every
+#     nearest-neighbor blow-up would agree perfectly. A blow-up leaves every
 #     scale x scale block flat, so blended (non-flat) blocks are counted: on real
 #     art roughly a third of them are.
 #
@@ -113,7 +113,7 @@ differing = sum(1 for i in range(0, len(a), 3)
 worst = max(delta)
 share = 100.0 * differing / (w * h)
 
-# Flat scale x scale blocks are what a nearest-neighbour blow-up produces; the
+# Flat scale x scale blocks are what a nearest-neighbor blow-up produces; the
 # filter's blending is what makes them non-flat.
 px = gl.load()
 blended = total = 0
@@ -138,12 +138,12 @@ if share > 0.05:
     ok = False
 if worst > 64:
     print("FAIL: %dx has a channel off by %d. Even a marginal threshold flip "
-          "moves a pixel toward a neighbouring colour, not across the palette."
+          "moves a pixel toward a neighboring color, not across the palette."
           % (factor, worst))
     ok = False
 if blendShare < 5.0:
     print("FAIL: %dx left %.1f%% of blocks blended. The output is a "
-          "nearest-neighbour blow-up -- the shader is not filtering, and "
+          "nearest-neighbor blow-up -- the shader is not filtering, and "
           "agreeing with a CPU path that also is not proves nothing."
           % (factor, blendShare))
     ok = False

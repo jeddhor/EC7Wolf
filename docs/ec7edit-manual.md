@@ -14,7 +14,7 @@ formats, and if you ever *do* need to, that is a bug in this document.
 > editor by `editor/scripts/manual_shots.py`, and regenerated whenever the
 > interface changes — a manual illustrated with year-old mock-ups is worse than
 > one with no pictures. They are taken with **no game data configured**, which
-> is why the map is drawn in flat colours and the palette shows labelled tiles.
+> is why the map is drawn in flat colors and the palette shows labeled tiles.
 > Point the editor at your own copy of Corridor 7 and everything you see here
 > is drawn with the game's own artwork instead.
 
@@ -56,7 +56,7 @@ Both are described in the next section.
 artwork so it can draw your map the way the game will, and reads its maps if
 you want to start from one. **EC7Edit ships no part of Corridor 7** — no maps,
 no artwork, no sounds — and cannot invent them. If you do not own the game the
-editor still runs, and everything is drawn as labelled placeholder tiles, which
+editor still runs, and everything is drawn as labeled placeholder tiles, which
 is exactly what the pictures in this manual show.
 
 **EC7Wolf**, to play what you make. The editor launches it for you.
@@ -102,7 +102,7 @@ without Qt for the command-line tools in section 15.
 ```
 
 builds the real main window without a display and prints what this build is:
-version, the Python and Qt inside it, the catalogue it found, the schema and
+version, the Python and Qt inside it, the catalog it found, the schema and
 protocol versions it speaks. It is the thing to paste into a bug report.
 
 ### First run
@@ -451,7 +451,7 @@ sixty floors, and copies the one you choose into your project.
 
 **Your game files are never written to.** Not by import, not by export, not by
 anything: the editor records the digest of what it read and checks it again
-afterwards, and every write goes through a guard that is told which folders are
+afterward, and every write goes through a guard that is told which folders are
 off limits.
 
 An imported map keeps its exact original words, including anything the editor
@@ -596,7 +596,7 @@ Nothing is written next to your Corridor 7 files, ever.
 **The editor will not start.** Run `./ec7edit --selftest` from a terminal. It
 prints what the build is and where it stopped, without needing a display.
 
-**The palette is all grey labelled tiles.** No game data is configured, or the
+**The palette is all gray labeled tiles.** No game data is configured, or the
 folder given is not the game's. **Tools → Setup…**, and point it at the folder
 holding `MAPTEMP.CO7`.
 
@@ -636,7 +636,7 @@ Stated plainly, because a manual that hides them wastes your time instead.
   DECORATE. A pack changes which levels the game offers and their order, and
   nothing about how the game behaves.
 * **Campaign metadata is deliberately bounded**: names, routing, music, par,
-  floor number, the tally screen. Colours and skills are not offered — a skill
+  floor number, the tally screen. Colors and skills are not offered — a skill
   block is global and would change the stock game's difficulty levels.
 * **The editor is beta**, as is EC7Wolf. The project file format has a schema
   version and a migration path, so projects made now will open later.
@@ -653,7 +653,7 @@ Stated plainly, because a manual that hides them wastes your time instead.
 * [ec7edit-snapshot.md](ec7edit-snapshot.md) — how snapshots work, and the
   live-preview decision
 * [ec7edit-mappack.md](ec7edit-mappack.md) — map packs, and the MAPINFO
-  behaviour behind them
+  behavior behind them
 * [corridor7.md](corridor7.md) — the Corridor 7 port itself
 
 EC7Edit is GPL-3.0-or-later. It contains no part of Corridor 7: Alien Invasion,

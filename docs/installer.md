@@ -19,7 +19,7 @@ they have not already.
 
 ## What a good installer also has, which is therefore in scope
 
-* A **licence page**. The engine is GPL, and the vendored xBRZ makes the binary
+* A **license page**. The engine is GPL, and the vendored xBRZ makes the binary
   GPL-3; that is not optional decoration.
 * An **ownership notice**. Nothing commercial is redistributed and the installer
   only ever copies from the user's own disc. Saying so is honest and it also
@@ -27,7 +27,7 @@ they have not already.
 * **Nothing is written until the user confirms.** A summary page listing every
   action, then a staging directory that is moved into place atomically — which
   is what `tools/package_corridor7_release.sh` already does, for the same
-  reason. Cancelling half way leaves nothing behind.
+  reason. Canceling half way leaves nothing behind.
 * **A disk-space check** before starting, because the cinematics alone are 27 MB
   and a build tree is far more.
 * **A log file**, always written, shown on failure, with a button that opens the
@@ -87,7 +87,7 @@ in CI, and what the GUI adds on top is layout.
 * `deps.py` — dependency scan for building and for ripping, per platform, each
   missing item carrying a human remedy (the distro package, the download page).
 * `build.py` — configure and build, streaming output line by line to a callback,
-  cancellable.
+  cancelable.
 * `install.py` — the layout, the staging directory, the atomic move, the
   manifest that the uninstaller later reads.
 * `verify.py` — the post-install check.
@@ -132,7 +132,7 @@ real wizard on Qt's offscreen platform — no display needed, and nothing thrown
 onto a developer's screen mid-run. It checks the thread crossing (100 detail
 lines arrive in order, progress never goes backwards and is throttled), page
 order, and each page's validation; then it runs two *actual* installs through
-the window, one to completion and one cancelled part way, because the worker,
+the window, one to completion and one canceled part way, because the worker,
 the progress display and the Cancel button cannot be judged from a static page.
 
 Two bugs it caught, both of which would have shipped:
@@ -144,7 +144,7 @@ Two bugs it caught, both of which would have shipped:
   the state before touching a widget.
 * `audio.rip` polled for cancellation only *between* tracks. Cancel is what
   makes that reachable, and the longest track on the disc is ten minutes, so the
-  window could have sat on "Cancelling…" for that long. It now polls inside the
+  window could have sat on "Canceling…" for that long. It now polls inside the
   streaming loop, and the gate holds it to stopping within 30 seconds of being
   asked. Measured: 0.3.
 
@@ -174,7 +174,7 @@ the engine actually announces:
 
 SDL takes the class from `argv[0]` unless told otherwise, so it matched neither
 the old string nor the desktop file. A task manager that cannot pair a window
-with its entry falls back to a grey cog and refuses to group the two — at no
+with its entry falls back to a gray cog and refuses to group the two — at no
 cost on install day. The launcher now exports `SDL_VIDEO_X11_WMCLASS` and
 `SDL_VIDEO_WAYLAND_WMCLASS` (the Wayland one matters on Plasma 6, where the app
 id is matched against the desktop file's name), and the measurement is a gate.
@@ -269,7 +269,7 @@ completely, and that is where the value is. It cannot run the *wizard*:
 and which Wine does not implement, so PySide6 will not load in a Wine prefix at
 all — frozen or not. That was worth pinning down rather than guessing, because
 the symptom (`ImportError: DLL load failed while importing QtCore`) looks
-exactly like a bad PyInstaller spec. `build_setup.py` recognises it and says so.
+exactly like a bad PyInstaller spec. `build_setup.py` recognizes it and says so.
 The frozen executable is therefore checked on a real `windows-latest` runner in
 CI, which builds it and runs `EC7Wolf-Setup.exe --selftest`: the self-test
 constructs every page offscreen and reports by exit code, because a windowed
@@ -294,7 +294,7 @@ Two bugs it caught:
 * The registry advertised a `QuietUninstallString` of `"Uninstall.cmd" --yes`,
   and `Uninstall.cmd` ignored its arguments entirely — so anything that used
   the quiet path would have sat waiting for a keypress nobody was there to
-  give. It honours `--yes` and `/S` now.
+  give. It honors `--yes` and `/S` now.
 
 ### Phase 5 — hardening — **done**
 
@@ -314,7 +314,7 @@ on, because quietly losing someone's saved games is worse than stopping.
 finds an install where one would go now says so and offers two actions.
 Conventional installers offer Upgrade, Repair and Modify as well — here all
 three would do the same work, because this installer always writes everything,
-and three buttons with one behaviour is theatre. The page is skipped entirely
+and three buttons with one behavior is theater. The page is skipped entirely
 when there is nothing installed, and choosing *Remove* goes straight to the
 summary: no disc to pick, no engine to find, no options to set. `RemovalPlan`
 wears the same `run(reporter) -> Path` shape as `InstallPlan`, so the worker

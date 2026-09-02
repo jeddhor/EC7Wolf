@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Jason Tripp
-"""E2: the XLAT and DECORATE readers, and the catalogue they join into.
+"""E2: the XLAT and DECORATE readers, and the catalog they join into.
 
-The catalogue is generated from files that live in this repository and change,
+The catalog is generated from files that live in this repository and change,
 so most of these tests are about the join staying honest as they do: every raw
 value the translation can spawn must resolve to exactly one entry, no two
 entries may claim the same key, and anything that will not join must be
 reported rather than filled in with a guess.
 
-The committed catalogue is checked against its inputs here as well as in the
-gate, because a stale catalogue is the failure that would otherwise show up as
+The committed catalog is checked against its inputs here as well as in the
+gate, because a stale catalog is the failure that would otherwise show up as
 the editor quietly describing a game the engine no longer plays.
 """
 
@@ -240,7 +240,7 @@ class RealCatalog(unittest.TestCase):
 
     def test_every_spawnable_value_resolves(self):
         missing = [v for v in self.xlat.thing_values() if self.catalog.for_value(1, v) is None]
-        self.assertEqual(missing, [], "plane-1 values with no catalogue entry")
+        self.assertEqual(missing, [], "plane-1 values with no catalog entry")
 
     def test_every_tile_resolves(self):
         missing = [v for v in self.xlat.tiles if self.catalog.for_value(0, v) is None]
@@ -288,7 +288,7 @@ class RealCatalog(unittest.TestCase):
         self.assertEqual(catalog_from_json(catalog_to_json(self.catalog)).entries,
                          self.catalog.entries)
 
-    def test_the_committed_catalogue_matches_its_inputs(self):
+    def test_the_committed_catalog_matches_its_inputs(self):
         self.assertTrue(GENERATED.exists(), "run scripts/generate_catalog.py write")
         self.assertEqual(
             GENERATED.read_text(encoding="utf-8"),
@@ -296,11 +296,11 @@ class RealCatalog(unittest.TestCase):
             "editor_catalog.json is stale; regenerate it and review the diff",
         )
 
-    def test_the_committed_catalogue_loads(self):
+    def test_the_committed_catalog_loads(self):
         self.assertEqual(len(load_catalog(GENERATED)), len(self.catalog))
 
     def test_no_pixels_are_serialised(self):
-        # The catalogue names sprite pages. If it ever carried image data it
+        # The catalog names sprite pages. If it ever carried image data it
         # would stop being a file this project may distribute.
         text = GENERATED.read_text(encoding="utf-8")
         for marker in ("data:image", "iVBOR", "base64", "\\u0000"):

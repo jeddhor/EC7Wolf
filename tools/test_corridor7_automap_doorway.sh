@@ -3,11 +3,11 @@
 # Regression test: the inset map panel keeps working while the player stands in
 # a doorway.
 #
-# The panel greys out any tile the player cannot currently walk to, which it
+# The panel grays out any tile the player cannot currently walk to, which it
 # decides with map->CheckLink() against the zone the player is standing in. A
 # door belongs to no zone -- it is the link between two of them -- so a player
 # halfway through a doorway had a NULL zone, CheckLink answered false for
-# everything, and the whole painted window filled solid grey.
+# everything, and the whole painted window filled solid gray.
 #
 # Asserted by comparing the panel on the door tile against the panel on the
 # floor tile beside it. Both are in the same room, so they must agree closely;
@@ -64,22 +64,22 @@ shoot door "$door_x"
 shoot floor "$floor_x"
 
 # The panel is 64x64 at (256,0) in 320x200, so at 640x400 it is 128x128 at
-# (512,0). Grey (palette 32) is "solid or unreachable"; count it in each shot.
+# (512,0). Gray (palette 32) is "solid or unreachable"; count it in each shot.
 python3 - "$work/door.png" "$work/floor.png" <<'PY'
 import sys
 from PIL import Image
 
-GREY = (142, 142, 142)   # palette index 32 at the C7 palette
+GRAY = (142, 142, 142)   # palette index 32 at the C7 palette
 
-def grey_count(path):
+def gray_count(path):
     im = Image.open(path).convert("RGB").crop((512, 0, 640, 128))
     counts = dict((c, n) for n, c in im.getcolors(maxcolors=1 << 16))
-    return counts.get(GREY, 0), im.width * im.height
+    return counts.get(GRAY, 0), im.width * im.height
 
-door, total = grey_count(sys.argv[1])
-floor, _ = grey_count(sys.argv[2])
+door, total = gray_count(sys.argv[1])
+floor, _ = gray_count(sys.argv[2])
 
-# The border is grey too and is 1008 px of the 16384, so compare the excess.
+# The border is gray too and is 1008 px of the 16384, so compare the excess.
 BORDER = 1008
 door_solid = door - BORDER
 floor_solid = floor - BORDER
@@ -89,7 +89,7 @@ print("panel solid px: doorway=%d, floor beside it=%d" % (door_solid, floor_soli
 # One tile of window scroll plus the player marker moves a couple of hundred
 # pixels; a collapsed zone lookup roughly doubles the solid area.
 if door_solid > floor_solid * 3 // 2:
-    print("FAIL: standing in the doorway greys out the map "
+    print("FAIL: standing in the doorway grays out the map "
           "(%d solid px vs %d one tile away). The player's tile has no zone, "
           "so every CheckLink failed." % (door_solid, floor_solid))
     sys.exit(1)

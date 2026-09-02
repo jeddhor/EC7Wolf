@@ -97,7 +97,7 @@ differs_a_lot() {
 looks_the_same() {
 	_n=$(pixels_differing "$1" "$2")
 	[ -n "$_n" ] || return 1
-	printf '  ..   %s pixels differ from the setup screen afterwards\n' "$_n"
+	printf '  ..   %s pixels differ from the setup screen afterward\n' "$_n"
 	[ "$_n" -lt 4000 ]
 }
 

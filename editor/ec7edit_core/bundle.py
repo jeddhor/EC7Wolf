@@ -8,7 +8,7 @@ From a checkout, `ec7edit_core/x.py` sits two levels below the editor tree, so
 `resources/` is `parents[1]`. Frozen by PyInstaller, that same module lives
 inside a bundle, `parents[1]` is somewhere under `_internal`, and the answer is
 whatever `sys._MEIPASS` says. Guessing wrong is not a crash -- it is an editor
-that starts with an empty palette and no explanation, because the catalogue it
+that starts with an empty palette and no explanation, because the catalog it
 could not find is read through a path that simply does not exist.
 
 So both questions are asked here, once, and every caller asks this instead of
@@ -40,7 +40,7 @@ def resource_root() -> Path:
 
 
 def catalog_path() -> Path:
-    """The editor catalogue, wherever this build keeps it."""
+    """The editor catalog, wherever this build keeps it."""
     return resource_root() / "resources" / "editor_catalog.json"
 
 

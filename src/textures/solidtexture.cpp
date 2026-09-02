@@ -58,7 +58,7 @@ protected:
 	BYTE* Pixels;
 	Span **Spans;
 	const DWORD color;
-	// >= 0 pins the texel to an exact palette entry instead of colour matching.
+	// >= 0 pins the texel to an exact palette entry instead of color matching.
 	const int paletteIndex;
 
 	virtual void MakeTexture();
@@ -102,13 +102,13 @@ FTexture *SolidTexture_TryCreate(const char* color)
 //
 // SolidTexture_CreateIndexed
 //
-// Solid texture pinned to an exact palette entry. Colour matching cannot
+// Solid texture pinned to an exact palette entry. Color matching cannot
 // express this: a palette may hold the same RGB at several indices, and which
 // one you get matters when something walks the palette by index rather than
-// reading the colour. Corridor 7's plane shading does exactly that -- it steps
-// one index darker per band and stops at the bottom of the colour's own
+// reading the color. Corridor 7's plane shading does exactly that -- it steps
+// one index darker per band and stops at the bottom of the color's own
 // 16-aligned ramp -- and its palette repeats (170,0,0) at 4, 76 and 244, so an
-// "#AA0000" flat resolved to 4 and faded out through the greys instead of the
+// "#AA0000" flat resolved to 4 and faded out through the grays instead of the
 // reds.
 //
 //==========================================================================

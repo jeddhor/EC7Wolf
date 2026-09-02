@@ -868,7 +868,7 @@ static void BuildMultiplayerMenu()
 	multiplayerMenu.setHeadText("Multiplayer", true);
 
 	// setLabel, not setText: a multiple-choice item puts its current value in
-	// the text, so a row labelled with setText renames itself to its own value
+	// the text, so a row labeled with setText renames itself to its own value
 	// the first time it is changed -- "Host a game    Host a game".
 	static const char* arenas[] = { "Level 1", "Level 2", "Level 3", "Level 4",
 	                                "Level 5", "Level 6", "Level 7", "Level 8" };

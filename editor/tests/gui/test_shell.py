@@ -176,7 +176,7 @@ class ProjectFlow(Base):
     def test_the_menu_asks_for_a_file_rather_than_silently_returning(self):
         # QAction.triggered carries a `checked` bool and PySide6 hands it to any
         # slot that can take it, so File > Open project called
-        # open_project(False). That reads as an empty path -- what a cancelled
+        # open_project(False). That reads as an empty path -- what a canceled
         # dialog looks like -- and it returned without ever opening one.
         from PySide6.QtWidgets import QFileDialog
 
@@ -502,10 +502,10 @@ class Canvas(unittest.TestCase):
         image = QImage(self.canvas.size(), QImage.Format_RGB32)
         image.fill(0)
         self.canvas.render(image)
-        # Something was actually drawn: more than one colour on the surface.
-        colours = {image.pixel(x, y) for x in range(0, image.width(), 3)
+        # Something was actually drawn: more than one color on the surface.
+        colors = {image.pixel(x, y) for x in range(0, image.width(), 3)
                    for y in range(0, image.height(), 3)}
-        self.assertGreater(len(colours), 1)
+        self.assertGreater(len(colors), 1)
 
     def test_hover_reports_the_cell(self):
         seen = []
@@ -553,7 +553,7 @@ class Palette(Base):
         names = [model.data(model.index(row, 0)) for row in range(model.rowCount())]
         self.assertIn("Alioprobe", names)
 
-    def test_entries_carry_their_catalogue_object(self):
+    def test_entries_carry_their_catalog_object(self):
         model = self.window.palette_models["walls"]
         model.set_entries(CATALOG.in_category("walls")[:5])
         entry = model.data(model.index(0, 0), EntryRole)
@@ -638,7 +638,7 @@ class Workers(unittest.TestCase):
         first = self.pool.submit("e", lambda job: 1)
         self.pool.submit("e", lambda job: 2)
         self.drain()
-        self.assertTrue(first.cancelled)
+        self.assertTrue(first.canceled)
 
     def test_cancel_all_stops_delivery(self):
         self.pool.submit("f", lambda job: 1)

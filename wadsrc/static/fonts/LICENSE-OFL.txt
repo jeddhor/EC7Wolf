@@ -5,7 +5,7 @@ reproduced below. Noto Sans declares no Reserved Font Name, so these subset
 and renamed copies are permitted.
 
 The OFL permits bundling and redistribution alongside software of any
-licence, including this GPL engine: the font is data, not linked code.
+license, including this GPL engine: the font is data, not linked code.
 
 ----------------------------------------------------------------------
 

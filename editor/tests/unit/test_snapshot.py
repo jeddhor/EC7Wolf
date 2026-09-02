@@ -51,8 +51,8 @@ class Cameras(unittest.TestCase):
                     check_camera(self.room(), Camera(bad, 8))
 
     def test_the_angle_wraps_rather_than_being_refused(self):
-        self.assertEqual(Camera(1, 1, 450).normalised().angle, 90)
-        self.assertEqual(Camera(1, 1, -90).normalised().angle, 270)
+        self.assertEqual(Camera(1, 1, 450).normalized().angle, 90)
+        self.assertEqual(Camera(1, 1, -90).normalized().angle, 270)
 
 
 class Arguments(unittest.TestCase):
@@ -109,11 +109,11 @@ class BlankFrames(unittest.TestCase):
     """The one check that matters: this project has shipped a gate that passed
     while comparing a black frame nobody had looked at."""
 
-    def png(self, colour, name):
+    def png(self, color, name):
         from PIL import Image
 
         path = Path(self._tmp.name) / name
-        Image.new("RGB", (64, 40), colour).save(path)
+        Image.new("RGB", (64, 40), color).save(path)
         return path
 
     def setUp(self):
@@ -127,7 +127,7 @@ class BlankFrames(unittest.TestCase):
     def test_a_black_frame_is_not_a_world(self):
         self.assertFalse(looks_like_a_world(self.png((0, 0, 0), "black.png")))
 
-    def test_one_flat_colour_is_not_a_world(self):
+    def test_one_flat_color_is_not_a_world(self):
         self.assertFalse(looks_like_a_world(self.png((30, 40, 50), "flat.png")))
 
     def test_a_missing_file_is_not_a_world(self):
@@ -174,7 +174,7 @@ class Facing(unittest.TestCase):
         angle = 0.0
         for _ in range(4):
             angle = (angle + 90.0) % 360.0
-        self.assertEqual(Camera(1, 1, angle).normalised().angle, 0.0)
+        self.assertEqual(Camera(1, 1, angle).normalized().angle, 0.0)
 
 
 if __name__ == "__main__":

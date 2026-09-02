@@ -181,7 +181,7 @@ static NSArray* GetKnownExtensions()
 	NSButton *cancelButton;
 	NSButton *browseButton;
 	NSTextField *parametersTextField;
-	bool cancelled;
+	bool canceled;
 }
 
 - (void)buttonPressed:(id) sender;
@@ -198,7 +198,7 @@ static NSArray* GetKnownExtensions()
 - (void)buttonPressed:(id) sender
 {
 	if(sender == cancelButton)
-		cancelled = true;
+		canceled = true;
 
 	[window orderOut:self];
 	[app stopModal];
@@ -275,7 +275,7 @@ static NSArray* GetKnownExtensions()
 	FString caption;
 	caption.Format("%s: Select an IWAD to use", GetGameCaption());
 
-	cancelled = false;
+	canceled = false;
 
 	app = [NSApplication sharedApplication];
 	//id windowTitle = [NSString stringWithFormat:@"%s %s", GAMENAME, GetVersionString()];
@@ -372,7 +372,7 @@ static NSArray* GetKnownExtensions()
 	[cancelButton release];
 	[browseButton release];
 
-	return cancelled ? -1 : [iwadTable selectedRow];
+	return canceled ? -1 : [iwadTable selectedRow];
 }
 
 - (NSString*)commandLineParameters

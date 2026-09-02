@@ -11,7 +11,7 @@
 #
 # Two runs, against a data directory that deliberately has no override:
 #
-#   1. Without c7menu.pk3 the art must be there and must be art -- many colours,
+#   1. Without c7menu.pk3 the art must be there and must be art -- many colors,
 #      not a flat fill and not the black the menu falls back to.
 #   2. With a synthetic c7menu.pk3 the art must become that instead. This is not
 #      only an override test: it is what proves run 1 was drawing the generated
@@ -120,16 +120,16 @@ gen_colors = len(set(gen_px))
 dark = sum(1 for r, g, b in gen_px if r < 16 and g < 16 and b < 16)
 magenta = sum(1 for r, g, b in ovr_px if r > 100 and b > 100 and g < 100)
 
-print("generated backdrop: %d distinct colours, %.0f%% near-black"
+print("generated backdrop: %d distinct colors, %.0f%% near-black"
       % (gen_colors, 100.0*dark/len(gen_px)))
 print("override backdrop: %.0f%% magenta" % (100.0*magenta/len(ovr_px)))
 
 failed = False
 
 # Real art, upscaled and requantised, lands in dozens of palette entries. A
-# black fallback would be 1, and a flat fill or a solid colour only a handful.
+# black fallback would be 1, and a flat fill or a solid color only a handful.
 if gen_colors < 32:
-    print("FAIL: the backdrop uses only %d colours. The menu is not drawing the "
+    print("FAIL: the backdrop uses only %d colors. The menu is not drawing the "
           "upscaled splash -- most likely it fell back to a black screen."
           % gen_colors)
     failed = True
@@ -140,7 +140,7 @@ if dark > 0.8*len(gen_px):
     failed = True
 
 if magenta < 0.9*len(ovr_px):
-    print("FAIL: only %.0f%% of the backdrop is the override colour. Either "
+    print("FAIL: only %.0f%% of the backdrop is the override color. Either "
           "c7menu.pk3 no longer wins, or the run above was never using the "
           "generated backdrop in the first place." % (100.0*magenta/len(ovr_px)))
     failed = True

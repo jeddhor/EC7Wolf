@@ -120,7 +120,7 @@ actor C7ProbeEye : C7Monster
 //
 // Deliberately NOT limited: a Bandor killed nearby still calls the others in.
 // That path is P_AlertCorridor7MonstersNear, which wakes them directly instead
-// of going through the sight check, so the documented loyalty behaviour is
+// of going through the sight check, so the documented loyalty behavior is
 // unaffected by the hearing cap.
 
 actor C7Bandor : C7Monster

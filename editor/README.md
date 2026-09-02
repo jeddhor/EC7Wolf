@@ -80,19 +80,19 @@ archive without refusing to open it.
 | Path | What it is |
 | --- | --- |
 | [`ec7edit`](ec7edit) | Run it from a checkout, without installing |
-| [`ec7edit_core/`](ec7edit_core/) | The Qt-free half: codecs, catalogue, document, path safety, CLI. The GUI depends on this; it never depends on the GUI |
+| [`ec7edit_core/`](ec7edit_core/) | The Qt-free half: codecs, catalog, document, path safety, CLI. The GUI depends on this; it never depends on the GUI |
 | [`ec7edit_gui/`](ec7edit_gui/) | The Qt layer: window, canvas, palette, first-run setup, background workers |
 | [`docs/native-formats.md`](docs/native-formats.md) | The byte layouts as implemented, checked against the engine that loads them |
 | [`docs/e0-evidence-ledger.md`](docs/e0-evidence-ledger.md) | E0: contracts traced to source, with grades |
 | [`docs/e1-evidence-ledger.md`](docs/e1-evidence-ledger.md) | E1: what the codec proved, and what it found |
-| [`docs/e2-evidence-ledger.md`](docs/e2-evidence-ledger.md) | E2: decoder equivalence, and three things the catalogue found in the data |
-| [`docs/e3-evidence-ledger.md`](docs/e3-evidence-ledger.md) | E3: the modelled 10 000 operations, the eleven injected save failures, and two defects they found |
+| [`docs/e2-evidence-ledger.md`](docs/e2-evidence-ledger.md) | E2: decoder equivalence, and three things the catalog found in the data |
+| [`docs/e3-evidence-ledger.md`](docs/e3-evidence-ledger.md) | E3: the modeled 10 000 operations, the eleven injected save failures, and two defects they found |
 | [`docs/e4-evidence-ledger.md`](docs/e4-evidence-ledger.md) | E4: the measured packaging decision, and why the engine is not run until you ask |
 | [`docs/e5-evidence-ledger.md`](docs/e5-evidence-ledger.md) | E5: the exit gate met end to end, and the drag bug that would have made painting unusable |
 | [`docs/e6-evidence-ledger.md`](docs/e6-evidence-ledger.md) | E6: nineteen compound tools, the door rule copied from the engine, and the six gaps coverage found |
 | [`scripts/make_fixtures.py`](scripts/make_fixtures.py) | Generates the synthetic corpus, including eleven malformed inputs |
 | [`scripts/audit_links.py`](scripts/audit_links.py) | Fails on a Markdown link that escapes the git root or points at an untracked file |
-| [`resources/editor_catalog.json`](resources/) | The generated catalogue: 457 entries joining raw map words to names, sprites and placement rules |
+| [`resources/editor_catalog.json`](resources/) | The generated catalog: 457 entries joining raw map words to names, sprites and placement rules |
 | [`scripts/generate_catalog.py`](scripts/generate_catalog.py) | Rebuilds it from the engine's translation and actors; `verify` is a gate |
 | [`scripts/build_c7assets.py`](scripts/build_c7assets.py) | Builds `tools/c7assets.py` by inlining the decoders, so there is only one copy of them |
 | [`tests/unit/`](tests/unit/) | 488 tests, plain `unittest`, no runner dependency |

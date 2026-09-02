@@ -245,21 +245,21 @@ static void FreeSpecialLights()
 //
 //==========================================================================
 
-// The infrared visor leaves a set of palette entries at their source colour --
+// The infrared visor leaves a set of palette entries at their source color --
 // the lamps embedded in wall graphics and the instrumentation meant to burn
 // through the tint. Nothing else may be shaded ONTO them, or ordinary artwork
-// inherits that exemption and shows untinted at whatever distance the colour
+// inherits that exemption and shows untinted at whatever distance the color
 // matcher happens to choose them.
 //
 // The set is bigger than the two lamp entries this used to reserve. C7's
-// palette holds near-duplicates of its ramp greys down in the low EGA block --
+// palette holds near-duplicates of its ramp grays down in the low EGA block --
 // index 7 is (170,170,170) against the ramp's (174,174,174), index 8 is
 // (85,85,85) against (81,81,81) -- and ColorMatcher.Pick returns the LOWEST of
 // a tie, so shaded wall art landed on 7 and 8 constantly. That stayed invisible
 // while the visor was a computed transform tinting everything except two
 // hand-written exemptions. Once the visor became the game's own measured DAC,
 // which leaves the whole low block alone, those texels began showing as raw
-// grey through infrared -- thousands of them in a single view.
+// gray through infrared -- thousands of them in a single view.
 //
 // Which indices are exempt is data, not a rule chosen here:
 // V_IsCorridor7VisorExempt reads it back off the measured table. Index 254 is
@@ -363,7 +363,7 @@ void FDynamicColormap::BuildLights ()
 		{ // White light, so we can just pick the colors directly
 			for (c = 0; c < 256; c++)
 			{
-				// At zero darkening a colour must map to ITSELF. ColorMatcher
+				// At zero darkening a color must map to ITSELF. ColorMatcher
 				// returns the lowest index holding that RGB, so in a palette with
 				// duplicates an entry can alias onto a different index that merely
 				// looks the same. Corridor 7 has two pure whites -- 39, used all
@@ -375,8 +375,8 @@ void FDynamicColormap::BuildLights ()
 				// further away (row 3+, index 38) tinted correctly.
 				// Identity is right for ordinary entries, but not for a
 				// reserved one that is not a lamp: Corridor 7's wall art uses
-				// the low EGA greys 7 and 8, and keeping them at row 0 put
-				// thousands of untinted grey texels on screen under infrared,
+				// the low EGA grays 7 and 8, and keeping them at row 0 put
+				// thousands of untinted gray texels on screen under infrared,
 				// which leaves that whole block alone. Shade those away instead,
 				// as the original's light table does.
 				const bool keepIdentity = colors[c] == GPalette.BaseColors[c] &&

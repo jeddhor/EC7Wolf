@@ -463,7 +463,7 @@ static void TickC7Apparition(APlayerPawn *pawn)
 	player_t *player = pawn->player;
 	// CORR7CD.EXE tests this timer after 0x800 70 Hz tics, then requires a
 	// zero from its byte RNG. The apparition is a non-kill-counting actor two
-	// tiles in front of the player, travelling back toward them at 0x300 map
+	// tiles in front of the player, traveling back toward them at 0x300 map
 	// units per tic while frames C718..C725 play.
 	if(++player->c7ApparitionTics <= 0x800)
 		return;

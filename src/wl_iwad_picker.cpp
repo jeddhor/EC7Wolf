@@ -324,7 +324,7 @@ int I_PickIWad (WadStuff *wads, int numwads, bool showwin, int defaultiwad)
 #else
 	if (!TXT_Init())
 	{
-		I_FatalError("Failed to initialise GUI");
+		I_FatalError("Failed to initialize GUI");
 	}
 
 	FString caption;

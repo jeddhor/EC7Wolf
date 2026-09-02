@@ -18,7 +18,7 @@ mistake, such as an exit nobody can walk to.
 * A door is passable when its lock is held. An unlocked door is always
   passable, which is true -- every door in the game opens on use.
 * Keys are picked up by walking onto them, and granted by using a wall
-  terminal, which needs a floor cell beside the terminal. Both are modelled.
+  terminal, which needs a floor cell beside the terminal. Both are modeled.
 * A transporter pair is a two-way edge between its endpoints. Reaching either
   end reaches the other.
 * Progress is a fixpoint: flood, collect whatever keys the flood reached, flood
@@ -39,7 +39,7 @@ from .catalog import Catalog
 from .document import MapDocument
 from .planes import coordinates, linear_index
 
-#: Plane-1 words that are a player start, in the order the catalogue lists
+#: Plane-1 words that are a player start, in the order the catalog lists
 #: them. Corridor 7 reflects a start's angle, so this band reads north, east,
 #: south, west -- see MapDocument.PLAYER_START_EAST.
 PLAYER_STARTS = (19, 20, 21, 22)
@@ -56,23 +56,23 @@ class Reach:
 
     #: Indices into the plane, four-connected from the start.
     reached: set[int] = field(default_factory=set)
-    #: Colours held once every reachable key and terminal has been used.
+    #: Colors held once every reachable key and terminal has been used.
     keys: set[str] = field(default_factory=set)
-    #: Locked door cells the flood stopped at, by colour.
+    #: Locked door cells the flood stopped at, by color.
     blocked: dict[str, list[int]] = field(default_factory=dict)
     #: True when the map has a start to flood from at all.
     started: bool = False
 
 
-def _door_colour(entry) -> str | None:
-    """The lock colour of a plane-0 door word, or None if it is not locked."""
+def _door_color(entry) -> str | None:
+    """The lock color of a plane-0 door word, or None if it is not locked."""
     if entry is None or entry.subcategory != "door" or "locked" not in entry.aliases:
         return None
     return "RED" if "red" in entry.aliases else "BLUE"
 
 
-def _key_colour(entry) -> str | None:
-    """The colour a plane-1 pickup or a plane-0 terminal grants."""
+def _key_color(entry) -> str | None:
+    """The color a plane-1 pickup or a plane-0 terminal grants."""
     if entry is None or "keycard" not in entry.aliases:
         return None
     if entry.plane == 1:
@@ -107,7 +107,7 @@ def _transporter_links(document: MapDocument, catalog: Catalog | None) -> dict[i
     return links
 
 
-def analyse(document: MapDocument, catalog: Catalog | None = None) -> Reach:
+def analyze(document: MapDocument, catalog: Catalog | None = None) -> Reach:
     """Flood from the player start, opening doors as keys are found."""
     width, height = document.width, document.height
     plane0 = document.planes.planes[0]
@@ -122,22 +122,22 @@ def analyse(document: MapDocument, catalog: Catalog | None = None) -> Reach:
     links = _transporter_links(document, catalog)
 
     # Precompute each cell's role once: floods run repeatedly.
-    door_colour: dict[int, str] = {}
+    door_color: dict[int, str] = {}
     open_doors: set[int] = set()
     key_at: dict[int, str] = {}
     for index, value in enumerate(plane0):
         entry = catalog.for_value(0, value) if catalog else None
-        colour = _door_colour(entry)
-        if colour:
-            door_colour[index] = colour
+        color = _door_color(entry)
+        if color:
+            door_color[index] = color
         elif entry is not None and entry.subcategory == "door":
             # An unlocked door is a wall word, but it is not an obstacle: every
             # door in Corridor 7 opens on use.
             open_doors.add(index)
-        granted = _key_colour(entry)
+        granted = _key_color(entry)
         if granted:
             # A terminal is in a wall; using it needs floor beside it, so the
-            # key is collected from any neighbour rather than from the cell.
+            # key is collected from any neighbor rather than from the cell.
             key_at[index] = granted
     for index, value in enumerate(plane1):
         entry = catalog.for_value(1, value) if catalog else None
@@ -148,15 +148,15 @@ def analyse(document: MapDocument, catalog: Catalog | None = None) -> Reach:
             # found. It is still not a *required* route: nothing here decides
             # whether a secret is optional.
             open_doors.add(index)
-        granted = _key_colour(entry)
+        granted = _key_color(entry)
         if granted:
             key_at[index] = granted
 
     def passable(index: int) -> bool:
         if _is_floor(plane0[index]) or index in open_doors:
             return True
-        colour = door_colour.get(index)
-        return colour is not None and colour in reach.keys
+        color = door_color.get(index)
+        return color is not None and color in reach.keys
 
     while True:
         reached = set()
@@ -166,30 +166,30 @@ def analyse(document: MapDocument, catalog: Catalog | None = None) -> Reach:
         while stack:
             index = stack.pop()
             x, y = index % width, index // width
-            neighbours = [ny * width + nx
+            neighbors = [ny * width + nx
                           for nx, ny in ((x, y - 1), (x + 1, y), (x, y + 1), (x - 1, y))
                           if 0 <= nx < width and 0 <= ny < height]
-            neighbours.extend(links.get(index, ()))
-            for neighbour in neighbours:
-                if neighbour in reached:
+            neighbors.extend(links.get(index, ()))
+            for neighbor in neighbors:
+                if neighbor in reached:
                     continue
-                if passable(neighbour):
-                    reached.add(neighbour)
-                    stack.append(neighbour)
-                elif neighbour in door_colour:
-                    blocked.setdefault(door_colour[neighbour], []).append(neighbour)
+                if passable(neighbor):
+                    reached.add(neighbor)
+                    stack.append(neighbor)
+                elif neighbor in door_color:
+                    blocked.setdefault(door_color[neighbor], []).append(neighbor)
 
         # Anything standing on a reached cell is picked up; a terminal is used
         # from the floor beside it.
         found = set()
-        for index, colour in key_at.items():
+        for index, color in key_at.items():
             if index in reached:
-                found.add(colour)
+                found.add(color)
                 continue
             x, y = index % width, index // width
             for nx, ny in ((x, y - 1), (x + 1, y), (x, y + 1), (x - 1, y)):
                 if 0 <= nx < width and 0 <= ny < height and (ny * width + nx) in reached:
-                    found.add(colour)
+                    found.add(color)
                     break
 
         if found <= reach.keys:

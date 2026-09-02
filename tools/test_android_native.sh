@@ -97,7 +97,7 @@ for abi in arm64-v8a x86_64; do
 	#
 	# The goal is parity: what works on a desktop works on the phone. The build
 	# is arranged to fall back to the software renderer when GL cannot be
-	# found, which is the right behaviour and also a silent one -- a missing
+	# found, which is the right behavior and also a silent one -- a missing
 	# GLES library or a stray find_package would produce a working build that
 	# had quietly lost the renderer. Two ways of asking, because either alone
 	# can be satisfied by accident.

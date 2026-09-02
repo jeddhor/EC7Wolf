@@ -104,7 +104,7 @@ def main(argv) -> int:
     pixels, edge, alpha = window.thumbnails.pixels_for(entry)
     check(len(pixels) == edge * edge * (4 if alpha else 3),
           f"a wall thumbnail decoded from the game data ({edge}x{edge})")
-    check(len(set(pixels)) > 4, "the thumbnail is not a flat colour")
+    check(len(set(pixels)) > 4, "the thumbnail is not a flat color")
 
     print("\nPaint a wall from the palette")
     # Somewhere with floor under it, so the change is visible and legal.

@@ -6,7 +6,7 @@ Two rules shape everything here.
 
 **The raw words are canonical.** There is no second, semantic representation of
 a map that could drift from the numbers the game reads. A door is plane-0 word
-251; the catalogue turns that into the word "Door" for display, and changing
+251; the catalog turns that into the word "Door" for display, and changing
 the door submits a command that declares exactly which words it writes. Nothing
 is derived and then stored, because anything stored twice eventually disagrees
 with itself.
@@ -223,7 +223,7 @@ class ProjectDocument:
 
     `revision` counts edits and `saved_revision` records the one on disk, so
     dirty is a comparison of two integers. Both are monotonic: an edit made
-    while a save is in flight leaves the document dirty afterwards, because the
+    while a save is in flight leaves the document dirty afterward, because the
     revision it saved is no longer the current one.
     """
 
@@ -236,8 +236,8 @@ class ProjectDocument:
     schema_version: int = SCHEMA_VERSION
     revision: int = 0
     saved_revision: int = 0
-    #: Catalogue version the UI interpreted this project's words with. Recorded
-    #: rather than acted on: a catalogue change must never rewrite raw words.
+    #: Catalog version the UI interpreted this project's words with. Recorded
+    #: rather than acted on: a catalog change must never rewrite raw words.
     catalog_version: int = 0
     export_defaults: dict = field(default_factory=dict)
     #: The map-pack campaign, as raw JSON. Kept unparsed here so `document` has

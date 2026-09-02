@@ -7,8 +7,8 @@
 # The filter must actually run. A scaler that silently fell back to point
 # sampling would still produce an image of the right size, so "it is N times
 # bigger" proves nothing on its own; the output is compared against the
-# nearest-neighbour blow-up of the same frame and must differ over a real share
-# of the picture, in colours that were not in the source palette at all.
+# nearest-neighbor blow-up of the same frame and must differ over a real share
+# of the picture, in colors that were not in the source palette at all.
 #
 # And it must still be the same picture. xBRZ reshapes edges, so a per-pixel
 # comparison against the source is meaningless -- but box-downscaling its output
@@ -152,15 +152,15 @@ for i in range(0, len(args), 2):
                      else big.getdata())
     blended = len(big_colors - src_colors)
 
-    print("%dx: %.1f%% of pixels reshaped, %d blended colours (source has %d), "
+    print("%dx: %.1f%% of pixels reshaped, %d blended colors (source has %d), "
           "round-trip MAE %.2f" % (factor, pct, blended, len(src_colors), mae))
 
     if pct < MIN_CHANGED_PCT:
-        print("FAIL: only %.1f%% of the %dx output differs from a nearest-neighbour "
+        print("FAIL: only %.1f%% of the %dx output differs from a nearest-neighbor "
               "blow-up. The frame was enlarged but not filtered." % (pct, factor))
         failed = True
     if blended == 0:
-        print("FAIL: the %dx output uses no colour outside the source frame's own. "
+        print("FAIL: the %dx output uses no color outside the source frame's own. "
               "xBRZ smooths edges by blending, so it cannot have run." % factor)
         failed = True
     if mae > MAX_ROUNDTRIP_MAE:

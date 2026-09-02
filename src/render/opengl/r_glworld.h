@@ -44,7 +44,7 @@ void R_GLLiveRenderScene();
 
 // Draw 2D that lands over the 3D view after the world pass (Corridor 7's
 // top-message / power-chamber overlay) and record which texels it painted, so
-// the compositor keeps them opaque even when they are drawn in the key colour
+// the compositor keeps them opaque even when they are drawn in the key color
 // (e.g. the top message's black drop shadow). `draw` is invoked more than once
 // and must be a pure drawing function. Reached from game code through
 // IRenderer::DrawViewOverlay; the software backend just calls `draw`.

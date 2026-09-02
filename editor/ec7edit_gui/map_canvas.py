@@ -10,7 +10,7 @@ the cell that gets edited.
 
 Two layers, both optional:
 
-* **texture** -- each cell drawn as the average colour of its wall page, which
+* **texture** -- each cell drawn as the average color of its wall page, which
   reads like the map;
 * **schematic** -- walls, floor, doors and objects as flat shapes, which reads
   like a plan and works with no game data at all.
@@ -113,9 +113,9 @@ class MapCanvas(QWidget):
         self._catalog = catalog
         self.update()
 
-    def set_wall_colours(self, colours: dict[int, QColor]) -> None:
-        """Average colours per plane-0 value, for the texture layer."""
-        self._swatches = dict(colours)
+    def set_wall_colors(self, colors: dict[int, QColor]) -> None:
+        """Average colors per plane-0 value, for the texture layer."""
+        self._swatches = dict(colors)
         self.update()
 
     # -- view -------------------------------------------------------------
@@ -189,7 +189,7 @@ class MapCanvas(QWidget):
 
     # -- painting ---------------------------------------------------------
 
-    def _colour_for(self, plane0: int, plane1: int) -> QColor:
+    def _color_for(self, plane0: int, plane1: int) -> QColor:
         if plane0 == 0:
             return _SCHEMATIC["zone"] if plane1 and plane1 != EMPTY_OBJECT else _SCHEMATIC["floor"]
         swatch = self._swatches.get(plane0)
@@ -206,7 +206,7 @@ class MapCanvas(QWidget):
                 return _SCHEMATIC["zone"]
         return _SCHEMATIC["wall"]
 
-    def _object_colour(self, value: int) -> QColor | None:
+    def _object_color(self, value: int) -> QColor | None:
         if not value or value == EMPTY_OBJECT:
             return None
         if self._catalog is None:
@@ -248,7 +248,7 @@ class MapCanvas(QWidget):
             for x in range(first_x, last_x + 1):
                 index = row + x
                 painter.fillRect(
-                    self.cell_rect(x, y), self._colour_for(plane0[index], plane1[index])
+                    self.cell_rect(x, y), self._color_for(plane0[index], plane1[index])
                 )
 
         if self._show_objects:
@@ -256,10 +256,10 @@ class MapCanvas(QWidget):
             for y in range(first_y, last_y + 1):
                 row = y * document.width
                 for x in range(first_x, last_x + 1):
-                    colour = self._object_colour(plane1[row + x])
-                    if colour is not None:
+                    color = self._object_color(plane1[row + x])
+                    if color is not None:
                         painter.fillRect(self.cell_rect(x, y).adjusted(
-                            inset, inset, -inset, -inset), colour)
+                            inset, inset, -inset, -inset), color)
 
         if self._show_grid and zoom >= 8:
             painter.setPen(QPen(QColor(0, 0, 0, 60), 1))
@@ -278,14 +278,14 @@ class MapCanvas(QWidget):
     def _paint_camera(self, painter) -> None:
         """A ring where the camera stands, and a cone showing where it looks.
 
-        Drawn over everything and in a colour nothing else uses, because it has
+        Drawn over everything and in a color nothing else uses, because it has
         to be findable on a busy map -- and drawn as a direction rather than a
         dot, because the angle is half of what a snapshot is of and turning the
         camera has to visibly do something.
         """
         x, y, angle = self._camera
         zoom = self._zoom
-        centre = QPointF(x * zoom, y * zoom)
+        center = QPointF(x * zoom, y * zoom)
         radius = max(4.0, zoom * 0.32)
 
         painter.save()
@@ -302,13 +302,13 @@ class MapCanvas(QWidget):
         reach = max(radius * 2.2, zoom * 0.95)
         painter.setBrush(QColor(255, 214, 0, 70))
         painter.setPen(Qt.NoPen)
-        painter.drawPie(QRectF(centre.x() - reach, centre.y() - reach,
+        painter.drawPie(QRectF(center.x() - reach, center.y() - reach,
                                reach * 2, reach * 2),
                         int((angle - 26) * 16), int(52 * 16))
 
         painter.setBrush(QColor(255, 214, 0, 190))
         painter.setPen(QPen(QColor(40, 30, 0), max(1.0, zoom / 16.0)))
-        painter.drawEllipse(centre, radius, radius)
+        painter.drawEllipse(center, radius, radius)
         painter.restore()
 
     # -- input ------------------------------------------------------------

@@ -6,7 +6,7 @@
 The geometry is checked on small hand-written grids where the right answer can
 be read off. The interesting tests are the ones about direction: rotating a
 selection has to rewrite the raw word of anything that faces a way, and it has
-to do it through the catalogue rather than by adding to the number, because the
+to do it through the catalog rather than by adding to the number, because the
 consecutive-value layout is a coincidence of the table and not a rule.
 """
 
@@ -128,7 +128,7 @@ class Rotation(unittest.TestCase):
         self.assertIn(SOUTH, rotated.planes[1])
         self.assertNotIn(EAST, rotated.planes[1])
 
-    def test_a_facing_is_left_alone_without_a_catalogue(self):
+    def test_a_facing_is_left_alone_without_a_catalog(self):
         clip = copy_region(make_map(2, 2, plane1=[EAST, 18, 18, 18]), 0, 0, 2, 2)
         self.assertIn(EAST, rotate_clip(clip, 1, None).planes[1])
 

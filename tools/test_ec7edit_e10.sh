@@ -16,7 +16,7 @@
 #      actually loaded.
 #   2. A blank frame. This project has already shipped a gate that passed while
 #      comparing a black frame nobody had looked at; a snapshot that is one
-#      flat colour is a failure however cleanly the process exited.
+#      flat color is a failure however cleanly the process exited.
 #   3. A shot that is not reproducible. It is anchored to a simulation tic
 #      rather than a frame, because how many frames pass in a tic depends on
 #      how busy the machine is -- so the same request must give the same bytes.

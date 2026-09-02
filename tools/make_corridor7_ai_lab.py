@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build a one-corridor Corridor 7 map for observing a single alien's AI.
 
-Enemy behaviour is hard to test on a released floor: the aliens there are mixed
+Enemy behavior is hard to test on a released floor: the aliens there are mixed
 together, so a sound or a wake-up cannot be attributed to one class, and their
 spacing is whatever the level designer wanted rather than whatever the test
 needs. This writes a MAPTEMP whose first level is an empty east-west corridor

@@ -4,7 +4,7 @@
 
 Every map here is drawn as ASCII so the case being tested is visible in the
 test rather than in a list of raw words. The model's limits are in
-`reachability.py`; these pin the behaviour the plan's section 19.11 asks for:
+`reachability.py`; these pin the behavior the plan's section 19.11 asks for:
 open, locked and keyed, transporter, isolated, and cyclic-key routes.
 """
 
@@ -22,7 +22,7 @@ from ec7edit_core.document import MapDocument
 from ec7edit_core.errors import Severity
 from ec7edit_core.names import NativeName
 from ec7edit_core.planes import MapPlanes, linear_index
-from ec7edit_core.reachability import analyse, unreachable_floor
+from ec7edit_core.reachability import analyze, unreachable_floor
 from ec7edit_core.validation import DEATHMATCH, validate_map
 
 CATALOG = load_catalog(EDITOR / "resources" / "editor_catalog.json")
@@ -67,7 +67,7 @@ def codes(document, **kwargs):
 
 class OpenRoutes(unittest.TestCase):
     def test_it_reaches_an_open_room(self):
-        reach = analyse(draw(["#####",
+        reach = analyze(draw(["#####",
                               "#@..#",
                               "#####"]), CATALOG)
         self.assertTrue(reach.started)
@@ -77,23 +77,23 @@ class OpenRoutes(unittest.TestCase):
         document = draw(["#####",
                          "#@#.#",
                          "#####"])
-        self.assertEqual(len(analyse(document, CATALOG).reached), 1)
+        self.assertEqual(len(analyze(document, CATALOG).reached), 1)
 
     def test_a_plain_door_does_not(self):
         # Every door in the game opens on use; only a lock stops anyone.
         document = draw(["#####",
                          "#@D.#",
                          "#####"])
-        self.assertEqual(len(analyse(document, CATALOG).reached), 3)
+        self.assertEqual(len(analyze(document, CATALOG).reached), 3)
 
     def test_isolated_floor_is_reported(self):
         document = draw(["#####",
                          "#@#.#",
                          "##X##"])
-        self.assertEqual(len(unreachable_floor(document, analyse(document, CATALOG))), 2)
+        self.assertEqual(len(unreachable_floor(document, analyze(document, CATALOG))), 2)
 
     def test_no_start_reaches_nothing(self):
-        reach = analyse(draw(["###", "#.#", "###"]), CATALOG)
+        reach = analyze(draw(["###", "#.#", "###"]), CATALOG)
         self.assertFalse(reach.started)
         self.assertEqual(reach.reached, set())
 
@@ -103,14 +103,14 @@ class Keys(unittest.TestCase):
         document = draw(["#######",
                          "#@.b.B#",
                          "#######"])
-        reach = analyse(document, CATALOG)
+        reach = analyze(document, CATALOG)
         self.assertIn("BLUE", reach.keys)
 
     def test_a_door_without_its_card_stays_shut(self):
         document = draw(["######",
                          "#@.B.#",
                          "######"])
-        reach = analyse(document, CATALOG)
+        reach = analyze(document, CATALOG)
         self.assertNotIn("BLUE", reach.keys)
         self.assertIn("BLUE", reach.blocked)
         # The cell past the door was never reached.
@@ -122,12 +122,12 @@ class Keys(unittest.TestCase):
         document = draw(["######",
                          "#@.T.#",
                          "######"], terminals={(3, 1): 11})
-        reach = analyse(document, CATALOG)
+        reach = analyze(document, CATALOG)
         self.assertIn("BLUE", reach.keys)
 
     def test_a_card_behind_its_own_door_is_a_warning(self):
         # The one key layout that is always a mistake: the fixpoint stops with
-        # the colour still blocking and its card still out of reach.
+        # the color still blocking and its card still out of reach.
         document = draw(["#######",
                          "#@.B.b#",
                          "#######"])
@@ -139,13 +139,13 @@ class Keys(unittest.TestCase):
                          "#######"])
         self.assertNotIn("C7E-DOOR-004", codes(document))
 
-    def test_two_colours_in_sequence_resolve(self):
+    def test_two_colors_in_sequence_resolve(self):
         # Blue opens the way to red, which opens the way onward: the fixpoint
         # has to run more than once to see it.
         document = draw(["##########",
                          "#@.b.B.r.#",
                          "##########"])
-        reach = analyse(document, CATALOG)
+        reach = analyze(document, CATALOG)
         self.assertEqual(reach.keys, {"BLUE", "RED"})
 
 
@@ -155,7 +155,7 @@ class Transporters(unittest.TestCase):
         document = draw(["#######",
                          "#@1#1.#",
                          "#######"])
-        reach = analyse(document, CATALOG)
+        reach = analyze(document, CATALOG)
         self.assertIn(linear_index(5, 1, 7), reach.reached)
 
     def test_an_unpaired_channel_links_nothing(self):
@@ -164,7 +164,7 @@ class Transporters(unittest.TestCase):
         document = draw(["########",
                          "#@1#1.1#",
                          "########"])
-        reach = analyse(document, CATALOG)
+        reach = analyze(document, CATALOG)
         self.assertNotIn(linear_index(5, 1, 8), reach.reached)
 
 

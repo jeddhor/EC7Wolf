@@ -22,7 +22,7 @@ In ECWolf every 2D element is drawn as *final palette indices* into a single
 8-bit framebuffer, on top of the 3D view. A GPU frame reproduces that layering
 without re-implementing any of the 2D code:
 
-1. The **GL 3D world** is rendered into a colour texture the exact size of the
+1. The **GL 3D world** is rendered into a color texture the exact size of the
    3D view sub-rectangle (`viewwidth × viewheight`). It reuses the Phase 5–9
    world renderer verbatim — same meshes, same indexed/colormap/palette shader,
    same interpolated camera — so the world pixels are identical to the world

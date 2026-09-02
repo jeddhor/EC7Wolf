@@ -81,12 +81,12 @@ class Camera:
     y: float
     angle: float = 0.0
 
-    def normalised(self) -> "Camera":
+    def normalized(self) -> "Camera":
         angle = self.angle % 360.0
         return Camera(self.x, self.y, angle)
 
     def arguments(self) -> list[str]:
-        camera = self.normalised()
+        camera = self.normalized()
         return ["--capture-warp", f"{camera.x:g}", f"{camera.y:g}", f"{camera.angle:g}"]
 
     #: The compass name for each right angle. Only the four the Turn button
@@ -95,7 +95,7 @@ class Camera:
     _COMPASS = {0.0: "east", 90.0: "north", 180.0: "west", 270.0: "south"}
 
     def describe(self) -> str:
-        camera = self.normalised()
+        camera = self.normalized()
         compass = self._COMPASS.get(camera.angle)
         facing = f"{camera.angle:g}°" + (f" ({compass})" if compass else "")
         return f"({camera.x:g}, {camera.y:g}) facing {facing}"
@@ -137,7 +137,7 @@ def snapshot_key(*, engine: Path | str, pk3: Path | str, data_fingerprint: str,
     somebody took the snapshot to see -- a new engine build, a re-exported map,
     a different camera.
     """
-    camera = camera.normalised()
+    camera = camera.normalized()
     parts = [
         "v1",
         _digest_file(engine),
@@ -169,10 +169,10 @@ def looks_like_a_world(png: Path | str, *, view_fraction: float = 0.5) -> bool:
     The one check that matters, and the reason it exists: this project has
     already shipped a gate that passed while comparing a black frame, because
     nothing asked whether there was a picture in it. A snapshot that is one
-    flat colour is a failure however cleanly the process exited, and caching it
+    flat color is a failure however cleanly the process exited, and caching it
     would make that failure permanent.
 
-    Counts distinct colours in the upper part of the frame, which is world
+    Counts distinct colors in the upper part of the frame, which is world
     rather than status bar.
     """
     try:
@@ -184,7 +184,7 @@ def looks_like_a_world(png: Path | str, *, view_fraction: float = 0.5) -> bool:
             width, height = image.size
             view = image.convert("RGB").crop(
                 (0, 0, width, max(1, int(height * view_fraction))))
-            colours = view.getcolors(maxcolors=1 << 20)
+            colors = view.getcolors(maxcolors=1 << 20)
     except (OSError, ValueError):
         return False
-    return colours is not None and len(colours) >= 8
+    return colors is not None and len(colors) >= 8

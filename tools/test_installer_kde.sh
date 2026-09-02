@@ -5,7 +5,7 @@
 # The parts of an install that live outside its own folder -- the menu entry,
 # the icons, the window's identity, and the uninstaller that has to take all of
 # it away again. These fail quietly. A wrong StartupWMClass costs nothing at
-# install time and shows up weeks later as a grey cog in the task manager that
+# install time and shows up weeks later as a gray cog in the task manager that
 # will not group with its launcher, and a desktop entry whose Exec is unquoted
 # works perfectly until someone installs into a path with a space in it.
 #

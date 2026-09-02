@@ -229,7 +229,7 @@ def sprite_rgba(page: bytes, palette: list[int]) -> bytes:
 
 
 def average_color(rgb: bytes) -> tuple[int, int, int]:
-    """The mean colour of an RGB buffer, for a palette swatch."""
+    """The mean color of an RGB buffer, for a palette swatch."""
     count = len(rgb) // 3
     if not count:
         return 0, 0, 0
@@ -237,7 +237,7 @@ def average_color(rgb: bytes) -> tuple[int, int, int]:
 
 
 def is_blank(pixels: bytes, *, channels: int) -> bool:
-    """True when nothing would be visible: all one colour, or fully transparent."""
+    """True when nothing would be visible: all one color, or fully transparent."""
     if not pixels:
         return True
     if channels == 4:

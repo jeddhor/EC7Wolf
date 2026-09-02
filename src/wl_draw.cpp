@@ -265,14 +265,14 @@ static inline BYTE Corridor7CycleColor(BYTE color)
 
 	// The DOS game independently rotates all four eight-color ramps from
 	// 208..239. Besides the red and blue force-field bands, 224..239 drive
-	// the blinking and travelling lights embedded in many wall textures.
+	// the blinking and traveling lights embedded in many wall textures.
 	if(color >= 208 && color <= 239)
 	{
 		const int base = color & ~7;
 		const int phase = (gamestate.TimeCount >> C7_RAMP_CYCLE_SHIFT) & 7;
 		// The ramps rotate DOWNWARD -- a texel walks toward the dark end of its
-		// eight-colour band as the phase advances, so a force field's energy
-		// reads as travelling down. Subtracting the phase ran it the other way.
+		// eight-color band as the phase advances, so a force field's energy
+		// reads as traveling down. Subtracting the phase ran it the other way.
 		return base + ((color-base+phase) & 7);
 	}
 	return color;
@@ -467,14 +467,14 @@ static FTexture *GetWallTexture(MapSpot spot, MapTile::Side side)
 // --- Corridor 7 force-field door helpers (kept in sync with r_worldbuilder.cpp) ---
 
 // 106 = active barrier, 107 = its permanently-open aperture. Both render as a single
-// centre pane on a track and, unlike normal doors, carry no offset flag.
+// center pane on a track and, unlike normal doors, carry no offset flag.
 static bool IsForceFieldDoor(MapSpot spot)
 {
 	return spot && spot->tile &&
 		(spot->corridor7WallMarker == 106 || spot->corridor7WallMarker == 107);
 }
 
-// A force-field door's axis is not stored, so derive it from open-neighbour
+// A force-field door's axis is not stored, so derive it from open-neighbor
 // topology (the pane blocks the passage, so it sits perpendicular to the open run).
 static bool ForceFieldDoorHorizontal(MapSpot spot)
 {
@@ -744,11 +744,11 @@ struct MaskedWallHit
 static TArray<MaskedWallHit> maskedWallHits;
 
 // Corridor 7 force-field doors (map marker 106) are a single see-through pane on
-// the cell-centre plane -- the barrier just switches off in place, it never slides.
+// the cell-center plane -- the barrier just switches off in place, it never slides.
 // The map format encodes only the tile, not the axis, so (like autoOrient doors)
-// pick it from open-neighbour topology: the pane blocks the passage, so it is
+// pick it from open-neighbor topology: the pane blocks the passage, so it is
 // perpendicular to whichever axis the open floor runs along. Returned as an axis
-// selector so the masked-plane code can centre it without the tile carrying an
+// selector so the masked-plane code can center it without the tile carrying an
 // offset flag (which would reclassify it as a door and change collision).
 enum { MASKPLANE_EDGES = 0, MASKPLANE_CENTRE_X, MASKPLANE_CENTRE_Y };
 
@@ -759,7 +759,7 @@ static int MaskedPlaneAxis(MapSpot spot)
 	if(spot->tile->offsetHorizontal)
 		return MASKPLANE_CENTRE_Y;
 	if(IsForceFieldDoor(spot))
-		// Passage along N/S -> pane spans X, centred in Y (MASKPLANE_CENTRE_Y).
+		// Passage along N/S -> pane spans X, centered in Y (MASKPLANE_CENTRE_Y).
 		return ForceFieldDoorHorizontal(spot) ? MASKPLANE_CENTRE_Y : MASKPLANE_CENTRE_X;
 	return MASKPLANE_EDGES;
 }
@@ -857,8 +857,8 @@ static void GetMaskedWallEndpoints(MapSpot spot, MapTile::Side side,
 	const fixed top = spot->GetY() << TILESHIFT;
 	const fixed right = left + TILEGLOBAL;
 	const fixed bottom = top + TILEGLOBAL;
-	// A centred pane (offset door or C7 force-field door) collapses front and back
-	// to the cell-centre plane; a plain masked wall keeps them at the tile edges.
+	// A centered pane (offset door or C7 force-field door) collapses front and back
+	// to the cell-center plane; a plain masked wall keeps them at the tile edges.
 	const int axis = MaskedPlaneAxis(spot);
 	const fixed verticalPlane = axis == MASKPLANE_CENTRE_X ? left+TILEGLOBAL/2 : left;
 	const fixed verticalBackPlane = axis == MASKPLANE_CENTRE_X ? left+TILEGLOBAL/2 : right;

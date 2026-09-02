@@ -799,7 +799,7 @@ INLINE void advance(FM_OPL *OPL)
 
 			case EG_SUS:	/* sustain phase */
 
-				/* this is important behaviour:
+				/* this is important behavior:
 				one can change percusive/non-percussive modes on the fly and
 				the chip will remain in sustain phase - verified on real YM3812 */
 

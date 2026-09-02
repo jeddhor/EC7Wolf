@@ -12,7 +12,7 @@
 # that is neither.
 #
 # The door checks matter most. A door's axis is not in the map -- the engine
-# counts open neighbours and decides -- so an editor that inferred it
+# counts open neighbors and decides -- so an editor that inferred it
 # differently would show one thing and ship another. The rule here is copied
 # from gamemap_planes.cpp including its tie-break, and the tests name the case.
 #
@@ -72,7 +72,7 @@ else
 	status=1
 fi
 
-printf '\nEvery semantic is reachable or labelled\n'
+printf '\nEvery semantic is reachable or labeled\n'
 if output=$("$headless" "$editor/scripts/coverage_report.py" --check 2>&1); then
 	printf '%s\n' "$output" | sed -n '3,7p' | sed 's/^ */  ..   /'
 	printf '  ok   %s\n' "$(printf '%s' "$output" | tail -1 | sed 's/^ *//')"

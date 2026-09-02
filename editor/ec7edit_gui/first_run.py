@@ -49,7 +49,7 @@ _STATUS_TEXT = {OK: "OK", WARN: "note", FAIL: "problem"}
 
 
 class PathRow(QWidget):
-    """A labelled path field with a Browse button. Accessible, tab-ordered."""
+    """A labeled path field with a Browse button. Accessible, tab-ordered."""
 
     changed = Signal()
 

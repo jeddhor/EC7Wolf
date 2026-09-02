@@ -15,7 +15,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QThread, Signal
 
-from ec7install.progress import Cancelled, Reporter
+from ec7install.progress import Canceled, Reporter
 
 
 class Bridge(QObject):
@@ -57,7 +57,7 @@ class GuiReporter(Reporter):
     def warn(self, message: str) -> None:
         self._bridge.warned.emit(message)
 
-    def cancelled(self) -> bool:
+    def canceled(self) -> bool:
         return self._cancel.is_set()
 
 
@@ -80,8 +80,8 @@ class InstallThread(QThread):
         try:
             destination = self._plan.run(self._reporter)
             self.ended.emit("ok", "", str(destination))
-        except Cancelled:
-            self.ended.emit("cancelled", "", "")
+        except Canceled:
+            self.ended.emit("canceled", "", "")
         except Exception as error:                    # noqa: BLE001
             self.traceback = traceback.format_exc()
             self.ended.emit("failed", str(error) or error.__class__.__name__, "")

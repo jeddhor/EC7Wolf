@@ -25,7 +25,7 @@ void Victory (bool fromIntermission);
 void LevelCompleted (void);
 void Corridor7Death (void);
 // The Corridor 7 pages print through a stencil: a palette index rather than a
-// colour range, so the text lands in the page's own palette. Shared with the
+// color range, so the text lands in the page's own palette. Shared with the
 // multiplayer scoreboard, which draws on the same backdrop.
 void C7StencilPrintAt(class FFont *font, int x, int y, const char *text,
 	BYTE paletteIndex);

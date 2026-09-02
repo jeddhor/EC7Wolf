@@ -13,7 +13,7 @@ do, in one run, through the real window against the real game:
 | Step | Result |
 | --- | --- |
 | Import MAP01 from the owned archive | `'Corr7 Level 1'` 64×64, digest recorded |
-| Decode a wall thumbnail from the artwork | 64×64, not a flat colour |
+| Decode a wall thumbnail from the artwork | 64×64, not a flat color |
 | Paint that wall from the palette | wall 2 written at (2, 1) |
 | Place an enemy | Rodex at (4, 2) facing east, raw 216 |
 | Configure it in the inspector | turned north, raw 217 |
@@ -70,10 +70,10 @@ A first version reported five errors on every map the game shipped. A validator
 like that teaches people to close the panel, and then the one that mattered is
 lost with the rest.
 
-Two things fixed it, and one of them was a real catalogue bug:
+Two things fixed it, and one of them was a real catalog bug:
 
 **Pushwalls belong inside walls.** Plane-1 words 98, 101, 102 and 106 configure
-the wall cell they sit in — that is what a pushwall *is*. The catalogue had
+the wall cell they sit in — that is what a pushwall *is*. The catalog had
 them as floor placements, so every shipped map reported its moving walls as
 things buried in stone. Corrected in `catalog.py`, and the validator was what
 found it.
@@ -93,10 +93,10 @@ After both, across the 60 shipped maps:
 The validator independently rediscovering the four empty slots is the useful
 kind of agreement.
 
-## 5. The catalogue decides the plane, not the tool
+## 5. The catalog decides the plane, not the tool
 
 A wall brush and an enemy brush are the same code. The difference is that the
-catalogue entry says plane 0 or plane 1, which is why placing a door and
+catalog entry says plane 0 or plane 1, which is why placing a door and
 placing an alien did not need two implementations, and why a test can assert
 that painting a wall leaves plane 1 alone.
 
@@ -109,7 +109,7 @@ depend on invisible state.
 
 Turning an alien to face north is not a property assignment; 108 and 109 are
 different words for the same alien. The inspector shows the raw value
-throughout and writes the word the catalogue names for the result.
+throughout and writes the word the catalog names for the result.
 
 Where a combination does not exist the control is **disabled**, not
 approximated: there is no patrolling Eniram, because the translation has no

@@ -89,7 +89,7 @@ def wait_for(predicate, timeout=90.0, what="condition"):
     return False
 
 # The self-test below makes its own QApplication and Qt permits exactly one,
-# so it runs first and this one is taken afterwards.
+# so it runs first and this one is taken afterward.
 from ec7install_gui.wizard import selftest as _selftest
 _selftest_result = _selftest(repo)
 app = QApplication.instance() or QApplication([])
@@ -132,9 +132,9 @@ progress = [value for kind, value in seen if kind == "progress"]
 check(progress == sorted(progress), "progress never goes backwards")
 check(len(progress) <= 100, f"progress is throttled, not one event per line ({len(progress)})")
 
-check(reporter.cancelled() is False, "the reporter is not cancelled")
+check(reporter.canceled() is False, "the reporter is not canceled")
 cancel.set()
-check(reporter.cancelled() is True, "setting the event cancels the reporter")
+check(reporter.canceled() is True, "setting the event cancels the reporter")
 
 # --- the wizard ----------------------------------------------------------
 print("\nthe self-test a frozen build is checked with")
@@ -176,11 +176,11 @@ def advance(expect):
 print("\nlicence must be accepted")
 advance("license")
 page = wizard.currentPage()
-check(not page.isComplete(), "Next is refused before the licence is accepted")
-check(len(page.text.toPlainText()) > 1000, "the licence text is actually shown")
+check(not page.isComplete(), "Next is refused before the license is accepted")
+check(len(page.text.toPlainText()) > 1000, "the license text is actually shown")
 page.accepted.setChecked(True)
 pump()
-check(page.isComplete(), "accepting the licence releases Next")
+check(page.isComplete(), "accepting the license releases Next")
 
 print("\nsource validation")
 advance("source")
@@ -511,7 +511,7 @@ check(not (target / "cdaudio").exists(), "and no music, which was not asked for"
 
 # --- an install that is stopped part way ----------------------------------
 print("\ncancelling part way through")
-cancelled_target = work / "gui-cancelled"
+cancelled_target = work / "gui-canceled"
 wizard2 = start(cancelled_target, music=True, video=True)
 page2 = wizard2.progress_page
 
@@ -522,8 +522,8 @@ asked = time.time()
 wait_for(lambda: bool(wizard2.state.outcome), 60, "the worker to unwind")
 pump(40)
 
-check(wizard2.state.outcome == "cancelled",
-      f"the outcome is cancelled (got {wizard2.state.outcome!r})")
+check(wizard2.state.outcome == "canceled",
+      f"the outcome is canceled (got {wizard2.state.outcome!r})")
 check(asked and time.time() - asked < 30,
       f"it stopped promptly ({time.time() - asked:.1f}s after asking)")
 check(not cancelled_target.exists(),
@@ -531,7 +531,7 @@ check(not cancelled_target.exists(),
 leftovers = [p.name for p in cancelled_target.parent.glob(".*staging*")]
 check(not leftovers, f"and no staging directory was left ({leftovers})")
 check(wizard2.currentId() == wizard2.ids["finish"], "it moved on to the finish page")
-check("cancelled" in wizard2.page_named("finish").text.toPlainText().lower(),
+check("canceled" in wizard2.page_named("finish").text.toPlainText().lower(),
       "which says so")
 
 print(f"\n{len(failures)} failure(s)")

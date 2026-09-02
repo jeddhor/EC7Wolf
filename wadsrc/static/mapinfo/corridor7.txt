@@ -33,7 +33,7 @@ gameinfo
 	menufade = "00 00 00"
 	menucolors = "00 50 70", "00 A0 D0", "00 30 50", "00 10 18", "00 80 A0", "00 00 00"
 	menuwindowcolors = "00 30 48", "00 C0 E0", "00 08 10", "80 70 00", "FF E0 00", "20 18 00"
-	// The original prompt window is dark grey with a near-black outline
+	// The original prompt window is dark gray with a near-black outline
 	// (measured from the released game's "Exit building?" dialog).
 	messagecolors = "30 30 30", "18 18 18", "18 18 18"
 	menufontcolor_title = "Gold"
@@ -218,13 +218,13 @@ defaultmap
 	// data -- every shipped map's flats plane is uniformly zero, there are no
 	// floor/ceiling tags, and the level header is fully accounted for by
 	// offsets/lengths/dimensions/name with no spare bytes. Values are palette
-	// indices 39 (white, the top of the grey ramp 16-39) and 199 (mid the
+	// indices 39 (white, the top of the gray ramp 16-39) and 199 (mid the
 	// purple ramp 184-207). Index 15 is also pure white but is a standalone
 	// entry, not the head of a ramp -- shading down from it walks into the
 	// skin tones at 14 and below. Written as "@NNN"
 	// (exact palette entry) rather than "#RRGGBB": the plane shading walks the
-	// palette by index, and Corridor 7 repeats colours across ramps, so a
-	// colour-matched flat can land in the wrong ramp and fade out the wrong way.
+	// palette by index, and Corridor 7 repeats colors across ramps, so a
+	// color-matched flat can land in the wrong ramp and fade out the wrong way.
 	defaultfloor = "@199"
 	defaultceiling = "@39"
 	// Corridor 7 uses a full-range depth ramp:

@@ -66,7 +66,7 @@ class RefusesToWriteTheSource(Fixture):
         self.assertRefused(link, "C7E-SOURCE-002")
 
     def test_a_hard_link_to_it(self):
-        # No amount of string normalisation finds this one; it needs the inode.
+        # No amount of string normalization finds this one; it needs the inode.
         link = self.work / "hard.co7"
         os.link(self.source, link)
         self.assertRefused(link, "C7E-SOURCE-002")
@@ -98,7 +98,7 @@ class RefusesToWriteTheSource(Fixture):
         with self.assertRaises(ExportError):
             guard.check(scratch / "." / "notes.c7map")
 
-    def test_game_data_is_recognised_by_its_own_files(self):
+    def test_game_data_is_recognized_by_its_own_files(self):
         from ec7edit_core.paths import looks_like_game_data
 
         plain = self.work / "plain"

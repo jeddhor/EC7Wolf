@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Jason Tripp
-"""Regenerate the EC7Edit semantic catalogue.
+"""Regenerate the EC7Edit semantic catalog.
 
     generate_catalog.py write     rebuild editor/resources/editor_catalog.json
     generate_catalog.py verify    fail if the committed file is out of date
     generate_catalog.py report    print the joins that did not resolve
 
-The catalogue is committed rather than built at startup so the editor opens
+The catalog is committed rather than built at startup so the editor opens
 without parsing the engine's translation every time, and so a change to it
-shows up as a reviewable diff instead of as different behaviour on somebody
+shows up as a reviewable diff instead of as different behavior on somebody
 else's machine. `verify` is what keeps the two honest: it is a gate, and it
-fails the moment the translation changes and the catalogue does not.
+fails the moment the translation changes and the catalog does not.
 
-Metadata only. The catalogue records *which* sprite page or wall page to draw;
+Metadata only. The catalog records *which* sprite page or wall page to draw;
 the pixels are decoded from the user's own copy of the game at runtime, which
 is what makes this file distributable when the artwork is not.
 """

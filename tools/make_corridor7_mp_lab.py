@@ -14,7 +14,7 @@ facing east, and is meant to be played *cooperative* rather than battle: the
 deathmatch spawner is the thing being avoided, and in cooperative the map's own
 start is used. Both players therefore begin on the same tile facing the same
 way, so one can walk east down the corridor while the other stands still and
-watches it recede -- centred, in the open, at a distance of your choosing.
+watches it recede -- centered, in the open, at a distance of your choosing.
 
 A square room was tried first and is worse: every wall of an empty room looks
 identical, so there is no way to tell from a screenshot which way you are
@@ -29,7 +29,7 @@ interior length in tiles, default 24.
 SOURCE is never opened for writing, and OUT is refused if it resolves to the
 source, to a hard or symbolic link aliasing it, or to anywhere in the source's
 directory. The write is atomic and read back, and the source's digest is
-checked again afterwards.
+checked again afterward.
 """
 
 from __future__ import annotations

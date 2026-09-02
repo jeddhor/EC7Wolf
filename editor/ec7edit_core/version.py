@@ -70,7 +70,7 @@ def version() -> str:
 def pep440() -> str:
     """The same number, spelled the way packaging tools insist on.
 
-    `1.0-beta209` is not a PEP 440 version; `1.0b209` is the normalised form of
+    `1.0-beta209` is not a PEP 440 version; `1.0b209` is the normalized form of
     it. Only build backends care, and only they should see this.
     """
     text = version()

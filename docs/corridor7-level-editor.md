@@ -2399,7 +2399,7 @@ At minimum, normal single-player export rejects:
 - transporter channel with a count other than two;
 - two incompatible meanings competing for the one plane-1 word;
 - compound feature whose required base/modifier cells are absent;
-- an editor-created unknown raw mapping without Advanced acknowledgement;
+- an editor-created unknown raw mapping without Advanced acknowledgment;
 - output path resolving to retail source, data root, application source root,
   or protected release root;
 - preflight/output readback semantic mismatch.
@@ -4426,7 +4426,7 @@ deliberately revised.
 
 **Status: shipped.** Approved 2026-09-01 and built. See
 [ec7edit-mappack.md](ec7edit-mappack.md) for the surface and the engine
-behaviour behind it; `ec7edit_e11` is the gate.
+behavior behind it; `ec7edit_e11` is the gate.
 
 The audit's three load-bearing findings:
 
@@ -4443,11 +4443,11 @@ The audit's three load-bearing findings:
   99 sits on it. `secretnext` is therefore real but reachable only through that
   marker, which the validator asks for.
 
-Two things the milestone listed are deliberately not built. Colours and skills
+Two things the milestone listed are deliberately not built. Colors and skills
 are not in the schema: `defaultfloor`/`defaultceiling` are palette-index
 decisions that belong to a map rather than to a campaign, and a `skill` block
 is global, so a pack that carried one would change the stock game's difficulty
-levels -- the opposite of "no stock behaviour regression". Both can be added
+levels -- the opposite of "no stock behavior regression". Both can be added
 later without moving anything already written.
 
 ### E12 — Hardening, accessibility, documentation, CI, and release
@@ -4500,7 +4500,7 @@ Built:
   elsewhere under `env -i`, with no python3 on PATH and a HOME of its own, and
   audits it for game data and for absolute paths from the build machine.
 - `ec7edit --selftest` reports the build's identity -- version, Python, Qt,
-  catalogue, schema and protocol -- without a display or game data. It is the
+  catalog, schema and protocol -- without a display or game data. It is the
   capability probe the plan asked for, and the thing to paste into a report.
 - `docs/ec7edit-manual.md`: eighteen sections covering the whole product, with
   nine screenshots generated from the real editor by
@@ -5346,7 +5346,7 @@ and commercial-content guidance.
 | Exact key/rank reachability semantics | E7 | Source-backed subset and advisory warnings |
 | Stable machine-readable engine map-entry output | E9 | Versioned log parser plus raw log |
 | Clean fixed-tic software snapshot on Windows/Linux; optional GL-specific adapter | E10 | Ship software only, or defer Snapshot if even that path is unreliable |
-| Custom MAPINFO grammar/export surface | E11 | Settled: bounded schema, MAP61+ by default, no colours or skills |
+| Custom MAPINFO grammar/export surface | E11 | Settled: bounded schema, MAP61+ by default, no colors or skills |
 | Linux frozen versus system-PySide6 package | E4/E12 | Source/system package with precise dependency check |
 
 ---
@@ -5668,9 +5668,9 @@ in Sections 7.4 and 8. No source bytes or thumbnails are embedded.
 
 ---
 
-## Appendix C — Initial validation catalogue
+## Appendix C — Initial validation catalog
 
-Codes are provisional until E7 freezes the machine-readable catalogue, but
+Codes are provisional until E7 freezes the machine-readable catalog, but
 their conditions and severity policy are requirements.
 
 | Provisional code | Default severity | Condition | Suggested action |

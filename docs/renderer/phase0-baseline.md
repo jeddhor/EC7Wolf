@@ -97,7 +97,7 @@ accelerated `DFrameBuffer`/`FNativeTexture` seams instead of raw buffer writes.
 Direct 3D-view lock (`VL_LockSurface`):
 - `src/id_vl.cpp` — implementation of the lock/unlock primitive.
 - `src/wl_draw.cpp` — `ThreeDRefresh` locks the surface for the whole 3D frame,
-  and (Corridor 7) memsets the view to the remapped background colour before
+  and (Corridor 7) memsets the view to the remapped background color before
   rendering so masked/glass texels never reveal stale pixels.
 
 Framebuffer `GetBuffer()` (2D / canvas paths):

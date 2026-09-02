@@ -3,7 +3,7 @@
 
 make_c7_upscaled_pk3.py shells out to the real upscaler, which wants a Vulkan
 device and the better part of an hour. This accepts the same arguments and does
-a nearest-neighbour enlargement instead, so the parts of the pipeline that are
+a nearest-neighbor enlargement instead, so the parts of the pipeline that are
 ours -- decoding the game's art, keeping masked walls transparent, writing the
 manifest, and everything the engine then does with the pack -- can be tested on
 a machine with no GPU in a few seconds.

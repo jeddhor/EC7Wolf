@@ -14,9 +14,9 @@ do not all start on the same rotation, patrol markers have eight, and nothing
 in the numbering says which value means which way. Adjacency is a coincidence
 of the table, not a rule of the format.
 
-So rotation goes through the catalogue: read the value's direction *by name*,
+So rotation goes through the catalog: read the value's direction *by name*,
 turn the name, and look up the value that means the new name. A value the
-catalogue does not describe as directional is carried through untouched, which
+catalog does not describe as directional is carried through untouched, which
 is the right answer for a wall and for an imported word nobody has identified.
 """
 

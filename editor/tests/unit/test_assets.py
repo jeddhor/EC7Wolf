@@ -80,10 +80,10 @@ class Png(unittest.TestCase):
         for chunk in (b"IHDR", b"IDAT", b"IEND"):
             self.assertIn(chunk, blob)
 
-    def test_header_records_size_and_colour_type(self):
+    def test_header_records_size_and_color_type(self):
         blob = encode_png(3, 5, bytes(3 * 5 * 4), alpha=True)
-        width, height, depth, colour = struct.unpack_from(">IIBB", blob, 16)
-        self.assertEqual((width, height, depth, colour), (3, 5, 8, 6))
+        width, height, depth, color = struct.unpack_from(">IIBB", blob, 16)
+        self.assertEqual((width, height, depth, color), (3, 5, 8, 6))
 
     def test_deterministic(self):
         pixels = bytes(range(48))
@@ -218,7 +218,7 @@ class Vga(unittest.TestCase):
 
 
 class Helpers(unittest.TestCase):
-    def test_average_colour(self):
+    def test_average_color(self):
         self.assertEqual(average_color(bytes([0, 0, 0, 10, 20, 30])), (5, 10, 15))
 
     def test_average_of_nothing(self):

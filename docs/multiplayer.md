@@ -163,7 +163,7 @@ Three things went wrong on the way, all worth keeping:
   waited for for ever. The exchange carries a sequence of its own now.
 * **The first few tics have no commands at all** and never will, because at the
   first tic the whole window is still ahead. Waiting for them hangs at exactly
-  `delay` tics, which is a distinctive enough symptom to recognise again.
+  `delay` tics, which is a distinctive enough symptom to recognize again.
 * **Resending from the pending ring cannot recover a lost packet.** Entries
   there are cleared as they are consumed, and the command a peer lost is
   precisely one we have already used. Two players then wait for each other for
@@ -314,7 +314,7 @@ Found on the way, in code this milestone was the first to exercise:
   while health is already set, so the `&&` let that through to dereference it.
   It had never fired because no shipped map had deathmatch starts to select
   among.
-* The setup rows were labelled with `setText`, and a multiple-choice item keeps
+* The setup rows were labeled with `setText`, and a multiple-choice item keeps
   its current value in its text -- so the first time a row was changed it
   renamed itself to its own value, and Role read "Host a game    Host a game".
   `AddLabeled` already existed for exactly this and says so in its comment.
@@ -383,7 +383,7 @@ that shaped both is that a world override in a netgame must be applied
 
 Two things this turned up:
 
-* **A pinned angle holds a player dead for ever.** A corpse turns towards the
+* **A pinned angle holds a player dead for ever.** A corpse turns toward the
   angle it died facing, and only once it has arrived does the player become
   eligible to respawn. The duel pinned the angle every tic, the death rotation
   pushed it two degrees, the pin put it back, and the two never agreed -- so
@@ -424,7 +424,7 @@ one actor you are never looking at -- until multiplayer, where every player is
 something the others have to draw. The archive turned out to hold a complete
 human soldier nobody had wired up: five walk frames in eight rotations, a pain
 frame, a seven-frame death and a three-frame firing pose, at C459-C509, with a
-*second* one in grey immediately after it. Two skins is what a game with more
+*second* one in gray immediately after it. Two skins is what a game with more
 than one player on screen needs, which is a decent argument that this is what
 they were for. `co7map.txt` names the first of them MARN.
 
@@ -491,7 +491,7 @@ shows progress under a deliberately slow connection.
 that lists people in order with a number beside each, and the scoreboard and
 the tally are drawn as members of that family -- the high-score page's font,
 printed through the same stencil, on its backdrop, with the same descending row
-colours, at its own coordinates. `C7StencilPrintAt` is shared rather than
+colors, at its own coordinates. `C7StencilPrintAt` is shared rather than
 copied, so the two cannot drift apart.
 
 ![The scoreboard, held during a match](images/multiplayer-scoreboard.png)
@@ -519,7 +519,7 @@ that can hang an entire match on one player who has gone to make tea.
 menu's shows a spinner, the address it is trying, the seconds elapsed and,
 after ten of them, what to check. The command line had no screen at all: for
 Corridor 7, `DrawStartupConsole` draws the signon splash and returns before
-printing anything -- a deliberate decision, since ECWolf's initialisation
+printing anything -- a deliberate decision, since ECWolf's initialization
 chatter has no business over the game's own opening art, and exactly wrong for
 the one screen where the game is waiting on somebody else. The network phase
 has its own callback now.
@@ -636,7 +636,7 @@ theirs is not arriving, *no ack* means ours is not.
 tries it again without measuring.** A player leaves the exchange as soon as it
 has everyone's packet and everyone has acked its own -- which says nothing
 about whether its own ack arrived. If that ack is lost, the player it was owed
-to waits for ever, resending a packet the sender no longer recognises:
+to waits for ever, resending a packet the sender no longer recognizes:
 `HandleCommandPackets` knows `StartPacket` and re-acks it, and did not know
 `NewGamePacket`. Teaching it to re-ack that too is the obvious symmetry, it is
 what the start packet already does, and measured over twelve connections each
@@ -715,7 +715,7 @@ code and called back into the menu only to *draw*. The return value of that
 callback was discarded at all eight call sites, and the drawing function never
 polled input -- so there was no path by which a keypress could have been
 noticed. Pressing Escape harder was never going to work. `InitStatusCallback`
-now means "keep waiting", the loops honour it, `Net::Init` returns whether a
+now means "keep waiting", the loops honor it, `Net::Init` returns whether a
 game was actually started, and the menu goes back to the setup screen with what
 the player typed still in it.
 
@@ -732,7 +732,7 @@ Two things this turned up on the way:
 text. Desktop SDL leaves text input on permanently, so `SDL_StartTextInput`
 was never needed and never written; on Android it is what raises the on-screen
 keyboard. Both text fields ask for it now and stop when they are done, so the
-keyboard does not sit over the menu afterwards.
+keyboard does not sit over the menu afterward.
 
 That fix exposed a second fault underneath it. `LastASCII` is a single slot
 that every `SDL_TEXTINPUT` overwrites, and `IN_ProcessEvents` drains the whole
@@ -875,7 +875,7 @@ tester spends their time navigating.
 The lab is an east-west corridor with one player start at the west end. Played
 *cooperative* rather than battle -- the deathmatch spawner being the thing
 avoided -- both players begin on the same tile facing the same way, so one can
-walk east while the other stands still and watches it recede, centred and in
+walk east while the other stands still and watches it recede, centered and in
 the open.
 
 A square room was tried first and is worse: every wall of an empty room looks

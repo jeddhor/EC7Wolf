@@ -6,7 +6,7 @@
 ** Both of the things here -- the overlay held up during a match and the page
 ** shown when one ends -- draw the same table, and draw it the way Corridor 7
 ** draws its high-score page: the same font, printed through the same stencil,
-** on the same backdrop, with the same descending row colours. The alternative
+** on the same backdrop, with the same descending row colors. The alternative
 ** was to invent a look for it, and this game already has one.
 **
 ** Everything shown is state every machine agrees on, so nobody's scoreboard

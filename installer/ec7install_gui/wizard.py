@@ -191,7 +191,7 @@ def selftest(repo_root: Path) -> int:
     a windowed executable can report reliably -- it has no console to print to,
     so anything written to stdout may go nowhere -- and constructing every page
     is a far better test than --help: it loads Qt, builds the widgets and reads
-    the bundled licence, which is where a bundle missing a file or a Qt plugin
+    the bundled license, which is where a bundle missing a file or a Qt plugin
     actually fails.
     """
     import os
@@ -203,10 +203,10 @@ def selftest(repo_root: Path) -> int:
                 "destination", "options", "summary", "progress", "finish"]
     if list(wizard.ids) != expected:
         return 1
-    licence = wizard.page_named("license")
-    licence.initializePage()
-    if len(licence.text.toPlainText()) < 1000:
-        return 2              # the licence did not travel with the bundle
+    license = wizard.page_named("license")
+    license.initializePage()
+    if len(license.text.toPlainText()) < 1000:
+        return 2              # the license did not travel with the bundle
     if wizard.windowIcon().isNull():
         return 3              # nor did the icon
     return 0
@@ -248,7 +248,7 @@ def main(argv: list[str] | None = None) -> int:
     if arguments.repo:
         repo_root = arguments.repo
     elif identity.is_frozen():
-        # Frozen: the bundled licence and icons are in the unpacked directory,
+        # Frozen: the bundled license and icons are in the unpacked directory,
         # and the engine -- which cannot be compiled without a source tree --
         # is looked for beside the setup executable, where whoever assembled
         # the download would have put it.

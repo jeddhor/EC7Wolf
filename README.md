@@ -309,7 +309,7 @@ behavior for other games was preserved wherever possible; these are the deltas.
 | [`docs/corridor7-level-editor.md`](docs/corridor7-level-editor.md) | The complete product design, native-format contract, validation and test strategy, and phased AI-agent implementation plan for a simple point-and-click Corridor 7 level editor. |
 | [`docs/ec7edit-manual.md`](docs/ec7edit-manual.md) | **The EC7Edit manual.** Everything from first run to map packs, illustrated with screenshots generated from the editor itself. |
 | [`editor/`](editor/) | EC7Edit, the level editor built to that plan: a Qt application, the native codec, the preview-WAD and map-pack exporters, and the `ec7edit` command line, with the byte layouts documented in [`editor/docs/native-formats.md`](editor/docs/native-formats.md). It ships as a self-contained package holding its own Python and Qt. |
-| [`docs/corridor7-technical-strategy-compendium.pdf`](docs/corridor7-technical-strategy-compendium.pdf) | Evidence-graded research dossier on the original game: mechanics, weapons and actors, map format and object codes, asset containers, executable offsets, and what changed from stock Wolfenstein 3D. Every claim carries an evidence grade, so a confirmed retail behaviour is never mixed up with an inference. It is the reference this port was built against. |
+| [`docs/corridor7-technical-strategy-compendium.pdf`](docs/corridor7-technical-strategy-compendium.pdf) | Evidence-graded research dossier on the original game: mechanics, weapons and actors, map format and object codes, asset containers, executable offsets, and what changed from stock Wolfenstein 3D. Every claim carries an evidence grade, so a confirmed retail behavior is never mixed up with an inference. It is the reference this port was built against. |
 | [`docs/renderer/`](docs/renderer/) | The renderer redesign, one document per phase — baseline and harness through the OpenGL cutover, hardening and optimization. |
 | [`docs/corridor7-video.md`](docs/corridor7-video.md) | The CD cinematics: what is on the disc, the FLIC format they are in, and how extraction and playback work. |
 | [`docs/multiplayer.md`](docs/multiplayer.md) | Network play, milestone by milestone: what the original had, what the map archive turned out to contain, what was reconstructed and from what evidence, and every wrong turn taken on the way. |
@@ -358,7 +358,7 @@ README.txt      ← documentation
 
 `CORR7CD.EXE` is on the required list because the game's palette is embedded in
 it — the port reads it out at runtime as the `C7PAL` lump, and the IWAD is not
-recognised without it. It is never redistributed, and neither is anything else
+recognized without it. It is never redistributed, and neither is anything else
 in the list above.
 
 > **The recognized CD executable is exactly 250,776 bytes.** Budget/"Play Now"
@@ -500,7 +500,7 @@ original's arrows-and-Space scheme as a tick-box.</td></tr>
 <tr><td><img src="docs/images/installer-summary.png" alt="Summary page"></td>
 <td><b>Ready to install.</b> Everything that is about to happen, on one page.
 <b>Nothing has been written yet.</b> The button says <i>Install</i>, and there is
-no way back afterwards — which is why this page exists.</td></tr>
+no way back afterward — which is why this page exists.</td></tr>
 </table>
 
 While it runs you get a progress bar, the current step, and a *Show details*
@@ -860,7 +860,7 @@ you: the game data, **the three CD cinematics the installer leaves behind**, and
 **the soundtrack, which nothing else ever copies off the disc**. That takes about
 half a minute on a 2019 tablet.
 
-Afterwards it offers to delete the archive it read from, because a CD image is a
+Afterward it offers to delete the archive it read from, because a CD image is a
 third of a gigabyte and there is no reason to keep it. Android does not always
 allow that — see [Limits](#android-limits-worth-knowing) — and it will tell you
 which happened.
@@ -875,7 +875,7 @@ VGAHEAD.CO7   VGAGRAPH.CO7  GFXTILES.CO7  CORR7CD.EXE
 ```
 
 **`CORR7CD.EXE` is required.** Corridor 7 keeps its palette inside its own
-executable, so without it the engine has no colours to draw with and refuses to
+executable, so without it the engine has no colors to draw with and refuses to
 start. `AUDIOMUS.CO7` is optional but wanted — it is the digitised speech and
 effects.
 
@@ -1013,7 +1013,7 @@ One failure has no message at all, so it is worth knowing: the palette is only
 read out of `CORR7CD.EXE` if that file is *exactly* 250,776 bytes and the 768
 bytes at `0x2FFC0` are all valid 6-bit DAC values. A different build of the
 executable satisfies every other check and simply yields no palette — so if the
-game runs but the colours are wrong, that is the reason, and it is a bug report
+game runs but the colors are wrong, that is the reason, and it is a bug report
 worth making.
 
 #### Android limits worth knowing

@@ -73,7 +73,7 @@ fi
 printf 'PASS: GL static world rendered (walls=%s, dynamic-faces=%s, coverage=%s%%).\n' \
 	"$walls" "${dynfaces:-0}" "${covered:-?}"
 
-# Phase 8: masked (colour-keyed, see-through) walls -- glass, grates, fences,
+# Phase 8: masked (color-keyed, see-through) walls -- glass, grates, fences,
 # force fields -- are built into a separate alpha-tested mesh instead of the
 # opaque static wall mesh. Corridor 7 MAP01 spawns facing a corridor lined with
 # chain-link fences and diamond-grate panels, so this view must produce masked

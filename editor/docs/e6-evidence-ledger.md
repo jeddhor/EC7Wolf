@@ -18,7 +18,7 @@ neither, and it found six gaps the first time it ran:
 
 | Value | What it turned out to be |
 | --- | --- |
-| 11 | the **BLUE** access terminal — 9 is RED, and my catalogue called both "Access terminal" |
+| 11 | the **BLUE** access terminal — 9 is RED, and my catalog called both "Access terminal" |
 | 30 | the intruder alarm terminal, which wakes the floor |
 | 88 | the health chamber's alternate wall page, used directly by two maps |
 | 102 | the second word for a plain moving wall |
@@ -27,7 +27,7 @@ neither, and it found six gaps the first time it ran:
 
 Two of those were naming bugs rather than missing tools. `lnspec.cpp` maps
 door argument 1 to `C7Static001` and 2 to `C7Static002`, and the terminals pass
-exactly those, so 9 grants red and 11 grants blue. The catalogue now says so.
+exactly those, so 9 grants red and 11 grants blue. The catalog now says so.
 
 Current state: **457 entries — 28 placed by a compound tool, 400 single words
 the brush handles directly, 29 preserved from imported maps.** Nothing
@@ -51,7 +51,7 @@ something the file format has to know about.
 
 ## 3. The door rule, copied rather than reasoned about
 
-A door's axis is not in the map. The engine counts its open neighbours:
+A door's axis is not in the map. The engine counts its open neighbors:
 
 ```cpp
 const bool horizontal = (openNorth + openSouth) > (openWest + openEast);
@@ -83,7 +83,7 @@ Clicking the same cell twice does not pair it with itself, a pad refuses to go
 anywhere but floor, and the validator reports any channel that does not have
 exactly two ends.
 
-## 5. Rotation moves the footprint, the catalogue moves the facings
+## 5. Rotation moves the footprint, the catalog moves the facings
 
 Two different things, deliberately kept apart:
 
@@ -91,7 +91,7 @@ Two different things, deliberately kept apart:
   and in the left-hand wall "in front" is east, not south. `Prefab.rotated`
   turns the preconditions with the writes, and a test places one in a left wall
   that is refused upright and accepted after three turns;
-* a **selection** rotates its *values*, through the catalogue, by name — the
+* a **selection** rotates its *values*, through the catalog, by name — the
   E3 mechanism, now reachable from Edit → Rotate selection.
 
 ## 6. What the tools refuse
@@ -126,5 +126,5 @@ The secret elevator is likewise not a tool. Its wall/marker combination is
 described in the plan as "based on the required wall and marker", and I could
 not establish which pairing that is from the translation alone — word 99 is
 ignored with a comment saying map setup promotes a tile-63 elevator to a bonus
-exit, which is engine behaviour rather than something the editor writes. It is
-reachable as raw words and labelled, not silently missing.
+exit, which is engine behavior rather than something the editor writes. It is
+reachable as raw words and labeled, not silently missing.

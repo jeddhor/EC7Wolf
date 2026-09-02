@@ -15,7 +15,7 @@
 #
 # This drives that path headlessly with --capture-vidmode, which performs the
 # same mode change the Display menu does, then captures the frame the live GL
-# renderer presents afterwards. For each case it asserts:
+# renderer presents afterward. For each case it asserts:
 #   * the OpenGL renderer went live (not the software fallback),
 #   * the presented frame is at the NEW mode's size and is not black,
 #   * its 2D HUD/status-bar band matches a software run that switched mode

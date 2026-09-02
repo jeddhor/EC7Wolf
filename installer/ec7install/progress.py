@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 
-class Cancelled(Exception):
+class Canceled(Exception):
     """Raised out of a step when the front end asked to stop."""
 
 
@@ -31,13 +31,13 @@ class Reporter:
     def warn(self, message: str) -> None:
         """Something the user should know that is not fatal."""
 
-    def cancelled(self) -> bool:
+    def canceled(self) -> bool:
         """Front ends override this; steps poll it at safe points."""
         return False
 
     def check_cancelled(self) -> None:
-        if self.cancelled():
-            raise Cancelled()
+        if self.canceled():
+            raise Canceled()
 
 
 class LogFile(Reporter):
@@ -75,8 +75,8 @@ class LogFile(Reporter):
         self._write(f"!!! {message}")
         self._inner.warn(message)
 
-    def cancelled(self) -> bool:
-        return self._inner.cancelled()
+    def canceled(self) -> bool:
+        return self._inner.canceled()
 
     def close(self) -> None:
         self._write("=== end ===")

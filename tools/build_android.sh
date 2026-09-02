@@ -55,7 +55,7 @@ case " $abis " in
 	*) printf 'NOTE: single-ABI build; the APK will not be release-ready.\n' ;;
 esac
 # arm64-v8a is what a phone runs, so it is the ABI the APK is assembled around;
-# the rest are added to it afterwards.
+# the rest are added to it afterward.
 primary=$(printf '%s\n' $abis | head -1)
 
 # A debug key, generated once and kept out of the repository. It signs nothing
@@ -101,7 +101,7 @@ for abi in $abis; do
 	mkdir -p "$out"
 	printf '=== %s ===\n' "$abi"
 	# find_file caches a miss. A build directory first configured without the
-	# SDK paths keeps ANDROID_SDK_JAR-NOTFOUND for ever afterwards, and the
+	# SDK paths keeps ANDROID_SDK_JAR-NOTFOUND for ever afterward, and the
 	# failure surfaces much later as ninja looking for a file called
 	# "ANDROID_SDK_JAR-NOTFOUND". Clearing them costs nothing and is not worth
 	# discovering twice.
@@ -146,7 +146,7 @@ done
 # Built from the primary ABI, then the other ABIs' libraries are added to the
 # same archive and it is signed again. CMake configures one ABI per build
 # directory, so there is no single configure that can see them all; adding to
-# the archive afterwards is how one APK ends up containing every architecture.
+# the archive afterward is how one APK ends up containing every architecture.
 
 printf '\n=== apk ===\n'
 primary_out="$builds/android-$primary"

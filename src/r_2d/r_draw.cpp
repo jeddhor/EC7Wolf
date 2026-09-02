@@ -337,7 +337,7 @@ void R_FillRevSubClampColumn (void)
 }
 
 //
-// Spectre/Invisibility.
+// Specter/Invisibility.
 //
 #define FUZZTABLE	50
 
@@ -471,7 +471,7 @@ The following note is from DOSDoom 0.65:
 New translucency algorithm, by Erik Sandberg:
 
 Basically, we compute the red, green and blue values for each pixel, and
-then use a RGB table to check which one of the palette colours that best
+then use a RGB table to check which one of the palette colors that best
 represents those RGB values. The RGB table is 8k big, with 4 R-bits,
 5 G-bits and 4 B-bits. A 4k table gives a bit too bad precision, and a 32k
 table takes up more memory and results in more cache misses, so an 8k
@@ -480,10 +480,10 @@ table seemed to be quite ultimate.
 The computation of the RGB for each pixel is accelerated by using two
 1k tables for each translucency level.
 The xth element of one of these tables contains the r, g and b values for
-the colour x, weighted for the current translucency level (for example,
-the weighted rgb values for background colour at 75% translucency are 1/4
+the color x, weighted for the current translucency level (for example,
+the weighted rgb values for background color at 75% translucency are 1/4
 of the original rgb values). The rgb values are stored as three
-low-precision fixed point values, packed into one long per colour:
+low-precision fixed point values, packed into one long per color:
 Bit 0-4:   Frac part of blue  (5 bits)
 Bit 5-8:   Int  part of blue  (4 bits)
 Bit 9-13:  Frac part of red   (5 bits)
@@ -492,7 +492,7 @@ Bit 18-22: Frac part of green (5 bits)
 Bit 23-27: Int  part of green (5 bits)
 Bit 28-31: All zeros          (4 bits)
 
-The point of this format is that the two colours now can be added, and
+The point of this format is that the two colors now can be added, and
 then be converted to a RGB table index very easily: First, we just set
 all the frac bits and the four upper zero bits to 1. It's now possible
 to get the RGB table index by anding the current value >> 5 with the

@@ -44,10 +44,10 @@ namespace
 		Glyph	glyphs[128 - 32];
 	};
 
-	// Resolving antialiasing means blending the text colour over whatever is
+	// Resolving antialiasing means blending the text color over whatever is
 	// already on the canvas and finding the nearest palette entry -- far too
 	// slow to do per pixel, since ColorMatcher::Pick searches the palette.
-	// Instead, for each text colour, precompute [coverage bucket][destination
+	// Instead, for each text color, precompute [coverage bucket][destination
 	// index] -> index once. 17 buckets keeps the table small while staying
 	// visually indistinguishable from full 256-level blending.
 	const int kBuckets = 17;

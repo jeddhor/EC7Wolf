@@ -48,7 +48,7 @@ trap cleanup EXIT INT TERM
 #
 # Every data file comes across, not just *.CO7: the iwad's MustContain list
 # includes C7PAL, and the palette is extracted from CORR7CD.EXE, so a directory
-# holding only the .CO7 archives is not recognised as a game data set at all.
+# holding only the .CO7 archives is not recognized as a game data set at all.
 run_dir="$work/run"
 mkdir -p "$run_dir"
 for f in "$data_dir"/*; do
@@ -123,7 +123,7 @@ run_with_cheat() {
 	# The tally screen blocks on input, so it has to be cleared for the run to
 	# reach the next level. Harmless when there is no transition.
 	# Cleared until the evidence appears or the game goes, rather than a fixed
-	# number of taps and a fixed wait afterwards. The capture line this gate
+	# number of taps and a fixed wait afterward. The capture line this gate
 	# reads is written when the chosen frame is rendered, and how long that
 	# takes depends on how busy the machine is -- so the old "ten taps, then
 	# sleep 6, then grep" reported "the run never reached the next level" on a

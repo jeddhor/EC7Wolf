@@ -542,18 +542,18 @@ const BYTE *V_GetC7RampFloors ()
 // tables; regenerate with tools/python/make_corridor7_visor_tables.py.
 //
 // They cannot be replaced by a formula. The mapping is keyed on the palette
-// INDEX, not the colour: indices 15 and 39 both hold (255,255,255) but infrared
+// INDEX, not the color: indices 15 and 39 both hold (255,255,255) but infrared
 // keeps 15 white and turns 39 red, and indices 37 and 254 both hold
 // (223,223,223) but infrared keeps 37 as red 223 and forces 254 to black. Nor is
-// the level a simple function of brightness -- greys map to themselves in
+// the level a simple function of brightness -- grays map to themselves in
 // infrared while (154,0,0) becomes 60 and (113,81,138) becomes 125, matching
 // neither luminance, average nor peak channel. Night vision is a different
-// transform again: a gamma-like boost with no crush to black, where the grey
+// transform again: a gamma-like boost with no crush to black, where the gray
 // ramp runs 8->40, 32->77, 125->178, 207->227, 255->255.
 //
 // What the tables encode, for reference: infrared leaves the low block 0-15,
 // 248-253 and 255 untouched (which is why the HUD text and the lamp whites keep
-// their colour), crushes positions 0-7 of every 24-entry ramp to black, and
+// their color), crushes positions 0-7 of every 24-entry ramp to black, and
 // forces the lamp halo at 254 to black. Night vision converts everything except
 // 255 and gives 254 its dimmest level.
 // Night vision (mode 1) DAC, read from the released game.
@@ -879,7 +879,7 @@ void HSVtoRGB (float *r, float *g, float *b, float h, float s, float v)
 	float f, p, q, t;
 
 	if (s == 0)
-	{ // achromatic (grey)
+	{ // achromatic (gray)
 		*r = *g = *b = v;
 		return;
 	}

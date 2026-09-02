@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Regression test: the floor objective banner is drawn in the colour the DOS
+# Regression test: the floor objective banner is drawn in the color the DOS
 # release drew it in.
 #
 # "Eliminate Aliens To Secure Floor" is painted as a solid stencil over the
@@ -9,13 +9,13 @@
 # intermediate shades, over the same bright gradient.
 #
 # This is worth a test because the failure is quiet and map-dependent. The
-# colour that was here before -- palette entry 3, (215,215,0) -- looks correct
+# color that was here before -- palette entry 3, (215,215,0) -- looks correct
 # over the dark walls most floors open on, and only reads as dull over a bright
 # background. MAP01 opens on the brightest one in the game, which is why it is
 # the map pinned here.
 #
 # The palette holds three identical pure yellows (111, 231, 253), so the drawing
-# code asks for the colour rather than an index; this checks what reached the
+# code asks for the color rather than an index; this checks what reached the
 # screen, which is the part the reference can actually speak to.
 #
 # Usage: test_corridor7_topmessage.sh BUILD_DIR DATA_DIR   (both absolute)
@@ -69,7 +69,7 @@ while off + 8 <= len(data):
     length = struct.unpack_from(">I", data, off)[0]
     tag, body = data[off+4:off+8], data[off+8:off+8+length]
     if tag == b"IHDR":
-        width, height, depth, colour = struct.unpack(">IIBB", body[:10])
+        width, height, depth, color = struct.unpack(">IIBB", body[:10])
     elif tag == b"PLTE":
         palette = body
     elif tag == b"IDAT":
@@ -78,8 +78,8 @@ while off + 8 <= len(data):
         break
     off += 12 + length
 
-if colour != 3:
-    sys.exit("FAIL: expected an indexed screenshot, got colour type %d" % colour)
+if color != 3:
+    sys.exit("FAIL: expected an indexed screenshot, got color type %d" % color)
 
 raw = zlib.decompress(idat)
 rows, prev, pos = [], bytearray(width), 0
@@ -118,14 +118,14 @@ for y in range(strip_h):
 if not counts:
     sys.exit("FAIL: no banner text found in the top of the frame")
 
-(colour_seen, pixels), = counts.most_common(1)
+(color_seen, pixels), = counts.most_common(1)
 print("  banner: %d px of rgb%s (%d distinct yellows)"
-      % (pixels, colour_seen, len(counts)))
+      % (pixels, color_seen, len(counts)))
 
-if colour_seen != (255, 255, 0):
+if color_seen != (255, 255, 0):
     sys.exit("FAIL: the banner is rgb%s; the DOS release draws it at (255, 255, 0). "
              "Palette entry 3, (215,215,0), is the value this regressed to before."
-             % (colour_seen,))
+             % (color_seen,))
 if len(counts) != 1:
     sys.exit("FAIL: the banner should be a solid stencil, but %d yellows are present"
              % len(counts))

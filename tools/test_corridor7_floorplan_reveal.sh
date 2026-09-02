@@ -3,12 +3,12 @@
 # Regression test: the floor plan reveals the whole floor, permanently.
 #
 # The inset panel normally paints only a 23x24 tile window around the player,
-# and greys out anything the player cannot currently walk to. The floor plan
+# and grays out anything the player cannot currently walk to. The floor plan
 # drops the window -- but it also has to drop the reachability gate, and that is
 # what this guards. The gate is a LIVE query: CheckLink reads zoneLinks, which
 # counts doors that are open at this instant, so with the gate left on the plan
 # appeared to expire. Walking through a door and letting it shut behind you
-# re-greyed everything beyond it, and the panel collapsed back to roughly the
+# re-grayed everything beyond it, and the panel collapsed back to roughly the
 # room the player was standing in.
 #
 # The property being asserted is that with the plan the panel is a blueprint:
@@ -71,10 +71,10 @@ python3 - "$work/plan_near.png" "$work/plan_far.png" "$work/bare_near.png" <<'PY
 import sys
 from PIL import Image
 
-# Panel colours, C7 palette: index 32 is the border, the walls, and any floor
-# the gate has greyed out; 48 is open floor. The rest are the overlays that are
+# Panel colors, C7 palette: index 32 is the border, the walls, and any floor
+# the gate has grayed out; 48 is open floor. The rest are the overlays that are
 # expected to move -- the player, the pixel trailing them, and the aliens.
-GREY   = (142, 142, 142)
+GRAY   = (142, 142, 142)
 FLOOR  = (16, 16, 81)
 BORDER = 1008 * 4        # the 1px panel border, at the 2x scale of a 640x400 shot
 
@@ -89,17 +89,17 @@ near, far, bare = (pixels(p) for p in sys.argv[1:4])
 # Only the map itself is being compared, so pixels either capture has painted an
 # overlay onto are skipped. The count is reported and capped: a large ignored
 # set could hide a real difference underneath it.
-overlay = [a not in (GREY, FLOOR) or b not in (GREY, FLOOR)
+overlay = [a not in (GRAY, FLOOR) or b not in (GRAY, FLOOR)
            for a, b in zip(near, far)]
 ignored = sum(overlay)
 differing = sum(1 for a, b, skip in zip(near, far, overlay)
-                if not skip and (a == GREY) != (b == GREY))
+                if not skip and (a == GRAY) != (b == GRAY))
 
-near_grey = near.count(GREY)
-bare_grey = bare.count(GREY)
+near_gray = near.count(GRAY)
+bare_gray = bare.count(GRAY)
 
-print("grey px: plan at (17,31)=%d, plan at (42,16)=%d, no plan at (17,31)=%d"
-      % (near_grey, far.count(GREY), bare_grey))
+print("gray px: plan at (17,31)=%d, plan at (42,16)=%d, no plan at (17,31)=%d"
+      % (near_gray, far.count(GRAY), bare_gray))
 print("wall px differing between the two plan captures: %d (%d ignored as "
       "player/alien overlay)" % (differing, ignored))
 
@@ -109,7 +109,7 @@ if differing:
     print("FAIL: the revealed map changes when the player moves (%d px differ). "
           "With the floor plan the panel must show the floor's geometry and "
           "nothing else -- the reachability gate is still running under it, and "
-          "it re-greys rooms whenever a door shuts." % differing)
+          "it re-grays rooms whenever a door shuts." % differing)
     failed = True
 
 if ignored > 256:
@@ -122,19 +122,19 @@ if ignored > 256:
 # the painted area covers the whole 62x62 tile interior, so the walls alone
 # exceed what the window could hold even if every tile in it were solid.
 WINDOW_PX = 23 * 24 * 4
-if near_grey - BORDER <= WINDOW_PX:
+if near_gray - BORDER <= WINDOW_PX:
     print("FAIL: the floor plan painted %d wall px, no more than the %d the "
           "unrevealed window could hold -- the reveal is not reaching past it."
-          % (near_grey - BORDER, WINDOW_PX))
+          % (near_gray - BORDER, WINDOW_PX))
     failed = True
 
 # Positive control: without the plan the panel must be doing something else,
 # otherwise the two captures above could agree for the trivial reason that the
 # plan is not being applied at all.
-if bare_grey == near_grey:
+if bare_gray == near_gray:
     print("FAIL: the panel looks identical with and without the floor plan "
-          "(%d grey px). --capture-floorplan is not reaching the panel, so "
-          "this test proves nothing." % near_grey)
+          "(%d gray px). --capture-floorplan is not reaching the panel, so "
+          "this test proves nothing." % near_gray)
     failed = True
 
 sys.exit(1 if failed else 0)

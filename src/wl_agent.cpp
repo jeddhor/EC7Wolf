@@ -375,7 +375,7 @@ void player_t::TakeDamage (int points, AActor *attacker)
 
 	// Bonus floors are point runs, not lives. When the player's health expires,
 	// the DOS game awards the run and advances to the next campaign floor. End
-	// the level while the travelling pawn is still alive so score, weapons,
+	// the level while the traveling pawn is still alive so score, weapons,
 	// access cards, and bonus pickups survive the transition.
 	if (health<=0 && IWad::CheckGameFilter("Corridor7") && levelInfo->BonusLevel)
 	{

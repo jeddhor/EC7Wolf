@@ -24,7 +24,7 @@ from ec7edit_core.document import MapDocument, SourceReference
 from ec7edit_core.errors import Severity
 from ec7edit_core.names import NativeName
 from ec7edit_core.planes import MapPlanes, linear_index
-from ec7edit_core.validation import summarise, validate_map
+from ec7edit_core.validation import summarize, validate_map
 
 CATALOG = load_catalog(EDITOR / "resources" / "editor_catalog.json")
 
@@ -180,7 +180,7 @@ class RepairingSoundAreas(unittest.TestCase):
         self.assertEqual(assign_sound_areas(build()), [])
 
     def test_the_summary_says_so(self):
-        self.assertEqual(summarise([]), "No problems found")
+        self.assertEqual(summarize([]), "No problems found")
 
 
 class Boundary(unittest.TestCase):
@@ -303,7 +303,7 @@ class Doors(unittest.TestCase):
         document = self.place(document, 0, 0, 3, RED_TERMINAL)
         self.assertNotIn("C7E-DOOR-003", codes(document))
 
-    def test_the_wrong_colour_terminal_does_not(self):
+    def test_the_wrong_color_terminal_does_not(self):
         document = self.place(build(), 0, 4, 4, RED_DOOR)
         document = self.place(document, 0, 0, 3, 11)   # blue terminal
         self.assertIn("C7E-DOOR-003", codes(document))
@@ -321,10 +321,10 @@ class Reporting(unittest.TestCase):
         self.assertTrue(any(p.where.startswith("cell (") for p in problems))
 
     def test_summary_counts(self):
-        self.assertEqual(summarise(validate_map(build(walls=False), CATALOG)).split(",")[0],
+        self.assertEqual(summarize(validate_map(build(walls=False), CATALOG)).split(",")[0],
                          "1 error")
 
-    def test_it_runs_without_a_catalogue(self):
+    def test_it_runs_without_a_catalog(self):
         # Structural checks still work before setup has found the game.
         self.assertEqual([p.code for p in validate_map(build(), None)], [])
         self.assertIn("C7E-BOUNDARY-001", [p.code for p in validate_map(build(walls=False), None)])

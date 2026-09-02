@@ -27,7 +27,7 @@ renderers=software,opengl
 
 Answers with **no game data, no config and no display**, because the editor asks
 what a build supports before it knows whether the data it has is usable. It runs
-before anything is initialised and exits.
+before anything is initialized and exits.
 
 ## The event stream
 

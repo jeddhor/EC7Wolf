@@ -127,7 +127,7 @@ bool R_GLRunSelfTest(const char *outPath)
 	GLuint itex = pipe.CreateIndexTexture(idx, W, H);
 	delete[] idx;
 
-	// Offscreen colour target so the result is independent of window visibility.
+	// Offscreen color target so the result is independent of window visibility.
 	GLuint fbo = 0, colorTex = 0;
 	glGenFramebuffers(1, &fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);

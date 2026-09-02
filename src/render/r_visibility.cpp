@@ -44,7 +44,7 @@ namespace
 	// small set of disjoint intervals.
 	//
 	// Merging matters more than it looks. Without it a cell in an open room gets
-	// re-expanded once per slightly-different window arriving from a neighbour,
+	// re-expanded once per slightly-different window arriving from a neighbor,
 	// which in a 64x64 map exhausts any sane expansion budget long before the
 	// far corners are reached -- and cells the traversal never reaches are cells
 	// a sprite can be culled in. Merging makes each cell's covered measure grow
@@ -302,7 +302,7 @@ void R_MarkVisibleCells()
 	// bound would be a coin toss at the frustum edge.
 	halfFov = MIN(halfFov + (2.0*M_PI/(double)FINEANGLES)*2.0, M_PI*0.98);
 
-	// The eye is the raycaster's eye, not the camera's centre: CalcViewVariables
+	// The eye is the raycaster's eye, not the camera's center: CalcViewVariables
 	// pulls it back by focallength, and the visible set has to be built from the
 	// same point or near-field cells disagree.
 	const double eyex = (double)viewx / (double)FRACUNIT;
@@ -357,9 +357,9 @@ void R_MarkVisibleCells()
 		if(AlreadyCovered(rec, cur.w))
 			continue;
 
-		// The cell's four edges, as (corner A, corner B, neighbour offset).
+		// The cell's four edges, as (corner A, corner B, neighbor offset).
 		// Corners are in tile units; the edge between this cell and the
-		// neighbour is what the window is clipped to.
+		// neighbor is what the window is clipped to.
 		static const int kEdge[4][6] =
 		{
 			//  ax, ay,  bx, by,  dx, dy
@@ -391,7 +391,7 @@ void R_MarkVisibleCells()
 			// point not on it, so an apparent span above pi means the short arc
 			// between the endpoints is the one running through +/-pi -- that is,
 			// the edge is behind the eye. The frustum is well under half a turn
-			// and centred on zero, so nothing there can be in view.
+			// and centered on zero, so nothing there can be in view.
 			//
 			// Inheriting the parent window here instead (an earlier attempt at
 			// "the eye is inside this cell, so do not clip") let the search walk

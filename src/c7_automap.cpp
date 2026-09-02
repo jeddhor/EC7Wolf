@@ -15,8 +15,8 @@
 **     pixel (i,j) is always map tile (i+1,j+1), so the 62x62 interior holds the
 **     64x64 map minus its solid border ring. This was confirmed by the
 **     alignment staying put across frames while the player moved.
-**   * Within the painted region, grey (32) means the tile is solid and the
-**     background (48) means it is floor. Correlating every grey pixel against
+**   * Within the painted region, gray (32) means the tile is solid and the
+**     background (48) means it is floor. Correlating every gray pixel against
 **     the raw MAPTEMP.CO7 plane-0 codes matched 100%, over both walls and
 **     doors, so this is "has a tile" rather than any door/wall distinction.
 **   * Only a 23x24 tile window around the player is painted; the rest of the
@@ -125,7 +125,7 @@ void C7Map_Draw()
 	if(pw <= 0 || ph <= 0)
 		return;
 
-	// Border, then the interior. The interior is the background colour that
+	// Border, then the interior. The interior is the background color that
 	// unpainted tiles keep, so floor tiles need no work later.
 	for(int j = 0;j < kPanelSize;++j)
 	{
@@ -157,7 +157,7 @@ void C7Map_Draw()
 	// window rather than widening it -- and it drops the reachability gate
 	// below with it. A blueprint shows the floor's geometry, not where you can
 	// currently walk; leaving the gate on made the plan look like it kept
-	// expiring, because the gate is live (see below) and re-greyed everything
+	// expiring, because the gate is live (see below) and re-grayed everything
 	// past a door the moment that door swung shut.
 	const bool fullmap = gamestate.fullmap ||
 		player->FindInventory(ClassDef::FindClass("C7FloorPlan")) != NULL;
@@ -172,7 +172,7 @@ void C7Map_Draw()
 	}
 
 	// Floor only counts as floor if the player could currently walk to it: the
-	// original paints grey for any area not linked to the one the player stands
+	// original paints gray for any area not linked to the one the player stands
 	// in, so a room behind a shut door reads as solid until the door opens. That
 	// is Wolf3D's zone graph, which Corridor 7 inherited and which ECWolf still
 	// maintains for sound propagation. Without this, level 1's sealed side rooms
@@ -189,7 +189,7 @@ void C7Map_Draw()
 		// belongs to no zone -- it is the link between two of them. CheckLink
 		// answers false for a NULL zone, so every tile on the map read as
 		// unreachable and the panel filled solid. Borrow a zone from a
-		// neighbouring tile: the player can only be inside a door that is open,
+		// neighboring tile: the player can only be inside a door that is open,
 		// and an open door links the zones on either side, so whichever of the
 		// two is found first gives the same reachability set.
 		static const int kAdjX[4] = { -1, 1, 0, 0 };
@@ -218,7 +218,7 @@ void C7Map_Draw()
 				const MapSpot spot = map->GetSpot(tx, ty, 0);
 				solid = spot->tile != NULL;
 				// Doors read as floor, not wall: the original paints the four
-				// doors on level 1 in the background colour even though they
+				// doors on level 1 in the background color even though they
 				// are tiles. Same test the ECWolf automap uses.
 				if(solid && (spot->tile->offsetHorizontal || spot->tile->offsetVertical))
 					solid = false;

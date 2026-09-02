@@ -403,7 +403,7 @@ void initControls(int width, int height,const char * graphics_path,const char *s
 		// Corridor 7 has two maps and both get a picture of one. The game's own
 		// inset floor panel takes the level-overview icon; ECWolf's
 		// full-viewport automap takes a folded paper map. It used to be
-		// labelled "F1" after the key it is bound to, which tells a player
+		// labeled "F1" after the key it is bound to, which tells a player
 		// holding a tablet nothing at all.
 		tcGameMain->addControl(new touchcontrols::Button("floor_map",touchcontrols::RectF(4,0,6,2),"map",PORT_ACT_C7_FLOORMAP));
 		tcGameMain->addControl(new touchcontrols::Button("map",touchcontrols::RectF(2,0,4,2),"foldmap",PORT_ACT_MAP));

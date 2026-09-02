@@ -31,7 +31,7 @@ the JNI glue, and the launcher's own CMake assembles a real APK with
 `aapt`/`d8`/`apksigner` and offers a `runadb` target that installs it, launches
 it and tails logcat.
 
-**The licence permits it.** `android-libs/launcher/License.txt` is explicit:
+**The license permits it.** `android-libs/launcher/License.txt` is explicit:
 the front end is GPLv2, and "ECWolf and products deriving from it are allowed
 to use this code under the terms of the LGPLv2.1". This fork is such a
 derivative.
@@ -78,7 +78,7 @@ and a working emulator.
 `SM-S938U1`, **Android 16, SDK 36, arm64-v8a**. That makes arm64-v8a the ABI
 that matters and the emulator the convenience, rather than the other way round,
 and it means acceptance is a thing that can actually be done rather than
-something to apologise for at the end.
+something to apologize for at the end.
 
 It also imposes a hard constraint that settles one of the questions above.
 Android has refused to *install* apps below a minimum `targetSdkVersion` since
@@ -260,7 +260,7 @@ trusting the build:
   clears those entries before configuring.
 
 The APK is assembled around the primary ABI and the others are added to the
-archive afterwards, because CMake configures one ABI per build directory and no
+archive afterward, because CMake configures one ABI per build directory and no
 single configure can see them all. Signing happens last, since adding to an
 archive invalidates whatever signature was on it.
 
@@ -367,7 +367,7 @@ result out of the simulation.
 **The controls had never been drawn once since the renderer cutover.**
 `frameControls()` was called from inside `if (UsingRenderer)` -- the SDL_Renderer
 path -- and Phase 11 replaced that with the GL backend. So from the cutover
-until now the overlay was not initialised and not drawn, on the one platform
+until now the overlay was not initialized and not drawn, on the one platform
 with no keyboard. It is now called in the GL present path, between
 `R_GLLivePresent` and `SDL_GL_SwapWindow`.
 
@@ -382,7 +382,7 @@ build that drew nothing:
   test out of the way. The engine now links `GLESv2` and builds with
   `USE_GLES2`, so both sides resolve the same headers.
 * **Thirteen non-void functions with no return**, including every control's
-  `initGL`. That is undefined behaviour, clang compiles it to a trap, and the
+  `initGL`. That is undefined behavior, clang compiles it to a trap, and the
   crash lands in `_Unwind_Resume` and the allocator -- nowhere near the cause.
   Fixed, and the library now builds with `-Werror=return-type` so it cannot
   come back.
@@ -426,7 +426,7 @@ dropped at your feet.
 
 The app was somebody else's: application id `com.beloko.wolf3dhg`, label
 "ECWolf", version 1.0, another game's icon, and its data in a directory called
-`Wolf3d`. It is now `org.ec7wolf.EC7Wolf`, labelled EC7Wolf, versioned
+`Wolf3d`. It is now `org.ec7wolf.EC7Wolf`, labeled EC7Wolf, versioned
 `1.0-beta140` (code 140), with this project's own icon and its data in
 `Corridor7`.
 
@@ -569,7 +569,7 @@ subject to whatever this device is doing. That is worth building the day the
 picker interaction is itself the thing under test; it is not worth it to reach
 code that an intent reaches directly.
 
-### Import speed, and clearing up afterwards
+### Import speed, and clearing up afterward
 
 **Where a disc import's time goes**, measured on the Tab S5e rather than guessed:
 

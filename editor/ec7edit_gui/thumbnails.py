@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Jason Tripp
-"""Turning a catalogue entry into a picture, using the user's own game data.
+"""Turning a catalog entry into a picture, using the user's own game data.
 
-The catalogue says *which* wall page or sprite page a thing is. This is where
+The catalog says *which* wall page or sprite page a thing is. This is where
 that becomes pixels — read from the copy of Corridor 7 the user pointed the
 editor at, decoded in memory, and cached in memory. Nothing is written to disk.
 
-That is the licensing boundary made concrete: the catalogue is a file this
+That is the licensing boundary made concrete: the catalog is a file this
 project can ship, and the artwork is not, so the artwork is never in the
-catalogue, never in a project file, and never in a cache on disk. It exists
+catalog, never in a project file, and never in a cache on disk. It exists
 while the editor is running and then it is gone.
 
-An entry whose page will not decode still gets a tile — a labelled placeholder
+An entry whose page will not decode still gets a tile — a labeled placeholder
 rather than a gap. A palette that silently omits broken items is a palette that
 hides the fact something is wrong with the data.
 """
@@ -35,7 +35,7 @@ from ec7edit_core.assets import (
 )
 from ec7edit_core.catalog import CatalogEntry
 
-#: Wall value 1 is page 0, and the catalogue records the value.
+#: Wall value 1 is page 0, and the catalog records the value.
 WALL_PAGE_OFFSET = 1
 
 
@@ -69,7 +69,7 @@ class AssetSource:
 
 
 class ThumbnailFactory:
-    """Catalogue entry to `QPixmap`, cached by key, size and data fingerprint.
+    """Catalog entry to `QPixmap`, cached by key, size and data fingerprint.
 
     The fingerprint is in the key because a user may repoint the editor at a
     different copy of the game -- a different rip, a patched executable -- and
@@ -115,10 +115,10 @@ class ThumbnailFactory:
         return QImage(pixels, edge, edge, stride, fmt).copy()
 
     def placeholder(self, entry: CatalogEntry, size: int) -> QPixmap:
-        """A labelled tile for an entry with no artwork, or artwork that failed.
+        """A labeled tile for an entry with no artwork, or artwork that failed.
 
-        Colour comes from the entry's own key, so the same thing is the same
-        colour every time and a palette of placeholders is still scannable.
+        Color comes from the entry's own key, so the same thing is the same
+        color every time and a palette of placeholders is still scannable.
         """
         pixmap = QPixmap(size, size)
         tint = QColor.fromHsv((hash(entry.key) % 360), 70, 90)
@@ -142,7 +142,7 @@ class ThumbnailFactory:
         return pixmap
 
     def swatch(self, entry: CatalogEntry, size: int = 16) -> QColor:
-        """The average colour of an entry's artwork, for a compact list."""
+        """The average color of an entry's artwork, for a compact list."""
         try:
             pixels, _, alpha = self.pixels_for(entry)
         except AssetError:

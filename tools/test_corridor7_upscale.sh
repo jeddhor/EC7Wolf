@@ -5,7 +5,7 @@
 #
 # The pack is built here rather than shipped, for the same reason the game never
 # ships one: everything in it derives from the player's commercial data files.
-# It is built with fake_upscaler.py, a nearest-neighbour stand-in for
+# It is built with fake_upscaler.py, a nearest-neighbor stand-in for
 # Real-ESRGAN, because none of what this checks depends on the upscale being any
 # good -- only on the pack being found, validated, applied and undone.
 #
@@ -59,7 +59,7 @@ for f in "$data_dir"/*.CO7 "$data_dir"/CORR7CD.EXE; do
 	[ -e "$f" ] && ln -s "$f" "$work/" || true
 done
 
-printf 'Building a test asset pack (walls, 2x, nearest neighbour)...\n'
+printf 'Building a test asset pack (walls, 2x, nearest neighbor)...\n'
 python3 "$tools_dir/make_c7_upscaled_pk3.py" \
 	--dir "$work" --out "$work/pack.pk3" --groups walls --scale 2 \
 	--tool "$tools_dir/fake_upscaler.py" --models "$work" --keep-file /dev/null \
@@ -197,7 +197,7 @@ printf '\nCase 3: the same pack, switched off\n'
 run_case off "$work/pack.pk3" 'Vid_UpscaledAssets = 0;
 '
 grep -q 'using the original art' "$work/off.log" \
-	&& check 0 'honours the config and puts the art back' || check 1 'honours the config and puts the art back'
+	&& check 0 'honors the config and puts the art back' || check 1 'honors the config and puts the art back'
 if cmp -s "$work/none.png" "$work/off.png"; then
 	check 0 'the restored frame is byte-identical to having no pack at all'
 else

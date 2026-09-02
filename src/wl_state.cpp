@@ -244,7 +244,7 @@ bool TryWalk (AActor *ob)
 =
 = SelectDodgeDir
 =
-= Attempts to choose and initiate a movement for ob that sends it towards
+= Attempts to choose and initiate a movement for ob that sends it toward
 = the player while dodging
 =
 = If there is no possible move (ob is totally surrounded)
@@ -286,7 +286,7 @@ void SelectDodgeDir (AActor *ob)
 
 	//
 	// arange 5 direction choices in order of preference
-	// the four cardinal directions plus the diagonal straight towards
+	// the four cardinal directions plus the diagonal straight toward
 	// the player
 	//
 

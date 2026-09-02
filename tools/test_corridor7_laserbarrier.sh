@@ -13,7 +13,7 @@
 #
 # This is worth pinning because the failure mode is to "improve" it. A previous
 # version replaced the sprite with a hashed white dissolve, which threw away
-# both the travelling sweep along the rods and the ring's shape. So this checks
+# both the traveling sweep along the rods and the ring's shape. So this checks
 # what only the real mechanism can produce:
 #
 #   * under infrared, several hundred pixels in ALL of the ramp's distinct
@@ -143,7 +143,7 @@ if n:
 for i, a in enumerate(shots):
 	if len(a) < 600:
 		sys.exit("FAIL[%s]: shot %d has only %d barrier pixels under infrared; the barrier is "
-			"either not drawn at all or its ramp colours have been overpainted"
+			"either not drawn at all or its ramp colors have been overpainted"
 			% (renderer, i, len(a)))
 	levels = collections.Counter(a.values())
 	if len(levels) < len(RAMP):
@@ -151,7 +151,7 @@ for i, a in enumerate(shots):
 			% (renderer, i, len(levels), len(RAMP)))
 	top = levels.most_common(1)[0][1]
 	if top > len(a) * 0.6:
-		sys.exit("FAIL[%s]: shot %d is %d%% one colour; it is filled, not swept"
+		sys.exit("FAIL[%s]: shot %d is %d%% one color; it is filled, not swept"
 			% (renderer, i, top * 100 // len(a)))
 
 first = shots[0]

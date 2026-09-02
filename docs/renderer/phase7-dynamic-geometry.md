@@ -30,10 +30,10 @@ door leaf or a moving pushwall never has to invalidate the (large) static mesh.
   meshes agree on exactly which cells are dynamic.
   * `BuildStatic` skips door and moving-pushwall cells but still emits their
     floor/ceiling, so the doorway (and a vacated pushwall cell) is not a hole.
-    Neighbours still treat those cells as solid for face adjacency, so no
+    Neighbors still treat those cells as solid for face adjacency, so no
     duplicate wall appears at the opening.
   * `BuildDynamic` emits, at the interpolated positions from `GetRender`:
-    * one **door-leaf** quad per door in the tile-centre plane (the same plane
+    * one **door-leaf** quad per door in the tile-center plane (the same plane
       the raycaster's `GetMaskedWallEndpoints` uses: `left+½` for a vertical
       door, `top+½` for a horizontal one), tagged with the door's slide style
       and amount;
@@ -49,7 +49,7 @@ door leaf or a moving pushwall never has to invalidate the (large) static mesh.
   * `SlideTextureOffset(style, …)` shifts the remaining (solid) columns, so the
     leaf recedes into its pocket exactly as `HitVertWall`/`DrawMaskedWall` draw
     it, for all three styles (`SLIDE_Normal`, `SLIDE_Split`, `SLIDE_Invert`).
-  * A door leaf is otherwise shaded as a wall (perpendicular distance, C7 colour
+  * A door leaf is otherwise shaded as a wall (perpendicular distance, C7 color
     cycle, full-bright), matching `ShadeWallColor`.
 
 The tic hooks are wired next to the existing actor interpolation in the play loop
@@ -97,7 +97,7 @@ PASS: GL door slide renders (closed vs open differ by 1065 px).
   The offscreen capture rebuilds the mesh each frame, so revision-gated caching is
   not yet observable; it lands with the persistent live GL context in Phase 10.
   The static/dynamic split done here is the prerequisite.
-* **Door jambs.** A door leaf sits in the tile centre while its cell's side faces
+* **Door jambs.** A door leaf sits in the tile center while its cell's side faces
   are suppressed (as in the classic engine); the exact jamb/track texture on the
   half-tile pocket is a masked-surface detail deferred to Phase 8/11.
 * **Software-side dynamic-wall interpolation.** The software raycaster still reads

@@ -8,7 +8,7 @@ skill 1, and 184 is the same alien patrolling on skill 3. So "turn this one to
 face north" is not a property assignment; it is a different word.
 
 The inspector makes that visible rather than hiding it. Each control changes
-one axis and writes the word the catalogue says corresponds to the result, and
+one axis and writes the word the catalog says corresponds to the result, and
 the raw value is shown throughout, because an editor for a game like this
 should never make its user guess what it is about to write.
 
@@ -35,7 +35,7 @@ from ec7edit_core.document import MapDocument
 
 #: The preview is deliberately larger than the palette's tiles. A 64x64 wall
 #: page at 64 pixels is a swatch you pick from; at 128 it is something you can
-#: actually read, which is the difference between "that is the grey one" and
+#: actually read, which is the difference between "that is the gray one" and
 #: "that is the one with the vent".
 PREVIEW_SIZE = 128
 #: The other plane's artwork, shown beside it. A cell often holds both a wall
@@ -117,9 +117,9 @@ class Inspector(QWidget):
                     or (entry.category in ("walls", "specials") and entry.texture))
 
     def _pixmap_for(self, entry: CatalogEntry | None, size: int):
-        """The entry's artwork at `size`, or a labelled placeholder, or None.
+        """The entry's artwork at `size`, or a labeled placeholder, or None.
 
-        Nearest-neighbour, always: these are 64x64 pages of hand-placed pixels,
+        Nearest-neighbor, always: these are 64x64 pages of hand-placed pixels,
         and smoothing them turns the thing being identified into a smear.
         """
         if entry is None or self.thumbnails is None:
@@ -244,7 +244,7 @@ class Inspector(QWidget):
             if raw == value:
                 self.direction.setCurrentIndex(self.direction.count() - 1)
 
-        # Which other variants of this actor exist is a catalogue question:
+        # Which other variants of this actor exist is a catalog question:
         # there is no patrolling Eniram because the translation has no entry
         # for one, and offering the control would promise something the format
         # cannot express.

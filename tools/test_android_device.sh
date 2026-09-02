@@ -15,7 +15,7 @@
 #     would be invisible -- the game would just be slow. This asserts the
 #     OpenGL backend by name.
 #   * An exception unwinding out of native code into the JNI trampoline. The
-#     touch controls initialised on whichever thread pushed the SDL resize
+#     touch controls initialized on whichever thread pushed the SDL resize
 #     event, which is the Java main thread and has no GL context; the texture
 #     loader threw, and there is no handler anywhere above it. It crashed at
 #     0xebad8084 with a one-frame backtrace. Any fatal signal fails this gate.

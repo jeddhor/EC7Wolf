@@ -57,16 +57,16 @@ view-space distance drives the same `GETPALOOKUP` shade row the software sprite
 loop computes from `FixedMul(r_depthvisibility<<8, height)`. On top of that:
 
 * **Transparency** keys on **raw index 0** (`if(src[y]) …` in the scaler), *not*
-  the index-255 mask colour walls use. An explicit opacity buffer still wins when
+  the index-255 mask color walls use. An explicit opacity buffer still wins when
   a sprite texture provides one.
-* **Colour-cycle** — Corridor 7 rotates indices 208–239; sprites share the wall
+* **Color-cycle** — Corridor 7 rotates indices 208–239; sprites share the wall
   cycle block, matching `C7CycleSpriteColor`.
 * **Full-bright** — `FL_BRIGHT`/`frame->fullbright` forces shade row 0 (ignore
   distance), matching `colormap = NormalLight.Maps`. The wall-only reserved-index
   full-bright rule (indices 15/254) is suppressed for sprites.
 * **Laser barrier** — no shader case at all, and deliberately so. Corridor 7's
   infrared barrier statics are painted entirely in the 232-239 ramp, so the
-  colour-cycle and full-bright rules above *are* the effect: the rotation walks
+  color-cycle and full-bright rules above *are* the effect: the rotation walks
   the infrared red sweep along artwork whose indices already climb the ramp. An
   earlier revision special-cased them here (a hashed dissolve painting
   `ColorMatcher.Pick(0xFF,0xFF,0xFF)`); it was removed, along with the
@@ -134,7 +134,7 @@ PASS: GL door slide renders (closed vs open differ by 1065 px).
 
 Actor sprites build as depth-tested billboards with correct frame/rotation/mirror
 selection, scale and offsets, screen-facing or world-oriented orientation,
-index-0 transparency, Corridor 7 colour-cycle, full-bright and visor gating —
+index-0 transparency, Corridor 7 color-cycle, full-bright and visor gating —
 which is what lights the infrared laser barrier — occluding and occluded by walls and masked panes
 in one shared depth buffer, at interpolated positions without frame blending. The
 determinism gate remains green; the simulation is untouched.

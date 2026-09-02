@@ -3,7 +3,7 @@
 **
 ** Engine-side wrapper around the vendored xBRZ upscaler (deps/xbrz).
 **
-** xBRZ is a "scale by rules" filter: it looks at each 5x5 neighbourhood of the
+** xBRZ is a "scale by rules" filter: it looks at each 5x5 neighborhood of the
 ** source and decides whether a step in the pixels is a genuine hard edge or a
 ** diagonal that was forced into a staircase by the low resolution, then draws
 ** the latter as a smooth slope. On art authored at 320x200 that recovers the
@@ -182,25 +182,25 @@ static inline int ColorDist(uint32_t a, uint32_t b)
 int R_XBRZDeDither(uint32_t *px, int w, int h)
 {
 	// Why this exists: xBRZ assumes clean pixel art, where a step between two
-	// colours means an edge. Hand-dithered art breaks that assumption on purpose
-	// -- a checkerboard of two colours is not an edge, it is a third colour that
+	// colors means an edge. Hand-dithered art breaks that assumption on purpose
+	// -- a checkerboard of two colors is not an edge, it is a third color that
 	// the palette could not hold. Fed to the upscaler as-is, every dither cell
 	// is read as a tiny feature worth preserving, and the filter enlarges the
 	// noise into visible blobs. Corridor 7's splash screen is dithered heavily
 	// through its shadows, which is exactly where the artifacts showed.
 	//
-	// So the dither is resolved first, into the colour it was always meant to
+	// So the dither is resolved first, into the color it was always meant to
 	// look like from a distance.
 	if(px == NULL || w < 3 || h < 3)
 		return 0;
 
-	// A pixel is dither if it differs from all four of its neighbours while they
+	// A pixel is dither if it differs from all four of its neighbors while they
 	// agree with each other: that is a lone cell in a flat field, which is what
 	// an ordered dither is made of. Real detail -- a highlight, a thin line --
-	// either matches a neighbour along its run or sits on a background that is
+	// either matches a neighbor along its run or sits on a background that is
 	// not flat, and fails one test or the other.
-	static const int kDiffers = 24;	// centre vs neighbour, summed over channels
-	static const int kAgrees  = 40;	// neighbour vs neighbour
+	static const int kDiffers = 24;	// center vs neighbor, summed over channels
+	static const int kAgrees  = 40;	// neighbor vs neighbor
 
 	TArray<uint32_t> src((unsigned)(w*h));
 	src.Resize((unsigned)(w*h));

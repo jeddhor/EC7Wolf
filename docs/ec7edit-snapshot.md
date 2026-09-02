@@ -70,7 +70,7 @@ deliberately, and no prototype code was written to be removed later.
 
 The criterion it fails is the last and least negotiable: *no engine/runtime
 semantics are moved into the approximate renderer as a new authority*. Corridor
-7's appearance is not separable from engine behaviour — a door's axis is
+7's appearance is not separable from engine behavior — a door's axis is
 inferred from surrounding floor at load time, the visor palette is a DAC ramp
 the renderer animates, laser-barrier statics are gated on an inventory token,
 and floor and ceiling shading comes from a per-band screen-space rule rather

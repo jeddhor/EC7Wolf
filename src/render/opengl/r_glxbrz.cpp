@@ -6,10 +6,10 @@
 // the same filter the software path already has. See r_glxbrz.h for why the
 // CPU implementation cannot simply be reused here.
 //
-// The port is deliberately literal. Every threshold, every colour-distance
+// The port is deliberately literal. Every threshold, every color-distance
 // quirk, and every blend weight is carried over from the C++ verbatim,
 // including the ones that look like they could be simplified -- the buffered
-// colour distance quantises its input, and the blend weights are applied in a
+// color distance quantises its input, and the blend weights are applied in a
 // fixed order because later ones blend over the results of earlier ones. A
 // "cleaner" shader that got any of that subtly wrong would still produce a
 // plausible-looking picture, which is exactly why the two are compared against
@@ -43,7 +43,7 @@ namespace
 		"layout(location=0) in vec2 aPos;\n"
 		"void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }\n";
 
-	// Shared by both passes: source access and the colour distance the whole
+	// Shared by both passes: source access and the color distance the whole
 	// algorithm is built on.
 	const char *kCommonSrc =
 		"uniform sampler2D uSrc;\n"
@@ -90,7 +90,7 @@ namespace
 	// layout the C++ builds in its preprocessing buffer.
 	//
 	// Running this per source pixel rather than per output pixel is the whole
-	// reason for the split. It is nine colour distances per corner and four
+	// reason for the split. It is nine color distances per corner and four
 	// corners per pixel; at 6x, folding it into the scaling pass would repeat all
 	// of that thirty-six times over for a result that cannot differ.
 	const char *kBlendFragSrc =
@@ -451,7 +451,7 @@ namespace
 		"            doLineBlend = false;\n"
 		"    }\n"
 		"\n"
-		"    vec3 px = Dist(e, f) <= Dist(e, h) ? f : h;\n"	// most similar colour
+		"    vec3 px = Dist(e, f) <= Dist(e, h) ? f : h;\n"	// most similar color
 		"\n"
 		"    if(doLineBlend)\n"
 		"    {\n"
@@ -601,7 +601,7 @@ namespace
 			return false;
 		// R8UI, not a normalized format: the preprocessing result is four 2-bit
 		// fields packed into a byte, and normalizing it would be a round trip
-		// through a float for data that is never a colour.
+		// through a float for data that is never a color.
 		if(MakeTarget(g.blendFbo, g.blendTex, fw, fh, GL_R8UI, GL_RED_INTEGER,
 			GL_UNSIGNED_BYTE) != GL_FRAMEBUFFER_COMPLETE)
 			return false;

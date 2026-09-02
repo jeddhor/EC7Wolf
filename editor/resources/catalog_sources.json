@@ -1,6 +1,6 @@
 {
   "_comment": [
-    "Curated identity for the EC7Edit catalogue. Everything else is generated:",
+    "Curated identity for the EC7Edit catalog. Everything else is generated:",
     "see editor/scripts/generate_catalog.py. Only put here what no input file",
     "can supply -- a friendly name, a search alias, a sentence of advice --",
     "and record where the identity came from in 'evidence'."
@@ -285,7 +285,7 @@
         "weapon",
         "alien"
       ],
-      "description": "Travelling plasma with a blast radius; it can set off mines.",
+      "description": "Traveling plasma with a blast radius; it can set off mines.",
       "evidence": "strategy compendium weapon 6",
       "name": "Alien Plasma Rifle",
       "subcategory": "pickup"
@@ -727,7 +727,7 @@
         "wall",
         "raw"
       ],
-      "description": "Occurs only inside wall cells, where the DOS engine reads it to configure masked-wall behaviour. It is not an object.",
+      "description": "Occurs only inside wall cells, where the DOS engine reads it to configure masked-wall behavior. It is not an object.",
       "name": "Masked-wall setting 86",
       "subcategory": "wall setting"
     },
@@ -737,7 +737,7 @@
         "wall",
         "raw"
       ],
-      "description": "Occurs only inside wall cells, where the DOS engine reads it to configure masked-wall behaviour. It is not an object.",
+      "description": "Occurs only inside wall cells, where the DOS engine reads it to configure masked-wall behavior. It is not an object.",
       "name": "Masked-wall setting 87",
       "subcategory": "wall setting"
     },
@@ -747,7 +747,7 @@
         "wall",
         "raw"
       ],
-      "description": "Occurs only inside wall cells, where the DOS engine reads it to configure masked-wall behaviour. It is not an object.",
+      "description": "Occurs only inside wall cells, where the DOS engine reads it to configure masked-wall behavior. It is not an object.",
       "name": "Masked-wall setting 88",
       "subcategory": "wall setting"
     },
@@ -768,7 +768,7 @@
         "closed",
         "retractable"
       ],
-      "description": "A green organic panel with yellow veins that parts in the middle. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
+      "description": "A green organic panel with yellow veins that parts in the middle. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behavior from Doors and Specials.",
       "name": "Retractable door (green organic) \u2014 closed",
       "subcategory": "door"
     },
@@ -814,7 +814,7 @@
         "closed",
         "retractable"
       ],
-      "description": "A pale double door with inward-pointing arrows that draws apart. Present in the artwork; no shipped map places one. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
+      "description": "A pale double door with inward-pointing arrows that draws apart. Present in the artwork; no shipped map places one. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behavior from Doors and Specials.",
       "name": "Retractable door (arrow door) \u2014 closed",
       "subcategory": "door"
     },
@@ -860,7 +860,7 @@
         "closed",
         "retractable"
       ],
-      "description": "A spiral metal iris that winds open. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
+      "description": "A spiral metal iris that winds open. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behavior from Doors and Specials.",
       "name": "Retractable door (metal iris) \u2014 closed",
       "subcategory": "door"
     },
@@ -906,7 +906,7 @@
         "closed",
         "retractable"
       ],
-      "description": "Horizontal white slats that draw back one band at a time. Present in the artwork; no shipped map places one. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
+      "description": "Horizontal white slats that draw back one band at a time. Present in the artwork; no shipped map places one. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behavior from Doors and Specials.",
       "name": "Retractable door (louvre slats) \u2014 closed",
       "subcategory": "door"
     },
@@ -952,7 +952,7 @@
         "closed",
         "retractable"
       ],
-      "description": "A yellow-and-white door whose central cross opens outward. Present in the artwork; no shipped map places one. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
+      "description": "A yellow-and-white door whose central cross opens outward. Present in the artwork; no shipped map places one. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behavior from Doors and Specials.",
       "name": "Retractable door (hazard cross) \u2014 closed",
       "subcategory": "door"
     },
@@ -998,7 +998,7 @@
         "closed",
         "retractable"
       ],
-      "description": "A grey and red alien bulkhead that retracts to an open aperture. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
+      "description": "A gray and red alien bulkhead that retracts to an open aperture. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behavior from Doors and Specials.",
       "name": "Retractable door (alien machinery) \u2014 closed",
       "subcategory": "door"
     },
@@ -1044,7 +1044,7 @@
         "closed",
         "retractable"
       ],
-      "description": "A red organic membrane that draws back to an open aperture. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
+      "description": "A red organic membrane that draws back to an open aperture. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behavior from Doors and Specials.",
       "name": "Retractable door (red membrane) \u2014 closed",
       "subcategory": "door"
     },
@@ -1090,7 +1090,7 @@
         "closed",
         "retractable"
       ],
-      "description": "A circular metal iris in a blue frame that opens outward. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
+      "description": "A circular metal iris in a blue frame that opens outward. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behavior from Doors and Specials.",
       "name": "Retractable door (iris hatch) \u2014 closed",
       "subcategory": "door"
     },
@@ -1136,7 +1136,7 @@
         "closed",
         "retractable"
       ],
-      "description": "A slatted silver shutter with hazard striping that rolls up. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
+      "description": "A slatted silver shutter with hazard striping that rolls up. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behavior from Doors and Specials.",
       "name": "Retractable door (hazard shutter) \u2014 closed",
       "subcategory": "door"
     },
@@ -1182,7 +1182,7 @@
         "closed",
         "retractable"
       ],
-      "description": "A cross-hatched energy screen that thins to nothing as it opens. Its closed frame is already half aperture, because it is a screen you can see through rather than a solid door. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behaviour from Doors and Specials.",
+      "description": "A cross-hatched energy screen that thins to nothing as it opens. Its closed frame is already half aperture, because it is a screen you can see through rather than a solid door. Painted on its own it is a door that never opens, which is how the shipped maps use several of these. Add the opening behavior from Doors and Specials.",
       "name": "Force field door \u2014 closed",
       "subcategory": "door"
     },

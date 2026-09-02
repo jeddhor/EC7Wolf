@@ -367,7 +367,7 @@ def to_windows(path: Path) -> Path:
 uninstaller = install.write_uninstaller(target, [to_windows(p) for p in created])
 check(uninstaller.name == "Uninstall.cmd", "an Uninstall.cmd was written")
 check("--yes" in uninstaller.read_text(),
-      "which honours --yes, as QuietUninstallString promises")
+      "which honors --yes, as QuietUninstallString promises")
 
 registered = windows.register_uninstall(target, uninstaller, "1.5pre-test",
                                         Reporter())
@@ -377,7 +377,7 @@ check(listing.returncode == 0, "and Windows can read it back")
 for value in ("DisplayName", "UninstallString", "QuietUninstallString",
               "InstallLocation", "Publisher", "DisplayVersion", "NoModify"):
     check(value in listing.stdout, f"  {value} is set")
-check("EC7Wolf" in listing.stdout, "under the name a user would recognise")
+check("EC7Wolf" in listing.stdout, "under the name a user would recognize")
 check("1.5pre-test" in listing.stdout, "with the version read out of the binary")
 
 print("\nuninstalling")

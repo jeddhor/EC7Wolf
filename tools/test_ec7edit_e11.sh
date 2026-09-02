@@ -35,7 +35,7 @@
 #      floor rejoins a campaign.
 #   6. The campaign ends. MAP62's next is EndTitle, and the engine must take
 #      the victory path rather than entering another level.
-#   7. Stock behaviour is unchanged with the pack loaded.
+#   7. Stock behavior is unchanged with the pack loaded.
 #   8. The package contains only markers, PLANES and metadata -- read back out
 #      of the built file, not remembered from having written it.
 #   9. Zero options misread as filenames, as E9 and E10 also require.
@@ -314,7 +314,7 @@ if not report.clean:
 if report.markers != ("MAP61", "MAP62", "MAP63"):
     sys.exit(f"  FAIL  the pack holds markers {report.markers}")
 
-# Nothing retail may have travelled with it. The maps were drawn by this
+# Nothing retail may have traveled with it. The maps were drawn by this
 # script, so every plane word in the file has to be one of the few this script
 # writes -- a stock map's words would show up immediately.
 allowed = {0, 1, 19, 63, 99, 256}

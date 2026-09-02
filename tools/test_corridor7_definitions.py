@@ -333,7 +333,7 @@ if len(re.findall(r'Time\s*=\s*-4', MAPINFO)) != 5 or len(re.findall(r'FadeType\
 require(r'templateTrigger\.arg\[4\]\s*=\s*horizontal', GAMEMAP_PLANES, "door orientation must not overwrite lock IDs")
 require(r'!levelInfo->BonusLevel\s*&&\s*gamestate\.killtotal', LNSPEC, "bonus elevators bypass campaign clearance")
 require(r'health<=0\s*&&\s*IWad::CheckGameFilter\("Corridor7"\)\s*&&\s*levelInfo->BonusLevel', WL_AGENT, "bonus health expiration is intercepted before death")
-require(r'health\s*=\s*mo->health\s*=\s*mo->SpawnHealth\(\).*?playstate\s*=\s*ex_completed', WL_AGENT, "bonus completion revives and advances the travelling pawn")
+require(r'health\s*=\s*mo->health\s*=\s*mo->SpawnHealth\(\).*?playstate\s*=\s*ex_completed', WL_AGENT, "bonus completion revives and advances the traveling pawn")
 require(r'levelShotsFired.*?levelShotsHit', WL_AGENT, "save-backed Corridor 7 hit/miss statistics")
 require(r'c7/teleport\s+\{\s+C7DS0001\s+C7AL0001\s+C7PC0001\s+\}', SNDINFO, "Corridor 7 vortex completion sound")
 require(r'c7/world/oof1\s+\{\s+C7DS0069.*?c7/world/oof2\s+\{\s+C7DS0070.*?'
@@ -682,7 +682,7 @@ require(r'C7VisorCanSeeActor.*?Corridor7IsLaserBarrierActor\(actor\)\s*\)\s*retu
 # the released game rotates -- which are black in the base palette and a
 # 32..255 red sweep under infrared. Reintroducing a per-texel override here
 # throws that away: the previous hashed dissolve replaced the sprite with
-# speckled white and lost both the travelling sweep along C006's rods and the
+# speckled white and lost both the traveling sweep along C006's rods and the
 # ring's shape. The ordinary sprite path already cycles and full-brights the
 # ramp, so there must be nothing barrier-specific left in either scaler.
 for name in ("C7LaserDissolveLit", "laserColor", "laserBarrier"):
@@ -708,9 +708,9 @@ for cls in ("C7Static005", "C7Static061"):
 require(r'bool C7IsInvulnerable', WL_AGENT,
 		"the invulnerability timer is available to damage paths outside TakeDamage")
 require(r'static void DamageC7ElectricField.*?if\(C7IsInvulnerable\(pawn\)\)\s*\n\s*return;',
-		WL_AGENT, "energized walls honour the Invulnerability Sphere")
+		WL_AGENT, "energized walls honor the Invulnerability Sphere")
 require(r'C7Invulnerability.*?amount > 0\)\s*\n\s*return;', WL_AGENT,
-		"TakeDamage honours the Invulnerability Sphere")
+		"TakeDamage honors the Invulnerability Sphere")
 # ...and it has to be visible, because nothing else tells the player it is still
 # running: there is no counter for it on the status bar.
 require(r'c7InvulnerabilityStrobe > 0.*?V_SetBlend\(0xFF, 0xF8, 0x00', WL_PLAY,

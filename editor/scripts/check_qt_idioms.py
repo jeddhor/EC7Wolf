@@ -13,7 +13,7 @@ All of these shipped once, and none is visible until the code path runs:
   * `triggered.connect(self.command)` where `command` takes a first positional
     parameter. `triggered` carries a `checked` bool and PySide6 passes it to
     any slot that can take it, so the menu calls `open_project(False)`. That
-    read as an empty path -- what a cancelled file dialog looks like -- and
+    read as an empty path -- what a canceled file dialog looks like -- and
     File > Open project returned without ever showing one. This one does not
     raise at all; it just quietly does nothing. Connect a lambda that drops
     the argument.

@@ -19,7 +19,7 @@ import subprocess
 from pathlib import Path
 
 from . import proc
-from .progress import Cancelled, Reporter
+from .progress import Canceled, Reporter
 
 RAW_SECTOR = 2352
 MUSIC_TRACKS = (3, 5, 7, 9)
@@ -125,7 +125,7 @@ def rip(source, destination: Path, reporter: Reporter,
                 process.stdin.close()
             except BrokenPipeError:
                 pass
-            except Cancelled:
+            except Canceled:
                 process.kill()
                 if encoding is not out and encoding.exists():
                     encoding.unlink()

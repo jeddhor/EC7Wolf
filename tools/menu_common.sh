@@ -55,7 +55,7 @@ menu_cursor_row() {
 }
 
 # The same, retried. A screenshot taken during a menu fade catches the
-# highlight too dim to recognise, and "no menu" is then indistinguishable from
+# highlight too dim to recognize, and "no menu" is then indistinguishable from
 # "not a menu" -- which is the exact failure the walks were reporting. Used
 # where a wrong answer ends the walk; the press poll uses the single shot,
 # because there a -1 just means "not yet".
@@ -104,7 +104,7 @@ menu_press_moved() {  # menu_press_moved KEY
 	# What the screen actually said, kept for the failure message. "The menu
 	# stopped responding" is not a diagnosis, and a gate that only says that
 	# sends the reader back to run it again and hope -- which is how a 1-in-3
-	# flake stays a mystery. -1 is "no menu recognised", so a run of them means
+	# flake stays a mystery. -1 is "no menu recognized", so a run of them means
 	# the screen went somewhere else, while a run of one steady number means the
 	# key never arrived.
 	MENU_PRESS_SEEN=""
@@ -207,8 +207,8 @@ menu_press() {  # menu_press KEY [SECONDS]
 
 # Screenshot a page, retrying while it is still blank.
 #
-# A page that has not finished drawing photographs as a flat colour, and a gate
-# that then compares two flat colours is measuring nothing -- or, as happened
+# A page that has not finished drawing photographs as a flat color, and a gate
+# that then compares two flat colors is measuring nothing -- or, as happened
 # here, reports "the screen is blank or nearly so" on a run where the only
 # problem was that the shot came a moment early. Standard deviation is the
 # cheapest "is there anything on this" there is.

@@ -5,7 +5,7 @@
 XLAT says which class a map word spawns; DECORATE says what that class *is* --
 what it inherits from, which sprite page it shows when it is standing still,
 and what the person who wrote it said about it in the comment above. All three
-matter to a catalogue entry, and all three are already in the repository, so
+matter to a catalog entry, and all three are already in the repository, so
 the alternative to reading them is maintaining a copy that goes stale the first
 time somebody fixes an actor.
 
@@ -42,7 +42,7 @@ _ACTOR = re.compile(r"^\s*actor\s+(\w+)\s*(?::\s*(\w+))?", re.IGNORECASE)
 #: matter more than they look: a weapon's `Spawn` state is its pickup on the
 #: floor and `Ready` is the thing in your hands, and they are different art.
 #: Leaving Ready/Fire/Hold off this list made the parser take the first frame
-#: it saw -- the viewmodel -- as the pickup sprite, so the catalogue showed the
+#: it saw -- the viewmodel -- as the pickup sprite, so the catalog showed the
 #: Taser as a gun barrel and reported it as an item nothing places.
 _STATE_LABEL = re.compile(
     r"^\s*(Spawn|See|Path|Missile|Melee|Pain|Death|Raise|Idle"
@@ -67,7 +67,7 @@ def granted_classes(text: str) -> set[str]:
 
     These are not placeable and never were. The Taser is weapon slot 1 and a
     starting item, so nothing puts it on a map -- and reporting it as an item
-    with no map word, which an earlier version of the catalogue did, is just
+    with no map word, which an earlier version of the catalog did, is just
     wrong about how a player gets a weapon.
     """
     return set(_GRANTED.findall(text))
@@ -154,8 +154,8 @@ def classify(actors: dict[str, "ActorInfo"], name: str) -> str:
     beside the monsters that fire them. Only the chain says what something is.
 
     Deliberately conservative at the end of the chain: an actor that reaches a
-    root nothing recognises becomes a decoration, which is the safest thing for
-    an editor to draw and the least likely to imply behaviour it lacks.
+    root nothing recognizes becomes a decoration, which is the safest thing for
+    an editor to draw and the least likely to imply behavior it lacks.
     """
     seen: set[str] = set()
     current = name

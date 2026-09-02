@@ -84,7 +84,7 @@ sleep 3
 
 
 # Retried, because a screenshot taken during a menu fade catches the highlight
-# too dim to recognise and "no menu" is then indistinguishable from "not a
+# too dim to recognize and "no menu" is then indistinguishable from "not a
 # menu". Every wrong answer here costs a keystroke sent to the wrong screen.
 
 # Walk to the last or first row rather than counting keystrokes to it: counting

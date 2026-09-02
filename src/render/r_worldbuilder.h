@@ -36,7 +36,7 @@ enum WorldSurfaceKind
 	WSURF_Ceiling,
 	WSURF_Wall,
 	WSURF_DoorLeaf,		// sliding door leaf: wall-shaded + shader slide (Phase 7)
-	WSURF_Masked,		// colour-keyed masked wall: wall-shaded + alpha test (Phase 8)
+	WSURF_Masked,		// color-keyed masked wall: wall-shaded + alpha test (Phase 8)
 	WSURF_Sprite		// billboard actor sprite: distance-shaded, index-0 keyed (Phase 9)
 };
 
@@ -91,7 +91,7 @@ namespace WorldBuilder
 	// blended between the previous and current simulation tics via DynamicWalls.
 	void BuildDynamic(GameMap *gm, WorldMesh &out, float alpha);
 
-	// Build the masked (colour-keyed, see-through) wall geometry: glass, grates,
+	// Build the masked (color-keyed, see-through) wall geometry: glass, grates,
 	// fences, force fields, and opened animated-wall apertures. Faces are emitted
 	// at the tile boundaries (like a solid wall) but only on sides that survive
 	// the connected-glass merge, and are alpha-tested by the backend. Rebuilt each
@@ -101,7 +101,7 @@ namespace WorldBuilder
 	// a masked-wall hit only for the cell a ray ENTERS, so it draws just the face
 	// nearest the viewer; emitting a cell's far face too makes a see-through pane
 	// read as a doubled box. camX/camY drive a CPU back-face cull that reproduces
-	// the entry-face behaviour (done on the CPU so it is independent of the world-
+	// the entry-face behavior (done on the CPU so it is independent of the world-
 	// mirror in the projection, which flips GL winding).
 	void BuildMasked(GameMap *gm, WorldMesh &out, float camX, float camY);
 

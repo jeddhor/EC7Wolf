@@ -120,7 +120,7 @@ making a copy of it, so the gate greps the thumbnail path for any write at all,
 checks no game-data file is committed under `editor/`, and checks the GUI
 embeds no binary blob.
 
-The palette works with no game data: every entry gets a labelled placeholder
+The palette works with no game data: every entry gets a labeled placeholder
 tile. That is not only for CI — it is the state a first-time user is in before
 setup, and a palette of empty squares would look broken.
 

@@ -152,7 +152,7 @@ class Brush(Base):
         self.assertEqual(self.document.cell(0, 4, 4), MapDocument.DEFAULT_FLOOR,
                          "plane 0 was disturbed")
 
-    def test_the_plane_comes_from_the_catalogue_not_the_tool(self):
+    def test_the_plane_comes_from_the_catalog_not_the_tool(self):
         # Same code path, different plane, because the entry says so.
         self.choose(WALL_ENTRY)
         self.stroke(Tool.BRUSH, [(3, 3)])
@@ -332,7 +332,7 @@ class Selection(Base):
 
 
 class StubAssets:
-    """An AssetSource-shaped stand-in: flat colour pages, no game data.
+    """An AssetSource-shaped stand-in: flat color pages, no game data.
 
     The preview path is decode -> QImage -> scale -> cache, and all of that is
     the editor's own code. What it must not need is a copy of Corridor 7.

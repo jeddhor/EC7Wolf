@@ -22,7 +22,7 @@ PLANES layout, little-endian, from `FMapLump::FillCache` and the reader in
     34  ...      three uncompressed planes, width*height u16 each
 
 The reader seeks straight to offset 10 and never looks at bytes 6..9; the
-engine's own writer leaves them uninitialised. This writer puts the documented
+engine's own writer leaves them uninitialized. This writer puts the documented
 map count there, so a byte-for-byte comparison against an engine-produced lump
 is meaningful from offset 10 onward and nowhere earlier.
 

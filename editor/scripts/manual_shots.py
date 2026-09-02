@@ -12,7 +12,7 @@ Running this again after a UI change regenerates the lot.
 **No game data, ever.** These images are committed to a public repository, so
 they must not contain one pixel of Corridor 7. That is not achieved by being
 careful -- it is achieved by never configuring a data directory, which puts the
-palette on its no-artwork path and draws every entry as a labelled tile. The
+palette on its no-artwork path and draws every entry as a labeled tile. The
 manual says so where a reader might otherwise wonder why their editor looks
 richer than the pictures.
 
@@ -159,7 +159,7 @@ def main(argv=None) -> int:
     # pixel of Corridor 7 may be in them -- and "I was careful" is not a
     # property anything can check later. This is: with no data directory
     # configured, the palette and the canvas take their no-artwork paths and
-    # draw labelled tiles and flat colours, and there is no artwork in the
+    # draw labeled tiles and flat colors, and there is no artwork in the
     # process to leak. A fresh QSettings file in a scratch directory cannot
     # have one, and if some future change gives it one, this stops rather than
     # writing a picture nobody would look at twice.

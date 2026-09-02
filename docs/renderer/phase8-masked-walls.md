@@ -3,7 +3,7 @@
 Phases 5–7 built the opaque static world plus the moving geometry (doors,
 pushwalls). Phase 8 adds the *see-through* geometry: glass, grates, fences,
 force fields, and the opened apertures left by Corridor 7's animated walls.
-These are colour-keyed surfaces — the texture reserves an index as transparent —
+These are color-keyed surfaces — the texture reserves an index as transparent —
 so they must be alpha-tested, and the geometry rendered *behind* them must show
 through. As before the work is verified offscreen against the software renderer;
 the simulation is untouched and the determinism gate stays green.
@@ -14,7 +14,7 @@ A masked-wall cell is still a `tile` (it has walls), so the Phase 5 static
 builder was emitting it as an **opaque** wall. In game that turns every
 chain-link fence and glass pane into a solid block. Phase 8 routes those cells
 into a dedicated alpha-tested mesh instead, and — just as importantly — fixes the
-neighbour-occlusion test so the geometry seen *through* a masked pane is actually
+neighbor-occlusion test so the geometry seen *through* a masked pane is actually
 built.
 
 ## The model
@@ -28,7 +28,7 @@ built.
 * **`WorldBuilder::BuildStatic` — two fixes:**
   * Masked cells are pulled out of the opaque mesh (their floor/ceiling is still
     emitted; a masked full tile has no sector, so that is a no-op).
-  * Occlusion now hides a wall face only when the neighbour is an **opaque solid**
+  * Occlusion now hides a wall face only when the neighbor is an **opaque solid**
     tile (`IsSolidOccluder`). Doors, pushwalls, and masked panes no longer hide
     the face behind them, so a wall seen through glass — or a doorjamb beside a
     door — is built instead of being culled. (This also lands the door-jamb faces
@@ -59,7 +59,7 @@ built.
   * an explicit per-column **opacity buffer** wins when the texture provides one
     (the C7 grate/fence `FFlatTexture`s — 6 of them on MAP01);
   * otherwise a masked wall (and, now, a door leaf) is keyed on the **index-255
-    remap colour** (`GPalette.Remap[255]`), the transparency key used throughout
+    remap color** (`GPalette.Remap[255]`), the transparency key used throughout
     Corridor 7.
   A small negative polygon offset biases the masked pass toward the viewer so a
   pane mounted flush on a solid wall does not z-fight the coplanar wall behind it.
@@ -82,11 +82,11 @@ PASS: GL door slide renders (closed vs open differ by 1065 px).
   transparent texels, matching the software frame. Before Phase 8 the same cells
   rendered as solid blocks.
 * **Both alpha paths exercised.** 6 masked textures upload explicit opacity masks;
-  the remaining masked faces alpha-test on the index-255 colour key.
+  the remaining masked faces alpha-test on the index-255 color key.
 * **Depth interactions.** Masked panes share the opaque depth buffer; opaque
   texels occlude and are occluded correctly, and transparent texels reveal freshly
   rendered geometry rather than stale framebuffer contents (the discard never
-  writes colour or depth).
+  writes color or depth).
 * **`tools/test_gl_world.sh`** asserts the masked mesh is non-empty and that at
   least one opacity mask uploaded, in addition to the existing wall/door checks.
 * **Determinism gate green** — `checksum=400c5d59`, unchanged from Phases 6–7;
@@ -100,7 +100,7 @@ PASS: GL door slide renders (closed vs open differ by 1065 px).
   is out of scope here.
 * **Pixel-exact software/GL parity** over the masked test matrix (framing,
   aspect, sub-pixel column selection) remains a Phase 11 item; Phase 8 verifies
-  the geometry, transparency behaviour, and material classification.
+  the geometry, transparency behavior, and material classification.
 * **Static-mesh caching.** Animated-wall cells change texture with the clock, so
   they must stay out of any revision-cached static mesh; that caching lands with
   the persistent live context in Phase 10.

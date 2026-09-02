@@ -210,7 +210,7 @@ def decode_png(data: bytes) -> tuple[int, int, int, bytearray]:
         if tag == b"IHDR":
             width, height, depth, color, comp, filt, interlace = struct.unpack(">IIBBBBB", body)
             if depth != 8 or interlace != 0 or color not in (2, 6):
-                raise ValueError(f"unsupported PNG (depth {depth}, colour type {color})")
+                raise ValueError(f"unsupported PNG (depth {depth}, color type {color})")
             channels = 4 if color == 6 else 3
         elif tag == b"IDAT":
             idat += body
@@ -268,11 +268,11 @@ def _palette_looks_valid(raw: bytes) -> bool:
     if len(raw) != PALETTE_SIZE or max(raw) > 63:
         return False
     if raw[0] or raw[1] or raw[2]:
-        return False  # colour 0 is black in every Wolfenstein-family palette
+        return False  # color 0 is black in every Wolfenstein-family palette
     if raw[45:48] != b"\x3f\x3f\x3f":
-        return False  # colour 15 is white
-    colours = {raw[i : i + 3] for i in range(0, PALETTE_SIZE, 3)}
-    return len(colours) >= 200
+        return False  # color 15 is white
+    colors = {raw[i : i + 3] for i in range(0, PALETTE_SIZE, 3)}
+    return len(colors) >= 200
 
 
 def load_palette(executable: bytes) -> list[int]:
@@ -316,7 +316,7 @@ class GfxTiles:
 # frames and window walls are ordinary 64x64 pages with holes punched in them.
 # Those pages have to come back as RGBA: the engine reads a hires wall's
 # transparency from the PNG's alpha channel (FPNGTexture::GetColumnOpacity), and
-# a masked wall delivered as flat RGB would be upscaled with the key colour
+# a masked wall delivered as flat RGB would be upscaled with the key color
 # baked in as a visible one, turning every grate solid.
 WALL_TRANSPARENT_INDEX = 255
 
@@ -507,7 +507,7 @@ def find_lump_names(data_dir: Path, override: str | None) -> dict[str, list[str]
 
 
 def bleed_edges(rgba: bytes, width: int, height: int, waves: int) -> bytes:
-    """Grow the opaque colours outwards so upscaling can't drag black in.
+    """Grow the opaque colors outwards so upscaling can't drag black in.
 
     Real-ESRGAN sees the RGB planes of a transparent pixel as ordinary data,
     and Wolfenstein sprites store black there. Without this the model paints a
@@ -827,7 +827,7 @@ def write_comparisons(originals, out_dir: Path, compare_dir: Path, scale: int) -
     automatic measures of "how wrong is this" were tried and both failed -- they
     rank tiles by how much the model changed, which is not the same question, so
     a detailed tile the model handled well scores worse than a sign it ruined.
-    That judgement needs eyes, so this makes it a two-minute job: browse the
+    That judgment needs eyes, so this makes it a two-minute job: browse the
     folder, note the names that got worse, and pass them to --keep.
     """
     compare_dir.mkdir(parents=True, exist_ok=True)
@@ -838,13 +838,13 @@ def write_comparisons(originals, out_dir: Path, compare_dir: Path, scale: int) -
         if not upscaled.is_file():
             continue
         bw, bh, bch, big = decode_png(upscaled.read_bytes())
-        # Nearest-neighbour so the left half is exactly what the game draws
+        # Nearest-neighbor so the left half is exactly what the game draws
         # today, magnified -- not a second opinion about how it should look.
         factor = max(1, bw // w)
         gap = 4
         out_w, out_h = w * factor + gap + bw, max(h * factor, bh)
         strip = bytearray(b"\x00" * (out_w * out_h * 3))
-        # Transparent texels keep the palette's key colour underneath, which on a
+        # Transparent texels keep the palette's key color underneath, which on a
         # masked wall is a magenta field that has nothing to do with how the
         # tile looks in game. Show a checkerboard through them instead.
         def blit(src, sw, sch, ox, dst_w, dst_h, mag):
@@ -949,7 +949,7 @@ def main() -> int:
         help="model for every group that has no override below")
     # The two useful models fail in opposite directions on this art, and which
     # one wins is a property of the picture rather than of the pack:
-    # realesrgan-x4plus keeps flat colour and hard geometry (SECURITY OFFICE
+    # realesrgan-x4plus keeps flat color and hard geometry (SECURITY OFFICE
     # stays yellow and legible) but invents film grain on flat walls and
     # rewrites small text; realesr-animevideov3 holds small text together
     # (ACCESS GRANTED survives it) but softens fine line work and desaturates.
@@ -983,7 +983,7 @@ def main() -> int:
         type=int,
         default=4,
         metavar="N",
-        help="pixels of colour to grow under transparent sprite areas (0 disables)",
+        help="pixels of color to grow under transparent sprite areas (0 disables)",
     )
     parser.add_argument("--namemap", help="co7map.txt or a pk3 containing it")
     parser.add_argument("--tool", help="an existing realesrgan-ncnn-vulkan binary")

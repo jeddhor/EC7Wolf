@@ -76,12 +76,12 @@ namespace
 		Span **Spans;
 	};
 
-	// Nearest palette entry for a 24-bit colour, cached by RGB555.
+	// Nearest palette entry for a 24-bit color, cached by RGB555.
 	//
 	// The exact matcher is a linear scan of all 256 entries, which is nothing for
-	// the handful of colours a menu picks but ruinous across a megapixel of
+	// the handful of colors a menu picks but ruinous across a megapixel of
 	// upscaled art -- xBRZ blends its inputs, so nearly every pixel is a new
-	// colour needing its own search. Quantising the key to 5 bits per channel
+	// color needing its own search. Quantising the key to 5 bits per channel
 	// bounds the work at 32768 searches however large the image, and costs
 	// nothing visible: the palette's own entries are further apart than the
 	// rounding this introduces.
@@ -98,7 +98,7 @@ namespace
 				BYTE c = ColorMatcher.Pick(r, g, b);
 				// Index 0 is the transparent key, so a pixel that matched it
 				// would punch a hole in the page. Remap[0] is the palette's own
-				// duplicate of colour 0 -- the same colour, but opaque.
+				// duplicate of color 0 -- the same color, but opaque.
 				if(c == 0)
 					c = GPalette.Remap[0];
 				Entry[key] = c;
@@ -133,12 +133,12 @@ namespace
 
 	// Rebuilds `src` at `factor` times its authored size.
 	//
-	// The result has to land back in the 256-colour palette, because every 2D
+	// The result has to land back in the 256-color palette, because every 2D
 	// surface in this engine is 8-bit -- so most of xBRZ's blending is quantised
 	// away again. What survives is the part that matters: the reshaped edges. A
-	// blended colour is lost to the nearest palette entry, but a diagonal that
-	// was a staircase and is now a slope is still a slope afterwards, because
-	// that is geometry rather than colour.
+	// blended color is lost to the nearest palette entry, but a diagonal that
+	// was a staircase and is now a slope is still a slope afterward, because
+	// that is geometry rather than color.
 	FTexture *BuildUpscaled(FTexture *src, int factor)
 	{
 		const int sw = src->GetWidth(), sh = src->GetHeight();

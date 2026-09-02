@@ -259,7 +259,7 @@ for g in $data_free_gates; do
 				"$here/test_ec7edit_e0.sh" ;;
 		ec7edit_e6)
 			# Data-free: the compound tools, and the coverage report that is
-			# E6's exit gate -- every semantic reachable or labelled.
+			# E6's exit gate -- every semantic reachable or labeled.
 			run_gate "$g" "ec7edit E6 semantics" \
 				"$here/test_ec7edit_e6.sh" ;;
 		ec7edit_e8)
@@ -285,13 +285,13 @@ for g in $data_free_gates; do
 			run_gate "$g" "ec7edit E4 shell" \
 				"$here/test_ec7edit_e4.sh" ;;
 		ec7edit_e3)
-			# Data-free: ten thousand modelled operations and eleven injected
+			# Data-free: ten thousand modeled operations and eleven injected
 			# save failures, neither of which needs a display or the game.
 			run_gate "$g" "ec7edit E3 document" \
 				"$here/test_ec7edit_e3.sh" ;;
 		ec7edit_e2)
 			# Data-free: synthetic pages, plus the two "regenerate and diff"
-			# checks that stop the catalogue and the single-file asset browser
+			# checks that stop the catalog and the single-file asset browser
 			# drifting from the engine and the decoders they are built from.
 			run_gate "$g" "ec7edit E2 assets" \
 				"$here/test_ec7edit_e2.sh" ;;
@@ -322,7 +322,7 @@ for g in $data_free_gates; do
 			run_gate "$g" "ec7edit editing slice" \
 				"$here/test_ec7edit_slice.sh" "$build_dir" "$data_dir" ;;
 		ec7edit_assets)
-			# Decodes the real artwork and checks the catalogue against the
+			# Decodes the real artwork and checks the catalog against the
 			# shipped maps. Reports counts and a digest, never retail bytes.
 			run_gate "$g" "ec7edit asset decode" \
 				"$here/test_ec7edit_assets.sh" "$build_dir" "$data_dir" ;;

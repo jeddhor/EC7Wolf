@@ -3,7 +3,7 @@
 # Copyright (C) 2026 Jason Tripp
 """E6: compound structures, their contracts, and the rules they depend on.
 
-Section 19.10 asks for table-driven neighbourhoods per tool: the exact words
+Section 19.10 asks for table-driven neighborhoods per tool: the exact words
 before and after, each precondition's diagnostic, what erase restores, how
 rotation moves the footprint, and that undo puts everything back. That is what
 this file is.
@@ -213,7 +213,7 @@ class Preconditions(unittest.TestCase):
 
     def test_any_side_will_do(self):
         # The tile paints the same texture on all four faces and the trigger
-        # names no side, so a wall unit is usable from whichever neighbour is
+        # names no side, so a wall unit is usable from whichever neighbor is
         # floor. Requiring one particular side made three walls in four
         # unusable for no reason the engine shares.
         for unit in ("prefab.dispenser.health", "prefab.dispenser.ammo",
@@ -305,7 +305,7 @@ class Doors(unittest.TestCase):
         self.assertFalse(axis.two_sided)
 
     def test_the_map_edge_counts_as_closed(self):
-        # The engine's bounds checks make off-map neighbours closed, so a door
+        # The engine's bounds checks make off-map neighbors closed, so a door
         # on the boundary is not open in that direction.
         axis = self.axis(["...", "...", "..."], 0, 1)
         self.assertFalse(axis.open_west)
@@ -392,8 +392,8 @@ class CellPredicates(unittest.TestCase):
         self.assertFalse(is_wall(0))
 
 
-class CatalogueAgreement(unittest.TestCase):
-    def test_every_prefab_word_is_in_the_catalogue(self):
+class CatalogAgreement(unittest.TestCase):
+    def test_every_prefab_word_is_in_the_catalog(self):
         for prefab in PREFABS:
             for write in prefab.writes:
                 if write.plane == 1 and write.value == EMPTY_OBJECT:
@@ -402,7 +402,7 @@ class CatalogueAgreement(unittest.TestCase):
                     self.assertIsNotNone(
                         CATALOG.for_value(write.plane, write.value),
                         f"{prefab.key} writes plane {write.plane} word {write.value}, "
-                        "which the catalogue does not describe",
+                        "which the catalog does not describe",
                     )
 
     def test_imported_only_prefabs_are_marked_advanced(self):

@@ -87,7 +87,7 @@ namespace C7Upscale
 
 	// True while the pack owns this wad, which is how the texture manager knows
 	// to keep the original texture alive instead of freeing it. Any other hires
-	// wad the player loads keeps the stock ZDoom behaviour of replacing outright.
+	// wad the player loads keeps the stock ZDoom behavior of replacing outright.
 	bool OwnsWad(int wadnum);
 
 	// Records one texture the pack replaced, so it can be put back.

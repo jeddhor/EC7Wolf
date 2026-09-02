@@ -17,7 +17,7 @@ Opt-in GL diagnostics for the live renderer, off by default and free when off:
 
 * A **`GL_KHR_debug` callback** is installed on the live game-window context the
   first time the live path renders. Driver diagnostics (errors, undefined
-  behaviour, performance warnings) are routed into the game console, tagged by
+  behavior, performance warnings) are routed into the game console, tagged by
   severity; verbose `NOTIFICATION`-level chatter is filtered out. Synchronous
   mode is enabled so a message points at the offending call.
 * Where `KHR_debug` is unavailable, the path degrades to **`glGetError` drains**
@@ -205,7 +205,7 @@ does not necessarily tell you.
 
 Done after the cutover, and profile-driven as the plan requires — which turned
 out to matter, because the plan's own headline item was worth almost nothing and
-two costs it did not emphasise dominated the frame.
+two costs it did not emphasize dominated the frame.
 
 ### Measuring first (`vid_glprofile` / `--gl-profile`)
 
@@ -271,7 +271,7 @@ rather than by guessing when to invalidate: the mesh is still built each frame
 and `memcmp`'d against the last upload. A pushwall settling into its final cell
 silently rewrites the static world, and a missed invalidation would leave a wall
 standing where the player just walked; a content compare can only ever fail
-towards rebuilding. That removed the upload (0.38 → 0.12 ms) and left the build.
+toward rebuilding. That removed the upload (0.38 → 0.12 ms) and left the build.
 
 ### Measured, and deliberately not done
 
@@ -289,7 +289,7 @@ measurements, and doing them anyway would trade real complexity for nothing.
 
 ## Retiring the raycaster (after Phase 11)
 
-The two items the optimization pass left standing were finished afterwards.
+The two items the optimization pass left standing were finished afterward.
 
 **Cell visibility** — `spot->visible` for the sprite cull and `AM_Visible` for
 the automap — used to be whatever the DDA's per-column rays walked through.
@@ -319,12 +319,12 @@ view. The cache meant to spare that keys on the simulation tic, which changes
 almost every frame once the renderer runs faster than 70 fps.
 
 `DrawViewModel` draws it as a screen-space quad through the same program as
-everything else, so the Corridor 7 colour cycle and the 208–239 full-bright rule
+everything else, so the Corridor 7 color cycle and the 208–239 full-bright rule
 apply exactly as they do to a world sprite. `uSurfKind` is the wall path because
 that is what enables those two rules; `uFixedShade` overrides the distance shade
 they would otherwise pick with the row `R_GetPlayerSpriteInfo` derived from the
 level light — the same row the software blit indexes its colormap with. Sampling
-is nearest with a half-pixel UV bias, because nearest reads at the pixel centre
+is nearest with a half-pixel UV bias, because nearest reads at the pixel center
 and the software blit steps whole texels from the pixel's left edge.
 
 Placement is shared rather than reimplemented: `R_GetPlayerSpriteInfo` is the
@@ -345,13 +345,13 @@ on measuring the untouched renderer.
 ### Texture Filter — Sharp / Bilinear / Smooth (`Vid_GLFilter`)
 
 The constraint that shapes all of this: **a palette index is a name, not a
-colour.** The world texture is `R8UI`, which the hardware can only sample
+color.** The world texture is `R8UI`, which the hardware can only sample
 nearest, and averaging indices would be meaningless anyway — index 5 and index
 200 average to 102, an unrelated entry. So filtering cannot happen at the
-sampler. Each tap is resolved the whole way — colour cycle, full-bright rules,
+sampler. Each tap is resolved the whole way — color cycle, full-bright rules,
 colormap row, palette — and only the resulting RGB is mixed.
 
-The same taps produce **coverage**: a transparent tap contributes no colour and
+The same taps produce **coverage**: a transparent tap contributes no color and
 lowers the weight instead, and that fraction is written to alpha.
 
 * **Sharp** — one tap. Bit-identical to the renderer without the feature.
@@ -361,7 +361,7 @@ lowers the weight instead, and that fraction is written to alpha.
 
 **There is no trilinear or anisotropic option, and that is not an omission.**
 Both need a mip chain. A mip chain of palette indices is meaningless for the
-reason above, and a mip chain of *resolved colour* would have to be rebuilt every
+reason above, and a mip chain of *resolved color* would have to be rebuilt every
 time Corridor 7 rewrites the palette — which it does for night vision, infrared,
 electric, damage and pickup flashes. **Smooth** is what those settings are for:
 it samples the actual pixel footprint, narrows with distance the same way, and
@@ -394,7 +394,7 @@ path used by the parity gate does not multisample, which is why turning it on
 cannot move those numbers.
 
 `tools/test_gl_filtering.sh` asserts the parts that could silently rot: that
-Sharp is untouched, that bilinear introduces colours outside the on-screen
+Sharp is untouched, that bilinear introduces colors outside the on-screen
 palette set (proving taps are resolved *before* mixing rather than after), that a
 256-entry palette rewrite still reaches the screen with filtering on, and that
 MSAA changes edges and only edges.
@@ -410,7 +410,7 @@ stock art. See `docs/corridor7.md` for the player-facing side.
 Three things about the implementation are worth knowing before touching it.
 
 **Both copies stay in memory, and the switch is a pointer swap.** The pack
-arrives through ZDoom's `hires/` namespace, whose normal behaviour is
+arrives through ZDoom's `hires/` namespace, whose normal behavior is
 `ReplaceTexture(id, newtex, /*free=*/true)` — the original is deleted. For this
 pack the free is suppressed and the pair recorded, so `C7Upscale::SetEnabled()`
 can swap `Textures[i].Texture` back and forth. Nothing else has to know: every
@@ -438,7 +438,7 @@ transparent PNG texel becomes index 0, which is also an ordinary black.
 
 **Validation is all-or-nothing on purpose.** An upscaler that dies partway
 through still writes a loadable pk3, and a level where some walls are sharp and
-their neighbours are not is worse than one where none are. The pack carries
+their neighbors are not is worse than one where none are. The pack carries
 `c7upscal.lst`, the manifest of what the build *intended* to write, and every
 name in it must resolve as a hires lump in that same file. A pack that fails is
 skipped entirely — `AddHiresTextures` is not called for it — rather than partly
@@ -456,7 +456,7 @@ Bilinear. Measured on the user's own 4x pack: the coupled frame is identical to
 an explicit Smooth capture, and differs from Sharp on 35% of pixels.
 
 `tools/test_corridor7_upscale.sh` builds a pack with `fake_upscaler.py` (a
-nearest-neighbour stand-in, so the test needs no GPU and takes seconds) and
+nearest-neighbor stand-in, so the test needs no GPU and takes seconds) and
 checks the four states: absent, complete, switched off, incomplete. The case
 that would rot silently is *switched off*: it is the only one where a texture has
 to be put back, and it asserts the frame is **byte-identical** to having no pack

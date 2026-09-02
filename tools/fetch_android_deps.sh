@@ -65,7 +65,7 @@ fetch SDL_net   "$SDL_NET_TAG"   https://github.com/libsdl-org/SDL_net.git
 fetch ogg       "$OGG_TAG"       https://github.com/xiph/ogg.git
 fetch vorbis    "$VORBIS_TAG"    https://github.com/xiph/vorbis.git
 
-# The one thing that has to be true afterwards, checked rather than assumed:
+# The one thing that has to be true afterward, checked rather than assumed:
 # the launcher reaches SDL's Java glue through a symlink into deps/SDL, and a
 # missing target there is a build that fails much later and less clearly.
 link="$root/android-libs/launcher/src/org/libsdl/app"

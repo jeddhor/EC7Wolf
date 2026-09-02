@@ -74,7 +74,7 @@ actor C7Player : PlayerPawn
 	// The archive has a complete human soldier at C459-C509 that no actor
 	// referenced -- five walk frames in eight rotations, a pain frame, a
 	// seven-frame death and a three-frame firing pose -- and a second one in
-	// grey immediately after it, which is what a game with more than one
+	// gray immediately after it, which is what a game with more than one
 	// player on screen needs. co7map.txt names the first of them MARN.
 	states
 	{

@@ -88,7 +88,7 @@ protected:
 	// Corridor 7 palette, so a wall that is merely dark would read as full of
 	// holes. Both renderers ask for transparency explicitly rather than
 	// inferring it from an index (see FFlatTexture, which does the same for the
-	// game's own index-255 colour key), and an upscaled replacement for a masked
+	// game's own index-255 color key), and an upscaled replacement for a masked
 	// wall has to be able to answer them or it comes out solid.
 	BYTE *Opacity;
 
@@ -618,7 +618,7 @@ void FPNGTexture::MakeTexture ()
 
 			// An alpha channel is the only thing that can make a PNG partly
 			// transparent here, so the opacity plane is built alongside the
-			// pixels for exactly those two colour types. It is written in the
+			// pixels for exactly those two color types. It is written in the
 			// same column-major order as `out`.
 			BYTE *opac = NULL;
 			if (ColorType == 4 || ColorType == 6)

@@ -94,7 +94,7 @@ bool IsPushwallCell(MapSpot spot)
 	// A see-through masked wall is never a moving block. C7 force-field doors carry
 	// a C7AnimatedWall thinker while deactivating; without this guard the thinker
 	// test below would also class them as a pushwall, so BuildDynamic would draw the
-	// full 4-face block on top of the masked centre pane for the ~0.5s transition.
+	// full 4-face block on top of the masked center pane for the ~0.5s transition.
 	if(!spot || !spot->tile || IsDoorCell(spot) || IsMaskedWallCell(spot))
 		return false;
 	// A wall in motion: the origin carries a thinker and/or a nonzero push
@@ -105,7 +105,7 @@ bool IsPushwallCell(MapSpot spot)
 
 bool IsMaskedWallCell(MapSpot spot)
 {
-	// Colour-keyed / see-through tiles (maskedWallType is derived from index-255
+	// Color-keyed / see-through tiles (maskedWallType is derived from index-255
 	// art; renderMasked is an explicit map flag). Doors slide as leaves in the
 	// dynamic mesh, so they are excluded here even though they too are masked.
 	if(!spot || !spot->tile || IsDoorCell(spot))

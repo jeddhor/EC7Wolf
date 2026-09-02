@@ -427,7 +427,7 @@ def package(engine_dir: Path | None, out: Path, kinds: list[str],
         # EC7Edit on its own. Someone who wants the level editor does not want
         # to download the engine to get it, and someone who wants the engine
         # usually does not want a 74 MB editor attached -- so it is a download
-        # of its own as well as travelling inside -full below.
+        # of its own as well as traveling inside -full below.
         name = f"EC7Edit-{release}-{tag}"
         path, archive = _make(out, name, windows)
         with archive:

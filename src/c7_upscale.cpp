@@ -160,7 +160,7 @@ void Init()
 		return;
 
 	// Find the pack among the open wads by name rather than by path: the path
-	// has been through separator normalisation since FindPack() handed it over.
+	// has been through separator normalization since FindPack() handed it over.
 	for(int i = Wads.GetNumWads()-1;i >= 0;--i)
 	{
 		FString name = Wads.GetWadFullName(i);
@@ -208,7 +208,7 @@ void Init()
 	// All or nothing. A pack whose build was interrupted, or whose upscaler
 	// dropped images partway through, still produces a loadable pk3 -- it is
 	// just missing lumps, and the result would be a level where some walls are
-	// sharp and their neighbours are not. Checking every promised name against
+	// sharp and their neighbors are not. Checking every promised name against
 	// what actually arrived is the only way to catch that before it is on screen.
 	TArray<FString> missing;
 	for(unsigned int i = 0;i < wanted.Size();++i)

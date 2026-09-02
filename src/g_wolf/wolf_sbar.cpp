@@ -707,7 +707,7 @@ static void DrawC7TopMessage(const char *message)
 	// smoky, which is the word the symptom keeps attracting -- over the bright
 	// ceiling gradient that MAP01 opens on.
 	//
-	// Asking for the colour rather than an index because the palette holds three
+	// Asking for the color rather than an index because the palette holds three
 	// identical pure yellows (111, 231 and 253) and a screenshot cannot say
 	// which one the DOS code named. They differ only under the palette rewrites
 	// C7 does for the visor and for damage, and picking by eye there would be

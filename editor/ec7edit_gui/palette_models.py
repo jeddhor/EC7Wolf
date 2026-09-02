@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Jason Tripp
-"""List models over the catalogue, with thumbnails that arrive when they can.
+"""List models over the catalog, with thumbnails that arrive when they can.
 
 The model shows every entry immediately, with a placeholder, and replaces each
 tile as its artwork decodes. That ordering is deliberate: a palette that waits
@@ -139,7 +139,7 @@ class CatalogModel(QAbstractListModel):
         factory = self._factory
 
         def work(job):
-            if job.cancelled:
+            if job.canceled:
                 return None
             return factory.pixels_for(entry)
 

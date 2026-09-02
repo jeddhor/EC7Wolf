@@ -229,7 +229,7 @@ def build_indexed_image(width: int, height: int) -> bytes:
 def build_palette_executable() -> bytes:
     """A stand-in for CORR7CD.EXE carrying a synthetic 6-bit palette.
 
-    Only the palette window matters, so the rest is a recognisable filler
+    Only the palette window matters, so the rest is a recognizable filler
     rather than anything resembling an executable. The values stay inside
     0..63 because that six-bit range is exactly what the loader checks to tell
     a real Corridor 7 executable from a file of the right length.

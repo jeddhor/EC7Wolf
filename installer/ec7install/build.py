@@ -17,7 +17,7 @@ from pathlib import Path
 from . import epoxy, sdl
 from .identity import exe_name, is_windows
 from . import proc
-from .progress import Cancelled, Reporter
+from .progress import Canceled, Reporter
 
 # Resolved per call rather than at import: the gate forces the Windows
 # branch through identity.host_platform(), and a constant fixed at import
@@ -470,9 +470,9 @@ def _stream(command: list[str], cwd: Path, reporter: Reporter,
             del tail[:-40]
             if on_line is not None:
                 on_line(line)
-            if reporter.cancelled():
+            if reporter.canceled():
                 process.terminate()
-                raise Cancelled()
+                raise Canceled()
         return process.wait()
     finally:
         if process.poll() is None:

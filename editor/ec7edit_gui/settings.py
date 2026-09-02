@@ -21,7 +21,7 @@ from PySide6.QtCore import QByteArray, QSettings
 
 from ec7edit_core.discovery import Profile
 
-ORGANISATION = "EC7Wolf"
+ORGANIZATION = "EC7Wolf"
 APPLICATION = "EC7Edit"
 
 _RECENT_LIMIT = 10
@@ -31,7 +31,7 @@ class Settings:
     """A typed face over QSettings, so the rest of the GUI never sees strings."""
 
     def __init__(self, backend: QSettings | None = None) -> None:
-        self._settings = backend or QSettings(ORGANISATION, APPLICATION)
+        self._settings = backend or QSettings(ORGANIZATION, APPLICATION)
 
     # -- where the editor keeps its own files -----------------------------
 

@@ -97,7 +97,7 @@ def body(text: str) -> QLabel:
 class Html(QTextBrowser):
     """A read-only panel used wherever a table or a list needs to wrap.
 
-    Colours come from the widget palette rather than being written into the
+    Colors come from the widget palette rather than being written into the
     markup, so the panel follows the desktop theme instead of assuming a light
     one -- which on a KDE dark theme would be black text on black.
     """
@@ -107,7 +107,7 @@ class Html(QTextBrowser):
         self.setOpenExternalLinks(True)
         self.setFrameShape(QFrame.StyledPanel)
 
-    def colours(self) -> dict:
+    def colors(self) -> dict:
         palette = self.palette()
         return {
             "text": palette.text().color().name(),
@@ -118,28 +118,28 @@ class Html(QTextBrowser):
         }
 
     def show_html(self, markup: str) -> None:
-        colour = self.colours()
+        color = self.colors()
         self.setHtml(
-            f"<body style='color:{colour['text']}; font-family:sans-serif;'>"
+            f"<body style='color:{color['text']}; font-family:sans-serif;'>"
             + markup + "</body>")
 
 
-def requirement_rows(report: deps.Report, colours: dict) -> str:
+def requirement_rows(report: deps.Report, colors: dict) -> str:
     """One line per dependency, with the remedy underneath the missing ones."""
     rows = []
     for requirement in report:
         if requirement.found:
-            mark, colour = "&#10003;", colours["ok"]
+            mark, color = "&#10003;", colors["ok"]
         elif requirement.optional:
-            mark, colour = "&#8211;", colours["warn"]
+            mark, color = "&#8211;", colors["warn"]
         else:
-            mark, colour = "&#10007;", colours["bad"]
+            mark, color = "&#10007;", colors["bad"]
         note = requirement.detail if requirement.found else requirement.remedy
         rows.append(
-            f"<tr><td style='color:{colour}; padding-right:8px; "
+            f"<tr><td style='color:{color}; padding-right:8px; "
             f"font-size:large;' valign='top'>{mark}</td>"
             f"<td style='padding-right:12px;' valign='top'><b>{requirement.label}</b></td>"
-            f"<td style='color:{colours['dim']};' valign='top'>{note}</td></tr>")
+            f"<td style='color:{colors['dim']};' valign='top'>{note}</td></tr>")
     return "<table cellspacing='4'>" + "".join(rows) + "</table>"
 
 
@@ -236,7 +236,7 @@ class ModePage(QWizardPage):
 
     def initializePage(self) -> None:
         manifest = self.state.existing or {}
-        colour = self.details.colours()
+        color = self.details.colors()
         rows = [f"<p><b>{self.state.destination}</b></p>"]
         installed = manifest.get("installed")
         source = manifest.get("source")
@@ -251,7 +251,7 @@ class ModePage(QWizardPage):
             if count:
                 extra.append(f"<b>{plural(count, 'saved game file')}</b>")
         if extra:
-            rows.append(f"<p style='color:{colour['dim']};'>"
+            rows.append(f"<p style='color:{color['dim']};'>"
                         + "<br>".join(extra) + "</p>")
         self.details.show_html("".join(rows))
         self._changed()
@@ -268,7 +268,7 @@ class ModePage(QWizardPage):
 
 
 # ---------------------------------------------------------------------------
-# Licence
+# License
 # ---------------------------------------------------------------------------
 
 class LicensePage(QWizardPage):
@@ -277,7 +277,7 @@ class LicensePage(QWizardPage):
     def __init__(self, state: State):
         super().__init__()
         self.state = state
-        self.setTitle("Licence")
+        self.setTitle("License")
         self.setSubTitle("EC7Wolf is free software under the GNU General "
                          "Public License, version 3.")
 
@@ -288,7 +288,7 @@ class LicensePage(QWizardPage):
         self.text.setPlainText(self._licence_text())
         layout.addWidget(self.text, 1)
 
-        self.accepted = QCheckBox("I accept the terms of the licence")
+        self.accepted = QCheckBox("I accept the terms of the license")
         self.accepted.toggled.connect(self.completeChanged)
         layout.addWidget(self.accepted)
 
@@ -456,7 +456,7 @@ class SourcePage(QWizardPage):
             return
         if not path.exists():
             self.result.show_html(
-                f"<p style='color:{self.result.colours()['bad']};'>"
+                f"<p style='color:{self.result.colors()['bad']};'>"
                 f"There is nothing at {path}.</p>")
             return
         self.result.show_html("<p>Reading&#8230;</p>")
@@ -465,10 +465,10 @@ class SourcePage(QWizardPage):
         self.task.start()
 
     def _probed(self, result, error: str) -> None:
-        colour = self.result.colours()
+        color = self.result.colors()
         if error:
             self.result.show_html(
-                f"<p style='color:{colour['bad']};'>This source could not be "
+                f"<p style='color:{color['bad']};'>This source could not be "
                 f"read: {error}</p>")
             self.completeChanged.emit()
             return
@@ -476,10 +476,10 @@ class SourcePage(QWizardPage):
         lines = [f"<p><b>{result['describe']}</b></p>"]
         if result["missing"]:
             lines.append(
-                f"<p style='color:{colour['bad']};'>Not the Corridor 7 game "
+                f"<p style='color:{color['bad']};'>Not the Corridor 7 game "
                 "data. Missing: " + ", ".join(result["missing"]) + "</p>")
         else:
-            lines.append(f"<p style='color:{colour['ok']};'>&#10003; All "
+            lines.append(f"<p style='color:{color['ok']};'>&#10003; All "
                          f"{len(install.REQUIRED_DATA)} game files are here.</p>")
             extras = []
             if result["tracks"]:
@@ -499,7 +499,7 @@ class SourcePage(QWizardPage):
                     "<span style='color:%s'>No soundtrack: %s. The music needs "
                     "the CD itself, or a BIN/CUE image of it. Everything else "
                     "installs; the game falls back to its AdLib "
-                    "music.</span>" % (colour["warn"], why))
+                    "music.</span>" % (color["warn"], why))
 
             if result["cinematics"]:
                 extras.append(f"{len(result['cinematics'])} of "
@@ -509,7 +509,7 @@ class SourcePage(QWizardPage):
                     "<span style='color:%s'>No cinematics: SEQONE, SEQTHREE and "
                     "SEQFOUR are not in this source. They are files on the "
                     "disc, so a copy made without them will not have "
-                    "them.</span>" % colour["warn"])
+                    "them.</span>" % color["warn"])
             if result["optional"]:
                 extras.append(", ".join(result["optional"]) + " (digitised speech)")
             lines.append("<ul><li>" + "</li><li>".join(extras) + "</li></ul>")
@@ -610,10 +610,10 @@ class EnginePage(QWizardPage):
 
     def _surveyed(self, result, error: str) -> None:
         self.recheck.setEnabled(True)
-        colour = self.report.colours()
+        color = self.report.colors()
         if error:
             self.report.show_html(
-                f"<p style='color:{colour['bad']};'>The check failed: {error}</p>")
+                f"<p style='color:{color['bad']};'>The check failed: {error}</p>")
             self.completeChanged.emit()
             return
 
@@ -630,9 +630,9 @@ class EnginePage(QWizardPage):
         if result["engine"] is not None:
             engine = result["engine"]
             parts.append(
-                f"<p style='color:{colour['ok']};'>&#10003; <b>An engine is "
+                f"<p style='color:{color['ok']};'>&#10003; <b>An engine is "
                 "already built.</b></p>"
-                f"<p style='color:{colour['dim']};'>{engine.source}<br>"
+                f"<p style='color:{color['dim']};'>{engine.source}<br>"
                 f"{engine.executable}</p>"
                 "<p>It will be used as it is, so there is nothing to compile. "
                 "Tick the box below to build a fresh one anyway.</p>")
@@ -642,7 +642,7 @@ class EnginePage(QWizardPage):
             # normal state of the installer-only download. It can fetch the
             # source itself, so this is a choice rather than a dead end.
             parts.append(
-                f"<p style='color:{colour['warn']};'><b>No engine was found "
+                f"<p style='color:{color['warn']};'><b>No engine was found "
                 "here.</b></p>"
                 "<p>This installer does not carry the engine's source, but it "
                 "can download it and build it for you &#8212; that is what the "
@@ -654,25 +654,25 @@ class EnginePage(QWizardPage):
             report = result["build"]
             if report.satisfied:
                 parts.append(
-                    f"<p style='color:{colour['ok']};'>&#10003; <b>Everything "
+                    f"<p style='color:{color['ok']};'>&#10003; <b>Everything "
                     "needed to compile the engine is installed.</b> The build "
                     "takes a few minutes; you can watch it if you like.</p>")
                 self.ready = True
             else:
                 parts.append(
-                    f"<p style='color:{colour['bad']};'><b>Some things are "
+                    f"<p style='color:{color['bad']};'><b>Some things are "
                     "missing.</b> Install them, then press <i>Check again</i>. "
                     "The commands below are for this system.</p>")
                 self.ready = False
             parts.append("<h4>To compile the engine</h4>")
-            parts.append(requirement_rows(report, colour))
+            parts.append(requirement_rows(report, color))
 
         rip = result["rip"]
         parts.append("<h4>To rip the soundtrack and cinematics</h4>")
-        parts.append(requirement_rows(rip, colour))
+        parts.append(requirement_rows(rip, color))
         if rip.blocking:
             parts.append(
-                f"<p style='color:{colour['warn']};'>Without these the game "
+                f"<p style='color:{color['warn']};'>Without these the game "
                 "installs and plays; it just falls back to the AdLib "
                 "soundtrack instead of the CD music.</p>")
 
@@ -723,7 +723,7 @@ class DestinationPage(QWizardPage):
             self.edit.setText(str(Path(path) / "EC7Wolf"))
 
     def _changed(self, *_) -> None:
-        colour = self.notes.colours()
+        color = self.notes.colors()
         text = self.edit.text().strip()
         parts = []
         if not text:
@@ -740,29 +740,29 @@ class DestinationPage(QWizardPage):
         free = install.free_space(path)
         if free < needed:
             parts.append(
-                f"<p style='color:{colour['bad']};'>&#10007; About "
+                f"<p style='color:{color['bad']};'>&#10007; About "
                 f"{megabytes(needed)} is needed here and only "
                 f"{megabytes(free)} is free.</p>")
         else:
             parts.append(
-                f"<p style='color:{colour['dim']};'>About {megabytes(needed)} "
+                f"<p style='color:{color['dim']};'>About {megabytes(needed)} "
                 f"needed, {megabytes(free)} free.</p>")
 
         existing = install.read_manifest(path)
         if existing:
             parts.append(
-                f"<p style='color:{colour['warn']};'>There is already an "
+                f"<p style='color:{color['warn']};'>There is already an "
                 "EC7Wolf install here. Continuing replaces it. Saved games "
                 "in its <tt>saves</tt> folder are kept.</p>")
         elif path.exists() and any(path.iterdir()):
             parts.append(
-                f"<p style='color:{colour['warn']};'>That folder is not empty. "
+                f"<p style='color:{color['warn']};'>That folder is not empty. "
                 "The installer only adds its own files, but choosing an empty "
                 "folder is tidier.</p>")
 
         if not os.access(self._writable_parent(path), os.W_OK):
             parts.append(
-                f"<p style='color:{colour['bad']};'>&#10007; You do not have "
+                f"<p style='color:{color['bad']};'>&#10007; You do not have "
                 "permission to write there.</p>")
 
         self.notes.show_html("".join(parts))
@@ -912,7 +912,7 @@ class SummaryPage(QWizardPage):
         # rather than inside it, so it survives a failure that unwinds the
         # staging directory.
         state.log_path = state.destination.parent / "ec7wolf-install.log"
-        colour = self.summary.colours()
+        color = self.summary.colors()
         rows = []
 
         if state.mode == "remove":
@@ -928,14 +928,14 @@ class SummaryPage(QWizardPage):
             if saves.is_dir():
                 count = sum(1 for f in saves.rglob("*") if f.is_file())
                 if count:
-                    warning = (f"<p style='color:{colour['warn']};'>"
+                    warning = (f"<p style='color:{color['warn']};'>"
                                f"This includes {plural(count, 'saved game file')}"
                                f" in {saves}. Copy them somewhere else first if "
                                "you want to keep them.</p>")
             self.summary.show_html(
                 "<p>These will be deleted:</p><ul><li>"
                 + "</li><li>".join(items) + "</li></ul>" + warning
-                + f"<p style='color:{colour['dim']};'>Log: {state.log_path}</p>")
+                + f"<p style='color:{color['dim']};'>Log: {state.log_path}</p>")
             return
 
         self.setTitle("Ready to install")
@@ -945,7 +945,7 @@ class SummaryPage(QWizardPage):
 
         def row(name: str, value: str) -> None:
             rows.append(
-                f"<tr><td style='color:{colour['dim']}; padding-right:14px;' "
+                f"<tr><td style='color:{color['dim']}; padding-right:14px;' "
                 f"valign='top'>{name}</td><td valign='top'>{value}</td></tr>")
 
         row("Game data from", state.probe["describe"] if state.probe else "&#8211;")
@@ -1096,7 +1096,7 @@ class ProgressPage(QWizardPage):
         """Ask the worker to stop. True if there was anything to stop."""
         if self.thread is not None and self.thread.isRunning():
             self.cancel.set()
-            self.stepLabel.setText("<b>Cancelling…</b> undoing what was written")
+            self.stepLabel.setText("<b>Canceling…</b> undoing what was written")
             return True
         return False
 
@@ -1135,13 +1135,13 @@ class FinishPage(QWizardPage):
 
     def initializePage(self) -> None:
         state = self.state
-        colour = self.text.colours()
+        color = self.text.colors()
         parts = []
 
         if state.outcome == "ok" and state.mode == "remove":
             self.setSubTitle("EC7Wolf has been removed.")
             parts.append(
-                f"<p style='color:{colour['ok']};'>&#10003; <b>EC7Wolf was "
+                f"<p style='color:{color['ok']};'>&#10003; <b>EC7Wolf was "
                 "removed.</b></p>"
                 "<p>The game, its shortcuts and its entry in the list of "
                 "installed programs are all gone. Nothing else on the system "
@@ -1151,7 +1151,7 @@ class FinishPage(QWizardPage):
         elif state.outcome == "ok":
             self.setSubTitle("EC7Wolf is installed.")
             parts.append(
-                f"<p style='color:{colour['ok']};'>&#10003; <b>Installed to "
+                f"<p style='color:{color['ok']};'>&#10003; <b>Installed to "
                 f"{state.installed}</b></p>")
             parts.append("<p>Start it from the applications menu, from the "
                          "desktop icon, or by running the launcher in that "
@@ -1167,22 +1167,22 @@ class FinishPage(QWizardPage):
                  "machinery. The arrow keys turn.") +
                 " Change any of them in <i>Options &#8594; Controls</i>.</p>")
             parts.append(
-                f"<p style='color:{colour['dim']};'>To remove it later, run "
+                f"<p style='color:{color['dim']};'>To remove it later, run "
                 f"<tt>uninstall.sh</tt> in that folder; it takes the menu "
                 "entry and the icons with it.</p>")
             self.launch.setVisible(True)
             self.launch.setChecked(True)
             self.openFolder.setVisible(True)
-        elif state.outcome == "cancelled":
-            self.setSubTitle("Cancelled.")
-            parts.append("<p><b>The install was cancelled.</b> Everything it "
+        elif state.outcome == "canceled":
+            self.setSubTitle("Canceled.")
+            parts.append("<p><b>The install was canceled.</b> Everything it "
                          "had written was removed; nothing was left behind.</p>")
             self.launch.setVisible(False)
             self.openFolder.setVisible(False)
         else:
             self.setSubTitle("The install did not finish.")
             parts.append(
-                f"<p style='color:{colour['bad']};'>&#10007; <b>{state.message}"
+                f"<p style='color:{color['bad']};'>&#10007; <b>{state.message}"
                 "</b></p>")
             parts.append("<p>Nothing was left half-installed. The log has the "
                          "full detail, including the compiler's own messages "
@@ -1191,11 +1191,11 @@ class FinishPage(QWizardPage):
             self.openFolder.setVisible(False)
 
         if state.warnings:
-            parts.append(f"<p style='color:{colour['warn']};'><b>Worth "
+            parts.append(f"<p style='color:{color['warn']};'><b>Worth "
                          "knowing</b></p><ul><li>"
                          + "</li><li>".join(state.warnings) + "</li></ul>")
 
-        parts.append(f"<p style='color:{colour['dim']};'>Log: {state.log_path}</p>")
+        parts.append(f"<p style='color:{color['dim']};'>Log: {state.log_path}</p>")
         self.text.show_html("".join(parts))
 
     def _open_folder(self) -> None:

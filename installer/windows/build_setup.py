@@ -88,7 +88,7 @@ def smoke_test(executable: Path) -> bool:
     # Exit codes, not printed output: this is a windowed executable with no
     # console, so whatever it writes to stdout may go nowhere at all.
     reasons = {0: "", 1: "the wizard's pages are not what they should be",
-               2: "the licence text did not make it into the bundle",
+               2: "the license text did not make it into the bundle",
                3: "the icon did not make it into the bundle"}
     if result.returncode == 0:
         print("  it starts, builds every page and finds its bundled files")

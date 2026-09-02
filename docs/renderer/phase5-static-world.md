@@ -19,7 +19,7 @@ game still runs on the software renderer; nothing about the live window changes.
 * `render/opengl/r_glworld.{h,cpp}`: uploads the mesh (VAO/VBO), a debug world
   shader, a depth buffer, and a camera calibrated to ECWolf (position from
   `camera->x/y` in tile units, yaw/pitch from the binary angles, horizontal FOV
-  from `players[].FOV`), rendering to an offscreen colour+depth FBO and reading
+  from `players[].FOV`), rendering to an offscreen color+depth FBO and reading
   it back to a PPM. `R_GLWorldCapture()` creates its own hidden GL context, so
   it is safe to call while the software renderer owns the game window.
 * Capture hook `--capture-glworld <ppm>`: at the `--capture-frame`, renders the
@@ -43,7 +43,7 @@ and that the camera is placed and oriented from the live ECWolf view.
 
 ## Scope / what is deliberately deferred
 
-Phase 5 debug-shades each surface by a per-texture pseudo-colour (so structure
+Phase 5 debug-shades each surface by a per-texture pseudo-color (so structure
 and depth are visible); **real indexed textures + palette/colormap fidelity are
 Phase 6**, and exact pixel-parity framing/aspect against the software raycaster
 is refined in Phase 6 and locked down in Phase 11. Dynamic walls (Phase 7),

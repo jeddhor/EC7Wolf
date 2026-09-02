@@ -94,10 +94,10 @@ static TArray<SpriteInfo> loadedSprites;
 // one of the four eight-entry ramps the released game rotates in the DAC --
 // and the ramp is black in the base palette and a 32/69/105/142/178/219/255/0
 // red sweep under infrared. That is the whole trick: the barrier is invisible
-// in normal vision because its colours are black, and it crawls with energy
+// in normal vision because its colors are black, and it crawls with energy
 // under infrared because the DAC rotation moves the sweep along artwork whose
 // indices already climb the ramp (C006's outer rods run 0->7 top to bottom and
-// its centre rod 7->0, so they travel in opposite directions; C062's ring is a
+// its center rod 7->0, so they travel in opposite directions; C062's ring is a
 // random scatter of all eight, which reads as static). The sprite path handles
 // that for every other C7 sprite already -- see C7ShadeWorldSpriteColor.
 bool Corridor7IsLaserBarrierActor(AActor *actor)

@@ -90,7 +90,7 @@ extern void setupmvline (int);
 
 extern void setuptmvline (int);
 
-// The Spectre/Invisibility effect.
+// The Specter/Invisibility effect.
 extern void (*R_DrawFuzzColumn)(void);
 
 // [RH] Draw shaded column
@@ -100,7 +100,7 @@ extern void (*R_DrawShadedColumn)(void);
 //	Green/Red/Blue/Indigo shirts.
 extern void (*R_DrawTranslatedColumn)(void);
 
-// Span drawing for rows, floor/ceiling. No Spectre effect needed.
+// Span drawing for rows, floor/ceiling. No Specter effect needed.
 extern void (*R_DrawSpan)(void);
 void R_SetupSpanBits(FTexture *tex);
 void R_SetSpanColormap(BYTE *colormap);

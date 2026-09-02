@@ -29,9 +29,9 @@ stops and before anything is exported.
 | `C7E-BOUNDARY-001` | local | `seal_boundary` | A cell on the outer ring is walkable, so the player can walk out of the world. | Paint the ring solid. The one-click fix does it. |
 | `C7E-CELL-002` | local | — | An imported word the translation does not define. It is preserved exactly and never rewritten. | Nothing, unless you meant to replace it. |
 | `C7E-DOOR-001` | — | — | A door without two opposing floor approaches. Corridor 7 infers a door's axis from the floor around it, so this one may not open the way it looks. | Reshape the corridor, or confirm the topology is what you meant. |
-| `C7E-DOOR-002` | — | — | A door whose axis is a tie. The engine breaks ties one way; an editor that guessed the other would show one thing and ship another. | Adjust a neighbouring cell so the axis is unambiguous. |
-| `C7E-DOOR-003` | map | — | A locked door whose card is nowhere on the floor -- neither lying about nor granted by a terminal of that colour. | Place the card or its terminal, or unlock the door. |
-| `C7E-DOOR-004` | map | — | The card that opens a door is behind that door. The reachability flood is a fixpoint, so a colour still blocking when it stops is one the player can never hold. | Move the card, or the door. |
+| `C7E-DOOR-002` | — | — | A door whose axis is a tie. The engine breaks ties one way; an editor that guessed the other would show one thing and ship another. | Adjust a neighboring cell so the axis is unambiguous. |
+| `C7E-DOOR-003` | map | — | A locked door whose card is nowhere on the floor -- neither lying about nor granted by a terminal of that color. | Place the card or its terminal, or unlock the door. |
+| `C7E-DOOR-004` | map | — | The card that opens a door is behind that door. The reachability flood is a fixpoint, so a color still blocking when it stops is one the player can never hold. | Move the card, or the door. |
 | `C7E-EXIT-001` | map | — | No way to finish the floor, or none the player can reach. | Place an elevator switch, a floor exit or an exit vortex where the player can get to it. |
 | `C7E-START-001` | map | — | No player start. | Place one on floor. |
 | `C7E-START-002` | map | — | More than the profile allows. A campaign floor takes one; an arena takes as many as it has spawn points. | Remove the extras, or check the slot this map is exported to. |

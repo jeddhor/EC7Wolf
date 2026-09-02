@@ -102,7 +102,7 @@ class LaunchPlan:
     #: already knows the answer to, and digging it back out of argv is the kind
     #: of guess that works until somebody appends an argument.
     preview: Path | None = None
-    #: What was tested, so a log can be matched to it afterwards.
+    #: What was tested, so a log can be matched to it afterward.
     export_digest: str = ""
     revision: int = -1
 

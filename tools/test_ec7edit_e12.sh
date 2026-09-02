@@ -221,7 +221,7 @@ if bad:
 # wrong: one screenshot taken with the game configured would put Corridor 7's
 # artwork in a public repository.
 #
-# Checked at the CAUSE rather than by looking at the pixels. Counting colours
+# Checked at the CAUSE rather than by looking at the pixels. Counting colors
 # was the obvious thing and it was useless -- a Qt window full of antialiased
 # text has ten thousand of them, so the measure could not tell artwork from a
 # font. What actually guarantees it is that the generator refuses to run with a

@@ -17,7 +17,7 @@ struct PalEntry;
 extern const int XBRZ_MAX_FACTOR;
 
 // Factor to actually use for a srcW x srcH frame shown in a dstW x dstH window,
-// honouring vid_xbrz: 0 means "do not scale" and is returned both when the
+// honoring vid_xbrz: 0 means "do not scale" and is returned both when the
 // setting is off and when the chosen factor would not fit the pixel budget.
 // vid_xbrz == 1 asks for the automatic factor; see R_XBRZAutoFactor.
 int R_XBRZFactor(int srcW, int srcH, int dstW, int dstH);
@@ -38,7 +38,7 @@ const uint32_t *R_XBRZScaleIndexed(const BYTE *src, int srcPitch, int srcW, int 
 void R_XBRZScaleARGB(const uint32_t *src, int srcW, int srcH, int factor,
 	uint32_t *dst, bool hasAlpha);
 
-// Collapses ordered dither back into the flat colour it was standing in for,
+// Collapses ordered dither back into the flat color it was standing in for,
 // in place, over a 0xAARRGGBB image. Run this before scaling art that was
 // dithered by hand -- see the note on the implementation for why the upscaler
 // cannot be left to cope with it alone. Returns the number of pixels changed.

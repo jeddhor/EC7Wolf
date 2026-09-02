@@ -55,7 +55,7 @@ sys.path.insert(0, str(repo / "tools"))
 from c7disc import GameSource
 from ec7install import audio, build, install
 from ec7install.plan import InstallPlan, RemovalPlan
-from ec7install.progress import Cancelled, Reporter
+from ec7install.progress import Canceled, Reporter
 
 failures = []
 
@@ -135,12 +135,12 @@ class StopAfter(Reporter):
     def detail(self, line):
         if line.startswith("track") and "already" not in line:
             self.seen += 1
-    def cancelled(self): return self.seen > self.limit
+    def canceled(self): return self.seen > self.limit
 
 try:
     audio.rip(source, work / "music-1", StopAfter(1), cache=cache)
-    check(False, "the rip should have been cancelled")
-except Cancelled:
+    check(False, "the rip should have been canceled")
+except Canceled:
     check(True, "the rip stopped part way")
 
 encoded = sorted(p.name for p in cache.iterdir()) if cache.is_dir() else []

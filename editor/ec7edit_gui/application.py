@@ -22,7 +22,7 @@ from PySide6.QtWidgets import QApplication, QDockWidget, QMessageBox
 from ec7edit_core import __version__
 
 from .main_window import MainWindow
-from .settings import APPLICATION, ORGANISATION, Settings
+from .settings import APPLICATION, ORGANIZATION, Settings
 
 
 def install_exception_hook(window=None, *, show_dialog: bool = True) -> None:
@@ -100,7 +100,7 @@ def build_application(argv=None) -> QApplication:
     application = QApplication.instance()
     if application is None:
         application = QApplication(argv if argv is not None else sys.argv)
-    application.setOrganizationName(ORGANISATION)
+    application.setOrganizationName(ORGANIZATION)
     application.setApplicationName(APPLICATION)
     application.setApplicationVersion(__version__)
     application.setAttribute(Qt.AA_DontUseNativeMenuBar, False)
@@ -118,7 +118,7 @@ def selftest() -> int:
     `--version` proves only that the executable starts, which is the part that
     was never in doubt.
 
-    So this builds the real main window offscreen, reads the real catalogue,
+    So this builds the real main window offscreen, reads the real catalog,
     and prints key=value lines. Deliberately plain, like the engine's
     --editor-capabilities: something a support conversation can paste.
     """

@@ -77,7 +77,7 @@ struct InitStatus
 };
 
 // Returns false to give up waiting. The connect loops poll this every frame
-// and honour it, so a player who changes their mind is not stuck holding a
+// and honor it, so a player who changes their mind is not stuck holding a
 // socket open until they kill the process.
 typedef bool (*InitStatusCallback)(const InitStatus &);
 
@@ -108,7 +108,7 @@ struct NetInit
 
 	// How many tics ahead each player's commands are sent, so that a round
 	// trip has that many tics to complete in rather than one. Zero is the
-	// original behaviour: exchange the current tic and block until everyone
+	// original behavior: exchange the current tic and block until everyone
 	// answers, which is free on a LAN and unusable over the internet -- at
 	// 70 tics a second it needs a reply every 14.3ms. See
 	// docs/multiplayer.md.

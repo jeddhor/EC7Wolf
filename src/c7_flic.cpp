@@ -73,7 +73,7 @@ namespace
 	//
 	// The logo's audio is assembled from ordinary in-game effects -- the
 	// apparition shriek, a morph, a door, a teleport -- which is why a player
-	// recognises the first one. Only the four speech samples are unique to the
+	// recognizes the first one. Only the four speech samples are unique to the
 	// cinematics, and they are the only digitized sounds in the game that
 	// nothing else ever plays.
 	struct SoundCue
@@ -504,7 +504,7 @@ bool C7Flic_Play(const char *name)
 	memset(&pixels[0], 0, FLIC_PIXELS);
 
 	// The animation owns the palette while it plays; the caller's is put back
-	// afterwards so whatever was on screen before still looks like itself.
+	// afterward so whatever was on screen before still looks like itself.
 	PalEntry saved[256];
 	memcpy(saved, screen->GetPalette(), sizeof(saved));
 	PalEntry pal[256];
@@ -609,9 +609,9 @@ bool C7Flic_Play(const char *name)
 	// The animation's last image is still in the framebuffer at this point, and
 	// it is 256 indices that mean something only under the animation's own
 	// palette. Restoring the game's palette first showed that image through the
-	// wrong colours for exactly one present -- a single psychedelic flash at the
+	// wrong colors for exactly one present -- a single psychedelic flash at the
 	// end of every cinematic. Fading out first drives the screen to black while
-	// the palette still matches its pixels, and the swap afterwards lands on
+	// the palette still matches its pixels, and the swap afterward lands on
 	// black, where it cannot be seen.
 	VW_FadeOut();
 	screen->Lock(false);

@@ -30,7 +30,7 @@ def flic_problem(path: Path) -> str | None:
 
     Public because the installer checks a cinematic before reusing one from an
     install it is replacing, and that has to be the same test the verifier
-    applies afterwards -- otherwise a file could be adopted here and condemned
+    applies afterward -- otherwise a file could be adopted here and condemned
     twenty seconds later.
     """
     return _check_flic(path)

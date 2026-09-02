@@ -233,7 +233,7 @@ protected:
 		bool m_Persistent;		// meant for persistent storage (disk)?
 		bool m_Loading;			// extracting objects?
 		bool m_Storing;			// inserting objects?
-		bool m_HubTravel;		// travelling inside a hub?
+		bool m_HubTravel;		// traveling inside a hub?
 		FFile *m_File;			// unerlying file object
 		DWORD m_ObjectCount;	// # of objects currently serialized
 		DWORD m_MaxObjectCount;

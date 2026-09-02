@@ -9,7 +9,7 @@ fails twenty minutes later looking like a netcode bug. It cost one full suite
 run before this existed.
 
 So instead of counting, the gates look. The shell draws the row under the
-cursor in yellow and every other row in white or grey, so the highlighted row
+cursor in yellow and every other row in white or gray, so the highlighted row
 is the widest run of yellow pixels in the menu column. Prints -1 if there is
 none, which is itself worth knowing: it means the screen being looked at is not
 a menu.

@@ -635,7 +635,7 @@ void FTextureManager::AddHiresTextures (int wadnum)
 							// The Corridor 7 upscale pack is a layer the player
 							// can switch off, so the art it displaces has to
 							// survive; every other hires wad keeps the stock
-							// behaviour of replacing outright.
+							// behavior of replacing outright.
 							const bool keep = C7Upscale::OwnsWad(wadnum);
 							ReplaceTexture(tlist[i], newtex, !keep);
 							if (keep)

@@ -398,7 +398,7 @@ const GameMap::PlayerSpawn *GameMap::GetPlayerSpawn(int player) const
 		return NULL;
 
 	// No direct spawn, so overlap with another player, but if possible divide
-	// amongst any additional spawn points available
+	// among any additional spawn points available
 	unsigned int alt = player % playerStarts.CountUsed();
 	const PlayerSpawn *best = NULL;
 	for(unsigned int i = 0;i < MAXPLAYERS;++i)

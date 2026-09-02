@@ -1177,7 +1177,7 @@ bool Init(InitStatusCallback callback)
 	else
 	{
 		// Give the socket back rather than holding the port until the process
-		// ends: the player who just cancelled is quite likely to try again on
+		// ends: the player who just canceled is quite likely to try again on
 		// the same port a moment later, and "address already in use" would be
 		// a baffling thing to meet on the second attempt.
 		Shutdown();

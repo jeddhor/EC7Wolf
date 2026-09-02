@@ -157,7 +157,7 @@ override has to look like.
 ```
 
 The reader seeks straight to offset 10 and never looks at bytes 6 to 9;
-`FMapLump::FillCache` leaves them uninitialised. This writer puts the
+`FMapLump::FillCache` leaves them uninitialized. This writer puts the
 documented map count there, so a byte-for-byte comparison with an
 engine-produced lump is meaningful **from offset 10 onward and nowhere
 earlier**.

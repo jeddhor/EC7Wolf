@@ -18,7 +18,7 @@ Flat:
 	#D2B48C
 }
 
-Gray Grey
+Gray Gray
 {
 	#272727  #EFEFEF
 Console:

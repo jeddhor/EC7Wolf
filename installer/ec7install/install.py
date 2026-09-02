@@ -3,7 +3,7 @@
 Nothing is written into the destination until every piece has been gathered in
 a staging directory beside it and the final move is a rename. That is how
 tools/package_corridor7_release.sh already works, and for the same reason: a
-cancelled or failed install must not leave a half-populated folder that looks
+canceled or failed install must not leave a half-populated folder that looks
 like a working one.
 """
 
@@ -252,7 +252,7 @@ def write_launcher(destination: Path) -> Path:
 
     Without it the engine writes to the user's global config, which is fine
     until they also have a system ECWolf -- and then the two fight over the same
-    file. Self-contained is the behaviour tools/package_corridor7_release.sh
+    file. Self-contained is the behavior tools/package_corridor7_release.sh
     already gives its releases.
     """
     if is_windows():

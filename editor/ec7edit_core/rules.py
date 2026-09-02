@@ -6,8 +6,8 @@ Two things in this format are decided by *topology* rather than stored, and an
 editor that guesses differently from the engine shows the author one thing and
 ships another.
 
-**A door has no axis.** The map records its colour and nothing else; the engine
-works out which way it slides by counting how many of its four neighbours are
+**A door has no axis.** The map records its color and nothing else; the engine
+works out which way it slides by counting how many of its four neighbors are
 open. `door_axis` is that count, copied from `gamemap_planes.cpp` including the
 tie-break, so the preview matches what will load.
 
@@ -25,7 +25,7 @@ from .errors import Diagnostic, Severity
 from .planes import linear_index
 from .prefabs import TRANSPORTER_CHANNELS, is_floor
 
-#: The engine calls a neighbouring cell "open" when it is not a tile -- floor
+#: The engine calls a neighboring cell "open" when it is not a tile -- floor
 #: or a sound zone. A wall, a door and a special are all tiles, and all closed.
 def is_open(value: int) -> bool:
     return is_floor(value)
@@ -211,7 +211,7 @@ def assign_sound_areas(document) -> list[tuple[int, int, int, int]]:
         if seen[start] or at(start % width, start // width) != 0:
             continue
         # One region: every zoneless floor cell reachable from here.
-        region, neighbours, stack = [], set(), [start]
+        region, neighbors, stack = [], set(), [start]
         seen[start] = True
         while stack:
             index = stack.pop()
@@ -226,9 +226,9 @@ def assign_sound_areas(document) -> list[tuple[int, int, int, int]]:
                         seen[ny * width + nx] = True
                         stack.append(ny * width + nx)
                 elif AREA_FIRST <= value <= AREA_LAST:
-                    neighbours.add(value)
+                    neighbors.add(value)
                 elif is_floor(value):
                     pass
-        area = min(neighbours) if neighbours else next(spare, AREA_LAST)
+        area = min(neighbors) if neighbors else next(spare, AREA_LAST)
         writes.extend((0, x, y, area) for x, y in region)
     return writes

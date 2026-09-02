@@ -6,7 +6,7 @@
 The plan asks E7 for a diagnostic reference. A hand-written one drifts: a rule
 gets a new severity or a fix and the table still says what it used to. This
 generates the table from what the validator actually does, and `--check` fails
-if the committed document no longer matches -- the same contract the catalogue
+if the committed document no longer matches -- the same contract the catalog
 has.
 
     validation_reference.py [write|check]
@@ -66,12 +66,12 @@ CODES = {
     "C7E-START-003": ("A player start is inside a wall.", "Move it onto floor."),
     "C7E-DOOR-003": (
         "A locked door whose card is nowhere on the floor -- neither lying "
-        "about nor granted by a terminal of that colour.",
+        "about nor granted by a terminal of that color.",
         "Place the card or its terminal, or unlock the door.",
     ),
     "C7E-DOOR-004": (
         "The card that opens a door is behind that door. The reachability "
-        "flood is a fixpoint, so a colour still blocking when it stops is one "
+        "flood is a fixpoint, so a color still blocking when it stops is one "
         "the player can never hold.",
         "Move the card, or the door.",
     ),
@@ -98,7 +98,7 @@ CODES = {
     "C7E-DOOR-002": (
         "A door whose axis is a tie. The engine breaks ties one way; an editor "
         "that guessed the other would show one thing and ship another.",
-        "Adjust a neighbouring cell so the axis is unambiguous.",
+        "Adjust a neighboring cell so the axis is unambiguous.",
     ),
 }
 

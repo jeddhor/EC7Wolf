@@ -747,7 +747,7 @@ SDLFB::SDLFB (int width, int height, bool fullscreen)
 	// arrived at "Could not create new screen (640 x 480)" -- the retry ladder
 	// above tries a different resolution, then toggles fullscreen, then gives
 	// up, and none of that helps when the request was never going to be
-	// honoured in the first place.
+	// honored in the first place.
 	fullscreen = true;
 	{
 		SDL_DisplayMode dm;
@@ -976,7 +976,7 @@ void SDLFB::Update ()
 		// The touch overlay, on top of the finished frame and before the swap.
 		// It used to be hooked into the SDL_Renderer path below, which the GL
 		// cutover stopped using -- so from Phase 11 until now the controls were
-		// never initialised and never drawn, on a platform that has no keyboard.
+		// never initialized and never drawn, on a platform that has no keyboard.
 		{
 			extern void frameControls();
 			frameControls();
@@ -1141,7 +1141,7 @@ void SDLFB::Update ()
 // The palette a frame is actually shown through: the source palette after gamma
 // and after any full-screen flash (damage, pickups, the visor tints) has been
 // blended in. Factored out of UpdateColors because the xBRZ path needs the same
-// colours but resolves them itself rather than through GPfx.
+// colors but resolves them itself rather than through GPfx.
 void SDLFB::GetPresentPalette (PalEntry pal[256])
 {
 	for (int i = 0; i < 256; ++i)

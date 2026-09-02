@@ -74,7 +74,7 @@ from ec7edit_core.validation import (
     fix_label,
     fix_writes,
     profile_for_slot,
-    summarise,
+    summarize,
     validate_local,
     validate_map,
 )
@@ -235,7 +235,7 @@ class MainWindow(QMainWindow):
         # first parameter as "the caller already knows the answer" --
         # open_project(path), new_map(name), import_map(archive_path) -- so the
         # menu was handing them False. open_project treated that as an empty
-        # path, which is what a cancelled file dialog looks like, and returned
+        # path, which is what a canceled file dialog looks like, and returned
         # without ever showing one. Drop the argument: nothing here is
         # checkable, so nothing wants it.
         action.triggered.connect(lambda _checked=False, call=slot: call())
@@ -500,7 +500,7 @@ class MainWindow(QMainWindow):
         self.palette_tabs.setAccessibleName("Palette")
         self.palette_models: dict[str, CatalogModel] = {}
 
-        # Structures are not catalogue entries -- they are compound tools, and
+        # Structures are not catalog entries -- they are compound tools, and
         # they get a plain list because what matters is the name and what it
         # needs, not a picture of one word out of several.
         self.prefab_list = QListWidget(self)
@@ -670,18 +670,18 @@ class MainWindow(QMainWindow):
             self.thumbnails.source = None
             self._note_problem(f"Game data unavailable: {error}")
             return False
-        self._apply_wall_colours()
+        self._apply_wall_colors()
         return True
 
-    def _apply_wall_colours(self) -> None:
-        """Average colours for the canvas's texture layer, computed once."""
+    def _apply_wall_colors(self) -> None:
+        """Average colors for the canvas's texture layer, computed once."""
         if not self.thumbnails.available or self.catalog is None:
             return
-        colours = {}
+        colors = {}
         for entry in self.catalog.in_category("walls"):
-            colours[entry.value] = self.thumbnails.swatch(entry)
+            colors[entry.value] = self.thumbnails.swatch(entry)
         for index in range(self.tabs.count()):
-            self.tabs.widget(index).canvas.set_wall_colours(colours)
+            self.tabs.widget(index).canvas.set_wall_colors(colors)
 
     # -- project ----------------------------------------------------------
 
@@ -1100,7 +1100,7 @@ class MainWindow(QMainWindow):
                               project_name=self.project.name,
                               author=self.project.author)
             if not pack.audit.clean:
-                # The audit reads the built file back. If it does not recognise
+                # The audit reads the built file back. If it does not recognize
                 # something in there, that file does not leave this machine.
                 raise export_error(
                     "C7E-PACK-010",
@@ -1242,7 +1242,7 @@ class MainWindow(QMainWindow):
         tab.canvas.released.connect(self.tools.release)
         index = self.tabs.addTab(tab, f"{document.lump_name} {document.name}")
         self.tabs.setCurrentIndex(index)
-        self._apply_wall_colours()
+        self._apply_wall_colors()
         self._show_camera()
         return tab
 
@@ -1271,7 +1271,7 @@ class MainWindow(QMainWindow):
         self.inspector.show_cell(self.project.map_by_uuid(tab.map_uuid), x, y)
 
     def _on_picked(self, plane: int, value: int) -> None:
-        """The eyedropper selects the catalogue entry it found."""
+        """The eyedropper selects the catalog entry it found."""
         if self.catalog is None:
             return
         entry = self.catalog.for_value(plane, value)
@@ -1477,7 +1477,7 @@ class MainWindow(QMainWindow):
         self.palette_models[category].set_entries(entries)
 
     def _refresh_prefabs(self) -> None:
-        """Rebuild the compound-tool list, honouring the search box."""
+        """Rebuild the compound-tool list, honoring the search box."""
         query = self.search.text().strip().lower()
         self.prefab_list.clear()
         for prefab in PREFABS:
@@ -1674,7 +1674,7 @@ class MainWindow(QMainWindow):
         return True
 
     def rotate_clipboard(self) -> bool:
-        """Turn what was copied, rewriting facings through the catalogue."""
+        """Turn what was copied, rewriting facings through the catalog."""
         if self.clipboard is None:
             self.statusBar().showMessage("Nothing copied yet", 4000)
             return False
@@ -2018,11 +2018,11 @@ class MainWindow(QMainWindow):
         self._problems = problems
         self._problems_revision = self.project.revision
         self._repaint_problems()
-        self.statusBar().showMessage(summarise(problems), 6000)
+        self.statusBar().showMessage(summarize(problems), 6000)
         return problems
 
     def _repaint_problems(self) -> None:
-        """Refill the list from the last result, honouring the severity floor."""
+        """Refill the list from the last result, honoring the severity floor."""
         floor = self.problem_filter.currentData()
         self.problems.clear()
         shown = 0
@@ -2038,7 +2038,7 @@ class MainWindow(QMainWindow):
             self.problems.addItem(item)
         hidden = len(self._problems) - shown
         stale = self._problems_revision != self.project.revision
-        parts = [summarise(self._problems)]
+        parts = [summarize(self._problems)]
         if hidden:
             parts.append(f"{hidden} hidden by the filter")
         if stale:

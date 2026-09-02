@@ -72,7 +72,7 @@ class Precondition:
     dx: int
     dy: int
     #: "floor", "wall", "any", "empty" (nothing on plane 1), or "reachable"
-    #: (at least one orthogonal neighbour is floor).
+    #: (at least one orthogonal neighbor is floor).
     requires: str
     why: str
 
@@ -144,7 +144,7 @@ class Prefab:
 
         Only the offsets move. A prefab whose *values* encode a facing -- none
         do today, because the facing ones are single words and go through the
-        catalogue -- would override this.
+        catalog -- would override this.
         """
         if not self.rotatable or quarter_turns % 4 == 0:
             return self
@@ -199,11 +199,11 @@ class Prefab:
 
 
 # ---------------------------------------------------------------------------
-# The catalogue
+# The catalog
 # ---------------------------------------------------------------------------
 
 #: A wall page that reads as a plain surface, used where a prefab needs a wall
-#: and the author has not chosen one. Page 0, the grey diagonal.
+#: and the author has not chosen one. Page 0, the gray diagonal.
 DEFAULT_WALL = 1
 #: What erasing a structure puts back on plane 0. A sound area, not zero: see
 #: MapDocument.DEFAULT_FLOOR -- a cell with no area is a cell nothing can hear
@@ -216,7 +216,7 @@ DEFAULT_FLOOR = 256
 #: placed on a map by anything.
 ANIMATED_DOORS = (
     (45, "Retractable door (alien machinery)",
-     "A grey and red alien bulkhead that retracts to an open aperture."),
+     "A gray and red alien bulkhead that retracts to an open aperture."),
     (49, "Retractable door (red membrane)",
      "A red organic membrane that draws back to an open aperture."),
     (53, "Retractable door (iris hatch)",
@@ -253,7 +253,7 @@ ANIMATED_DOORS = (
 #: consecutive pages where that fraction only grows. That measurement also
 #: proposes bases one page early, where an ordinary wall happens to precede a
 #: door, so every candidate was looked at before being accepted: 80, 192 and
-#: 240 are a red texture, grey static and a monitor screen respectively.
+#: 240 are a red texture, gray static and a monitor screen respectively.
 ANIMATION_FRAMES = tuple(
     sorted({base + step for base, _, _ in ANIMATED_DOORS for step in (1, 2, 3)} - {84})
 )
@@ -365,7 +365,7 @@ PREFABS: tuple[Prefab, ...] = (
                  "Lock 1 Corridor7 is C7Static002, 'BLUE Access Required'",
         notes="Lock 1 is the blue card and lock 2 is the red one, which is the "
               "opposite of the order the two words appear in. Both doors were "
-              "labelled with the other colour here until a lab map proved a "
+              "labeled with the other color here until a lab map proved a "
               "player carrying C7Static002 opens 252.",
     ),
     Prefab(

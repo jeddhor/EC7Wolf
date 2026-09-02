@@ -3,11 +3,11 @@
 // r_glworld.cpp - GL world render + offscreen capture + 2D compositor.
 //
 // Phase 5 stood up the geometry/camera with a debug shader. Phase 6 replaced
-// the debug colours with real fidelity: each surface's FTexture is uploaded as
-// an 8-bit *index* texture, and the shader resolves colour exactly the way the
+// the debug colors with real fidelity: each surface's FTexture is uploaded as
+// an 8-bit *index* texture, and the shader resolves color exactly the way the
 // software renderer does -- index -> colormap[shadeRow] -> palette -- with the
 // shade row derived from ECWolf's own distance/light math, plus the Corridor 7
-// colour-cycle and full-bright rules. Palette effects (visor/electric/damage)
+// color-cycle and full-bright rules. Palette effects (visor/electric/damage)
 // live entirely in the 256-entry palette texture, never in world pixels.
 //
 // Phase 10 adds the 2D compositor: the GL 3D world is rendered into the view
@@ -89,7 +89,7 @@ namespace GLProf
 		B_Masked,		// masked walls
 		B_Sprites,		// actor billboards
 		B_Upload,		// VBO creation + texture upload
-		B_Draw,			// world colour pass submission
+		B_Draw,			// world color pass submission
 		B_Present,		// composite + xBRZ + swap
 		NUM_BUCKETS
 	};
@@ -277,12 +277,12 @@ namespace
 		"in vec2 vUV; in vec3 vViewPos;\n"
 		"out vec4 fragColor;\n"
 		"uniform usampler2D uIndexTex;\n"    // per-surface WxH, R8UI physical indices
-		"uniform usampler2D uC7RampFloor;\n" // 256x1 R8UI: colour -> its ramp floor
+		"uniform usampler2D uC7RampFloor;\n" // 256x1 R8UI: color -> its ramp floor
 		"uniform usampler2D uOpacityTex;\n"  // per-surface WxH, R8UI (0 = transparent)
 		"uniform sampler2D  uPaletteTex;\n"  // 256x1 RGB8
 		"uniform usampler2D uColormapTex;\n" // 256xNUMCOLORMAPS R8UI
 		"uniform int   uHasOpacity;\n"
-		"uniform int   uMasked;\n"        // 1 = colour-keyed masked wall / door leaf
+		"uniform int   uMasked;\n"        // 1 = color-keyed masked wall / door leaf
 		"uniform int   uMaskColor;\n"     // physical index treated as transparent (Remap[255])
 		"uniform float uDepthVis;\n"
 		"uniform float uHeightNum;\n"
@@ -318,15 +318,15 @@ namespace
 		"}\n"
 		// --- texture filtering -------------------------------------------------
 		//
-		// A palette index is a name, not a colour: averaging index 5 and index 200
+		// A palette index is a name, not a color: averaging index 5 and index 200
 		// gives 102, which is an unrelated entry. So the hardware cannot filter
 		// this texture (it is R8UI, which is nearest-only anyway) and neither can
-		// we, until each tap has been resolved all the way through the colour
+		// we, until each tap has been resolved all the way through the color
 		// cycle, the colormap row and the palette. Filtering therefore means
 		// running the whole per-texel chain once per tap and mixing the RGB.
 		//
 		// The same taps produce coverage: a tap that is transparent contributes no
-		// colour and lowers the weight instead. That fraction is written to alpha,
+		// color and lowers the weight instead. That fraction is written to alpha,
 		// where GL_SAMPLE_ALPHA_TO_COVERAGE turns it into an antialiased silhouette
 		// -- which is why sprite edges can be smoothed without blending, and
 		// therefore without breaking the order-independence the draw batching
@@ -453,7 +453,7 @@ namespace
 		"    if(uFixedShade >= 0) shadeRow = uFixedShade;\n"
 		"    shadeRow = clamp(shadeRow, 0, uNumColormaps - 1);\n"
 		"\n"
-		"    // --- debug visualizations read the centre texel only ---\n"
+		"    // --- debug visualizations read the center texel only ---\n"
 		"    if(uDebug == 1){\n"
 		"        ivec2 dt = tapWrap(ivec2(floor(uv * vec2(isz))), isz);\n"
 		"        int didx = int(texelFetch(uIndexTex, dt, 0).r);\n"
@@ -478,7 +478,7 @@ namespace
 		"        // pixel's footprint in texture space. This is what stands in for\n"
 		"        // trilinear/anisotropic filtering here -- both of those need a mip\n"
 		"        // chain, and a mip chain of palette indices is meaningless while a\n"
-		"        // mip chain of resolved colour would have to be rebuilt every time\n"
+		"        // mip chain of resolved color would have to be rebuilt every time\n"
 		"        // Corridor 7 rewrites the palette (night vision, infrared, damage).\n"
 		"        // Sampling the footprint directly needs no such precomputation and\n"
 		"        // narrows with distance the same way, which is what stops the\n"
@@ -490,10 +490,10 @@ namespace
 		"        sampleBilinear(uv + (-0.125)*dx + ( 0.375)*dy, isz, shadeRow, litBand, acc, cov, 0.25);\n"
 		"    }\n"
 		"    if(cov <= 0.0) discard;\n"
-		"    // Colour is the average of the taps that were opaque; alpha is how much\n"
+		"    // Color is the average of the taps that were opaque; alpha is how much\n"
 		"    // of the pixel they covered. Without alpha-to-coverage the alpha is\n"
 		"    // ignored (the target is RGB and nothing blends), so edges stay hard\n"
-		"    // and only the colour is filtered.\n"
+		"    // and only the color is filtered.\n"
 		"    fragColor = vec4(acc / cov, cov);\n"
 		"}\n";
 
@@ -511,7 +511,7 @@ namespace
 		"#version 330 core\n"
 		"in vec2 vUV; out vec4 fragColor;\n"
 		"uniform int uMode;\n"               // 0 = RGB world blit, 1 = indexed 2D overlay
-		"uniform sampler2D  uWorldTex;\n"    // RGB8 world colour (mode 0)
+		"uniform sampler2D  uWorldTex;\n"    // RGB8 world color (mode 0)
 		"uniform usampler2D uOverlayIdx;\n"  // R8UI final palette indices (mode 1)
 		"uniform usampler2D uOverlayOpac;\n" // R8UI 0 = transparent (mode 1)
 		"uniform sampler2D  uPaletteTex;\n"  // 256x1 RGB8
@@ -542,7 +542,7 @@ namespace
 	// texture. Palette effects only ever re-run this; world pixels never change.
 	GLuint CreatePaletteTexture()
 	{
-		// The palette actually on screen, not GPalette's base colours: Corridor 7
+		// The palette actually on screen, not GPalette's base colors: Corridor 7
 		// rewrites the DAC for the visor modes and V_ForceBlend adds a flash on
 		// top. The live path already uploads this; the offscreen capture path did
 		// not, so a --capture-glframe of a visor scene came back untinted and could
@@ -935,7 +935,7 @@ namespace
 			const WorldSurface &surf = mesh.surfaces[i];
 			// Door leaves, masked walls, and sprites all shade as walls
 			// (perpendicular distance, C7 cycle). Walls/doors/masked alpha-test
-			// the index-255 colour key; sprites key on raw index 0 instead. A
+			// the index-255 color key; sprites key on raw index 0 instead. A
 			// door leaf additionally runs the slide.
 			const bool isDoor = surf.kind == WSURF_DoorLeaf;
 			const bool isMasked = surf.kind == WSURF_Masked;
@@ -1025,7 +1025,7 @@ namespace
 
 	// =======================================================================
 	// Shared world render: build the four meshes + program + uniforms once, then
-	// draw the colour (and, for the capture, shade-row debug) passes into the
+	// draw the color (and, for the capture, shade-row debug) passes into the
 	// currently bound framebuffer's viewport. Both the world capture and the
 	// full-frame compositor drive this so the world pixels are identical.
 	// =======================================================================
@@ -1340,7 +1340,7 @@ namespace
 	// is nothing to composite and nothing to mask.
 	//
 	// It goes through the same program as everything else, so the Corridor 7
-	// colour cycle and the 208-239 full-bright rule apply exactly as they do to
+	// color cycle and the 208-239 full-bright rule apply exactly as they do to
 	// a world sprite. uSurfKind is the wall path because that is what enables
 	// those two rules; the distance shade they would otherwise pick is
 	// overridden by uFixedShade, which is the row R_GetPlayerSpriteInfo
@@ -1419,7 +1419,7 @@ namespace
 			const double y0 = (double)s.y, y1 = y0 + hpx;
 
 			// Half a pixel of UV bias. Nearest sampling reads at the pixel
-			// CENTRE, so without this every texel boundary lands half a pixel
+			// CENTER, so without this every texel boundary lands half a pixel
 			// left of where the software blit puts it.
 			const double uw = (double)s.tex->GetWidth();
 			const double vh = (double)s.tex->GetHeight();
@@ -1470,7 +1470,7 @@ namespace
 		glEnable(GL_DEPTH_TEST);
 	}
 
-	// Render the world colour pass into the bound FBO's current viewport. Static
+	// Render the world color pass into the bound FBO's current viewport. Static
 	// opaque world first, then dynamic door/pushwall geometry, then masked panes
 	// (biased toward the viewer so they don't z-fight a coplanar wall behind
 	// them), then sprite billboards -- all sharing one clear and depth buffer.
@@ -1627,7 +1627,7 @@ namespace
 	// GPU world shows through. Both are detected the same robust way -- redraw
 	// over two different backgrounds and keep the pixels that come out identical
 	// -- because a masked blit overwrites deterministically, so a texel is
-	// "painted" iff it is background-independent, whatever colour it landed in.
+	// "painted" iff it is background-independent, whatever color it landed in.
 	void BuildOverlay(int FW, int FH, int vx, int vy, int vw, int vh,
 		GLuint &idxTexOut, GLuint &opacTexOut, unsigned int &viewOpaqueOut)
 	{
@@ -1697,7 +1697,7 @@ bool R_GLWorldCapture(const char *outPath)
 		return false;
 	}
 
-	// Offscreen colour + depth target.
+	// Offscreen color + depth target.
 	GLuint fbo = 0, colorTex = 0, depthRb = 0;
 	glGenFramebuffers(1, &fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
@@ -1726,7 +1726,7 @@ bool R_GLWorldCapture(const char *outPath)
 
 	unsigned char *rgb = new unsigned char[(size_t)W * H * 3];
 
-	// Pass 1: full-fidelity colour.
+	// Pass 1: full-fidelity color.
 	DrawWorldColourPass(wr);
 	glFinish();
 	dev.ReadPixelsRGB(rgb, W, H);
@@ -1787,7 +1787,7 @@ bool R_GLFrameCapture(const char *outPath)
 	if(!dev.Create(FW, FH, false, /*hidden=*/true, "EC7Wolf GL frame"))
 		return false;
 
-	// --- 1) Render the GL 3D world into its own view-sized colour texture. Kept
+	// --- 1) Render the GL 3D world into its own view-sized color texture. Kept
 	// at the exact view dimensions so the world shader's screen-space plane bands
 	// / horizon math are identical to the standalone world capture. ---
 	WorldGL wr;
@@ -2074,7 +2074,7 @@ namespace
 		// guessing when the map's static geometry might have changed -- a
 		// pushwall settling into its final cell silently rewrites it, and a
 		// missed invalidation would leave a wall standing where the player just
-		// walked. Comparing can only fail towards rebuilding.
+		// walked. Comparing can only fail toward rebuilding.
 		WorldMesh staticCacheMesh;
 		MeshGL    staticCacheGL;
 		bool      staticCacheValid;
@@ -2202,7 +2202,7 @@ namespace
 		gLive.worldH = h;
 
 		// Multisampling renders into its own multisampled framebuffer and is
-		// resolved into worldTex afterwards, because the compositor samples
+		// resolved into worldTex afterward, because the compositor samples
 		// worldTex as an ordinary texture. Rendering straight to a multisampled
 		// texture would work too, but this keeps everything downstream unaware
 		// that MSAA is on at all.
@@ -2345,7 +2345,7 @@ namespace
 		if(msaa)
 		{
 			glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
-			// Resolve the multisampled colour into the texture the compositor
+			// Resolve the multisampled color into the texture the compositor
 			// samples. Depth is not needed downstream.
 			glBindFramebuffer(GL_READ_FRAMEBUFFER, gLive.msaaFbo);
 			glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gLive.worldFbo);
@@ -2490,7 +2490,7 @@ void R_GLLiveRenderScene()
 //
 // The compositor decides what shows through the view region by keying on the
 // palette's black index (the value R_GLLiveRenderScene clears the view to), and
-// that test cannot see 2D drawn *in* that colour. C7's top message paints a
+// that test cannot see 2D drawn *in* that color. C7's top message paints a
 // one-pixel black drop shadow under its yellow letters exactly like the DOS
 // notification renderer, so those texels read as "nothing drawn here" and the
 // world showed through them -- the shadow vanished in GL while surviving in
@@ -2499,7 +2499,7 @@ void R_GLLiveRenderScene()
 // The fix is the same destination-independence test the weapon coverage mask
 // uses: run the draw twice over two different backgrounds and keep the texels
 // that come out identical. A masked/stencil blit ignores what it covers, so a
-// texel is "painted" iff it is background-independent, whatever colour it is.
+// texel is "painted" iff it is background-independent, whatever color it is.
 // `draw` is therefore called more than once and must be pure (a translucent
 // draw would fail the test and stay transparent, as it does today).
 void R_GLLiveDrawViewOverlay(void (*draw)())

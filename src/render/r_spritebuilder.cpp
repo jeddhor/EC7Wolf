@@ -4,7 +4,7 @@
 //
 // DrawScaleds() in the software renderer walks the actor list, tests each
 // actor's visibility, transforms it, selects a rotation frame, and scan-line
-// scales it into the framebuffer with the Corridor 7 colour-cycle, full-bright,
+// scales it into the framebuffer with the Corridor 7 color-cycle, full-bright,
 // visor-visibility rules baked into the inner loop.
 //
 // The GPU renderer needs the same *selection* (which actors, which frame /

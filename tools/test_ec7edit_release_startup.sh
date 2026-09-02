@@ -22,7 +22,7 @@
 #   3. With a HOME of its own, so it cannot read the developer's settings and
 #      cannot leave anything in a real profile.
 #   4. Through --selftest, which builds the real main window and reads the real
-#      catalogue. `--version` proves the executable starts, which was never the
+#      catalog. `--version` proves the executable starts, which was never the
 #      part in doubt.
 #
 # And it audits what is in the file, because this is a PUBLIC artifact: no
@@ -195,7 +195,7 @@ PY
 
 # --- 4b. what a package owes the person who downloaded it ------------------
 #
-# It bundles a Qt and a Python, so it owes their licences: "it is only a
+# It bundles a Qt and a Python, so it owes their licenses: "it is only a
 # dependency" stops being true the moment the libraries are inside the file
 # being distributed. And a manual is not much use left on a website.
 for required in LICENSE.txt THIRD-PARTY.txt README.txt MANUAL.md; do

@@ -5,7 +5,7 @@
 Corridor 7's data files are the user's own property and this project has no
 right to alter them, so the rule is stronger than "try not to": every write
 goes through a guard that has to be told which roots are off limits, and the
-source's digest is checked again afterwards. A tool that merely intends to be
+source's digest is checked again afterward. A tool that merely intends to be
 read-only is one argument-order mistake away from not being.
 
 Three ways a write can reach a file it must not touch, all covered here:
@@ -14,7 +14,7 @@ Three ways a write can reach a file it must not touch, all covered here:
 * the path *is* the source, spelled differently -- `./MAPTEMP.CO7`, a symlink,
   `~/games/../games/data`;
 * the path is a hard link to the source, which no amount of string
-  normalisation will reveal. That one needs the inode.
+  normalization will reveal. That one needs the inode.
 """
 
 from __future__ import annotations

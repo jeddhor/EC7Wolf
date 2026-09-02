@@ -33,7 +33,7 @@ namespace
 
 	// A session id is echoed back on every line, so it has to be something a
 	// parent can match exactly and a map cannot smuggle a newline through.
-	// Anything outside this set is refused rather than sanitised: a silently
+	// Anything outside this set is refused rather than sanitized: a silently
 	// altered nonce would never match, and "my events stopped arriving" is a
 	// much worse thing to debug than "that session id was rejected".
 	bool Printable(const char *text)
@@ -60,7 +60,7 @@ namespace
 	//: the map, and an absent one identifies nothing.
 	const unsigned int VALUE_LIMIT = 160;
 
-	FString Sanitised(const char *text)
+	FString Sanitized(const char *text)
 	{
 		FString out;
 		for(const char *c = (text ? text : ""); *c; ++c)
@@ -87,7 +87,7 @@ namespace
 		if(!g_active)
 			return;
 		// Straight to stdout, not Printf: Printf goes through the console,
-		// which word-wraps, colours, and is not guaranteed to reach the pipe
+		// which word-wraps, colors, and is not guaranteed to reach the pipe
 		// before the frame ends. This has to be one line, exactly as written,
 		// now.
 		//
@@ -192,14 +192,14 @@ void DataSelected(const char *extension, const char *directory)
 {
 	FString body;
 	body.Format("extension=%s directory=%s",
-		Sanitised(extension).GetChars(), Sanitised(directory).GetChars());
+		Sanitized(extension).GetChars(), Sanitized(directory).GetChars());
 	Emit("data-selection", body.GetChars());
 }
 
 void PreviewLoaded(const char *path, bool loaded, unsigned int lumps)
 {
 	FString body;
-	body.Format("path=%s loaded=%s lumps=%u", Sanitised(path).GetChars(),
+	body.Format("path=%s loaded=%s lumps=%u", Sanitized(path).GetChars(),
 		loaded ? "yes" : "no", lumps);
 	Emit("preview-load", body.GetChars());
 }
@@ -209,24 +209,24 @@ void MapEntered(const char *marker, const char *name, const char *mapName,
 {
 	FString body;
 	body.Format("marker=%s name=%s mapname=%s spawnfilter=%d next=%s secretnext=%s",
-		Sanitised(marker).GetChars(), Sanitised(name).GetChars(),
-		Sanitised(mapName).GetChars(), spawnFilter,
-		Sanitised(next && *next ? next : "-").GetChars(),
-		Sanitised(secretNext && *secretNext ? secretNext : "-").GetChars());
+		Sanitized(marker).GetChars(), Sanitized(name).GetChars(),
+		Sanitized(mapName).GetChars(), spawnFilter,
+		Sanitized(next && *next ? next : "-").GetChars(),
+		Sanitized(secretNext && *secretNext ? secretNext : "-").GetChars());
 	Emit("map-entry", body.GetChars());
 }
 
 void CampaignEnded(const char *via)
 {
 	FString body;
-	body.Format("via=%s", Sanitised(via).GetChars());
+	body.Format("via=%s", Sanitized(via).GetChars());
 	Emit("campaign-end", body.GetChars());
 }
 
 void Fatal(const char *message)
 {
 	FString body;
-	body.Format("message=%s", Sanitised(message).GetChars());
+	body.Format("message=%s", Sanitized(message).GetChars());
 	Emit("fatal", body.GetChars());
 }
 
@@ -240,7 +240,7 @@ void SessionResult(const char *outcome)
 		return;
 	said = true;
 	FString body;
-	body.Format("outcome=%s", Sanitised(outcome).GetChars());
+	body.Format("outcome=%s", Sanitized(outcome).GetChars());
 	Emit("session-result", body.GetChars());
 }
 

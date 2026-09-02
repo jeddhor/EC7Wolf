@@ -95,8 +95,8 @@ shoot() { # $1 width  $2 height
 		xdotool key --clearmodifiers Up; sleep 0.6
 		xdotool key --clearmodifiers Return; sleep 3
 		# Retried until the page has actually drawn: a shot taken a moment
-		# early is a flat colour, and this gate then compares two flat
-		# colours and reports "the screen is blank or nearly so".
+		# early is a flat color, and this gate then compares two flat
+		# colors and reports "the screen is blank or nearly so".
 		menu_shot "$PG_WORK/scores-$PG_W.png" || true
 		xdotool key --clearmodifiers Escape; sleep 2
 
@@ -147,7 +147,7 @@ for name, label in (("scores", "high scores"), ("exit", "sign-off")):
     levels = len(set(ab))
     spread = max(ab) - min(ab)
 
-    print("%s: two resolutions agree to %.2f levels of 255; %d grey levels, "
+    print("%s: two resolutions agree to %.2f levels of 255; %d gray levels, "
           "range %d" % (label, mae, levels, spread))
 
     if mae > MAX_MAE:
@@ -157,7 +157,7 @@ for name, label in (("scores", "high scores"), ("exit", "sign-off")):
               "upscaled texture's own size as virtual units." % (label, mae))
         failed = True
     if levels < 16 or spread < 64:
-        print("FAIL: the %s page shows %d grey levels over a range of %d. The "
+        print("FAIL: the %s page shows %d gray levels over a range of %d. The "
               "screen is blank or nearly so." % (label, levels, spread))
         failed = True
 

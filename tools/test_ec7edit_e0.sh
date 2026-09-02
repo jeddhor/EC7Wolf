@@ -51,7 +51,7 @@ printf '  ..   %s fixtures\n' "$(find "$work/a" -type f | wc -l)"
 
 # Byte-for-byte between two independent runs: determinism, not luck.
 check "two runs produce identical bytes" diff -r "$work/a" "$work/b"
-check "they match the generator afterwards" \
+check "they match the generator afterward" \
 	python3 "$editor/scripts/make_fixtures.py" verify "$work/a"
 
 # A fixture nobody can tamper with quietly.

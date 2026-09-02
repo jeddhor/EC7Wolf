@@ -38,7 +38,7 @@ namespace DynamicWalls
 		return IsDoorCell(spot) || IsPushwallCell(spot);
 	}
 
-	// A non-door masked wall: a tile whose art is colour-keyed / see-through
+	// A non-door masked wall: a tile whose art is color-keyed / see-through
 	// (glass, grate, fence, force field, or an opened animated-wall aperture).
 	// Rendered by the alpha-tested masked pass, not the opaque static mesh.
 	// Doors (offsetVertical/offsetHorizontal) are excluded -- they are already

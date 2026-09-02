@@ -46,7 +46,7 @@ namespace EditorLink
 
 	// Reads --editor-protocol and --editor-session out of argv and claims both
 	// tokens and their values, so normal parameter dispatch never sees them.
-	// Safe to call before anything is initialised.
+	// Safe to call before anything is initialized.
 	void ParseArgs(int argc, char **argv);
 
 	// Whether an editor asked for the stream. False for every ordinary run.

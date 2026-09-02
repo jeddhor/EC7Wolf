@@ -266,7 +266,7 @@ def write_words(document: MapDocument, writes, *, label: str = "Place",
     """Write `(plane, x, y, value)` tuples: the general compound placement.
 
     A door is a plane-0 word; an alien facing east is a plane-1 word; a
-    transporter is both a zone and a trigger. Anything the catalogue describes
+    transporter is both a zone and a trigger. Anything the catalog describes
     as a compound write comes through here as one command, so it is one undo.
     """
     edits = []

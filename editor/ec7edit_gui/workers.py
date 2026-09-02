@@ -8,7 +8,7 @@ the answer is thrown away. Without this, scrolling a palette fast enough shows
 thumbnails from three selections ago arriving over the current one, and the
 user is looking at the wrong picture with no way to tell.
 
-**Cancellation is cooperative and checked.** A cancelled job stops at its next
+**Cancellation is cooperative and checked.** A canceled job stops at its next
 checkpoint and reports nothing. It is never killed mid-write, because a
 half-written cache entry is worse than a slow one.
 
@@ -33,14 +33,14 @@ class Job:
     revision: int
     work: callable
     #: Set to stop at the next checkpoint. Read by the work function.
-    cancelled: bool = False
+    canceled: bool = False
     metadata: dict = field(default_factory=dict)
     #: Whether the answer goes stale when the document changes. False for work
     #: that does not depend on the document at all.
     tracks_revision: bool = True
 
     def cancel(self) -> None:
-        self.cancelled = True
+        self.canceled = True
 
 
 class _Signals(QObject):
@@ -57,14 +57,14 @@ class _Task(QRunnable):
 
     @Slot()
     def run(self) -> None:
-        if self.job.cancelled:
+        if self.job.canceled:
             return
         try:
             result = self.job.work(self.job)
         except BaseException:  # a worker must never take the application down
             self.signals.failed.emit(self.job, traceback.format_exc())
             return
-        if not self.job.cancelled:
+        if not self.job.canceled:
             self.signals.finished.emit(self.job, result)
 
 
@@ -98,7 +98,7 @@ class WorkerPool(QObject):
         """Tell the pool where the document is now.
 
         Jobs already in flight against an older revision will be discarded when
-        they finish. They are not cancelled: they may be nearly done, and the
+        they finish. They are not canceled: they may be nearly done, and the
         cost of letting them finish and dropping the answer is lower than the
         bookkeeping to stop them.
         """
@@ -145,7 +145,7 @@ class WorkerPool(QObject):
     def _on_finished(self, job: Job, result) -> None:
         if self._jobs.get(job.key) is job:
             del self._jobs[job.key]
-        if job.cancelled:
+        if job.canceled:
             return
         if job.tracks_revision and job.revision != self._revision:
             self.discarded.emit(job.key)

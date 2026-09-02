@@ -90,7 +90,7 @@ class Rectangles(unittest.TestCase):
         self.assertEqual(sorted(rectangle_cells(3, 3, 0, 0)),
                          sorted(rectangle_cells(0, 0, 3, 3)))
 
-    def test_bounds_normalise_any_drag_direction(self):
+    def test_bounds_normalize_any_drag_direction(self):
         for corners in ((0, 0, 3, 2), (3, 2, 0, 0), (0, 2, 3, 0), (3, 0, 0, 2)):
             self.assertEqual(rectangle_bounds(*corners), (0, 0, 4, 3))
 

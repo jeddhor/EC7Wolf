@@ -16,7 +16,7 @@
 # closed all day. Median start is 0.22 s against 1.19 s.
 #
 # The package is DATA-FREE and this script keeps it that way: it copies the
-# editor's own sources and its catalogue and nothing else, and the audit at the
+# editor's own sources and its catalog and nothing else, and the audit at the
 # end fails if a Corridor 7 file, or anything the size of one, got in.
 #
 # Usage: package_ec7edit.sh --output DIR [--python PYTHON] [--no-archive]
@@ -71,7 +71,7 @@ version=$("$python" -c "import sys; sys.path.insert(0, '$editor'); \
 
 # Stamped into the package, because there is no repository inside one to ask.
 # Written before the freeze so PyInstaller picks it up as an ordinary module,
-# and removed afterwards -- a generated file left in the tree would be the next
+# and removed afterward -- a generated file left in the tree would be the next
 # checkout's stale answer.
 stamp="$editor/ec7edit_core/_build_version.py"
 cat >"$stamp" <<EOF
@@ -101,7 +101,7 @@ work=$(mktemp -d /tmp/ec7edit-package.XXXXXX)
 # Qt is enormous and most of it is not used. Excluding the modules the editor
 # never imports is the difference between a package somebody downloads and one
 # they give up on -- and an exclusion that is wrong shows up immediately as an
-# editor that will not start, which the startup gate runs straight afterwards.
+# editor that will not start, which the startup gate runs straight afterward.
 ( cd "$editor" && "$python" -m PyInstaller \
 	--noconfirm --clean --log-level WARN \
 	--distpath "$work/dist" --workpath "$work/build" --specpath "$work" \
@@ -140,7 +140,7 @@ mv "$work/dist/ec7edit" "$staging"
 cp "$repo/docs/license-gpl.txt" "$staging/LICENSE.txt"
 
 # What else is in the box, and under what terms. A package that bundles a Qt
-# and a Python owes their licences too, and "it is only a dependency" stops
+# and a Python owes their licenses too, and "it is only a dependency" stops
 # being true the moment the libraries are inside the file being distributed.
 # Versions are read from the environment that was frozen rather than typed
 # here, so this cannot describe a Qt the package does not contain.
@@ -168,9 +168,9 @@ if metadata is not None:
             md = metadata.metadata(name)
         except Exception:
             continue
-        licence = md.get("License-Expression") or md.get("License") or "see the project"
+        license = md.get("License-Expression") or md.get("License") or "see the project"
         lines.append(f"  {name} {md.get('Version')}")
-        lines.append(f"      {licence}")
+        lines.append(f"      {license}")
         lines.append("      Qt itself is included, under the same terms.")
         lines.append("      https://www.qt.io/licensing  https://pypi.org/project/PySide6/")
         lines.append("")
@@ -182,7 +182,7 @@ lines += [
     "",
     "  PyInstaller runtime (the bootloader in this executable)",
     "      GPL-2.0-or-later with the bootloader exception, which permits",
-    "      shipping frozen applications under any licence.",
+    "      shipping frozen applications under any license.",
     "      https://pyinstaller.org/en/stable/license.html",
     "",
     "No part of Corridor 7: Alien Invasion is in this package. That game",

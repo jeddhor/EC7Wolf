@@ -77,7 +77,7 @@ ok(f"{len(palette) // 3} entries read from the executable")
 if len(set(palette)) < 32:
     fail("the palette is suspiciously flat")
 else:
-    ok(f"{len(set(zip(palette[0::3], palette[1::3], palette[2::3])))} distinct colours")
+    ok(f"{len(set(zip(palette[0::3], palette[1::3], palette[2::3])))} distinct colors")
 
 print("\nWalls and sprites")
 gfx = (data / "GFXTILES.CO7").read_bytes()
@@ -138,7 +138,7 @@ try:
 except FileNotFoundError:
     note("no VGAGRAPH set here")
 
-print("\nThe catalogue against the shipped maps")
+print("\nThe catalog against the shipped maps")
 catalog = load_catalog(repo / "editor" / "resources" / "editor_catalog.json")
 archive = parse_archive((data / "MAPTEMP.CO7").read_bytes())
 
@@ -154,15 +154,15 @@ note(f"{len(archive)} maps, {len(plane0)} distinct plane-0 values, "
      f"{len(plane1)} distinct plane-1 values")
 
 if unknown0:
-    fail(f"plane-0 values in the shipped maps with no catalogue entry: {unknown0[:20]}")
+    fail(f"plane-0 values in the shipped maps with no catalog entry: {unknown0[:20]}")
 else:
     ok("every plane-0 value used by the shipped maps has an entry")
 if unknown1:
-    fail(f"plane-1 values in the shipped maps with no catalogue entry: {unknown1[:20]}")
+    fail(f"plane-1 values in the shipped maps with no catalog entry: {unknown1[:20]}")
 else:
     ok("every plane-1 value used by the shipped maps has an entry")
 
-# A sprite the catalogue points at has to exist in the artwork, or the palette
+# A sprite the catalog points at has to exist in the artwork, or the palette
 # would show a hole where an alien should be.
 missing = [
     entry.key for entry in catalog
@@ -172,7 +172,7 @@ missing = [
 if missing:
     fail(f"{len(missing)} entries name a sprite page outside GFXTILES: {missing[:5]}")
 else:
-    ok("every catalogue sprite reference is inside the artwork")
+    ok("every catalog sprite reference is inside the artwork")
 
 sys.exit(status)
 PYEOF

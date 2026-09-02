@@ -26,7 +26,7 @@ by running the game from a directory holding those files and nothing else.
 The recognized CD executable is 250,776 bytes, and it is required rather than
 merely useful: the game's palette is embedded in it and is read out at runtime
 as the `C7PAL` lump, which `iwadinfo.txt` lists in `MustContain` — without the
-executable the data is not recognised as Corridor 7 at all. The palette and
+executable the data is not recognized as Corridor 7 at all. The palette and
 other commercial resources are not embedded or redistributed.
 
 ### The CD soundtrack
@@ -84,11 +84,11 @@ three floor-to-ceiling rods, and C062, a speckled energy ring — is painted
 released game rotates in the DAC. That single fact is the whole effect:
 
 * Those eight entries are **(0,0,0) in the base palette**, so the barrier is
-  black-on-black in normal vision. It is not hidden by a rule; it has no colour.
+  black-on-black in normal vision. It is not hidden by a rule; it has no color.
 * Under infrared they become a **32 / 69 / 105 / 142 / 178 / 219 / 255 / 0 red
   sweep** (`Corridor7InfraredPal`), so the artwork lights up.
 * The ramp **rotates continuously**, and the artwork's indices already climb it:
-  C006's two outer rods run position 0→7 top to bottom and its centre rod 7→0,
+  C006's two outer rods run position 0→7 top to bottom and its center rod 7→0,
   so the bright band travels down the outer rods and up the middle one at the
   same time. C062's ring is a random scatter of all eight positions, which
   reshuffles into crackling static.
@@ -97,7 +97,7 @@ Nothing there is barrier-specific. `C7ShadeWorldSpriteColor` already cycles and
 full-brights indices 208-239 for every Corridor 7 world sprite, and the GL
 shader's `c7Cycle` does the same, so the traps come out right by being drawn
 like anything else. The port previously replaced them with a hashed white
-dissolve; that lost the travelling sweep, lost the ring's shape, and could not
+dissolve; that lost the traveling sweep, lost the ring's shape, and could not
 have looked like the original because the original never draws over the sprite.
 
 The remaining special case is visibility: the statics are skipped outside
@@ -106,7 +106,7 @@ release** — the barrier is visible under infrared and nowhere else. The artwor
 explains most of it on its own: under night vision the whole ramp collapses to a
 flat (0,40,0) in `Corridor7NightVisionPal`, so there is no sweep to reveal, and
 in normal vision the beams are black. The gate covers the remainder, which is
-the small grey mount at each end of a rod (indices 21/25/29/30/32, the only
+the small gray mount at each end of a rod (indices 21/25/29/30/32, the only
 non-ramp texels in C006).
 
 `tools/test_corridor7_laserbarrier.sh` pins the result in both renderers: all of
@@ -201,7 +201,7 @@ is right for the whole game. Measured on Corridor 7's own art:
 
 | | `realesrgan-x4plus` (default) | `realesr-animevideov3` |
 |---|---|---|
-| Flat colour, hard geometry | keeps it — the SECURITY OFFICE sign stays yellow and legible | washes out, desaturates toward orange |
+| Flat color, hard geometry | keeps it — the SECURITY OFFICE sign stays yellow and legible | washes out, desaturates toward orange |
 | Fine line work (stripes, drips) | crisp | smeared |
 | Small bitmap text | rewrites it — ACCESS GRANTED became ACCE55 GRVNITED | survives, legible |
 | Flat walls | invents film grain, which quantises to speckle | cleaner |
@@ -215,7 +215,7 @@ out best.
 glyphs that small, and two automatic ways of detecting which tiles it ruined
 were tried and both failed — they measure how much the model *changed* a tile,
 which ranks a detailed tile it handled well above a sign it destroyed. So the
-judgement is yours:
+judgment is yours:
 
 ```sh
 tools/make_c7_upscaled_pk3.py --dir /path/to/game-data --compare /tmp/c7compare
@@ -236,7 +236,7 @@ because the list is specific to one.
 
 Two notes for anyone rebuilding the pack:
 
-* The upscaled art is quantised back into the 256-colour palette on load. That
+* The upscaled art is quantised back into the 256-color palette on load. That
   is not a limitation to work around — Corridor 7 rewrites the palette for the
   infrared visor and for damage flashes, and art that had left the palette
   would stop responding to either. What survives quantisation is the resolution
@@ -372,7 +372,7 @@ Append an output directory and `--all` to load-check every map in the archive.
   ADJUST AUDIO/ADJUST VISUAL open the sound and display options, RETRIEVE/
   STORE MISSION load and save, RESUME/ABORT CURRENT MISSION return to or end
   the running game, HIGH SCORES shows the table, and EXIT BUILDING asks
-  "Exit building?" in the original grey prompt window. Menu sounds follow a
+  "Exit building?" in the original gray prompt window. Menu sounds follow a
   controlled DMA capture of the released game: every cursor move plays
   sample 9, activating an entry is silent, escaping back to the main menu
   plays 33, and the quit/confirm prompt announces itself with 31 with a
@@ -503,7 +503,7 @@ and high-score songs simply do not play -- the routine returns immediately. The
 CDPlay table has five entries, one zeroed and four real ones, and those four
 are the in-game songs on physical tracks 3, 5, 7 and 9.
 
-So silence in the menu under CD audio is the original's behaviour, not a gap.
+So silence in the menu under CD audio is the original's behavior, not a gap.
 The short even-numbered tracks between the songs (six to eight seconds, track 2
 among them) are lead-ins to the song that follows, not menu music.
 

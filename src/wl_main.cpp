@@ -7,6 +7,7 @@
 #endif
 
 #include "wl_def.h"
+#include "g_session.h"
 #include "wl_menu.h"
 #include "id_ca.h"
 #include "id_sd.h"
@@ -159,7 +160,7 @@ void NewGame (int difficulty, FString map, bool displayBriefing, FName playerCla
 	gamestate.difficulty = &SkillInfo::GetSkill(difficulty);
 	strncpy(gamestate.mapname, map, 8);
 	gamestate.mapname[8] = 0;
-	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 		gamestate.playerClass[i] = ClassDef::FindClass(playerClassNames[i]);
 
 	levelInfo = &LevelInfo::Find(map);
@@ -171,7 +172,7 @@ void NewGame (int difficulty, FString map, bool displayBriefing, FName playerCla
 	LevelRatios.killratio = LevelRatios.secretsratio = LevelRatios.treasureratio =
 		LevelRatios.numLevels = LevelRatios.time = 0;
 
-	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 		players[i].state = player_t::PST_ENTER;
 
 	Dialog::ClearConversations();
@@ -1354,6 +1355,7 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 		else IFARG("--gltest") { if(i + 1 < argc && argv[i+1][0] != '-') ++i; }
 		else IFARG("--flictest") { ++i; }
 		else IFARG("--netvectors") { ++i; }
+		else IFARG("--sessiontest") {}
 		else IFARG("--editor-capabilities") {}
 		else if(EditorLink::ArgClaimed(i))
 		{
@@ -1559,6 +1561,16 @@ int WL_Main (int argc, char *argv[])
 		{
 			if(strcmp(argv[ni], "--netvectors") == 0)
 				return Net::WriteProtocolVectors(argv[ni + 1]);
+		}
+
+		// The session model, checked against sessions this build cannot yet
+		// play: an authority that owns no player, a slot 0 owned by somebody
+		// who is not the authority. Also data-free -- it touches no player
+		// array, which is most of what it is proving.
+		for(int si = 1; si < argc; ++si)
+		{
+			if(strcmp(argv[si], "--sessiontest") == 0)
+				return Session::SelfTest();
 		}
 
 #ifdef ECWOLF_RENDERER_OPENGL

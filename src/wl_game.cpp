@@ -10,6 +10,7 @@
 #include "c7_automap.h"
 #include "c7_flic.h"
 #include "wl_def.h"
+#include "g_session.h"
 #include "c7_editorlink.h"
 #include "wl_menu.h"
 #include "render/r_dynamicwalls.h"
@@ -315,7 +316,7 @@ void SetupGameLevel (void)
 			= gamestate.secretcount
 			= gamestate.killcount
 			= gamestate.treasurecount = 0;
-		for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+		for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 		{
 			players[i].killerobj = NULL;
 			players[i].levelShotsFired = players[i].levelShotsHit = 0;
@@ -759,7 +760,7 @@ restartgame:
 				if(playstate == ex_newmap)
 				{
 					// This logic could probably use refinement for multiplayer
-					for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+					for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 					{
 						if(NewMap.flags & NEWMAP_KEEPPOSITION)
 						{
@@ -772,7 +773,7 @@ restartgame:
 				}
 			}
 
-			for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+			for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 			{
 				player_t &player = players[i];
 
@@ -979,7 +980,7 @@ restartgame:
 					next = teleportMap.MapName;
 				}
 
-				for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+				for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 					StripInventory(players[i].mo);
 
 				if(dointermission)
@@ -1009,7 +1010,7 @@ restartgame:
 					return false;
 				}
 
-				for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+				for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 					players[i].oldscore = players[i].score;
 
 				strncpy(gamestate.mapname, next, 8);
@@ -1041,7 +1042,7 @@ restartgame:
 				return false;
 
 			case ex_warped:
-				for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+				for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 					players[i].state = player_t::PST_ENTER;
 				break;
 

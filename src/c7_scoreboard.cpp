@@ -14,6 +14,7 @@
 */
 
 #include "wl_def.h"
+#include "g_session.h"
 #include "wl_agent.h"
 #include "wl_draw.h"
 #include "wl_game.h"
@@ -69,7 +70,7 @@ namespace
 	// give two players a different table for the same game.
 	void Collect(TArray<Standing> &standings)
 	{
-		for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+		for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 		{
 			Standing s = { i, players[i].frags, Net::PlayerTeam(i) };
 			standings.Push(s);
@@ -172,7 +173,7 @@ void C7Scoreboard_DrawOverlay()
 	const int oldpa = pa;
 	pa = MENU_NONE;
 
-	const int rows = (int)Net::InitVars.numPlayers +
+	const int rows = (int)Session::ActiveSlotCount() +
 		(Net::InitVars.gameMode == Net::GM_TeamBattle ? 3 : 0);
 	const int panelH = kFirstRow + kRowStep*rows + 8 - (kTitleY - 8);
 	DrawWindow(8, kTitleY - 8, 304, panelH, 0);

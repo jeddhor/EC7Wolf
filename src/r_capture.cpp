@@ -15,6 +15,7 @@
 
 #include "r_capture.h"
 #include "wl_def.h"
+#include "g_session.h"
 #include "wl_play.h"
 #include "actor.h"
 #include "wl_agent.h"
@@ -317,7 +318,7 @@ namespace
 		if(g_playerFile == NULL)
 			return;
 
-		for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+		for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 		{
 			if(players[i].mo == NULL)
 				continue;
@@ -1168,7 +1169,7 @@ void PreTic()
 	{
 		if(!g_duelFound)
 			FindDuelSpots();
-		for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+		for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 		{
 			if(players[i].mo == NULL || g_duelX[i] == 0)
 				continue;
@@ -1190,7 +1191,7 @@ void PreTic()
 
 	if(g_topUpAmmo)
 	{
-		for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+		for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 		{
 			if(players[i].mo == NULL)
 				continue;

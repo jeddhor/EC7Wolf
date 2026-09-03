@@ -8,6 +8,7 @@
 #include "m_classes.h"
 #include "m_random.h"
 #include "wl_def.h"
+#include "g_session.h"
 #include "wl_menu.h"
 #include "wl_iwad.h"
 #include "c7_cdaudio.h"
@@ -732,7 +733,7 @@ MENU_LISTENER(SetRenderScale)
 MENU_LISTENER(SetFOV)
 {
 	localDesiredFOV = kFOVValues[which];
-	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 		players[i].SetFOV(localDesiredFOV);
 	return true;
 }

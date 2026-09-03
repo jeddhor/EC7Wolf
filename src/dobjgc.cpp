@@ -79,6 +79,7 @@
 //#include "intermission/intermission.h"
 #include "wl_agent.h"
 #include "wl_net.h"
+#include "g_session.h"
 #include "thingdef/thingdef.h"
 #include "id_ca.h"
 
@@ -307,7 +308,7 @@ static void MarkRoot()
 
 	Gray = NULL;
 	thinkerList.MarkRoots();
-	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 		players[i].PropagateMark();
 	if(map)
 		map->PropagateMark();

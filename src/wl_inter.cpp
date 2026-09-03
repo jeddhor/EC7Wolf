@@ -1,6 +1,7 @@
 // WL_INTER.C
 
 #include "wl_def.h"
+#include "g_session.h"
 #include "wl_menu.h"
 #include "wl_play.h"
 #include "id_ca.h"
@@ -280,18 +281,18 @@ static void InterAddBonus(unsigned int bonus, bool count=false)
 // Divy up bonus points to all players
 static void InterGiveBonus(unsigned int bonus)
 {
-	unsigned int commonBonus = bonus/Net::InitVars.numPlayers;
-	unsigned int extraBonus = bonus%Net::InitVars.numPlayers;
+	unsigned int commonBonus = bonus/Session::ActiveSlotCount();
+	unsigned int extraBonus = bonus%Session::ActiveSlotCount();
 
 	// We'll give the remainder points to the lowest scoring player because why not?
 	player_t *extraRecipient = players;
-	for(unsigned int i = 1;i < Net::InitVars.numPlayers;++i)
+	for(unsigned int i = 1;i < Session::ActiveSlotCount();++i)
 	{
 		if(players[i].score < extraRecipient->score)
 			extraRecipient = &players[i];
 	}
 
-	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 		players[i].GivePoints(commonBonus + (&players[i] == extraRecipient ? extraBonus : 0));
 }
 

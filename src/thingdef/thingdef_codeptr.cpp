@@ -45,6 +45,7 @@
 #include "thingdef/thingdef.h"
 #include "wl_act.h"
 #include "wl_def.h"
+#include "g_session.h"
 #include "wl_agent.h"
 #include "wl_draw.h"
 #include "wl_game.h"
@@ -218,7 +219,7 @@ ACTION_FUNCTION(A_BossDeath)
 		if(deathcam && playstate == ex_stillplaying)
 		{
 			// Return the camera to the players if we're still going
-			for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+			for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 			{
 				players[i].camera = players[i].mo;
 				players[i].BringUpWeapon();

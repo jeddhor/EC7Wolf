@@ -2,6 +2,7 @@
 
 #include "c_cvars.h"
 #include "wl_def.h"
+#include "g_session.h"
 #include "r_capture.h"
 #include "render/r_renderer.h"
 #include "render/r_interpolation.h"
@@ -802,7 +803,7 @@ void PollControls (bool absolutes)
 		AM_CheckKeys();
 	}
 
-	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 	{
 		if(control[i].buttonstate[bt_pause] && !control[i].buttonheld[bt_pause])
 		{

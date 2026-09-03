@@ -59,6 +59,7 @@
 #include "wl_menu.h"
 #include "wl_net.h"
 #include "wl_play.h"
+#include "g_session.h"
 #include "textures/textures.h"
 
 void R_RenderView();
@@ -541,7 +542,7 @@ static void Serialize(FArchive &arc)
 		gamestate.difficulty = &SkillInfo::GetSkill(difficulty);
 	}
 
-	unsigned int maxPlayers = Net::InitVars.numPlayers;
+	unsigned int maxPlayers = Session::ActiveSlotCount();
 
 	arc << gamestate.playerClass[0];
 	if(SaveVersion >= 1599444347)

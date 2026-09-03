@@ -5,6 +5,7 @@
 
 #include "doomerrors.h"
 #include "wl_def.h"
+#include "g_session.h"
 #include "id_ca.h"
 #include "id_sd.h"
 #include "id_vl.h"
@@ -328,7 +329,7 @@ static void CheckFragLimit()
 		return;
 	}
 
-	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 	{
 		if(players[i].frags >= limit)
 		{
@@ -370,7 +371,7 @@ void player_t::TakeDamage (int points, AActor *attacker)
 	if (!godmode)
 		mo->health = health -= points;
 
-	if (godmode != 2 && GetPlayerNum() == ConsolePlayer)
+	if (godmode != 2 && Session::IsLocalViewSlot(GetPlayerNum()))
 		StartDamageFlash (points);
 
 	// Bonus floors are point runs, not lives. When the player's health expires,
@@ -490,7 +491,7 @@ static void DamageC7ElectricField(APlayerPawn *pawn, AActor *source)
 		if(pawn->player->health <= 0)
 			pawn->player->TakeDamage(0, NULL);
 	}
-	if(static_cast<unsigned int>(playerNumber) == ConsolePlayer)
+	if(Session::IsLocalViewSlot(playerNumber))
 		StartC7ElectricFlash();
 }
 
@@ -1055,7 +1056,7 @@ void player_t::DeathFade()
 	if(ScreenFader)
 		return; // Already setup
 
-	if(GetPlayerNum() == ConsolePlayer)
+	if(Session::IsLocalViewSlot(GetPlayerNum()))
 		FinishPaletteShifts();
 
 	switch(gameinfo.DeathTransition)
@@ -1354,7 +1355,7 @@ FArchive &operator<< (FArchive &arc, player_t *&player)
 
 void CheckSpawnPlayer(bool setup)
 {
-	for(unsigned int p = 0;p < Net::InitVars.numPlayers;++p)
+	for(unsigned int p = 0;p < Session::ActiveSlotCount();++p)
 	{
 		if(setup || players[p].state == player_t::PST_ENTER || players[p].state == player_t::PST_REBORN)
 		{

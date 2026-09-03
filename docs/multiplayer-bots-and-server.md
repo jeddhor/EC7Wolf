@@ -1167,6 +1167,140 @@ hardening:
 
 ---
 
+## 10b. S2 classification audit
+
+The milestone's third work item is to classify every `numPlayers`, `Client[]`,
+`ConsolePlayer`, `players[0]`, and transport-mode check by what it actually
+means. This is that record. Counts are from `main` at the S2 commit; the point
+of writing them down is that the next milestone can tell a conversion from a
+regression.
+
+### `Net::InitVars.numPlayers`
+
+77 uses at the start of Phase S. Outside `wl_net.cpp` the meaning turned out to
+be almost perfectly uniform -- 32 of 34 were the bound of a loop over
+`players[]` -- which is what made this safe to do mechanically.
+
+| Meaning | Count | Now reads | Where |
+| --- | ---: | --- | --- |
+| active player slots | 32 | `Session::ActiveSlotCount()` | `wl_game`, `wl_state`, `wl_agent`, `wl_play`, `wl_inter`, `wl_loadsave`, `wl_act2`, `actor`, `dobjgc`, `gamemap`, `c7_scoreboard`, `r_capture`, `g_intermission`, `a_deathcam`, `thingdef_codeptr`, `wl_main`, `wl_menu` |
+| the operator's configured player count | 4 | unchanged | `--host N` in `wl_main`, the menu in `wl_menu`, one status string |
+| network peers | 40 | unchanged, commented | `wl_net.cpp` only |
+| the adapter that reconciles the two | 1 | `AdoptLegacyNetState()` | `g_session.cpp` |
+
+The 40 in `wl_net.cpp` are the transport's own working state: how many
+addresses to collect, how many acknowledgements to wait for, how many entries a
+start packet carries, which `Client[]` slots to send to. Those become peer
+counts properly in Phase D when the protocol stops implying a slot from an
+address; converting them now would mean inventing a peer table the wire cannot
+yet describe.
+
+### `ConsolePlayer`
+
+265 uses at the start of Phase S, 260 now. It means three different things and
+the split matters, because a dedicated authority answers "none" to two of them:
+
+| Meaning | Approx. | Disposition |
+| --- | ---: | --- |
+| **local view** -- the slot this process draws, and the HUD, camera, projection, automap, and view-model state that follows from it | ~200 | Behind `Session::LocalViewSlot()` / `IsLocalViewSlot()` where gameplay code asks it; the renderer keeps the variable until Phase D gives presentation a null implementation (§26.3) |
+| **local human input** -- the slot this machine samples into `control[]` | ~25 | `Session::LocalPlayerSlot()`. `wl_play.cpp` is the concentration |
+| **legacy peer index** -- this machine's position in `Client[]` and in the per-peer exchange arrays | ~29 | `wl_net.cpp` only; becomes a `PeerId` in Phase D |
+
+The eleven sites converted in S2 are the ones where **gameplay** code asks a
+presentation question -- `a_playerpawn.cpp` deciding whether to set a HUD
+message, start a chamber readout, run the weapon-bob interpolation, or update
+the status face, and `wl_agent.cpp` deciding whether to flash the screen. Those
+are exactly the calls that a playerless process reaches and must be able to
+decline, and they now decline by the session answering "no local view" rather
+than by a comparison against a number that happens to be zero.
+
+The remaining ~200 are inside the renderer, the status bars, the automap and
+the input backends. Converting them is not deferred out of laziness: the plan's
+endpoint for them is a presentation event sink with a real client
+implementation and a deliberate null server one (§26.3), and rewriting them
+twice would be worse than rewriting them once.
+
+### `IsArbiter()`
+
+Was `ConsolePlayer == Arbiter`, which conflated being the authority, occupying
+slot zero, and being this machine. Now `Session::IsAuthority()`. Its six
+callers -- menu abort/restart permissions and three debug keys -- are asking the
+role question and get it unchanged today, because a listen host is still all
+three things at once.
+
+`#define Arbiter 0` survives in `wl_net.cpp` as what it always was: the legacy
+protocol's peer zero, used as an index into `Client[]`. It is commented as
+such.
+
+### Transport mode as a gameplay rule
+
+`Net::InitVars.mode` is read outside transport code in a handful of places, all
+of which mean one of "are sockets open", "is this deathmatch", or "should local
+menus and saves be available". `Net::IsNetworked()` and the existing
+`Deathmatch()` / `RespawnItems()` / `NoMonsters()` cover the first two.
+Separating the third, and adding the grep gate that keeps them separated, is
+S3's work -- the audit belongs with the milestone that has an offline
+deathmatch to prove the difference against.
+
+### How S2 is verified
+
+`tools/test_multiplayer_session.sh` runs `ec7wolf --sessiontest`, which is
+data-free and windowless like `--flictest` and `--netvectors`, and is
+registered in `run_gates.sh` among the data-free gates. Sixty checks:
+
+| Group | What it constructs |
+| --- | --- |
+| shapes that exist today | single player; a listen host; the same session seen from a client |
+| shapes the engine cannot play yet | an authority with eleven players and none of its own; slot 0 owned by a peer that is not the authority; a roster with more slots than peers; one with more peers than slots |
+| capacities | the maximal valid session, then each of the three bounds pushed past on its own |
+| rosters that cannot be true | 22 corruptions, each of which must be refused |
+
+None of it indexes `players[]`, reads `ConsolePlayer`, or opens a socket. That
+is most of what it proves: if a playerless authority could only be described by
+code that touches a player array, it could not exist, and Phase D would be a
+very late place to discover that.
+
+Two notes on what the gate does and does not say:
+
+- The plan's exit-gate wording is "a debug assertion fires for each violated
+  invariant". What is actually proven is that `Validate()` **detects** each
+  corruption and names it; the assertion is the debug-build mechanism layered
+  on that detection. A fatal-error path cannot be exercised in-process without
+  killing the test, so detection is what is measured.
+- The self-test was checked for the ability to fail, twice: breaking
+  `Validate()` produces 22 failures, and breaking `HasLocalPlayer()` produces
+  the specific dedicated-authority failure. A green gate that cannot go red is
+  the failure mode this program has already been bitten by once (§10a, item 4).
+
+`AssertValid()` runs in the adoption path in debug builds, so a netgame on the
+ASan+UBSan build is the check that it does not fire on legitimate play. It
+passes, at the unchanged `checksum=5960981e`.
+
+The S1 baselines are unchanged by the whole conversion: loopback
+`5960981e`, determinism 500 tics `ae626557`. Thirty-two loop bounds and eleven
+local-view questions moved, and the simulation did not.
+
+### What S2 deliberately did not finish
+
+`Lifecycle` exists as a type with all the phases §23 needs, and the adoption
+path sets it at the two moments that exist today -- roster lock and running.
+**Nothing reads it yet.** The states are there so that D2 and D3 have somewhere
+to put admission, the ready barrier and terminal-pending without inventing a
+second vocabulary; treating the enum as working lifecycle control would be
+reading more into this milestone than is in it. The rule that goes with it --
+never infer a phase from whether a menu is open or a socket is blocked -- is a
+constraint on the code that will read it, not a claim about code that does.
+
+Likewise the roster is still built by an adapter, `AdoptLegacyNetState()`, from
+`Net::InitVars` and `ConsolePlayer` rather than being the source of truth. Two
+counts therefore exist, and the milestone's job was to make their meanings
+separate rather than to eliminate one. A debug assertion at the start-of-game
+exchange fails the build loudly if they ever disagree, because two machines
+quietly iterating different numbers of players is a desync that would be blamed
+on the netcode for a week.
+
+---
+
 # Part III — Phase B: bots
 
 ## 11. Bot architecture

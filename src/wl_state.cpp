@@ -1,6 +1,7 @@
 // WL_STATE.C
 
 #include "wl_def.h"
+#include "g_session.h"
 #include "id_ca.h"
 #include "id_sd.h"
 #include "id_us.h"
@@ -670,7 +671,7 @@ bool MoveObj (AActor *ob, int32_t move)
 	//
 	// check to make sure it's not on top of player
 	//
-	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 	{
 		if (map->CheckLink(ob->GetZone(), players[i].mo->GetZone(), true))
 		{
@@ -1102,7 +1103,7 @@ static bool CheckSightTo (AActor *ob, AActor *target, double minseedist, double 
 
 static int CheckSight (AActor *ob, double minseedist, double maxseedist, double maxheardist, double fov)
 {
-	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 	{
 		if(CheckSightTo(ob, players[i].mo, minseedist, maxseedist, maxheardist, fov))
 			return i;

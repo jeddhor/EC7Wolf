@@ -45,6 +45,7 @@
 #include "wl_menu.h"
 #include "wl_play.h"
 #include "wl_net.h"
+#include "g_session.h"
 #include "net_watchdog.h"
 #include "m_swap.h"
 #include "m_random.h"
@@ -63,6 +64,9 @@
 #define MAXEXTRATICS 64
 
 // TODO: Handle transfer of arbiter status as client quit
+// The legacy protocol's authority: peer zero, which is also slot zero,
+// because one address is one player. Uses below are peer indices into
+// Client[] -- ask Session::IsAuthority() for the role.
 #define Arbiter 0
 
 // Every build speaks exactly one of these. There was no version field at all
@@ -1479,7 +1483,10 @@ static void Shutdown()
 bool Init(InitStatusCallback callback)
 {
 	if(InitVars.mode == MODE_SinglePlayer)
+	{
+		Session::AdoptLegacyNetState();
 		return true;
+	}
 
 	if(SDLNet_Init() < 0)
 	{
@@ -1509,12 +1516,21 @@ bool Init(InitStatusCallback callback)
 		InitVars.mode = MODE_SinglePlayer;
 		ConsolePlayer = 0;
 	}
+
+	// One place where what these variables mean gets written down, whichever
+	// way the connection went. Both callers of Init -- the command line and
+	// the multiplayer menu -- come through here, so neither can forget.
+	Session::AdoptLegacyNetState();
 	return connected;
 }
 
 bool IsArbiter()
 {
-	return ConsolePlayer == Arbiter;
+	// Was ConsolePlayer == 0, which conflated three separate things: being the
+	// authority, occupying slot zero, and being this machine. A listen host is
+	// all three today and a dedicated authority will be only the first, so the
+	// question has to be asked of the session rather than of an array index.
+	return Session::IsAuthority();
 }
 
 bool IsBlocked()
@@ -1646,17 +1662,24 @@ void NewGame(int &difficulty, FString &map, FName (&playerClassNames)[MAXPLAYERS
 	myNewGameRequest.map[8] = 0;
 
 	ExchangePacket(newGamePackets);
-	for(unsigned int client = 0;client < InitVars.numPlayers;++client)
+	// Peers, not slots: this loop walks the per-peer setup records the
+	// exchange just filled in, and the legacy protocol's one-address-one-slot
+	// rule is the only reason the two indices are interchangeable here.
+	for(unsigned int peer = 0;peer < InitVars.numPlayers;++peer)
 	{
-		playerClassNames[client] = newGamePackets[client].playerClass;
+		playerClassNames[peer] = newGamePackets[peer].playerClass;
 
-		if(client == Arbiter)
+		if(peer == Arbiter)
 		{
-			difficulty = newGamePackets[client].difficulty;
-			newGamePackets[client].map[8] = 0;
-			map = newGamePackets[client].map;
+			difficulty = newGamePackets[peer].difficulty;
+			newGamePackets[peer].map[8] = 0;
+			map = newGamePackets[peer].map;
 		}
 	}
+
+	// The roster is settled from here until the match ends: version 1 adds,
+	// removes and reassigns no slot while a match runs.
+	Session::AdoptLegacyRoster(playerClassNames);
 }
 
 // Input delay: the whole of what makes this playable over the internet.

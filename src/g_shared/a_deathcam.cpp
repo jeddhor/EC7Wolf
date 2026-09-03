@@ -16,6 +16,7 @@
 #include "wl_game.h"
 #include "wl_net.h"
 #include "wl_play.h"
+#include "g_session.h"
 
 IMPLEMENT_POINTY_CLASS(DeathCam)
 	DECLARE_POINTER(actor)
@@ -77,7 +78,7 @@ void ADeathCam::Tick()
 
 	if(gamestate.victoryflag)
 	{
-		for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+		for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 		{
 			players[i].mo->TickPSprites();
 		}
@@ -150,7 +151,7 @@ ACTION_FUNCTION(A_FinishDeathCam)
 
 	IN_UserInput(300, ACK_Any);
 
-	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 	{
 		players[i].camera = cam;
 		players[i].SetPSprite(cam->FindState(NAME_Ready), player_t::ps_weapon);

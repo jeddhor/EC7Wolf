@@ -40,6 +40,7 @@
 #include "tarray.h"
 #include "w_wad.h"
 #include "wl_def.h"
+#include "g_session.h"
 #include "lnspec.h"
 #include "actor.h"
 #include "thingdef/thingdef.h"
@@ -365,7 +366,7 @@ const GameMap::PlayerSpawn *GameMap::GetPlayerSpawn(int player) const
 			PlayerSpawn &spot = deathmatchStarts[i];
 
 			fixed closest = INT_MAX;
-			for(unsigned int p = 0;p < Net::InitVars.numPlayers;++p)
+			for(unsigned int p = 0;p < Session::ActiveSlotCount();++p)
 			{
 				// A player with no pawn has no position to be far from, and
 				// the next line reads one. Before the first spawn of a round

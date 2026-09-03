@@ -46,6 +46,7 @@
 #include "wl_game.h"
 #include "wl_loadsave.h"
 #include "wl_net.h"
+#include "g_session.h"
 #include "wl_state.h"
 #include "id_us.h"
 #include "m_random.h"
@@ -780,7 +781,7 @@ void StartTravel ()
 	// Set thinker priorities to TRAVEL so that they don't get wiped on level
 	// load.  We'll transfer them to a new actor.
 
-	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 	{
 		AActor *player = players[i].mo;
 

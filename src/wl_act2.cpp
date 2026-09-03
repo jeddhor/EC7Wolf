@@ -7,6 +7,7 @@
 #include "m_random.h"
 #include "wl_act.h"
 #include "wl_def.h"
+#include "g_session.h"
 #include "wl_iwad.h"
 #include "wl_menu.h"
 #include "id_ca.h"
@@ -529,7 +530,7 @@ ACTION_FUNCTION(A_Chase)
 			// Auto select player to target. ZDoom tries to sight for a target and
 			// if it doesn't find one switches to idle. Wolf3D, however, never had
 			// explicit targets so the player was assumed to always be targeted.
-			self->target = players[pr_chase()%Net::InitVars.numPlayers].mo;
+			self->target = players[pr_chase()%Session::ActiveSlotCount()].mo;
 			assert(self->target);
 		}
 

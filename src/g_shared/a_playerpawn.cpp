@@ -33,6 +33,7 @@
 */
 
 #include "a_inventory.h"
+#include "g_session.h"
 #include "a_playerpawn.h"
 #include "c_cvars.h"
 #include "g_mapinfo.h"
@@ -326,13 +327,13 @@ bool APlayerPawn::TryUseC7HealthChamber()
 		return false;
 	if(player->health >= maxhealth)
 	{
-		if(player->GetPlayerNum() == ConsolePlayer)
+		if(Session::IsLocalViewSlot(player->GetPlayerNum()))
 			StatusBar->SetTopMessage("FULL HEALTH");
 		return true;
 	}
 	if(door->corridor7ChamberPower == 0)
 	{
-		if(player->GetPlayerNum() == ConsolePlayer)
+		if(Session::IsLocalViewSlot(player->GetPlayerNum()))
 		{
 			StatusBar->SetTopMessage("HEALTH CHAMBER DEPLETED");
 			StatusBar->SetC7HealthChamberPower(0, 4*TICRATE);
@@ -345,7 +346,7 @@ bool APlayerPawn::TryUseC7HealthChamber()
 	player->c7ChamberPower = door->corridor7ChamberPower;
 	player->c7ChamberTics = 0;
 	player->c7ChamberState = 1;
-	if(player->GetPlayerNum() == ConsolePlayer)
+	if(Session::IsLocalViewSlot(player->GetPlayerNum()))
 		StatusBar->SetC7HealthChamberPower(player->c7ChamberPower, 4*TICRATE);
 	SD_PlaySound("c7/chamber/activate");
 	return true;
@@ -428,7 +429,7 @@ static bool TickC7HealthChamber(APlayerPawn *pawn)
 			const unsigned int power = MIN<unsigned int>(door->corridor7ChamberPower, 100);
 			if(power == 0)
 			{
-				if(player->GetPlayerNum() == ConsolePlayer)
+				if(Session::IsLocalViewSlot(player->GetPlayerNum()))
 					StatusBar->SetTopMessage("HEALTH CHAMBER DEPLETED");
 				player->c7ChamberPower = 0;
 				StatusBar->SetC7HealthChamberPower(0, 4*TICRATE);
@@ -592,7 +593,7 @@ void APlayerPawn::Tick()
 			{
 				player->c7FloorSecuredNotified = true;
 				player->c7ClearanceNotified = true;
-				if(player->GetPlayerNum() == ConsolePlayer)
+				if(Session::IsLocalViewSlot(player->GetPlayerNum()))
 				{
 					StatusBar->SetTopMessage("FLOOR SECURED", 4*TICRATE);
 					SD_PlaySound("c7/announcement/secured");
@@ -601,7 +602,7 @@ void APlayerPawn::Tick()
 			else if(!player->c7ClearanceNotified && destroyed >= clearance[skill])
 			{
 				player->c7ClearanceNotified = true;
-				if(player->GetPlayerNum() == ConsolePlayer)
+				if(Session::IsLocalViewSlot(player->GetPlayerNum()))
 				{
 					StatusBar->SetTopMessage("ELEVATOR CLEARANCE ACQUIRED", 4*TICRATE);
 					SD_PlaySound("c7/announcement/clearance");
@@ -618,7 +619,7 @@ void APlayerPawn::Tick()
 
 	TickPSprites();
 
-	if(player->GetPlayerNum() == ConsolePlayer)
+	if(Session::IsLocalViewSlot(player->GetPlayerNum()))
 	{
 		// [RH] Smooth transitions between bobbing and not-bobbing frames.
 		// This also fixes the bug where you can "stick" a weapon off-center by
@@ -670,7 +671,7 @@ void APlayerPawn::Tick()
 		return;
 	}
 
-	if((player->GetPlayerNum()) == ConsolePlayer)
+	if(Session::IsLocalViewSlot(player->GetPlayerNum()))
 		StatusBar->UpdateFace();
 	CheckWeaponChange(this);
 

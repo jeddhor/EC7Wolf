@@ -145,7 +145,8 @@ void APlayerPawn::DeathTick()
 
 		if((player->RespawnEligible <= gamestate.TimeCount && cmd.buttonstate[bt_use]) || player->RespawnEligible + 100 <= gamestate.TimeCount)
 		{
-			if(Net::InitVars.mode == Net::MODE_SinglePlayer)
+			// Restart the level, or come back into the arena where you fell.
+			if(!Session::AllowsRespawn())
 			{
 				player->state = player_t::PST_ENTER;
 				playstate = ex_died;

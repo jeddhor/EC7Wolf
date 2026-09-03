@@ -1241,7 +1241,7 @@ void DrawHighScores (void)
 
 void CheckHighScore (int32_t score, const LevelInfo *levelInfo)
 {
-	if (!gameinfo.TrackHighScores || Net::InitVars.mode != Net::MODE_SinglePlayer)
+	if (!gameinfo.TrackHighScores || !Session::TracksHighScores())
 		return;
 	PrepareCorridor7HighScores();
 

@@ -1,6 +1,7 @@
 // WL_DRAW.C
 
 #include "wl_def.h"
+#include "g_session.h"
 #include "id_sd.h"
 #include "id_in.h"
 #include "id_vl.h"
@@ -1836,9 +1837,9 @@ void CalcViewVariables()
 static TUniquePtr<FFader> fizzlein;
 void ThreeDStartFadeIn()
 {
-	// For multiplayer disable fade in since players need to be back in the
-	// action immediately after respawning.
-	if(Net::InitVars.mode != Net::MODE_SinglePlayer)
+	// No fade where death is a respawn: players need to be back in the action
+	// at once, and that is true of an offline deathmatch too.
+	if(Session::AllowsRespawn())
 		return;
 
 	switch(gameinfo.DeathTransition)

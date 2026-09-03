@@ -1301,6 +1301,94 @@ on the netcode for a week.
 
 ---
 
+## 10c. S3 record
+
+### The rule/transport split
+
+Thirty-two `InitVars.mode` reads outside the transport, and every one of them
+was asking one of four different questions through the same hole in the wall:
+
+| What it really asked | Sites | Now |
+| --- | ---: | --- |
+| do multiplayer rules apply | 5 | `ItemsStayInWorld()`, `AllowsRespawn()` — keys, weapons, respawn, the death fade |
+| is anyone else in the world | 4 | `HasMultiplePlayers()` — positional sound, the scoreboard, the tally, whether death stops the world |
+| is a socket open | 3 | `Net::IsNetworked()` — command exchange, event blocking, the watchdog |
+| does saving or a high score make sense, and may I leave | 12 | `AllowsSaving()`, `TracksHighScores()`, `CanLeaveSessionUnilaterally()`, `CanPauseLocally()` |
+
+Afterwards `InitVars.mode` appears in exactly five places outside the
+transport and the session adapter, and all five **set** it: `--host`/`--join`
+in `wl_main.cpp`, the menu in `wl_menu.cpp`, and one status string.
+
+`IsMultiplayerGameplay()` is the only predicate that consults the transport,
+and it does so deliberately. While cooperative play over the wire exists there
+is no way to answer "do multiplayer rules apply" from the rules alone — a co-op
+netgame is not a deathmatch and is still multiplayer. Asking whether a socket
+is open is exactly right for that case and exactly wrong for an offline
+deathmatch, so it is asked once, in one function, with the reason written
+above it. It is also what makes the milestone behavior-preserving: a host
+sitting alone in a one-player netgame still answers every question the way it
+always did.
+
+### The truth table
+
+The self-test grew from 60 checks to 106. The new rows are the substance:
+
+| Session | multiplayer rules | respawn | items stay | saving | high scores | local pause | >1 player |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| single player | no | no | no | **yes** | **yes** | yes | no |
+| **offline deathmatch** | **yes** | **yes** | **yes** | no | no | **yes** | yes |
+| networked co-op | yes | yes | yes | no | no | no | yes |
+| networked deathmatch | yes | yes | yes | no | no | no | yes |
+| host waiting alone | yes | yes | yes | no | no | no | **no** |
+
+The second row is the one the old code could not express at all: every rules
+question answered yes, every transport question answered no. The fifth is the
+mirror image and the reason `HasMultiplePlayers()` is separate from
+`IsMultiplayerGameplay()`.
+
+Checked for the ability to fail: reverting `AllowsRespawn()` to the old
+socket test produces exactly one failure, `offline deathmatch: respawn`.
+
+### The offline gate
+
+`tools/test_multiplayer_offline.sh` starts a deathmatch with no network and
+proves three things behaviorally:
+
+- it reaches gameplay on `MAP53` and simulates 200 tics;
+- it opens **no internet socket at all**, proven by `strace -e trace=socket`
+  rather than by the absence of a log line. If ptrace is unavailable the gate
+  says the check was skipped rather than passing quietly;
+- `MAP01` holds five aliens normally and none under `--battle`, so a
+  deathmatch rule is being applied with no socket to justify it.
+
+What is *not* proven behaviorally, and why: respawning in place rather than
+restarting, and an item left behind for somebody else, both need a second pawn
+to observe. They are checked as predicates in the table above and become
+observable in S4, whose exit gate is two slots "spawned, moving, scored, and
+killable". Claiming them as behavioral results here would be claiming more than
+was measured.
+
+### The source contract
+
+`test_multiplayer_session.sh` now also greps the tree: no file outside
+`wl_net.{h,cpp}`, `g_session.{h,cpp}`, `wl_main.cpp` and `wl_menu.cpp` may name
+`InitVars.mode`, and the last two may only assign it. Verified to fail by
+putting the old automap check back — it names the file and the line.
+
+### Reserved slots
+
+`State::reservedSlots` is the plan's "position before a controller exists": a
+lobby row reading open, or the slot a bot will take once there is a bot.
+Reserved slots are **not** in the match — they spawn nothing, score nothing,
+and nothing waits on a socket for them — which is what lets a roster name a
+position without breaking the contiguity that every `[0, count)` loop in the
+engine depends on. Validation covers the new range, and the self-test refuses
+a roster that reserves fewer positions than it is playing, one that puts a
+player in a position it only held open, and one that reserves more than the
+engine has slots for.
+
+---
+
 # Part III — Phase B: bots
 
 ## 11. Bot architecture

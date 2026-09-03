@@ -12,12 +12,15 @@
 #include "wl_agent.h"
 #include "wl_game.h"
 #include "wl_play.h"
+#include "g_session.h"
 
 IMPLEMENT_CLASS(Key)
 
 bool AKey::ShouldStay()
 {
-	return Net::InitVars.mode != Net::MODE_SinglePlayer;
+	// Whether a key is left behind for whoever else needs it -- a question
+	// about the match, not about whether a socket happens to be open.
+	return Session::ItemsStayInWorld();
 }
 
 class AKeyGiver : public AInventory
@@ -27,7 +30,7 @@ class AKeyGiver : public AInventory
 	protected:
 		bool ShouldStay()
 		{
-			return Net::InitVars.mode != Net::MODE_SinglePlayer;
+			return Session::ItemsStayInWorld();
 		}
 
 		bool TryPickup(AActor *toucher)

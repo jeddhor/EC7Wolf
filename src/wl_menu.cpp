@@ -132,7 +132,7 @@ MENU_LISTENER(ViewScoresOrEndGame)
 	}
 	else
 	{
-		if (gameinfo.TrackHighScores == true && Net::InitVars.mode == Net::MODE_SinglePlayer)
+		if (gameinfo.TrackHighScores == true && Session::TracksHighScores())
 		{
 			MenuFadeOut();
 
@@ -156,7 +156,7 @@ MENU_LISTENER(ViewScoresOrEndGame)
 // always shows the table and ABORT CURRENT MISSION always ends the game.
 MENU_LISTENER(C7ViewHighScores)
 {
-	if (gameinfo.TrackHighScores == true && Net::InitVars.mode == Net::MODE_SinglePlayer)
+	if (gameinfo.TrackHighScores == true && Session::TracksHighScores())
 	{
 		MenuFadeOut();
 
@@ -1366,7 +1366,7 @@ void US_ControlPanel (ScanCode scancode)
 		}
 	}
 
-	if (Net::InitVars.mode != Net::MODE_SinglePlayer)
+	if (!Session::AllowsSaving())
 	{
 		// At this time we don't support saves in multiplayer
 		switch(scancode)
@@ -1446,8 +1446,9 @@ void US_ControlPanel (ScanCode scancode)
 
 		if(ingame)
 		{
-			mainMenu[C7MENU_NEW]->setEnabled(Net::InitVars.mode == Net::MODE_SinglePlayer); // Require explicit end game for net games
-			mainMenu[C7MENU_STORE]->setEnabled(Net::InitVars.mode == Net::MODE_SinglePlayer && players[ConsolePlayer].state != player_t::PST_DEAD);
+			// Require an explicit end game rather than stranding other players.
+			mainMenu[C7MENU_NEW]->setEnabled(Session::CanLeaveSessionUnilaterally());
+			mainMenu[C7MENU_STORE]->setEnabled(Session::AllowsSaving() && players[ConsolePlayer].state != player_t::PST_DEAD);
 			mainMenu[C7MENU_RESUME]->setEnabled(true);
 			mainMenu[C7MENU_ABORT]->setEnabled(Net::IsArbiter());
 		}
@@ -1459,23 +1460,23 @@ void US_ControlPanel (ScanCode scancode)
 			mainMenu[C7MENU_ABORT]->setEnabled(false);
 		}
 		mainMenu[C7MENU_OPTIONS]->setEnabled(true);
-		mainMenu[C7MENU_HIGHSCORES]->setEnabled(gameinfo.TrackHighScores == true && Net::InitVars.mode == Net::MODE_SinglePlayer);
+		mainMenu[C7MENU_HIGHSCORES]->setEnabled(gameinfo.TrackHighScores == true && Session::TracksHighScores());
 		mainMenu[C7MENU_EXIT]->setEnabled(true);
 	}
 	else if(ingame)
 	{
-		mainMenu[0]->setEnabled(Net::InitVars.mode == Net::MODE_SinglePlayer); // Require explicit end game for net games
+		mainMenu[0]->setEnabled(Session::CanLeaveSessionUnilaterally()); // explicit end game rather than stranding others
 		mainMenu[mainMenu.countItems()-3]->setText(language["STR_EG"]);
 		mainMenu[mainMenu.countItems()-3]->setEnabled(Net::IsArbiter());
 		mainMenu[mainMenu.countItems()-2]->setText(language["STR_BG"]);
 		mainMenu[mainMenu.countItems()-2]->setEnabled(true);
 		mainMenu[mainMenu.countItems()-2]->setHighlighted(true);
-		mainMenu[3]->setEnabled(Net::InitVars.mode == Net::MODE_SinglePlayer && players[ConsolePlayer].state != player_t::PST_DEAD);
+		mainMenu[3]->setEnabled(Session::AllowsSaving() && players[ConsolePlayer].state != player_t::PST_DEAD);
 	}
 	else
 	{
 		mainMenu[0]->setEnabled(true);
-		if (gameinfo.TrackHighScores == true && Net::InitVars.mode == Net::MODE_SinglePlayer)
+		if (gameinfo.TrackHighScores == true && Session::TracksHighScores())
 		{
 			mainMenu[mainMenu.countItems()-3]->setText(language["STR_VS"]);
 			mainMenu[mainMenu.countItems()-3]->setEnabled(true);
@@ -1486,7 +1487,7 @@ void US_ControlPanel (ScanCode scancode)
 			mainMenu[mainMenu.countItems()-3]->setEnabled(false);
 		}
 		mainMenu[mainMenu.countItems()-2]->setText(language["STR_BD"]);
-		mainMenu[mainMenu.countItems()-2]->setEnabled(Net::InitVars.mode == Net::MODE_SinglePlayer);
+		mainMenu[mainMenu.countItems()-2]->setEnabled(Session::CanLeaveSessionUnilaterally());
 		mainMenu[mainMenu.countItems()-2]->setHighlighted(false);
 		mainMenu[3]->setEnabled(false);
 	}

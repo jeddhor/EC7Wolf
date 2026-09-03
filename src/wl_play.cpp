@@ -787,7 +787,7 @@ void PollControls (bool absolutes)
 		if (demoptr >= lastdemoptr - 8)
 			playstate = ex_completed;
 	}
-	else if(Net::InitVars.mode != Net::MODE_SinglePlayer)
+	else if(Net::IsNetworked())
 		Net::PollControls();
 
 	// Check automap toggle before we set any buttons as held
@@ -1507,8 +1507,11 @@ void PlayLoop (void)
 
 				CheckSpawnPlayer();
 
-				// In single player if the player dies only tick the pawn
-				if(Net::InitVars.mode != Net::MODE_SinglePlayer || players[0].state != player_t::PST_DEAD)
+				// With nobody else in the world, death stops it; with somebody
+				// else in it, the world has to keep running for them. players[0]
+				// is only reached when there is exactly one slot, which is the
+				// local one.
+				if(Session::HasMultiplePlayers() || players[0].state != player_t::PST_DEAD)
 					thinkerList.Tick();
 				else
 					thinkerList.Tick(ThinkerList::PLAYER);

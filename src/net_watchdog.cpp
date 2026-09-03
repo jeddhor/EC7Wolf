@@ -72,7 +72,7 @@ void NetWatch_Start()
 {
 	if(WatchThread != NULL || !netwatchdog)
 		return;
-	if(Net::InitVars.mode == Net::MODE_SinglePlayer)
+	if(!Net::IsNetworked())
 		return;
 
 	WatchRunning = true;

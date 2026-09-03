@@ -44,6 +44,7 @@ void State::Reset()
 	for(unsigned int i = 0;i < MAX_PLAYER_SLOTS;++i)
 		slots[i] = PlayerSlotInfo();
 	activeSlots = 0;
+	reservedSlots = 0;
 	for(unsigned int i = 0;i < MAX_SESSION_PEERS;++i)
 		peers[i] = PeerInfo();
 	peerCount = 0;
@@ -66,6 +67,7 @@ void State::SetStandaloneSinglePlayer()
 	slots[0].kind = SlotKind::Human;
 	slots[0].ownerPeer = (PeerId)0;
 	activeSlots = 1;
+	reservedSlots = 1;
 
 	localHumanSlot = (PlayerSlot)0;
 	localViewSlot = (PlayerSlot)0;
@@ -92,6 +94,17 @@ bool IsNetworked()
 }
 
 unsigned int ActiveSlotCount() { return Live().activeSlots; }
+
+unsigned int ReservedSlotCount() { return Live().reservedSlots; }
+
+bool ReserveSlots(unsigned int n)
+{
+	if(n < Live().activeSlots || n > MAX_PLAYER_SLOTS)
+		return false;
+	Live().reservedSlots = n;
+	AssertValid(Live());
+	return true;
+}
 
 bool SlotActive(PlayerSlot slot)
 {
@@ -121,6 +134,42 @@ bool IsLocalViewSlot(PlayerSlot slot)
 		*Live().localViewSlot == slot;
 }
 
+// --- what kind of game this is -------------------------------------------------
+
+bool IsDeathmatch() { return Net::Deathmatch(); }
+
+bool HasMultiplePlayers() { return ActiveSlotCount() > 1; }
+
+// The one predicate here allowed to consult the transport, and it does so
+// deliberately. While cooperative play over the wire still exists there is no
+// way to answer "do multiplayer rules apply" from the rules alone: a co-op
+// netgame is not a deathmatch and is still multiplayer. Asking whether a socket
+// is open is exactly right for that case and exactly wrong for an offline
+// deathmatch, so both are asked, once, here.
+//
+// It is also what keeps this milestone behavior-preserving: every site
+// converted below previously read the socket question directly, and a host
+// sitting alone in a one-player netgame still answers the same way it always
+// did.
+bool IsMultiplayerGameplay()
+{
+	return Net::IsNetworked() || IsDeathmatch();
+}
+
+bool AllowsRespawn()     { return IsMultiplayerGameplay(); }
+bool ItemsStayInWorld()  { return IsMultiplayerGameplay(); }
+bool RespawnItems()      { return Net::RespawnItems(); }
+bool NoMonsters()        { return Net::NoMonsters(); }
+
+// Saving and high scores belong to the single-player campaign. Multiplayer
+// saves have never been supported, and an offline deathmatch is not a campaign
+// to record a score for -- see the plan's section 19.3.
+bool AllowsSaving()      { return !IsMultiplayerGameplay(); }
+bool TracksHighScores()  { return !IsMultiplayerGameplay(); }
+
+bool CanPauseLocally()   { return !Net::IsNetworked(); }
+bool CanLeaveSessionUnilaterally() { return !Net::IsNetworked(); }
+
 // --- invariants ---------------------------------------------------------------
 
 static const PeerInfo *FindPeer(const State &state, PeerId id)
@@ -149,6 +198,12 @@ bool Validate(const State &state, FString *why)
 	if(state.peerCount > MAX_SESSION_PEERS)
 		FAIL("peerCount %u exceeds MAX_SESSION_PEERS %u",
 			state.peerCount, (unsigned)MAX_SESSION_PEERS);
+	if(state.reservedSlots > MAX_PLAYER_SLOTS)
+		FAIL("reservedSlots %u exceeds MAX_PLAYER_SLOTS %u",
+			state.reservedSlots, (unsigned)MAX_PLAYER_SLOTS);
+	if(state.reservedSlots < state.activeSlots)
+		FAIL("%u slots are in the match but only %u are reserved",
+			state.activeSlots, state.reservedSlots);
 
 	unsigned int clientPeers = 0;
 	unsigned int authorities = 0;
@@ -213,7 +268,8 @@ bool Validate(const State &state, FString *why)
 		// in the engine would walk straight into.
 		if(inMatch && info.kind == SlotKind::Empty)
 			FAIL("slot %u is empty but inside the active range", slot);
-		// 7. Nothing above the active count owns anything.
+		// 7. Nothing above the active count owns anything -- reserved or not.
+		// A set-aside position is a name for a place, not a participant.
 		if(!inMatch)
 		{
 			if(info.kind != SlotKind::Empty)
@@ -333,6 +389,7 @@ void AdoptLegacyNetState()
 		s.slots[i].name.Format("Player %u", i + 1);
 	}
 	s.activeSlots = count;
+	s.reservedSlots = count;
 
 	s.authorityPeer = 0;
 	s.localPeer = (PeerId)ConsolePlayer;
@@ -433,6 +490,7 @@ State ListenAuthority(unsigned int players)
 		s.slots[i].ownerPeer = (PeerId)i;
 	}
 	s.activeSlots = players;
+	s.reservedSlots = players;
 	s.authorityPeer = 0;
 	s.localPeer = (PeerId)0;
 	s.localHumanSlot = (PlayerSlot)0;
@@ -468,6 +526,7 @@ State DedicatedAuthority(unsigned int humans, unsigned int bots)
 		slot.controllerSeed = (uint64_t)(0x5eed0000u + i);
 	}
 	s.activeSlots = humans + bots;
+	s.reservedSlots = humans + bots;
 
 	s.peers[humans].id = serverPeer;
 	s.peers[humans].authority = true;
@@ -679,6 +738,96 @@ int SelfTest()
 		s = listen;
 		s.localHumanSlot = (PlayerSlot)5;
 		CheckRefused(s, "has a host playing a slot that is not in the match");
+	}
+
+	Printf("\nPositions held before a controller exists\n");
+	{
+		State s = ListenAuthority(2);
+		s.reservedSlots = 4;
+		CheckAccepted(s, "two players and two positions held open");
+		Live() = s;
+		Check(ActiveSlotCount() == 2, "two slots are in the match");
+		Check(ReservedSlotCount() == 4, "four positions are spoken for");
+		Check(KindOf(2) == SlotKind::Empty && KindOf(3) == SlotKind::Empty,
+			"a held position has no controller");
+		Check(!SlotActive(2), "and is not in the match");
+
+		State bad = s;
+		bad.reservedSlots = 1;
+		CheckRefused(bad, "reserves fewer positions than it is playing");
+
+		bad = s;
+		bad.slots[2].kind = SlotKind::Human;
+		bad.slots[2].ownerPeer = (PeerId)0;
+		CheckRefused(bad, "puts a player in a position it only held open");
+
+		bad = s;
+		bad.reservedSlots = MAX_PLAYER_SLOTS + 1;
+		CheckRefused(bad, "holds open more positions than the engine has");
+
+		Live() = s;
+		Check(!ReserveSlots(1), "refuses to unreserve a slot in play");
+		Check(ReserveSlots(MAX_PLAYER_SLOTS), "reserves up to the maximum");
+		Check(ReserveSlots(2), "and back down to what is in the match");
+	}
+
+	Printf("\nWhat kind of game this is, without asking about sockets\n");
+	{
+		// The rules predicates read Net::InitVars, so the truth table is built
+		// by setting the same variables the game sets. Restored afterwards.
+		const Net::Mode wasMode = Net::InitVars.mode;
+		const Net::GameMode wasGame = Net::InitVars.gameMode;
+
+		struct Row
+		{
+			const char *what;
+			Net::Mode mode;
+			Net::GameMode game;
+			unsigned int slots;
+			bool multiplayerRules, respawn, itemsStay, saving, highScores,
+				pauseLocally, manyPlayers;
+		};
+		// The row that matters is the second: a deathmatch with no socket. It
+		// answers "yes" to every rules question and "no" to every transport
+		// one, which the old mode check could not express at all.
+		static const Row rows[] = {
+			{ "single player",        Net::MODE_SinglePlayer, Net::GM_Cooperative, 1,
+			  false, false, false, true,  true,  true,  false },
+			{ "offline deathmatch",   Net::MODE_SinglePlayer, Net::GM_Battle,      2,
+			  true,  true,  true,  false, false, true,  true  },
+			{ "networked co-op",      Net::MODE_Host,         Net::GM_Cooperative, 2,
+			  true,  true,  true,  false, false, false, true  },
+			{ "networked deathmatch", Net::MODE_Host,         Net::GM_Battle,      2,
+			  true,  true,  true,  false, false, false, true  },
+			{ "host waiting alone",   Net::MODE_Host,         Net::GM_Battle,      1,
+			  true,  true,  true,  false, false, false, false },
+		};
+
+		for(unsigned int r = 0;r < sizeof(rows)/sizeof(rows[0]);++r)
+		{
+			const Row &row = rows[r];
+			Net::InitVars.mode = row.mode;
+			Net::InitVars.gameMode = row.game;
+			State s = (row.mode == Net::MODE_SinglePlayer)
+				? ListenAuthority(row.slots) : ListenAuthority(row.slots);
+			s.role = (row.mode == Net::MODE_SinglePlayer)
+				? RuntimeRole::Standalone : RuntimeRole::ListenAuthority;
+			Live() = s;
+
+			FString label;
+#define ROW_CHECK(expr, name) 			label.Format("%s: %s", row.what, #name); 			Check((expr) == row.name, label.GetChars())
+			ROW_CHECK(IsMultiplayerGameplay(), multiplayerRules);
+			ROW_CHECK(AllowsRespawn(), respawn);
+			ROW_CHECK(ItemsStayInWorld(), itemsStay);
+			ROW_CHECK(AllowsSaving(), saving);
+			ROW_CHECK(TracksHighScores(), highScores);
+			ROW_CHECK(CanPauseLocally(), pauseLocally);
+			ROW_CHECK(HasMultiplePlayers(), manyPlayers);
+#undef ROW_CHECK
+		}
+
+		Net::InitVars.mode = wasMode;
+		Net::InitVars.gameMode = wasGame;
 	}
 
 	// Leave the process as it was found, in case anything runs after this.

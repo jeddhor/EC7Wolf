@@ -149,6 +149,13 @@ struct State
 	// "for(i = 0; i < count; ++i)" loop over players become a slot loop
 	// without also becoming a different loop.
 	unsigned int activeSlots = 0;
+	// Positions the session has set aside that no controller has taken yet: a
+	// lobby row reading "open", or the slot a bot will occupy once there is a
+	// bot to put in it. Reserved slots are NOT in the match. They spawn
+	// nothing, score nothing, and nothing waits on a socket for them -- which
+	// is the whole point of being able to name a position before a controller
+	// for it exists. [activeSlots, reservedSlots) are Empty.
+	unsigned int reservedSlots = 0;
 
 	PeerInfo     peers[MAX_SESSION_PEERS];
 	unsigned int peerCount = 0;
@@ -173,6 +180,12 @@ bool IsDedicated();
 bool IsNetworked();
 
 unsigned int ActiveSlotCount();
+// Active plus set-aside. Never a loop bound over players[]: nothing in
+// [ActiveSlotCount(), ReservedSlotCount()) has a pawn.
+unsigned int ReservedSlotCount();
+// Set aside n positions beyond the ones in the match. Refuses to reserve fewer
+// than are already active.
+bool ReserveSlots(unsigned int n);
 bool SlotActive(PlayerSlot slot);
 SlotKind KindOf(PlayerSlot slot);
 bool SlotIsBot(PlayerSlot slot);
@@ -183,6 +196,41 @@ std::optional<PlayerSlot> LocalPlayerSlot();
 bool HasLocalView();
 std::optional<PlayerSlot> LocalViewSlot();
 bool IsLocalViewSlot(PlayerSlot slot);
+
+// --- what kind of game this is, as opposed to how it is transported ----------
+//
+// Every one of these was answered by "is Net::InitVars.mode something other
+// than MODE_SinglePlayer" -- a question about sockets. That works only while a
+// socket is evidence of an opponent. It stops working in both directions at
+// once: an offline deathmatch has opponents and no socket, and a host sitting
+// alone has a socket and no opponent.
+//
+// So gameplay asks what kind of match this is, and transport code asks whether
+// a socket is open, and the two questions stop being the same one.
+
+// The bridge while networked cooperative play still exists: a co-op netgame is
+// multiplayer gameplay without being a deathmatch, and an offline deathmatch is
+// multiplayer gameplay without a socket. Deliberately the only predicate here
+// that consults the transport, and the only one that should.
+bool IsMultiplayerGameplay();
+
+bool IsDeathmatch();
+// Death puts you back in the arena rather than restarting the level.
+bool AllowsRespawn();
+// A picked-up item is left behind for whoever else needs it.
+bool ItemsStayInWorld();
+bool RespawnItems();
+bool NoMonsters();
+// More than one slot is being simulated. Distinct from IsMultiplayerGameplay():
+// a host waiting alone is multiplayer by rules and alone in the world.
+bool HasMultiplePlayers();
+bool AllowsSaving();
+bool TracksHighScores();
+// Nothing outside this process is simulating, so stopping the world is a local
+// decision and harms nobody.
+bool CanPauseLocally();
+// Leaving or restarting does not strand anyone else.
+bool CanLeaveSessionUnilaterally();
 
 // --- invariants --------------------------------------------------------------
 

@@ -85,4 +85,52 @@ if [ "$checks" -lt 50 ]; then
 	exit 1
 fi
 
-printf '\nPASS: %s checks, including an authority that owns no player.\n' "$checks"
+# --- the rule that keeps the model honest ------------------------------------
+#
+# Gameplay must not ask the transport what kind of game this is. Net::InitVars
+# .mode says whether a socket is open, which is a different question from
+# whether items stay, whether death respawns you, or whether saving makes
+# sense -- and the two answers come apart the moment there is an offline
+# deathmatch. Only these files may name it: the transport that owns it, the
+# session adapter that translates it, and the two places that set it from the
+# command line and the menu.
+allowed='src/wl_net.cpp src/wl_net.h src/g_session.cpp src/g_session.h src/wl_main.cpp src/wl_menu.cpp'
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+offenders=""
+for f in $(cd "$root" && grep -rl 'InitVars\.mode' src --include='*.cpp' --include='*.h' 2>/dev/null); do
+	case " $allowed " in
+		*" $f "*) continue ;;
+	esac
+	offenders="$offenders $f"
+done
+
+printf '\nGameplay asking the transport what game this is\n'
+if [ -z "$offenders" ]; then
+	printf '  ok   nothing outside the transport and the adapter reads it\n'
+else
+	printf '  FAIL these read InitVars.mode and should ask the session:\n'
+	for f in $offenders; do
+		printf '         %s\n' "$f"
+		(cd "$root" && grep -n 'InitVars\.mode' "$f" | sed 's/^/           /')
+	done
+	exit 1
+fi
+
+# wl_main and wl_menu are allowed only to *set* it. If either starts reading it
+# to decide a rule, the allow-list stops meaning anything.
+for f in src/wl_main.cpp src/wl_menu.cpp; do
+	reads=$(cd "$root" && grep -n 'InitVars\.mode' "$f" |
+		grep -v 'InitVars\.mode = ' | grep -vc 'switch(Net::InitVars.mode)' || true)
+	[ -n "$reads" ] || reads=0
+	if [ "$reads" -ne 0 ]; then
+		printf '  FAIL %s reads InitVars.mode as well as setting it:\n' "$f"
+		(cd "$root" && grep -n 'InitVars\.mode' "$f" | grep -v 'InitVars\.mode = ' |
+			sed 's/^/         /')
+		exit 1
+	fi
+done
+printf '  ok   the two places that set it do not also ask it\n'
+
+printf '\nPASS: %s checks, including an authority that owns no player,\n' "$checks"
+printf '      and no gameplay code asking the transport what game this is.\n'

@@ -164,7 +164,7 @@ namespace
 
 void C7Scoreboard_DrawOverlay()
 {
-	if(Net::InitVars.mode == Net::MODE_SinglePlayer)
+	if(!Session::HasMultiplePlayers())
 		return;
 
 	// The table is printed at the 320x200 coordinates the page was authored
@@ -185,7 +185,7 @@ void C7Scoreboard_DrawOverlay()
 
 void C7Scoreboard_ShowTally()
 {
-	if(Net::InitVars.mode == Net::MODE_SinglePlayer)
+	if(!Session::HasMultiplePlayers())
 		return;
 
 	VW_FadeOut();

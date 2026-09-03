@@ -33,6 +33,7 @@
 */
 
 #include "wl_def.h"
+#include "g_session.h"
 #include "am_map.h"
 #include "colormatcher.h"
 #include "id_ca.h"
@@ -88,7 +89,7 @@ bool am_needsrecalc = false;
 
 static bool AM_ShouldPauseGame()
 {
-	return am_pause && Net::InitVars.mode == Net::MODE_SinglePlayer;
+	return am_pause && Session::CanPauseLocally();
 }
 
 void AM_ChangeResolution()

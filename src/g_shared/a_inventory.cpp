@@ -39,6 +39,7 @@
 #include "thinker.h"
 #include "thingdef/thingdef.h"
 #include "wl_def.h"
+#include "g_session.h"
 #include "wl_agent.h"
 #include "wl_game.h"
 #include "wl_iwad.h"
@@ -788,7 +789,7 @@ bool AWeapon::UseForAmmo(AWeapon *owned)
 
 bool AWeapon::ShouldStay()
 {
-	return Net::InitVars.mode != Net::MODE_SinglePlayer && !(itemFlags & IF_DROPPED);
+	return Session::ItemsStayInWorld() && !(itemFlags & IF_DROPPED);
 }
 
 ACTION_FUNCTION(A_ReFire)
@@ -852,7 +853,7 @@ class AWeaponGiver : public AWeapon
 	protected:
 		bool ShouldStay()
 		{
-			return Net::InitVars.mode != Net::MODE_SinglePlayer && !(itemFlags & IF_DROPPED);
+			return Session::ItemsStayInWorld() && !(itemFlags & IF_DROPPED);
 		}
 
 		bool TryPickup(AActor *toucher)

@@ -27,6 +27,7 @@
 //                      NeedsMusic - load music?
 //
 #include "wl_def.h"
+#include "g_session.h"
 #ifdef _WIN32
 #include <direct.h>
 #define getcwd _getcwd
@@ -1333,8 +1334,10 @@ int SD_PlaySound(const char* sound, SoundChannel chan)
 
 	// Volume fall off for Adlib/PC Speaker sounds is added for multiplayer.
 	// We may wish to enable it for single player at a later time but it's
-	// absolutely needed in multiplayer.
-	ispos &= (Net::InitVars.mode != Net::MODE_SinglePlayer);
+	// absolutely needed in multiplayer -- because it is how you locate somebody
+	// else, which is a question about who is in the world rather than about the
+	// transport that put them there.
+	ispos &= Session::HasMultiplePlayers();
 	if(!ispos)
 		lp = rp = 0;
 

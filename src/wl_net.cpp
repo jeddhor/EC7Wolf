@@ -65,6 +65,17 @@
 // TODO: Handle transfer of arbiter status as client quit
 #define Arbiter 0
 
+// Every build speaks exactly one of these. There was no version field at all
+// before: two builds that disagreed about a packet layout joined each other
+// happily and then desynchronized, which looks like a game bug rather than a
+// version mismatch and is far harder to diagnose than a refusal. Bump this
+// whenever a packet's layout or meaning changes -- including the day the
+// canonical command frame grows a slot number.
+#define NET_PROTOCOL_VERSION 2
+// Present in the first datagram of every connection. A request used to be one
+// lone zero byte, so any stray packet arriving on the port was a new player.
+static const BYTE NetMagic[3] = { 'E', '7', 'N' };
+
 namespace Net {
 
 enum
@@ -115,8 +126,19 @@ struct RequestPacket
 	enum { Type = NET_RequestConnection };
 
 	BYTE type;
+	BYTE magic[3];
+	uint16_t protocolVersion;
 
-	void ByteSwap() {}
+	void ByteSwap()
+	{
+		protocolVersion = LittleShort(protocolVersion);
+	}
+
+	bool MagicOk() const
+	{
+		return magic[0] == NetMagic[0] && magic[1] == NetMagic[1] &&
+			magic[2] == NetMagic[2];
+	}
 };
 
 struct StartPacket
@@ -124,6 +146,9 @@ struct StartPacket
 	enum { Type = NET_ConnectionStart };
 
 	BYTE type;
+	// Echoed so the joining machine can refuse a host it cannot speak to,
+	// rather than reading its player number out of a layout it has guessed.
+	uint16_t protocolVersion;
 	BYTE playerNumber;
 	BYTE numPlayers;
 	BYTE gameMode;
@@ -143,8 +168,16 @@ struct StartPacket
 
 	void ByteSwap()
 	{
+		protocolVersion = LittleShort(protocolVersion);
 		rngseed = LittleLong(rngseed);
-		for(BYTE i = 0;i < numPlayers;++i)
+		// N - 1, not N. The host is not in its own trailing array, so an
+		// N-player packet carries N-1 entries -- and this loop was walking N
+		// of them. On the sending side that is six bytes past a malloc; on the
+		// receiving side it is an attacker-chosen count, because nothing had
+		// validated numPlayers yet when this ran. See ValidateDeclaredSize.
+		//
+		// The i+1 form rather than numPlayers-1 so that a zero never wraps.
+		for(unsigned int i = 0;i + 1 < numPlayers;++i)
 		{
 			clients[i].host = LittleLong(clients[i].host);
 			clients[i].port = LittleShort(clients[i].port);
@@ -274,6 +307,98 @@ struct EndGamePacket
 	}
 };
 #pragma pack()
+
+// A hand-written copy of a packed struct in another language drifts, silently,
+// and a hostile-packet gate that fires the wrong shape proves nothing while
+// looking green. tools/netfuzz.py had drifted twice over: its copy of the NET_
+// enum had NewGame and TicCmd the wrong way round and InAck, DebugCmd and
+// EndGame all misnumbered, and its start packet was laid out for a struct with
+// natural alignment when this one is #pragma pack(1). It had been firing
+// well-formed nonsense at the wrong message types.
+//
+// So the encoder says what it emits, and the gate reads it.
+int WriteProtocolVectors(const char *path)
+{
+	FILE *out = (path == NULL || strcmp(path, "-") == 0) ? stdout
+		: fopen(path, "w");
+	if(out == NULL)
+	{
+		fprintf(stderr, "netvectors: cannot write %s\n", path);
+		return 1;
+	}
+
+	fprintf(out, "protocol %u\n", (unsigned)NET_PROTOCOL_VERSION);
+	fprintf(out, "magic %02x%02x%02x\n", NetMagic[0], NetMagic[1], NetMagic[2]);
+	fprintf(out, "maxplayers %u\n", (unsigned)MAXPLAYERS);
+	fprintf(out, "maxextratics %u\n", (unsigned)MAXEXTRATICS);
+
+#define VEC_TYPE(name, T) \
+	fprintf(out, "type %s %d %u\n", name, (int)T::Type, (unsigned)sizeof(T))
+	VEC_TYPE("RequestConnection", RequestPacket);
+	VEC_TYPE("ConnectionStart", StartPacket);
+	VEC_TYPE("Ack", AckPacket);
+	VEC_TYPE("TicCmd", TicCmdPacket);
+	VEC_TYPE("NewGame", NewGamePacket);
+	VEC_TYPE("BlockPlaysim", BlockPlaysimPacket);
+	VEC_TYPE("InAck", InAckPacket);
+	VEC_TYPE("DebugCmd", DebugCmdPacket);
+	VEC_TYPE("EndGame", EndGamePacket);
+#undef VEC_TYPE
+
+	// The one packet whose size is not sizeof(): offsets, entry size, and the
+	// rule the trailing count follows.
+	fprintf(out, "start.offset.protocolVersion %u\n",
+		(unsigned)offsetof(StartPacket, protocolVersion));
+	fprintf(out, "start.offset.playerNumber %u\n",
+		(unsigned)offsetof(StartPacket, playerNumber));
+	fprintf(out, "start.offset.numPlayers %u\n",
+		(unsigned)offsetof(StartPacket, numPlayers));
+	fprintf(out, "start.offset.gameMode %u\n",
+		(unsigned)offsetof(StartPacket, gameMode));
+	fprintf(out, "start.offset.ticDelay %u\n",
+		(unsigned)offsetof(StartPacket, ticDelay));
+	fprintf(out, "start.offset.fragLimit %u\n",
+		(unsigned)offsetof(StartPacket, fragLimit));
+	fprintf(out, "start.offset.rngseed %u\n",
+		(unsigned)offsetof(StartPacket, rngseed));
+	fprintf(out, "start.offset.clients %u\n",
+		(unsigned)offsetof(StartPacket, clients));
+	fprintf(out, "start.size.client %u\n",
+		(unsigned)sizeof(StartPacket::Client));
+	fprintf(out, "start.clients.are numPlayers-1\n");
+	fprintf(out, "start.maxgamemode %u\n", (unsigned)GM_TeamBattle);
+
+	// One golden datagram, built by the same code the host sends: two players,
+	// one trailing client. If the gate cannot reproduce these bytes it is
+	// building the wrong packet.
+	{
+		const size_t size = sizeof(StartPacket) + sizeof(StartPacket::Client);
+		StartPacket *golden = (StartPacket *)calloc(1, size);
+		golden->type = StartPacket::Type;
+		golden->protocolVersion = NET_PROTOCOL_VERSION;
+		golden->playerNumber = 1;
+		golden->numPlayers = 2;
+		golden->gameMode = GM_Battle;
+		golden->ticDelay = 6;
+		golden->fragLimit = 0;
+		golden->rngseed = 0x01020304;
+		golden->clients[0].host = 0x0100007F;
+		golden->clients[0].port = 5029;
+		golden->ByteSwap();
+
+		fprintf(out, "start.golden ");
+		for(size_t i = 0;i < size;++i)
+			fprintf(out, "%02x", ((const unsigned char *)golden)[i]);
+		fprintf(out, "\n");
+		free(golden);
+	}
+
+	if(out != stdout)
+		fclose(out);
+	else
+		fflush(out);
+	return 0;
+}
 
 NetInit InitVars = {
 	MODE_SinglePlayer,
@@ -435,25 +560,128 @@ static void Abandon(const bool have[MAXPLAYERS])
 
 static void DoEndGame()
 {
+	// Reachable before any level exists. A client that has synced with a host
+	// is still pumping packets through the sign-on wait, and players[i].mo is
+	// null until CheckSpawnPlayer has run -- so an end-game arriving in that
+	// window dereferenced null and took the process with it.
+	//
+	// Found by fixing tools/netfuzz.py rather than by reading this function:
+	// the battery's "well-formed start packet with trailing rubbish" case had
+	// been built with the wrong struct layout for as long as it existed, so no
+	// client under test had ever actually synced, so nothing had ever reached
+	// this line without a level. A gate firing the wrong bytes does not fail;
+	// it passes, which is worse.
 	playstate = ex_died;
 	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
 	{
 		players[i].lives = 0;
 		players[i].killerobj = NULL;
-		players[i].mo->Die();
+		if(players[i].mo != NULL)
+			players[i].mo->Die();
 	}
 }
 
-// Check if we have a potentially valid packet of a certain type
+// Does this datagram even claim to be a T? Type byte and fixed size only.
+// Nothing here may consult a length or a count that came off the wire.
+template<typename T>
+static bool IsPacketType(const UDPpacket *packet)
+{
+	return packet->len >= (signed)sizeof(T) && ((T*)packet->data)->type == T::Type;
+}
+
+// Everything a packet declares about its own size has to be true before a
+// single byte of it is swapped, because ByteSwap is where the trailing arrays
+// get walked. This used to run afterwards, which is no protection at all: by
+// the time the check said "255 players is absurd", the swap had already
+// followed that 255 off the end of the buffer, reading and writing as it went.
+//
+// The fixed-size packets are fully described by sizeof(T), which IsPacketType
+// has already established, so the template below is the whole story for them.
+template<typename T>
+static bool ValidateDeclaredSize(const T *, int)
+{
+	return true;
+}
+
+// Every field of a start packet is a number a stranger chose.
+//
+// This one ends in a client array whose length is declared by a byte inside
+// the packet, so the size that matters is not the size of the struct. What the
+// unchecked version allowed, from one forged UDP datagram: numPlayers up to
+// 255, whose swap loop ran forty bytes past the end of the 1500-byte receive
+// buffer, reading and writing every step of the way; playerNumber up to 255
+// becoming an index into players[]; a gameMode outside the enum; and a tic
+// delay large enough to swamp the extratics ring. A client sitting on a
+// "waiting for sync" screen is the most exposed the game ever is: it is
+// holding an open socket, it has told nobody where it is, and it will believe
+// the first thing that answers.
+//
+// A foreign protocol version is refused here rather than parsed, because
+// nothing below the version field can be trusted to mean what it says. Only
+// the type byte and the version itself sit at an offset both versions agree
+// on, which is the entire reason the version is the second field.
+static bool ValidateDeclaredSize(const StartPacket *data, int len)
+{
+	if(len < 0)
+		return false;
+	if(LittleShort(data->protocolVersion) != NET_PROTOCOL_VERSION)
+		return false;
+	if(data->numPlayers < 1 || data->numPlayers > MAXPLAYERS)
+		return false;
+	if(data->playerNumber >= data->numPlayers)
+		return false;
+	if(data->gameMode > GM_TeamBattle)
+		return false;
+	// The delayed path stamps commands this far ahead and holds them in a ring
+	// of MAXEXTRATICS; half of that leaves room for the tics still in flight.
+	if(data->ticDelay > MAXEXTRATICS/2)
+		return false;
+
+	// The array the packet says it has, rather than the one the struct
+	// declares: sizeof(StartPacket) counts none of it, and the host does not
+	// list itself, so N players means N-1 entries.
+	const size_t needed =
+		sizeof(StartPacket) + sizeof(StartPacket::Client)*(data->numPlayers - 1);
+	if((size_t)len < needed)
+		return false;
+
+	return true;
+}
+
+// A connection request that does not carry this build's magic and version is
+// not a player, it is a port scanner or a stale binary. Both are refused, and
+// only the second is worth a message.
+static bool ValidateDeclaredSize(const RequestPacket *data, int)
+{
+	return data->MagicOk() &&
+		LittleShort(data->protocolVersion) == NET_PROTOCOL_VERSION;
+}
+
+// The two fields every version of a start packet has at the same offset, read
+// without trusting anything else, so a mismatch can be named instead of
+// mis-parsed.
+static bool PeekStartVersion(const UDPpacket *packet, unsigned int &version)
+{
+	if(packet->len < (signed)(sizeof(BYTE) + sizeof(uint16_t)))
+		return false;
+	if(packet->data[0] != StartPacket::Type)
+		return false;
+	uint16_t raw;
+	memcpy(&raw, packet->data + 1, sizeof(raw));
+	version = LittleShort(raw);
+	return true;
+}
+
+// Check if we have a valid packet of a certain type, and decode it in place.
 template<typename T>
 static bool CheckPacketType(const UDPpacket *packet)
 {
-	if(packet->len >= (signed)sizeof(T) && ((T*)packet->data)->type == T::Type)
-	{
-		((T*)packet->data)->ByteSwap();
-		return true;
-	}
-	return false;
+	if(!IsPacketType<T>(packet))
+		return false;
+	if(!ValidateDeclaredSize((const T*)packet->data, packet->len))
+		return false;
+	((T*)packet->data)->ByteSwap();
+	return true;
 }
 
 // Sends an ACK packet to a given address
@@ -518,11 +746,65 @@ int UnbufferPacket<TicCmdPacket>(TicCmdPacket (&packets)[MAXPLAYERS], bool (&rec
 	return unbufferedCount;
 }
 
+// One place that decides who is allowed to say something, rather than five
+// places that each forgot. Every packet handled below can change the state of
+// a match in progress -- block the playsim, run a debug command, end the game
+// -- and not one of them established that the sender was in the match.
+//
+// A stranger who guessed the port could end anyone's game with five bytes.
+//
+// Peer-level is as far as version 1 goes: any player may end the match,
+// because the quit menu has always worked that way, and narrowing that to the
+// arbiter is a lifecycle change that belongs with the rest of the authority
+// work rather than smuggled into a security fix.
+// Is there a world for a packet to act on? Everything below that touches the
+// playsim needs one, and until now nothing asked. A client that has synced
+// with a host is already pumping packets during the sign-on wait, several
+// seconds before any level exists -- and in that window PlayFrame() and
+// DoEndGame() both walk straight into a null pawn.
+//
+// Both crashes were found by fixing tools/netfuzz.py, not by reading this
+// file: the battery's one genuinely well-formed start packet had been built
+// with the wrong struct layout since it was written, so no client under test
+// had ever synced, so this window had never been shot at.
+static bool InAGame()
+{
+	return ingame;
+}
+
+static bool FromKnownPeer(int *client)
+{
+	const int found = FindClient(Packet->address);
+	if(found < 0)
+	{
+		// Not acked, and not one line per datagram: an unknown sender is
+		// either a scanner or a flood, and answering either one confirms
+		// there is a game here and doubles its traffic for it.
+		static uint32_t lastReport = 0;
+		static unsigned int ignored = 0;
+		++ignored;
+		if(lastReport == 0 || SDL_GetTicks() - lastReport >= 1000)
+		{
+			lastReport = SDL_GetTicks();
+			Printf("Ignored %u packet%s from outside the game.\n",
+				ignored, ignored == 1 ? "" : "s");
+			ignored = 0;
+		}
+		return false;
+	}
+	if(client != NULL)
+		*client = found;
+	return true;
+}
+
 static void HandleCommandPackets()
 {
 	if(CheckPacketType<BlockPlaysimPacket>(Packet))
 	{
 		const BlockPlaysimPacket *data = reinterpret_cast<BlockPlaysimPacket *>(Packet->data);
+
+		if(!FromKnownPeer(NULL) || !InAGame())
+			return;
 
 		SendAck<BlockPlaysimPacket>(Packet->address, data->TimeCount);
 		if(data->TimeCount < gamestate.TimeCount-1) // Too old?
@@ -535,16 +817,13 @@ static void HandleCommandPackets()
 	{
 		const DebugCmdPacket *data = reinterpret_cast<DebugCmdPacket *>(Packet->data);
 
+		int client = -1;
+		if(!FromKnownPeer(&client) || !InAGame())
+			return;
+
 		SendAck<DebugCmdPacket>(Packet->address, data->TimeCount);
 		if(data->TimeCount != gamestate.TimeCount)
 			Printf("Desync: Debug key command for tic %d arrived on %d\n", data->TimeCount, gamestate.TimeCount);
-
-		int client = FindClient(Packet->address);
-		if(client < 0)
-		{
-			Printf("Packet recieved from unknown source\n");
-			return;
-		}
 
 		DebugCmd cmd;
 		cmd.Type = static_cast<EDebugCmd>(data->CommandType);
@@ -560,12 +839,20 @@ static void HandleCommandPackets()
 	{
 		const EndGamePacket *data = reinterpret_cast<EndGamePacket *>(Packet->data);
 
+		// There is nothing to end before a level exists, and DoEndGame's own
+		// guard is defense in depth rather than the answer.
+		if(!FromKnownPeer(NULL) || !InAGame())
+			return;
+
 		SendAck<EndGamePacket>(Packet->address, data->TimeCount);
 		DoEndGame();
 	}
 	else if(CheckPacketType<InAckPacket>(Packet))
 	{
 		const InAckPacket *data = reinterpret_cast<InAckPacket *>(Packet->data);
+
+		if(!FromKnownPeer(NULL))
+			return;
 
 		SendAck<InAckPacket>(Packet->address, data->TimeCount);
 		if(data->Number != AwaitingAck)
@@ -578,8 +865,14 @@ static void HandleCommandPackets()
 	}
 	else if(CheckPacketType<StartPacket>(Packet))
 	{
-		// Host lost our start ack, so send another one
-		SendAck<StartPacket>(Client[0].address, 0xFFFFFFFF);
+		// Host lost our start ack, so send another one -- but only to the
+		// host, and only if the host is who asked. Answering anyone else
+		// sends an ack to an address a stranger chose.
+		int client = -1;
+		if(!FromKnownPeer(&client) || client != Arbiter)
+			return;
+
+		SendAck<StartPacket>(Client[Arbiter].address, 0xFFFFFFFF);
 	}
 }
 
@@ -669,7 +962,7 @@ static void ExchangePacket(T (&packets)[MAXPLAYERS])
 				int client = FindClient(Packet->address);
 				if(client < 0)
 				{
-					Printf("Packet recieved from unknown source\n");
+					Printf("Packet received from unknown source\n");
 					continue;
 				}
 
@@ -699,7 +992,7 @@ static void ExchangePacket(T (&packets)[MAXPLAYERS])
 				int client = FindClient(Packet->address);
 				if(client < 0)
 				{
-					Printf("Packet recieved from unknown source\n");
+					Printf("Packet received from unknown source\n");
 					continue;
 				}
 				if(acked[client])
@@ -785,7 +1078,7 @@ static void SendReliablePacket(T &packet)
 				int client = FindClient(Packet->address);
 				if(client < 0)
 				{
-					Printf("Packet recieved from unknown source\n");
+					Printf("Packet received from unknown source\n");
 					continue;
 				}
 				if(acked[client])
@@ -821,43 +1114,6 @@ static void FillPeers(InitStatus &status, const bool acked[MAXPLAYERS])
 			peer.state = IPaddressToString(Client[i].address);
 		status.peers.Push(peer);
 	}
-}
-
-// Every field of a start packet is a number a stranger chose.
-//
-// CheckPacketType only proves the packet is at least sizeof(T) and carries the
-// right type byte. That is enough for the fixed-size packets and not enough for
-// this one, which ends in a client array whose length is declared by a byte
-// inside the packet -- so the size that matters is not the size of the struct.
-//
-// What the unchecked version allowed, from one forged UDP datagram: numPlayers
-// up to 255 walking Client[MAXPLAYERS] off the end of itself and writing as it
-// went, playerNumber up to 255 becoming an index into players[], a gameMode
-// outside the enum, and a tic delay large enough to swamp the extratics ring.
-// A client sitting on a "waiting for sync" screen is the most exposed the game
-// ever is: it is holding an open socket, it has told nobody where it is, and
-// it will believe the first thing that answers.
-static bool ValidStartPacket(const StartPacket *data, int len)
-{
-	if(data->numPlayers < 1 || data->numPlayers > MAXPLAYERS)
-		return false;
-	if(data->playerNumber >= data->numPlayers)
-		return false;
-	if(data->gameMode > GM_TeamBattle)
-		return false;
-	// The delayed path stamps commands this far ahead and holds them in a ring
-	// of MAXEXTRATICS; half of that leaves room for the tics still in flight.
-	if(data->ticDelay > MAXEXTRATICS/2)
-		return false;
-
-	// The array the packet says it has, rather than the one the struct
-	// declares: sizeof(StartPacket) counts none of it.
-	const size_t needed =
-		sizeof(StartPacket) + sizeof(StartPacket::Client)*(data->numPlayers - 1);
-	if(len < 0 || (size_t)len < needed)
-		return false;
-
-	return true;
 }
 
 static bool StartHost(InitStatusCallback callback)
@@ -909,7 +1165,39 @@ static bool StartHost(InitStatusCallback callback)
 		if(SDLNet_UDP_Recv(Socket, Packet))
 		{
 			const RequestPacket *data = reinterpret_cast<RequestPacket*>(Packet->data);
-			if(CheckPacketType<RequestPacket>(Packet))
+			// A request this build cannot speak to. Said once a second at
+			// most, because the sender will keep trying every 400ms and the
+			// person who needs to read this is looking at the host's console.
+			if(Packet->len >= 1 && Packet->data[0] == RequestPacket::Type &&
+				!IsPacketType<RequestPacket>(Packet))
+			{
+				static uint32_t lastOld = 0;
+				if(lastOld == 0 || SDL_GetTicks() - lastOld >= 1000)
+				{
+					lastOld = SDL_GetTicks();
+					Printf("\b\b\bRefused %s: it speaks an older network"
+						" protocol than %u.\n   ",
+						IPaddressToString(Packet->address).GetChars(),
+						(unsigned)NET_PROTOCOL_VERSION);
+					fflush(stdout);
+				}
+			}
+			else if(IsPacketType<RequestPacket>(Packet) &&
+				!CheckPacketType<RequestPacket>(Packet))
+			{
+				static uint32_t lastBad = 0;
+				if(lastBad == 0 || SDL_GetTicks() - lastBad >= 1000)
+				{
+					lastBad = SDL_GetTicks();
+					Printf("\b\b\bRefused %s: wrong magic or network"
+						" protocol %u, expected %u.\n   ",
+						IPaddressToString(Packet->address).GetChars(),
+						(unsigned)LittleShort(data->protocolVersion),
+						(unsigned)NET_PROTOCOL_VERSION);
+					fflush(stdout);
+				}
+			}
+			else if(CheckPacketType<RequestPacket>(Packet))
 			{
 				Printf("\b\b\b");
 
@@ -942,6 +1230,7 @@ static bool StartHost(InitStatusCallback callback)
 	StartPacket *startData = (StartPacket *)malloc(startSize);
 	UDPpacket startPacket = { -1, (Uint8*)startData, startSize, startSize, 0 };
 	startData->type = StartPacket::Type;
+	startData->protocolVersion = NET_PROTOCOL_VERSION;
 	startData->numPlayers = InitVars.numPlayers;
 	startData->gameMode = InitVars.gameMode;
 	startData->ticDelay = InitVars.ticDelay;
@@ -1030,8 +1319,13 @@ static bool StartJoin(InitStatusCallback callback)
 	Printf("Attempting to connect to %u.%u.%u.%u:%u :\n   ", address.host&0xFF, (address.host&0xFF00)>>8, (address.host&0xFF0000)>>16, (address.host&0xFF000000)>>24, BigShort(address.port));
 
 	// Send a connection request to host
-	Uint8 requestData[] = {NET_RequestConnection};
-	UDPpacket packet = { -1, requestData, 1, 1, 0, address };
+	RequestPacket requestData;
+	requestData.type = RequestPacket::Type;
+	memcpy(requestData.magic, NetMagic, sizeof(requestData.magic));
+	requestData.protocolVersion = NET_PROTOCOL_VERSION;
+	requestData.ByteSwap();
+	UDPpacket packet = { -1, (Uint8*)&requestData, sizeof(requestData),
+		sizeof(requestData), 0, address };
 
 	InitStatus status;
 	status.phase = InitStatus::PHASE_Joining;
@@ -1074,30 +1368,61 @@ static bool StartJoin(InitStatusCallback callback)
 			if(Packet->address.host != address.host ||
 				Packet->address.port != address.port)
 				continue;
-			if(CheckPacketType<StartPacket>(Packet))
+			if(IsPacketType<StartPacket>(Packet) &&
+				!CheckPacketType<StartPacket>(Packet))
 			{
-				if(!ValidStartPacket(data, Packet->len))
+				// A host that speaks another protocol is a different problem
+				// from a forged packet, and the difference is the whole
+				// reason anyone can act on the message: one means upgrade,
+				// the other means somebody is firing packets at you.
+				unsigned int theirs = 0;
+				if(PeekStartVersion(Packet, theirs) &&
+					theirs != NET_PROTOCOL_VERSION)
 				{
-					// Counted and reported at most once a second: somebody
-					// firing these is firing a great many, and a line each
-					// would bury everything else in the log. Flushed, because
-					// this is the one thing here worth reading promptly, and
-					// stdout to a file does not flush itself in time to be
-					// read by anyone wondering what is going on.
-					static uint32_t lastReport = 0;
-					static unsigned int rejected = 0;
-					++rejected;
-					if(lastReport == 0 || SDL_GetTicks() - lastReport >= 1000)
+					AbortReason.Format(
+						"Host speaks network protocol %u,\nthis game speaks %u."
+						"\nBoth machines need the same version.",
+						theirs, (unsigned)NET_PROTOCOL_VERSION);
+					Printf("%s\n", AbortReason.GetChars());
+					fflush(stdout);
+
+					// Held on screen rather than printed and abandoned: the
+					// next thing that happens is a silent fall back to single
+					// player, and "why am I not in a netgame" is exactly the
+					// question this answers.
+					status.failure = AbortReason;
+					const uint32_t shown = SDL_GetTicks();
+					while(SDL_GetTicks() - shown < 5000)
 					{
-						lastReport = SDL_GetTicks();
-						Printf("Rejected %u malformed start packet%s.\n",
-							rejected, rejected == 1 ? "" : "s");
-						fflush(stdout);
-						rejected = 0;
+						if(!callback(status))
+							break;
+						SDL_Delay(16);
+						IN_ProcessEvents();
 					}
-					continue;
+					return false;
 				}
 
+				// Counted and reported at most once a second: somebody
+				// firing these is firing a great many, and a line each
+				// would bury everything else in the log. Flushed, because
+				// this is the one thing here worth reading promptly, and
+				// stdout to a file does not flush itself in time to be
+				// read by anyone wondering what is going on.
+				static uint32_t lastReport = 0;
+				static unsigned int rejected = 0;
+				++rejected;
+				if(lastReport == 0 || SDL_GetTicks() - lastReport >= 1000)
+				{
+					lastReport = SDL_GetTicks();
+					Printf("Rejected %u malformed start packet%s.\n",
+						rejected, rejected == 1 ? "" : "s");
+					fflush(stdout);
+					rejected = 0;
+				}
+				continue;
+			}
+			if(CheckPacketType<StartPacket>(Packet))
+			{
 				ConsolePlayer = data->playerNumber;
 				InitVars.numPlayers = data->numPlayers;
 				InitVars.gameMode = static_cast<GameMode>(data->gameMode);
@@ -1123,8 +1448,8 @@ static bool StartJoin(InitStatusCallback callback)
 		}
 	}
 
-	Printf("\b\b\bRecieved sync from host! Sending ack...\n");
-	status.detail = "Synchronised";
+	Printf("\b\b\bReceived sync from host! Sending ack...\n");
+	status.detail = "Synchronized";
 	callback(status);
 
 	// Send ACK and forget, if we're waiting for ticcmd and we get a start, we'll send another ack then.

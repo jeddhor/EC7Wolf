@@ -34,7 +34,7 @@ Established by reading the code and running it, not assumed:
 | --- | --- |
 | **ECWolf has netcode** | `src/wl_net.cpp`, 1031 lines: UDP, host and client, cooperative and battle modes, an arbiter, acked reliable packets, per-player classes |
 | **It is reachable only by flag** | `--host <players>`, `--join <address>`, `--port` — no menu path at all |
-| **The arenas exist and load** | `MAP51`–`MAP58`, already translated and named "Corridor 7 Network Level 1–8" in `mapinfo/corridor7.txt`. MAP51, 55 and 58 load and render; the HUD reads level 51 and **ALIENS 0**, as a deathmatch map should |
+| **The arenas exist and load** | Eight of them, already translated and named "Corridor 7 Network Level 1–8" in `mapinfo/corridor7.txt`. Not the contiguous `MAP51`–`MAP58` block this line first claimed: `MAP58` and `MAP59` are named "Network Level 9" and "10" and are unused boxes, so Network Level 8 is **`MAP60`** and the set is `MAP51`–`MAP57` plus `MAP60`. `src/wl_menu.cpp` and `tools/test_multiplayer_arenas.sh` have always had it right. MAP51, 55 and 60 load and render; the HUD reads level 51 and **ALIENS 0**, as a deathmatch map should |
 | **The menu has the pieces** | `LabelMenuItem` renders as a section heading — small dim capitals over a hairline — which is exactly the separator this needs, and the Corridor 7 shell already draws it. `TextInputMenuItem` exists for an address field. `MenuSwitcherMenuItem` opens a submenu |
 | **There is a determinism harness** | `--capture-checksum` and the `corridor7_determinism` gate. Lockstep multiplayer is only correct while every machine simulates identically, so this is not a nicety — it is the instrument the whole feature is tested with |
 

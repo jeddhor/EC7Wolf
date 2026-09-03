@@ -1051,6 +1051,122 @@ Beyond each milestone's gate:
 
 ---
 
+## 10a. S1 baselines
+
+Recorded 3 September 2026 on `multiplayer-foundation`, from
+`builds/release-build` against `corr7/CORR7CD`. These are the numbers later
+phases regress against; re-record them, do not quietly adjust them.
+
+**Determinism.** `test_multiplayer_loopback.sh` — MAP53, seed 1, input delay 6,
+two processes:
+
+```text
+120 tics, both sides identical every tic, summary checksum=5960981e
+```
+
+**Latency and loss.** `test_multiplayer_latency.sh` — 80 ms round trip, 2%
+loss, 140 tics each way:
+
+| Input delay | Throughput | In sync |
+| ---: | ---: | --- |
+| 8 | 23 tics/sec | every tic |
+| 0 | 8 tics/sec | every tic |
+
+The delay is worth roughly 3x on a link like this, which is the measurement
+that justifies a positive negotiated lead in §25.1 and makes `D = 0` a
+loopback-only diagnostic.
+
+**Single-player determinism.** `test_corridor7_determinism.sh`:
+
+```text
+run-to-run determinism            500 tics, checksum=ae626557
+interpolation on/off              identical simulation
+software and OpenGL               identical simulation
+```
+
+**Rules and content.** `rules`, `classes`, `arenas`, `menu`, `setup`, `cancel`,
+and `presentation` all pass: player-versus-player damage and frag attribution,
+team damage refusal and aggregate team frags, both classes differing in pawn,
+health, side and measured speed, and all eight arenas placing players apart with
+both machines agreeing.
+
+**Hostile traffic.** `test_multiplayer_hostile.sh` passes on both the ordinary
+build and an ASan+UBSan build, including the two new protocol-mismatch sections.
+
+**Wire format**, as the engine reports it through `ec7wolf --netvectors -`:
+
+```text
+protocol 2      magic 45374e      maxplayers 11      maxextratics 64
+RequestConnection 0/6   ConnectionStart 1/12   Ack 2/6    TicCmd 3/79
+NewGame 4/19            BlockPlaysim 5/5       InAck 6/9  DebugCmd 7/269
+EndGame 8/5
+ConnectionStart: version@1 player@3 count@4 mode@5 delay@6 frags@7
+                 seed@8 clients@12, 6 bytes each, numPlayers-1 of them
+```
+
+**One exit criterion is met by construction rather than by a gate.** "With
+mouselook toggled on in a two-machine game, per-tic checksums stay equal" has
+no gate, because mouselook is reachable only through a debug key and there is
+no command-line way to turn it on -- adding one would put a new option into an
+argv surface that already has seven independent scanners, to test three lines.
+The write is simply unreachable while networked. If a later phase gives
+mouselook a menu entry, it needs the canonical pitch field first (§24.3), and
+that comes with a real gate.
+
+**Known open behaviors**, carried forward from
+[multiplayer.md](multiplayer.md) rather than measured here: roughly half of
+connections complete the level-start exchange at 5% packet loss, and a
+mid-match departure ends the match for everyone through `Abandon()` rather than
+dropping one player. Both are Phase D work (§23.3, §32); neither regressed.
+
+### What S1 actually changed
+
+For the record, since three of the five items were live defects rather than
+hardening:
+
+1. **`StartPacket::ByteSwap()` overran two different buffers.** The receiving
+   half is the one that matters -- one forged datagram, `numPlayers = 255`, and
+   the swap walked forty bytes past a 1500-byte receive buffer, reading and
+   writing, before any validation ran. `ValidStartPacket` existed and was
+   correct; it was simply called afterwards. The sending half was an
+   independent off-by-one: the encoder writes `numPlayers - 1` trailing entries
+   and the swap walked `numPlayers`, so a host overran its own `malloc` on
+   every sync packet it had ever sent. Both are proven by ASan, and both were
+   reintroduced deliberately to confirm the gate detects them.
+2. **No control packet checked its sender.** `EndGamePacket` reached
+   `DoEndGame()` from any source: five bytes from anyone who guessed the port
+   ended the match. `BlockPlaysim` and `InAck` were the same, and `DebugCmd`
+   acknowledged an unknown sender before rejecting it.
+3. **`tools/netfuzz.py` had never fired the packets it claimed.** Its copy of
+   the `NET_` enum had `NewGame` and `TicCmd` transposed and `InAck`,
+   `DebugCmd`, and `EndGame` misnumbered; its start packet was laid out for
+   natural alignment when the struct is `#pragma pack(1)`. It was shooting
+   well-formed nonsense at the wrong message types and passing. The engine now
+   states its own layout through `--netvectors`, and the fuzzer rebuilds the
+   engine's golden packet and refuses to run if the bytes differ.
+4. **Two null-pawn crashes, found only because item 3 was fixed.** The
+   battery's one genuinely well-formed start packet -- "well-formed, with 60kB
+   of trailing rubbish" -- had been built with the wrong layout for as long as
+   it had existed, so no client under test had ever actually synced with the
+   forger. Once it did, the window between syncing and loading a level turned
+   out to be reachable and unguarded: `BlockPlaysim` called `PlayFrame()` and
+   `EndGame` called `DoEndGame()`, both walking into `players[i].mo == NULL`,
+   both a SEGV. `HandleCommandPackets` now requires a game to exist before
+   anything touches the playsim.
+
+   This is the clearest argument in the program for the "real encoder vectors"
+   rule in §24.1 and §39.2. The gate did not fail for years and it did not
+   half-work; it passed confidently while firing at nothing.
+5. **Pitch left the command boundary and broke the instrument.** Covered in
+   §6.6; `ChecksumThisTic()` hashes actor pitch, so mouselook desynchronized
+   the determinism harness itself.
+6. **The protocol had no version.** Now `NET_PROTOCOL_VERSION 2`, with magic in
+   the connection request, refused by name at both ends -- and a joining
+   client holds the reason on screen rather than falling silently back to
+   single player, through a new `InitStatus::failure`.
+
+---
+
 # Part III — Phase B: bots
 
 ## 11. Bot architecture

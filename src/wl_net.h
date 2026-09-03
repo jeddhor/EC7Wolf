@@ -74,6 +74,11 @@ struct InitStatus
 	FString      detail;	// the address being dialled, or the port being held
 	unsigned int seconds;	// since the wait began
 	TArray<Peer> peers;	// hosts only; empty while joining
+	// Why the wait ended badly, shown instead of the progress line. A refusal
+	// a player can read beats a wait that quietly turns into single player,
+	// and there is nowhere else to say it: the console scrolls past on a
+	// desktop and does not exist on a phone.
+	FString      failure;
 };
 
 // Returns false to give up waiting. The connect loops poll this every frame
@@ -126,6 +131,12 @@ bool Abandoned();
 const char *AbandonedReason();
 void ClearAbandoned();
 
+// Writes this build's real packet layout to a file, so the hostile-packet
+// gate can build its shots from what the encoder actually emits instead of a
+// hand-maintained guess. Needs no game data and no window. Returns an exit
+// code. See tools/netfuzz.py.
+int WriteProtocolVectors(const char *path);
+
 bool IsArbiter();
 bool IsBlocked();
 void BlockPlaysim();
@@ -146,6 +157,10 @@ void StartAck(AckType type);
 // existed. Team play has no monsters and respawns items exactly as free-for-all
 // does; the only thing it changes is who may shoot whom.
 static bool Deathmatch() { return InitVars.gameMode != GM_Cooperative; }
+// Whether a socket is open and other machines are simulating the same world.
+// Distinct from Deathmatch(), which is a rules question: the two answers come
+// apart the moment there is an offline deathmatch to answer them about.
+static bool IsNetworked() { return InitVars.mode != MODE_SinglePlayer; }
 static bool RespawnItems() { return Deathmatch(); }
 static bool NoMonsters() { return Deathmatch(); }
 

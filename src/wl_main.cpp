@@ -380,15 +380,22 @@ static void CollectGC()
 static bool DrawNetworkStatus(const Net::InitStatus &status)
 {
 	FString statusStr;
-	if(status.phase == Net::InitStatus::PHASE_Hosting)
-		statusStr.Format("Listening on %s", status.detail.GetChars());
-	else
-		statusStr.Format("Connecting to %s", status.detail.GetChars());
-	statusStr.AppendFormat("   %u:%02u", status.seconds/60, status.seconds%60);
-	for(unsigned int i = 0;i < status.peers.Size();++i)
+	if(!status.failure.IsEmpty())
 	{
-		statusStr.AppendFormat("\n%s: %s",
-			status.peers[i].name.GetChars(), status.peers[i].state.GetChars());
+		statusStr = status.failure;
+	}
+	else
+	{
+		if(status.phase == Net::InitStatus::PHASE_Hosting)
+			statusStr.Format("Listening on %s", status.detail.GetChars());
+		else
+			statusStr.Format("Connecting to %s", status.detail.GetChars());
+		statusStr.AppendFormat("   %u:%02u", status.seconds/60, status.seconds%60);
+		for(unsigned int i = 0;i < status.peers.Size();++i)
+		{
+			statusStr.AppendFormat("\n%s: %s",
+				status.peers[i].name.GetChars(), status.peers[i].state.GetChars());
+		}
 	}
 
 	const bool hasSignon = !gameinfo.SignonLump.IsEmpty();
@@ -619,7 +626,17 @@ static void InitGame()
 	// starts -- just not as a netgame. Better than a splash screen with no way
 	// off it.
 	if(!Net::Init(DrawNetworkStatus))
+	{
+		// Which is more use than "abandoned" on its own, and this is the one
+		// place that knows the netgame is over before a level exists to say it
+		// on.
+		if(Net::Abandoned())
+		{
+			Printf("%s\n", Net::AbandonedReason());
+			Net::ClearAbandoned();
+		}
 		Printf("Network game abandoned; starting single-player.\n");
+	}
 	NetWatch_Start();
 
 //
@@ -1336,6 +1353,7 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 		else IFARG("--vis-diff") {}
 		else IFARG("--gltest") { if(i + 1 < argc && argv[i+1][0] != '-') ++i; }
 		else IFARG("--flictest") { ++i; }
+		else IFARG("--netvectors") { ++i; }
 		else IFARG("--editor-capabilities") {}
 		else if(EditorLink::ArgClaimed(i))
 		{
@@ -1532,6 +1550,15 @@ int WL_Main (int argc, char *argv[])
 		{
 			if(strcmp(argv[fi], "--flictest") == 0)
 				return C7Flic_SelfTest(argv[fi + 1]);
+		}
+
+		// The packet layout this build actually speaks. Data-free and
+		// windowless, like --flictest, because the gate that reads it runs
+		// before anything is loaded.
+		for(int ni = 1; ni + 1 < argc; ++ni)
+		{
+			if(strcmp(argv[ni], "--netvectors") == 0)
+				return Net::WriteProtocolVectors(argv[ni + 1]);
 		}
 
 #ifdef ECWOLF_RENDERER_OPENGL

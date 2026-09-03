@@ -606,6 +606,25 @@ void PollMouseMove (void)
 	control[ConsolePlayer].controlx += control[ConsolePlayer].controlpanx * 20 / (21 - mousexadjustment);
 	if(mouselook)
 	{
+		// The one place a human still reaches past the command boundary and
+		// writes simulated state directly. Every other input this function
+		// samples ends up in a TicCmd_t, gets sent, and is applied by every
+		// machine; pitch is written straight onto the pawn and TicCmdPacket
+		// carries no pitch field, so in a netgame each machine holds a
+		// different value for the same actor.
+		//
+		// That is not cosmetic. ChecksumThisTic() hashes actor pitch, so
+		// mouselook desynchronizes the determinism harness -- the instrument
+		// the whole netgame is verified with -- and reports it as a
+		// simulation divergence, which is a long way to chase a mouse.
+		//
+		// Mouselook is a debug toggle with no menu entry, so refusing it
+		// online costs a player nothing today. Carrying a bounded pitch field
+		// in the canonical command is the real answer and belongs with the
+		// protocol work: docs/multiplayer-bots-and-server.md, S1 and 24.3.
+		if(Net::IsNetworked())
+			return;
+
 		int mousey = control[ConsolePlayer].controlpany;
 
 		if(players[ConsolePlayer].ReadyWeapon && players[ConsolePlayer].ReadyWeapon->fovscale > 0)

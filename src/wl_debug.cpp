@@ -346,11 +346,13 @@ static int DebugKeys (void)
 	else if (Keyboard[sc_M]) // M = Mouse look
 	{
 		mouselook ^= 1;
-		US_CenterWindow (17,3);
-		if (mouselook)
-			US_PrintCentered ("Mouse look ON");
-		else
+		US_CenterWindow (24,3);
+		if (!mouselook)
 			US_PrintCentered ("Mouse look OFF");
+		else if (Net::IsNetworked())
+			US_PrintCentered ("No mouse look online");
+		else
+			US_PrintCentered ("Mouse look ON");
 		VW_UpdateScreen();
 		IN_Ack (ACK_Block);
 		return 1;

@@ -16,6 +16,7 @@
 #include "r_capture.h"
 #include "wl_def.h"
 #include "g_session.h"
+#include "g_command.h"
 #include "wl_play.h"
 #include "actor.h"
 #include "wl_agent.h"
@@ -52,6 +53,8 @@ namespace
 	DWORD    g_seed           = 0;
 
 	FString  g_checksumPath;
+	TArray<FString> g_tapes;
+	FString  g_commandTracePath;
 	FILE    *g_checksumFile   = NULL;
 
 	int      g_captureFrame   = -1;      // 1-based rendered frame to shoot
@@ -524,6 +527,16 @@ namespace
 			(unsigned long)g_ticCount,
 			(unsigned long)g_frameCount,
 			(unsigned int)g_worldChecksum);
+
+		// The command digest is separate from the world checksum on purpose:
+		// "the machines disagree about what was pressed" and "the machines
+		// disagree about what happened" are different failures, and a single
+		// number cannot tell you which one you have.
+		Command::CloseTrace();
+		const Command::Violations &bad = Command::GetViolations();
+		Printf("Capture: commands digest=%08x clamped=%u stripped=%u missing=%u\n",
+			(unsigned int)Command::Digest(),
+			bad.clampedAxes, bad.strippedButtons, bad.missingCommands);
 	}
 
 	// Set for every argv index this harness consumed -- see ClaimArg in the
@@ -643,6 +656,16 @@ void ParseArgs(int argc, char **argv)
 			g_duelB = atoi(argv[++i]);
 			if(i + 1 < argc && argv[i+1][0] >= '0' && argv[i+1][0] <= '9')
 				g_duelC = atoi(argv[++i]);
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-tape") == 0 && i + 1 < argc)
+		{
+			g_tapes.Push(argv[++i]);
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-commands") == 0 && i + 1 < argc)
+		{
+			g_commandTracePath = argv[++i];
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-tally") == 0 && i + 1 < argc)
@@ -1086,6 +1109,41 @@ namespace Capture
 // applied to the pawn directly: the point of the gate this exists for is that
 // two machines agree about a fight, and a shot that never traveled over the
 // wire would prove nothing about that.
+void SetupScriptedSlots(FName (&playerClassNames)[MAXPLAYERS])
+{
+	if(!g_commandTracePath.IsEmpty())
+		Command::OpenTrace(g_commandTracePath.GetChars());
+
+	for(unsigned int i = 0;i < g_tapes.Size();++i)
+	{
+		FString error;
+		Command::Producer *producer =
+			Command::MakeScriptedProducer(g_tapes[i].GetChars(), error);
+		if(producer == NULL)
+		{
+			// Fatal rather than skipped: a gate that quietly ran with one
+			// fewer player than it asked for would still pass, and would be
+			// testing something nobody chose.
+			I_FatalError("%s", error.GetChars());
+		}
+
+		const unsigned int slot = Session::AddAuthoritySlot(0, 0x5eed0000u + i);
+		if(slot >= Session::MAX_PLAYER_SLOTS)
+		{
+			delete producer;
+			I_FatalError("No room for command tape '%s': %u slots already",
+				g_tapes[i].GetChars(), Session::ActiveSlotCount());
+		}
+
+		Command::SetProducer(slot, producer);
+		// The same character as the player, so the tape is an ordinary
+		// opponent rather than something with different rules.
+		playerClassNames[slot] = playerClassNames[0];
+		Printf("Capture: slot %u is driven by command tape '%s'.\n",
+			slot, g_tapes[i].GetChars());
+	}
+}
+
 void InjectControls(TicCmd_t &cmd)
 {
 	if(g_holdScoreboard)

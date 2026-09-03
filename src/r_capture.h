@@ -2,6 +2,7 @@
 #define __R_CAPTURE_H__
 
 #include "zdoomsupport.h"
+#include "name.h"
 
 // ===========================================================================
 //
@@ -84,6 +85,13 @@ namespace Capture
 	// Fold capture-time button presses into the local player's command,
 	// before it is sent (see --capture-fire).
 	void InjectControls(TicCmd_t &cmd);
+
+	// Adds one authority-owned slot per --capture-tape and attaches its
+	// scripted producer. Called once the roster exists and before the player
+	// classes are resolved, because a slot that appears later never spawns.
+	// Test scaffolding: the tape proves a slot with neither a keyboard nor a
+	// socket gets a command, and nothing in the shipped game uses it.
+	void SetupScriptedSlots(FName (&playerClassNames)[MAXPLAYERS]);
 
 	// Force a full-screen palette blend (--capture-blend R G B A) just before the
 	// scene is rendered, after the gameplay palette shifts have run so it is not

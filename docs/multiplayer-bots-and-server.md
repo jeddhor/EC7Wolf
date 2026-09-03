@@ -1361,12 +1361,21 @@ proves three things behaviorally:
 - `MAP01` holds five aliens normally and none under `--battle`, so a
   deathmatch rule is being applied with no socket to justify it.
 
-What is *not* proven behaviorally, and why: respawning in place rather than
-restarting, and an item left behind for somebody else, both need a second pawn
-to observe. They are checked as predicates in the table above and become
-observable in S4, whose exit gate is two slots "spawned, moving, scored, and
-killable". Claiming them as behavioral results here would be claiming more than
-was measured.
+What was *not* proven behaviorally at the time, and why: respawning in place
+rather than restarting, and an item left behind for somebody else, both need a
+second pawn to observe. They were checked as predicates in the table above.
+
+**S4 supplied the second pawn, and respawn is now proven behaviorally.** In the
+duel the command gate runs, slot 0 dies around tic 80 and returns around tic
+236 across four hundred *continuous* tics with no level reload -- which is
+exactly the difference between "you respawned" and "the level restarted", in an
+offline deathmatch with no socket anywhere. `test_multiplayer_commands.sh`
+asserts it. Item-stay remains predicate-only: proving it wants a pickup placed
+between two players, which is a map-authoring problem rather than a command one.
+
+The general point is worth keeping: a claim deferred because it could not be
+measured should be revisited when the measurement becomes possible, not left
+standing as a permanent caveat.
 
 ### The source contract
 
@@ -1386,6 +1395,96 @@ engine depends on. Validation covers the new range, and the self-test refuses
 a roster that reserves fewer positions than it is playing, one that puts a
 player in a position it only held open, and one that reserves more than the
 engine has slots for.
+
+---
+
+## 10d. S4 record
+
+### The seam
+
+`src/g_command.{h,cpp}`. A producer emits an `Intent` -- normalized movement
+and requested actions, with no actor handles and no way to touch the world --
+and one finalizer clamps the axes, strips everything that is not a gameplay
+control, derives the held state, and installs the result. The rule the whole
+bot design rests on now holds by construction rather than by convention:
+
+> nothing reaches the simulation except through a command, and every command
+> has been through here.
+
+Held state moved with it. It is derived from the previous command **applied to
+that slot**, not carried by whoever produced it. The old scheme computed it at
+the sender against raw input, which is equivalent only while commands are
+applied in the order sent and none are ever substituted -- and Phase D's
+neutral substitution (§25.3) breaks exactly that assumption. The engine's own
+comment recorded what getting this wrong looks like: one tap of the visor
+cycling it eleven times.
+
+### Local UI came out of the command
+
+Forcing every command through a whitelist immediately exposed five buttons that
+had no business travelling: `bt_pause`, `bt_automap`, `bt_c7map`,
+`bt_scoreboard`, `bt_showstatusbar`. They are things a machine does to its own
+screen, and they were being sampled into a command, replicated, and read back
+out of `control[]` by presentation code. They now live in a separate local
+buffer, `Command::LocalUi()`.
+
+Two consequences, both improvements, both worth stating because they are
+behavior changes:
+
+- **A remote player's pause key used to pause your machine.** The pause handler
+  read `bt_pause` out of *every* slot's command. It reads one machine's own
+  keyboard now. This is the hazard §23.5 warns about -- "never reuse a player
+  `bt_pause` bit" -- found by building the whitelist rather than by reading the
+  code.
+- **The scoreboard key took effect a delay window late** in a netgame, because
+  it was read from `control[ConsolePlayer]`, which holds a command from
+  `ticDelay` tics ago. Local UI has no reason to wait for the network.
+
+### What the gate measured
+
+```text
+frags 1 and 1; lowest health 0 and 0
+400 continuous tics of slot 0, across its death and return
+the tape visited 8 distinct tiles
+clamped 300 axes, stripped 600 buttons, 0 missing commands
+turn 100 forward -100 strafe 100 buttons 1000000...
+  (asked for 500 / -900 / 400 and six UI buttons)
+800 commands over 400 sequences for 2 slots
+both machines finalized byte-identical commands
+```
+
+A slot with no keyboard and no socket spawned, walked eight tiles through the
+ordinary movement code, shot, scored a frag, and died -- and killed the human
+back. Verified to fail by breaking the whitelist: `stripped 0`, two failures.
+
+The netgame section compares the two peers' command traces line by line rather
+than comparing digests, because a digest mismatch says only that something
+differed, and the first differing line says which slot on which tic.
+
+### The tape is not an AI
+
+`ScriptedProducer` replays a fixed text file: `turn forward strafe [buttons]`,
+plus `repeat N` and `loop`. It reads no world state and makes no decisions. It
+exists to prove the boundary carries a command for a slot that cannot produce
+one for itself. **No AI exists at the end of Phase S**, which was the
+milestone's own condition; the AI arrives in Phase B and arrives behind this
+same `Producer` interface.
+
+It is wired through the capture harness (`--capture-tape`, `--capture-commands`)
+rather than through a game option, because it is test scaffolding and should
+not look like a feature. A tape that fails to load is fatal rather than
+skipped: a gate that quietly ran with one fewer player than it asked for would
+still pass, and would be testing something nobody chose.
+
+### A slot with no peer
+
+`Session::AddAuthoritySlot()` appends a slot the authority owns and no socket
+corresponds to -- the shape a bot occupies in Phase B. Its `SlotKind` is `Bot`
+because what the *roster* needs to know is "authority-owned, no peer"; what is
+actually driving it belongs to the command layer. The S2 drift assertion was
+corrected at the same time: it compares peers against **human** slots now,
+since counting an authority-owned slot would make the split this phase exists
+to create look like a fault.
 
 ---
 

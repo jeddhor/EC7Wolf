@@ -104,6 +104,7 @@ ec7edit_assets
 ec7edit_slice
 multiplayer_loopback
 multiplayer_offline
+multiplayer_commands
 multiplayer_latency
 multiplayer_menu
 multiplayer_arenas

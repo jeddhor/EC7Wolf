@@ -157,6 +157,11 @@ void NewGame (int difficulty, FString map, bool displayBriefing, FName playerCla
 
 	Net::NewGame(difficulty, map, playerClassNames);
 
+	// Any --capture-tape slots join the roster here: after the human roster is
+	// settled, before the classes below are resolved, because a slot that
+	// appears after that never gets a pawn.
+	Capture::SetupScriptedSlots(playerClassNames);
+
 	gamestate.difficulty = &SkillInfo::GetSkill(difficulty);
 	strncpy(gamestate.mapname, map, 8);
 	gamestate.mapname[8] = 0;
@@ -1356,6 +1361,8 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 		else IFARG("--flictest") { ++i; }
 		else IFARG("--netvectors") { ++i; }
 		else IFARG("--sessiontest") {}
+		else IFARG("--capture-tape") { ++i; }
+		else IFARG("--capture-commands") { ++i; }
 		else IFARG("--editor-capabilities") {}
 		else if(EditorLink::ArgClaimed(i))
 		{

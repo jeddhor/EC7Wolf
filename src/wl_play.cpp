@@ -3,6 +3,7 @@
 #include "c_cvars.h"
 #include "wl_def.h"
 #include "g_session.h"
+#include "g_command.h"
 #include "r_capture.h"
 #include "render/r_renderer.h"
 #include "render/r_interpolation.h"
@@ -730,6 +731,7 @@ void PollControls (bool absolutes)
 		if (demoptr == lastdemoptr)
 			playstate = ex_completed;   // demo is done
 
+		Command::SetLocalUi(cmd);
 		return;
 	}
 
@@ -765,6 +767,11 @@ void PollControls (bool absolutes)
 	// they travel like real ones.
 	Capture::InjectControls(cmd);
 
+	// What this keyboard asked for, kept before finalization removes the parts
+	// that are nobody else's business. The automap, the scoreboard and pause
+	// are read from here; the simulation never sees them.
+	Command::SetLocalUi(cmd);
+
 	if (demorecord)
 	{
 		//
@@ -790,11 +797,37 @@ void PollControls (bool absolutes)
 	else if(Net::IsNetworked())
 		Net::PollControls();
 
+	// The canonical frame for the tic about to run: one command for every
+	// active slot, all of them finalized before any thinker moves anything, so
+	// that one slot's movement cannot change another slot's command.
+	//
+	// A slot with a producer is asked; a slot without one already has its
+	// command, either sampled from this keyboard or delivered by the network,
+	// and goes through the same finalizer so that clamping, the gameplay
+	// whitelist and held-state derivation happen in exactly one place.
+	{
+		const uint32_t sequence = (uint32_t)gamestate.TimeCount;
+		Command::BeginFrame(sequence);
+		for(unsigned int slot = 0;slot < Session::ActiveSlotCount();++slot)
+		{
+			if(Command::HasProducer(slot))
+				Command::ProduceAndInstall(slot, sequence);
+			else
+				Command::InstallSampled(slot, control[slot]);
+		}
+		Command::FinishFrame();
+	}
+
+	// Local UI, from what this keyboard asked for rather than from the
+	// finalized command -- which no longer carries these, and in a netgame
+	// would be a delay window out of date if it did.
+	const TicCmd_t &ui = Command::LocalUi();
+
 	// Check automap toggle before we set any buttons as held
-	if (cmd.buttonstate[bt_c7map] && !cmd.buttonheld[bt_c7map])
+	if (ui.buttonstate[bt_c7map] && !ui.buttonheld[bt_c7map])
 		C7Map_Toggle();
 
-	if (cmd.buttonstate[bt_automap] && !cmd.buttonheld[bt_automap])
+	if (ui.buttonstate[bt_automap] && !ui.buttonheld[bt_automap])
 	{
 		AM_Toggle();
 	}
@@ -803,9 +836,12 @@ void PollControls (bool absolutes)
 		AM_CheckKeys();
 	}
 
-	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
+	// Pause is this machine stopping its own world. It used to be read out of
+	// every slot's command, which meant a remote player's pause key stopped
+	// yours -- and once pause stops being a button that travels, there is
+	// nothing in a command to read.
 	{
-		if(control[i].buttonstate[bt_pause] && !control[i].buttonheld[bt_pause])
+		if (ui.buttonstate[bt_pause] && !ui.buttonheld[bt_pause])
 		{
 			Paused ^= 1;
 
@@ -1348,7 +1384,7 @@ static void DrawC7MapOverlay()
 // letting go of anything else.
 static void DrawScoreboardOverlay()
 {
-	if(control[ConsolePlayer].buttonstate[bt_scoreboard])
+	if(Command::LocalUi().buttonstate[bt_scoreboard])
 		C7Scoreboard_DrawOverlay();
 }
 

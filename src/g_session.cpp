@@ -97,6 +97,25 @@ unsigned int ActiveSlotCount() { return Live().activeSlots; }
 
 unsigned int ReservedSlotCount() { return Live().reservedSlots; }
 
+unsigned int AddAuthoritySlot(uint32_t profile, uint64_t seed)
+{
+	State &s = Live();
+	if(s.activeSlots >= MAX_PLAYER_SLOTS)
+		return MAX_PLAYER_SLOTS;
+
+	const unsigned int slot = s.activeSlots;
+	s.slots[slot] = PlayerSlotInfo();
+	s.slots[slot].kind = SlotKind::Bot;
+	s.slots[slot].botProfile = profile;
+	s.slots[slot].controllerSeed = seed;
+	s.slots[slot].name.Format("Slot %u", slot + 1);
+	s.activeSlots = slot + 1;
+	if(s.reservedSlots < s.activeSlots)
+		s.reservedSlots = s.activeSlots;
+	AssertValid(s);
+	return slot;
+}
+
 bool ReserveSlots(unsigned int n)
 {
 	if(n < Live().activeSlots || n > MAX_PLAYER_SLOTS)
@@ -409,11 +428,20 @@ void AdoptLegacyRoster(const FName (&playerClassNames)[MAXPLAYERS])
 	// catching: two machines quietly iterating different numbers of players is
 	// a desync that would be blamed on the netcode for a week.
 #ifndef NDEBUG
-	if(Net::InitVars.mode != Net::MODE_SinglePlayer &&
-		Net::InitVars.numPlayers != s.activeSlots)
+	// Peers against *human* slots, not against every slot: a slot the
+	// authority owns has no peer by definition, and counting it here would
+	// make the split this milestone exists to create look like a fault.
+	unsigned int humans = 0;
+	for(unsigned int i = 0;i < s.activeSlots;++i)
 	{
-		I_FatalError("Session has %u slots but the transport has %u players",
-			s.activeSlots, (unsigned)Net::InitVars.numPlayers);
+		if(s.slots[i].kind == SlotKind::Human)
+			++humans;
+	}
+	if(Net::InitVars.mode != Net::MODE_SinglePlayer &&
+		Net::InitVars.numPlayers != humans)
+	{
+		I_FatalError("Session has %u human slots but the transport has %u peers",
+			humans, (unsigned)Net::InitVars.numPlayers);
 	}
 #endif
 

@@ -2,6 +2,7 @@
 
 #include "wl_def.h"
 #include "g_session.h"
+#include "g_command.h"
 #include "id_sd.h"
 #include "id_in.h"
 #include "id_vl.h"
@@ -1904,7 +1905,8 @@ void R_RenderView()
 
 	DrawPlayerWeapon ();    // draw player's hands
 
-	if((control[ConsolePlayer].buttonstate[bt_showstatusbar] || control[ConsolePlayer].buttonheld[bt_showstatusbar]) && viewsize == 21)
+	if((Command::LocalUi().buttonstate[bt_showstatusbar] ||
+		Command::LocalUi().buttonheld[bt_showstatusbar]) && viewsize == 21)
 	{
 		ingame = false;
 		StatusBar->DrawStatusBar();

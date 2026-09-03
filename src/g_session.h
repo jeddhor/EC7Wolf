@@ -186,6 +186,14 @@ unsigned int ReservedSlotCount();
 // Set aside n positions beyond the ones in the match. Refuses to reserve fewer
 // than are already active.
 bool ReserveSlots(unsigned int n);
+
+// Appends a slot the authority owns and no socket corresponds to. This is the
+// shape a bot occupies in Phase B; in Phase S the only thing that occupies it
+// is a scripted command tape, which is not an AI and is not a step toward one.
+// The kind is Bot because what the roster needs to know is "authority-owned,
+// no peer" -- what is actually driving it is the command layer's business.
+// Returns the new slot, or an out-of-range value if there is no room.
+unsigned int AddAuthoritySlot(uint32_t profile, uint64_t seed);
 bool SlotActive(PlayerSlot slot);
 SlotKind KindOf(PlayerSlot slot);
 bool SlotIsBot(PlayerSlot slot);

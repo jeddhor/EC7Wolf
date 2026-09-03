@@ -66,8 +66,26 @@ fi
 	exit 0
 }
 
-version=$("$python" -c "import sys; sys.path.insert(0, '$editor'); \
+case $(uname -s 2>/dev/null || echo unknown) in
+	Linux)  platform=linux ;;
+	Darwin) platform=macos ;;
+	MINGW*|MSYS*|CYGWIN*) platform=windows ;;
+	*)      platform=unknown ;;
+esac
+arch=$(uname -m 2>/dev/null || echo unknown)
+
+# Asked from inside the editor directory rather than by handing Python a path.
+# Under MSYS the shell's own paths are /d/a/... and native Python cannot open
+# one, so `sys.path.insert(0, "$editor")` silently found nothing and every
+# Windows package would have called itself "unknown".
+version=$(cd "$editor" && "$python" -c \
+	"import sys; sys.path.insert(0, '.'); \
 	from ec7edit_core import __version__; print(__version__)" 2>/dev/null || echo unknown)
+if [ "$version" = unknown ]; then
+	printf 'FAIL: %s cannot import ec7edit_core, so the package would have no version\n' \
+		"$python" >&2
+	exit 1
+fi
 
 # Stamped into the package, because there is no repository inside one to ask.
 # Written before the freeze so PyInstaller picks it up as an ordinary module,
@@ -83,18 +101,14 @@ trap 'cleanup_stamp; rm -rf "${work:-}"' EXIT INT TERM
 runtime=$("$python" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')
 qt=$("$python" -c 'import PySide6; print(PySide6.__version__)')
 
-case $(uname -s 2>/dev/null || echo unknown) in
-	Linux)  platform=linux ;;
-	Darwin) platform=macos ;;
-	MINGW*|MSYS*|CYGWIN*) platform=windows ;;
-	*)      platform=unknown ;;
-esac
-arch=$(uname -m 2>/dev/null || echo unknown)
 name="ec7edit-$version-$platform-$arch"
 
 printf 'EC7Edit %s -- freezing with Python %s and PySide6 %s\n' "$version" "$runtime" "$qt"
 
 work=$(mktemp -d /tmp/ec7edit-package.XXXXXX)
+if [ "$platform" = windows ]; then data_sep=';'; else data_sep=':'; fi
+
+cp "$editor/resources/editor_catalog.json" "$work/editor_catalog.json"
 
 # --- freeze ----------------------------------------------------------------
 #
@@ -105,11 +119,19 @@ work=$(mktemp -d /tmp/ec7edit-package.XXXXXX)
 ( cd "$editor" && "$python" -m PyInstaller \
 	--noconfirm --clean --log-level WARN \
 	--distpath "$work/dist" --workpath "$work/build" --specpath "$work" \
-	`# --add-data sources resolve against --specpath, not the working` \
-	`# directory, so this one is absolute; a relative path here fails` \
-	`# with "unable to find" naming a file in the temporary spec dir.` \
+	`# --add-data SRC:DEST -- and both halves of that are a trap.` \
+	`#` \
+	`# SRC resolves against --specpath rather than the working directory,` \
+	`# so the catalogue is copied next to the spec and named bare. It cannot` \
+	`# be an absolute path: under MSYS an argument containing a colon looks` \
+	`# like a path list, and the shell rewrites each half -- which turned` \
+	`# /d/a/.../editor_catalog.json into \d\a\... and failed every Windows` \
+	`# build with "unable to find".` \
+	`#` \
+	`# DEST is separated by a semicolon on Windows and a colon elsewhere,` \
+	`# following os.pathsep, which is what PyInstaller splits on.` \
 	--name ec7edit --windowed --onedir \
-	--add-data "$editor/resources/editor_catalog.json:resources" \
+	--add-data "editor_catalog.json${data_sep}resources" \
 	--hidden-import ec7edit_gui.application \
 	--hidden-import ec7edit_core._build_version \
 	--exclude-module tkinter \

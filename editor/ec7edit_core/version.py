@@ -34,7 +34,7 @@ ANCHOR = "20ee748cd9f45846f6002abfaf99e0a47294eb07"
 
 #: Used when there is no git to ask and no frozen stamp to read. Bump when
 #: cutting a release, beside EC7WOLF_BETA_FALLBACK.
-BETA_FALLBACK = 226
+BETA_FALLBACK = 227
 
 
 def _from_stamp() -> str:

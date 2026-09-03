@@ -205,6 +205,27 @@ jobs:
         run: |
           python -c "import sys; sys.path.insert(0, 'installer'); from ec7install import deps; [print(f'{r.key:12} found={r.found} {r.detail or r.remedy}') for r in deps.scan_build()]"
 
+      - name: Package the editor for Windows
+        # Here rather than only in the release workflow, because the release
+        # workflow is the wrong place to discover a Windows-only bug: the first
+        # one shipped a broken tag. --add-data's separator and MSYS's habit of
+        # rewriting anything that looks like a colon-separated path list are
+        # both invisible on Linux.
+        shell: bash
+        run: |
+          tools/package_ec7edit.sh --output builds/ec7edit-release --no-archive \
+            --python "$(command -v python)"
+
+      - name: Check the packaged editor starts on Windows
+        shell: bash
+        run: tools/test_ec7edit_release_startup.sh builds/ec7edit-release
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ec7edit-windows
+          path: builds/ec7edit-release
+          if-no-files-found: error
+
       - name: Build EC7Wolf-Setup.exe
         # build_setup.py starts the result and checks it knows its own
         # arguments, which is where a missing bundled import shows up.

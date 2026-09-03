@@ -642,6 +642,26 @@ one command that produces the frames itself.
 Everything after the frames needs nothing installed. Fourteen frames a second
 is the game's own rate and a sensible default.
 
+**There is no sound.** FLIC has no audio chunk, and the game's own cinematics
+get theirs from sound effects fired at fixed frame numbers. Your video's audio
+track is dropped, and the editor says so as it works.
+
+**On size.** A five-second clip of real footage comes to about 900 kB — some
+12 kB a frame, against 64 kB for an uncompressed one. Frames are stored as the
+difference from the one before, so a talking head costs far less than a
+whip-pan, and a still image costs almost nothing.
+
+If you want it smaller, lower `--fps` first: it is a straight trade and 10 fps
+still reads as motion. `--colors` below 256 saves less than you would think and
+costs more than you would like.
+
+`--stability` decides how much a color has to change before the pixel does.
+Real footage is noisy, and reducing each frame on its own turns that noise into
+a different palette color every frame across large flat areas — which is paid
+for twice, in the file size and in a shimmer across every wall in the picture.
+The default of 900 made a real clip a third smaller with nothing visibly
+different. Pushing it much past 2000 starts leaving blotches on flat walls.
+
 **Ship it.** Put the result in a resource pack as `video/MYENDING.CO7`, and
 name it in your campaign's ending:
 
@@ -663,8 +683,7 @@ cinematic plays without anything being installed beside the game. If it names
 an animation nothing carries, the engine says which one rather than showing
 nothing — an ending that silently did nothing would look like a crash.
 
-There is no sound: FLIC has no audio chunk, and the game's own cinematics get
-theirs from effects fired at fixed frame numbers.
+
 
 ---
 

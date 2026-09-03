@@ -113,7 +113,7 @@ def frame_files(source: Path) -> list[Path]:
 
 
 def encode_frames(files, *, fps: int = DEFAULT_FPS, colors: int = 256,
-                  progress=None) -> Encoded:
+                  stability: int = imagery.STABILITY, progress=None) -> Encoded:
     """Frames to a cinematic, with one palette shared by all of them."""
     files = list(files)
     if not files:
@@ -153,7 +153,13 @@ def encode_frames(files, *, fps: int = DEFAULT_FPS, colors: int = 256,
     mapping = imagery.build_mapping(palette)
 
     note("reducing frames to those colors")
-    frames = [flic.Frame(imagery.quantize(rgb, mapping)) for rgb in images]
+    frames = []
+    previous = None
+    for rgb in images:
+        indices = imagery.quantize_stable(rgb, mapping, palette, previous,
+                                          stability)
+        frames.append(flic.Frame(indices))
+        previous = indices
 
     note("writing")
     speed_ms = max(1, round(1000 / fps))
@@ -163,12 +169,12 @@ def encode_frames(files, *, fps: int = DEFAULT_FPS, colors: int = 256,
 
 
 def encode(source: Path | str, *, fps: int = DEFAULT_FPS, colors: int = 256,
-           progress=None) -> Encoded:
+           stability: int = imagery.STABILITY, progress=None) -> Encoded:
     """A cinematic from a video file or a folder of PNG frames."""
     source = Path(source)
     if source.is_dir():
         return encode_frames(frame_files(source), fps=fps, colors=colors,
-                             progress=progress)
+                             stability=stability, progress=progress)
     if not source.is_file():
         raise export_error("C7E-VIDEO-002", f"{source} is not there", str(source))
     if source.suffix.lower() not in VIDEO_SUFFIXES:
@@ -180,8 +186,13 @@ def encode(source: Path | str, *, fps: int = DEFAULT_FPS, colors: int = 256,
     with tempfile.TemporaryDirectory(prefix="ec7edit-frames-") as scratch:
         if progress is not None:
             progress(f"extracting frames from {source.name} with ffmpeg")
+            # Said every time rather than only when there is audio to drop.
+            # Detecting that would mean another tool, and somebody whose clip
+            # is silent anyway loses nothing by being told.
+            progress("FLIC carries no sound, so the audio is not included")
         files = extract_frames(source, Path(scratch), fps)
-        result = encode_frames(files, fps=fps, colors=colors, progress=progress)
+        result = encode_frames(files, fps=fps, colors=colors,
+                               stability=stability, progress=progress)
     return Encoded(data=result.data, frames=result.frames,
                    speed_ms=result.speed_ms, colors=result.colors,
                    source=str(source))

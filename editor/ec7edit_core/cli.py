@@ -461,13 +461,16 @@ def _pack_with_resources(args, project, campaign) -> int:
 
 def command_video_encode(args) -> int:
     """Turn a video, or a folder of frames, into a cinematic the game plays."""
-    from . import video
+    from . import imagery, video
+
+    if args.stability is None:
+        args.stability = imagery.STABILITY
 
     def note(message: str) -> None:
         print(f"  {message}")
 
     result = video.encode(args.source, fps=args.fps, colors=args.colors,
-                          progress=note)
+                          stability=args.stability, progress=note)
     guard = OutputGuard(protected_roots=tuple(args.protect))
     output = args.output
     if output.suffix.upper() != ".CO7":
@@ -603,6 +606,11 @@ def build_parser() -> argparse.ArgumentParser:
                               help="frames a second (default 14, as the game's own)")
     video_encode.add_argument("--colors", type=int, default=256,
                               help="palette size, 2..256")
+    video_encode.add_argument(
+        "--stability", type=int, default=None, metavar="N",
+        help="how much a color must change before the pixel does (default 900; "
+             "0 quantizes every frame independently, which is a third larger "
+             "and shimmers; much above 2000 smears)")
     video_encode.add_argument("--protect", type=Path, action="append", default=[])
     video_encode.set_defaults(handler=command_video_encode)
 

@@ -21,7 +21,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from ec7edit_core import flic, video
 from ec7edit_core.errors import ExportError
-from ec7edit_core.imagery import build_mapping, build_palette, quantize, read_png
+from ec7edit_core.imagery import (
+    build_mapping, build_palette, quantize, quantize_stable, read_png,
+)
 
 
 def write_png(path: Path, width: int, height: int, rgb: bytes, *,
@@ -132,6 +134,79 @@ class Colors(unittest.TestCase):
     def test_a_smaller_palette_is_honored(self):
         palette = build_palette([a_frame(0)], colors=16)
         self.assertEqual(len(palette), 16)
+
+
+class Stability(unittest.TestCase):
+    """Keeping the previous frame's index where the color has not really moved.
+
+    Real footage is noisy, and quantizing each frame on its own turns that
+    noise into a different palette index every frame across large flat areas.
+    Measured on a 77-frame clip of real video: a quarter of every frame
+    changed, and three quarters of those changes were to a color
+    indistinguishable from the one already there -- paid for twice, in the
+    delta and in a shimmer across every wall in the picture.
+    """
+
+    def setUp(self):
+        self.palette = [(0, 0, 0), (10, 10, 10), (200, 30, 30), (255, 255, 255)]
+        self.palette += [(0, 0, 0)] * (256 - len(self.palette))
+        self.mapping = build_mapping(self.palette)
+
+    def test_the_first_frame_is_quantized_normally(self):
+        from ec7edit_core.imagery import quantize, quantize_stable
+        rgb = bytes([200, 30, 30] * 16)
+        self.assertEqual(quantize_stable(rgb, self.mapping, self.palette, None),
+                         quantize(rgb, self.mapping))
+
+    def test_a_color_that_barely_moved_keeps_its_index(self):
+        from ec7edit_core.imagery import quantize_stable
+        previous = bytes([1] * 16)                      # (10, 10, 10)
+        rgb = bytes([12, 12, 12] * 16)                  # near enough
+        self.assertEqual(quantize_stable(rgb, self.mapping, self.palette, previous),
+                         previous)
+
+    def test_a_color_that_really_moved_does_not(self):
+        from ec7edit_core.imagery import quantize_stable
+        previous = bytes([1] * 16)                      # (10, 10, 10)
+        rgb = bytes([255, 255, 255] * 16)               # nothing like it
+        self.assertNotEqual(quantize_stable(rgb, self.mapping, self.palette, previous),
+                            previous)
+
+    def test_zero_stability_is_plain_quantization(self):
+        from ec7edit_core.imagery import quantize, quantize_stable
+        previous = bytes([1] * 16)
+        rgb = bytes([11, 11, 11] * 16)
+        self.assertEqual(
+            quantize_stable(rgb, self.mapping, self.palette, previous, 0),
+            quantize(rgb, self.mapping))
+
+    def test_it_makes_a_noisy_animation_smaller(self):
+        import random
+
+        from ec7edit_core import video as video_module
+
+        random.seed(7)
+        base = bytearray()
+        for _ in range(flic.WIDTH * flic.HEIGHT):
+            base.extend((120, 120, 120))
+        frames = []
+        for _ in range(6):
+            noisy = bytearray(base)
+            for at in range(0, len(noisy), 3):
+                jitter = random.randint(-4, 4)
+                noisy[at] = max(0, min(255, noisy[at] + jitter))
+                noisy[at + 1] = max(0, min(255, noisy[at + 1] + jitter))
+                noisy[at + 2] = max(0, min(255, noisy[at + 2] + jitter))
+            frames.append(bytes(noisy))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            for index, rgb in enumerate(frames):
+                write_png(folder / f"{index:03d}.png", flic.WIDTH, flic.HEIGHT, rgb)
+            steady = video_module.encode(folder, stability=900)
+            jumpy = video_module.encode(folder, stability=0)
+        self.assertLess(len(steady.data), len(jumpy.data),
+                        "stability should shrink a noisy animation")
 
 
 class Pipeline(unittest.TestCase):

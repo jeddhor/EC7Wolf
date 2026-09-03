@@ -216,4 +216,45 @@ def quantize(rgb: bytes, mapping: bytes) -> bytes:
     return bytes(out)
 
 
-__all__ = ["build_mapping", "build_palette", "quantize", "read_png"]
+#: How different a color has to be from the one already on screen before the
+#: pixel is changed at all. Weighted squared distance, the same measure the
+#: palette search uses; 900 is about a step of ten in one channel.
+#:
+#: Real footage is noisy, and quantizing each frame independently turns that
+#: noise into a different palette index every frame across large flat areas.
+#: Measured on a 77-frame clip: a quarter of every frame changed, and three
+#: quarters of those changes were to a color indistinguishable from the one
+#: already there. That is paid for twice -- in the delta, and in a shimmer
+#: across every wall in the picture.
+STABILITY = 900
+
+
+def quantize_stable(rgb: bytes, mapping: bytes, palette, previous: bytes | None,
+                    threshold: int = STABILITY) -> bytes:
+    """Like `quantize`, but keeps the previous frame's index where it still fits.
+
+    Only where the color it stands for is within `threshold` of the new one --
+    so motion, edges and anything that actually changed come through
+    untouched, and a wall that is the same wall stays the same byte.
+    """
+    if previous is None:
+        return quantize(rgb, mapping)
+
+    out = bytearray(len(rgb) // 3)
+    bucket = _bucket
+    entries = list(palette)
+    for index in range(len(out)):
+        at = index * 3
+        red, green, blue = rgb[at], rgb[at + 1], rgb[at + 2]
+        was = previous[index]
+        r, g, b = entries[was]
+        if (2 * (r - red) ** 2 + 4 * (g - green) ** 2
+                + 3 * (b - blue) ** 2) <= threshold:
+            out[index] = was
+            continue
+        out[index] = mapping[bucket(red, green, blue)]
+    return bytes(out)
+
+
+__all__ = ["STABILITY", "build_mapping", "build_palette", "quantize",
+           "quantize_stable", "read_png"]

@@ -40,32 +40,39 @@ trap 'rm -rf "$work"' EXIT INT TERM
 
 printf 'Vid_MaxFPS = 0;\n' >"$work/cfg"
 
-frames="20 120 240 360 480"
+# TICS, not frames. Damage accrues per tic, and frames are not tics: how many
+# frames pass in a tic depends on how busy the machine is, so the same
+# --capture-frame reaches a different tic from run to run and the measurement
+# window slides. An earlier version recorded the tic each frame happened to
+# land on and sorted by it, which kept the readings honest but left the window
+# itself drifting -- and on a loaded machine it drifted far enough to straddle
+# something that made one shot read an empty gauge and the next a full one.
+#
+# --capture-snapshot renders at an exact simulation tic and exits, so these are
+# the tics asked for on any machine. Chosen with margin: the gauge falls from
+# 528 lit pixels to 288 across them, and the player is nowhere near dying.
+tics="20 100 140 220 300"
 
-for f in $frames; do
+for f in $tics; do
 	( cd "$data_dir"
 	  export SDL_AUDIODRIVER=dummy
 	  export SDL_VIDEODRIVER=x11
 	  timeout 180s xvfb-run -a "$build_dir/ec7wolf" --data CO7 --no-upscale \
 		--config "$work/cfg" --savedir "$work" --nowait --tedlevel MAP01 --skill 2 \
-		--vid-renderer software --capture-rngseed 1 \
+		--vid-renderer software --res 640 480 --capture-rngseed 1 \
 		--capture-warp 35 19 0 \
-		--capture-frame "$f" --capture-file "$work/shot.$f.png" --capture-maxframes 600
+		--capture-snapshot "$work/shot.$f.png" "$f"
 	) >"$work/run.$f.log" 2>&1 || true
 	if [ ! -s "$work/shot.$f.png" ]; then
-		printf 'FAIL: no frame captured at %s\n' "$f" >&2
+		printf 'FAIL: no frame captured at tic %s\n' "$f" >&2
 		tail -20 "$work/run.$f.log" >&2
 		exit 1
 	fi
 	convert "$work/shot.$f.png" -depth 8 "ppm:$work/shot.$f.ppm"
-	# Record the TIC the capture actually landed on. Frames are not 1:1 with
-	# tics under decoupled pacing, and each of these is an independent process,
-	# so the same --capture-frame can reach a different tic from run to run --
-	# which made a monotonic-by-frame assertion fail on a loaded machine with
-	# nothing wrong. Damage accrues per tic, so the tic is the honest axis.
-	sed -n 's/.*at frame [0-9]* tic \([0-9]*\).*/\1/p' "$work/run.$f.log" \
-		| head -n1 >"$work/tic.$f"
+	printf '%s\n' "$f" >"$work/tic.$f"
 done
+
+frames=$tics
 
 python3 - "$work" $frames <<'PY'
 import sys

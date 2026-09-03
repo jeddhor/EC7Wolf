@@ -72,11 +72,22 @@ check() {
 	else printf '  FAIL %s\n' "$message"; status=1; fi
 }
 
+# Traced where ptrace is allowed, so "offline" can be proven rather than
+# assumed. Containers commonly forbid it; the run still happens and the socket
+# check says it was skipped rather than passing quietly.
+tracer=""
+if command -v strace >/dev/null 2>&1 &&
+	strace -f -e trace=socket -o /dev/null true >/dev/null 2>&1; then
+	tracer=yes
+fi
+
 solo() {   # solo NAME TICS EXTRA...
 	name=$1; ticcount=$2; shift 2
+	trace=""
+	[ -n "$tracer" ] && trace="strace -f -e trace=socket -o $work/$name.strace"
 	( cd "$data_dir"
 	  DISPLAY=$display SDL_VIDEODRIVER=x11 SDL_AUDIODRIVER=dummy \
-	  timeout 150 "$build_dir/ec7wolf" --data CO7 --res 320 200 --nowait \
+	  timeout 150 $trace "$build_dir/ec7wolf" --data CO7 --res 320 200 --nowait \
 		--config "$work/$name.cfg" --savedir "$work/$name-saves" \
 		--capture-rngseed 1 \
 		--capture-players "$work/$name.players" \
@@ -128,6 +139,18 @@ printf '  ..   %s continuous tics of slot 0, across its death and return\n' "$ti
 check "the level did not restart when the player died" test "$ticspan" -ge 390
 check "and the player came back" \
 	test "$(awk '$2==0 {h=$6} END {print h+0}' "$work/duel.players")" -gt 0
+
+# The whole duel -- two pawns, two frags, two deaths -- with no network
+# underneath it. This is the Phase S exit criterion in one run.
+if [ -n "$tracer" ]; then
+	opened=$(grep -c 'AF_INET' "$work/duel.strace" 2>/dev/null || true)
+	[ -n "$opened" ] || opened=0
+	printf '  ..   %s internet sockets opened during the duel\n' "$opened"
+	check "two players fought without a socket between them" \
+		test "$opened" -eq 0
+else
+	printf '  ..   strace cannot trace here; socket check skipped\n'
+fi
 
 # ---------------------------------------------------------------------------
 printf '\nA slot that walks, rather than one that is placed\n'

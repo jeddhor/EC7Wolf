@@ -1488,6 +1488,50 @@ to create look like a fault.
 
 ---
 
+## 10e. Phase S is complete
+
+Each criterion in §3.1, and where it is proven:
+
+| Criterion | Where | Evidence |
+| --- | --- | --- |
+| `IsArbiter()` no longer refers to `ConsolePlayer`, and no gameplay, spawn, score or GC loop indexes players by peer number | S2 | `Session::IsAuthority()`; 32 loop bounds converted to `ActiveSlotCount()`; §10b |
+| A session model can hold a slot no socket corresponds to, and nothing waits on a peer for it | S2, S4 | `--sessiontest`, 106 checks; `AddAuthoritySlot()` exercised by the command gate |
+| An offline deathmatch with one human and one placeholder reaches gameplay, spawns two pawns, scores both, and needs no UDP socket | S3, S4 | `test_multiplayer_commands.sh`: two pawns, one frag each, both dead, **0 internet sockets opened during the duel** |
+| Existing human multiplayer unchanged and green | all | thirteen multiplayer gates plus twelve single-player gates |
+| No variable-length packet byte-swapped or dereferenced before its declared length is validated, over real encoder output | S1 | `--netvectors` golden packet, ASan-proven both ways |
+| Every command that reaches the simulation came through `TicCmd_t`; no input path writes pawn state directly | S1, S4 | the pitch write closed; the whitelist and clamp enforced in one finalizer |
+
+Baselines are identical to the ones recorded at S1, through four milestones and
+roughly nine hundred lines of change: loopback `5960981e`, determinism 500 tics
+`ae626557`.
+
+### What Phase B inherits
+
+- A roster that can name a slot with no peer, and an authority that is a role
+  rather than a slot number.
+- A command boundary that clamps, whitelists, and derives held state in one
+  place, with a `Producer` interface a brain plugs into unchanged.
+- A per-slot command trace and a command digest separate from the world digest,
+  so "the machines disagree about what was pressed" is a distinguishable
+  failure from "the machines disagree about what happened".
+- An offline deathmatch to develop against, needing no second machine and no
+  socket.
+- Rules predicates that answer correctly with no network present, so a bot
+  match is a deathmatch by the same rules a networked one is.
+
+### What Phase B must not assume
+
+- `Lifecycle` is a type with no readers yet (§10b). D2 and D3 give it meaning.
+- The roster is still built by an adapter from `Net::InitVars`; two counts
+  exist, and a debug assertion fails the build if they disagree.
+- `SlotKind::Bot` currently means "authority-owned, no peer" and is occupied by
+  a scripted tape. B2 gives it a brain; nothing about the roster changes when
+  it does, which is the point.
+- The ~200 remaining `ConsolePlayer` uses in the renderer and status bars are
+  Phase D's, behind a presentation sink. A bot must never need one.
+
+---
+
 # Part III — Phase B: bots
 
 ## 11. Bot architecture

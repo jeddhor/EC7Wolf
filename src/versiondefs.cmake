@@ -36,7 +36,7 @@ set(EC7WOLF_BETA_ANCHOR "20ee748cd9f45846f6002abfaf99e0a47294eb07")
 # Used when there is no git to ask: a source zip, or an exported tree. Update
 # it when cutting a release; CI builds from a full checkout and computes the
 # real number, so this is a floor rather than the usual answer.
-set(EC7WOLF_BETA_FALLBACK 209)
+set(EC7WOLF_BETA_FALLBACK 226)
 
 execute_process(
 	COMMAND git rev-list --count "${EC7WOLF_BETA_ANCHOR}..HEAD"

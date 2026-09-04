@@ -60,6 +60,22 @@ Violations   g_violations;
 uint32_t     g_digest = 0;
 FILE        *g_trace = NULL;
 
+// The one place an intent becomes a command.
+//
+// It was two places, which is how "forward" came to mean backward and stayed
+// that way: TicCmd_t's controly is negative for forward -- an artifact of how
+// the original read its keyboard -- and a controller writing +35 into it walks
+// away from where it meant to go. Both copies made the same mistake because
+// both copies made it independently.
+void ToCommand(const Intent &intent, TicCmd_t &cmd)
+{
+	cmd.controlx = intent.turn;			// + clockwise, as ControlMovement reads it
+	cmd.controly = -intent.forward;		// controly is negative for forward
+	cmd.controlstrafe = intent.strafe;	// + right, as ControlMovement reads it
+	for(int i = 0;i < NUMBUTTONS;++i)
+		cmd.buttonstate[i] = intent.press[i] ? 1 : 0;
+}
+
 int ClampAxis(int value, unsigned int *clamped)
 {
 	if(value < AXIS_MIN) { if(clamped) ++*clamped; return AXIS_MIN; }
@@ -226,11 +242,7 @@ void ProduceAndInstall(Session::PlayerSlot slot, uint32_t sequence)
 	Producer *producer = g_producers[slot];
 	if(producer != NULL && producer->Produce(slot, sequence, intent))
 	{
-		cmd.controlx = intent.turn;
-		cmd.controly = intent.forward;
-		cmd.controlstrafe = intent.strafe;
-		for(int i = 0;i < NUMBUTTONS;++i)
-			cmd.buttonstate[i] = intent.press[i] ? 1 : 0;
+		ToCommand(intent, cmd);
 	}
 	// A producer with nothing to say gets a neutral command rather than the
 	// last one repeated: a stuck attack button is worse than standing still,
@@ -261,11 +273,7 @@ bool ProduceForWire(Session::PlayerSlot slot, uint32_t sequence, TicCmd_t &out)
 		return true;
 	}
 
-	out.controlx = intent.turn;
-	out.controly = intent.forward;
-	out.controlstrafe = intent.strafe;
-	for(int i = 0;i < NUMBUTTONS;++i)
-		out.buttonstate[i] = intent.press[i] ? 1 : 0;
+	ToCommand(intent, out);
 	FinalizeShared(out);
 	return true;
 }

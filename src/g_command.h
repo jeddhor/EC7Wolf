@@ -51,9 +51,15 @@ enum { AXIS_MIN = -100, AXIS_MAX = 100 };
 // S1), no held state (derived, never asserted), and no automap fields.
 struct Intent
 {
-	int  forward = 0;
-	int  strafe  = 0;
-	int  turn    = 0;
+	// Positive is forward, positive is right, positive is clockwise. Say so,
+	// because TicCmd_t does not: controly is *negative* for forward, which is
+	// an artifact of how the original read its keyboard and is not something
+	// a controller should have to know. An intent that said "forward 35" and
+	// walked backward cost an afternoon and a wrong bug report; the conversion
+	// happens in one place now, in ToCommand.
+	int  forward = 0;	// + forward, - backward
+	int  strafe  = 0;	// + right, - left
+	int  turn    = 0;	// + clockwise, - anticlockwise
 	bool press[NUMBUTTONS] = {};
 
 	void Clear();

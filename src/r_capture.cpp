@@ -19,6 +19,7 @@
 #include "g_command.h"
 #include "g_bot.h"
 #include "g_traversal.h"
+#include "g_botnav.h"
 #include "wl_play.h"
 #include "actor.h"
 #include "wl_agent.h"
@@ -60,6 +61,7 @@ namespace
 	FString  g_commandTracePath;
 	FString  g_botTracePath;
 	FString  g_traversalPath;
+	FString  g_navPath;
 	FILE    *g_checksumFile   = NULL;
 
 	int      g_captureFrame   = -1;      // 1-based rendered frame to shoot
@@ -700,6 +702,11 @@ void ParseArgs(int argc, char **argv)
 			g_traversalPath = argv[++i];
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-nav") == 0 && i + 1 < argc)
+		{
+			g_navPath = argv[++i];
+			g_armed = true;
+		}
 		else if(strcmp(arg, "--capture-tally") == 0 && i + 1 < argc)
 		{
 			g_tallyPath = argv[++i];
@@ -1210,6 +1217,103 @@ static void WriteTraversalMap(const char *path)
 	Printf("Capture: wrote traversal map -> %s\n", path);
 }
 
+// The graph, and a fixed set of routes through it.
+//
+// The routes are chosen from the graph itself rather than from anything about
+// this run, so two runs ask the same questions: evenly spaced node ids, which
+// is a deterministic sample of the arena rather than a sample of wherever the
+// player happened to be.
+static void WriteNavMap(const char *path)
+{
+	if(map == NULL)
+		return;
+
+	Traversal::Body body = Traversal::PlayerBody(gamestate.playerClass[0]);
+	if(players[0].mo != NULL)
+		body.radius = players[0].mo->radius;
+
+	BotNav::Graph &graph = BotNav::Current();
+	if(!graph.Build(body))
+	{
+		Printf("Capture: the navigation graph could not be built.\n");
+		return;
+	}
+
+	FILE *out = fopen(path, "w");
+	if(out == NULL)
+	{
+		Printf("Capture: FAILED to open nav dump '%s'\n", path);
+		return;
+	}
+
+	fprintf(out, "# nav nodes %u edges %u digest %08x radius %d\n",
+		graph.NodeCount(), graph.EdgeCount(),
+		(unsigned int)graph.Digest(), (int)(body.radius>>10));
+
+	// Every edge, so a gate can check symmetry and that each one is a step the
+	// traversal query agrees with.
+	for(unsigned int e = 0;e < graph.EdgeCount();++e)
+	{
+		const BotNav::Edge &edge = graph.EdgeOf(e);
+		const BotNav::Node &a = graph.NodeOf(edge.from);
+		const BotNav::Node &b = graph.NodeOf(edge.to);
+		fprintf(out, "edge %u %u %u %u %u %u\n",
+			a.x, a.y, b.x, b.y, edge.cost, (unsigned)edge.type);
+	}
+
+	// Sixteen routes, spread across the graph by id.
+	const unsigned int samples = 16;
+	if(graph.NodeCount() >= 2)
+	{
+		for(unsigned int i = 0;i < samples;++i)
+		{
+			const BotNav::NodeId from =
+				(BotNav::NodeId)((uint64_t)graph.NodeCount()*i/samples);
+			const BotNav::NodeId to =
+				(BotNav::NodeId)((uint64_t)graph.NodeCount()*(samples - i)/(samples + 1));
+			if(from == to)
+				continue;
+
+			TArray<BotNav::NodeId> route;
+			BotNav::SearchStats stats;
+			const bool found = graph.FindPath(from, to, route, stats);
+
+			const BotNav::Node &a = graph.NodeOf(from);
+			const BotNav::Node &b = graph.NodeOf(to);
+			fprintf(out, "path %u %u %u %u %s %u %u",
+				a.x, a.y, b.x, b.y, found ? "found" : "none",
+				route.Size(), stats.expansions);
+			for(unsigned int n = 0;n < route.Size();++n)
+			{
+				const BotNav::Node &step = graph.NodeOf(route[n]);
+				fprintf(out, " %u,%u", step.x, step.y);
+			}
+			fprintf(out, "\n");
+
+			// And the same route smoothed, so a gate can check the shortcut
+			// is a shortcut and still walkable.
+			if(found && route.Size() > 2)
+			{
+				TArray<BotNav::NodeId> smoothed = route;
+				graph.Smooth(body, smoothed);
+				fprintf(out, "smooth %u %u %u %u %u %u",
+					a.x, a.y, b.x, b.y, route.Size(), smoothed.Size());
+				for(unsigned int n = 0;n < smoothed.Size();++n)
+				{
+					const BotNav::Node &step = graph.NodeOf(smoothed[n]);
+					fprintf(out, " %u,%u", step.x, step.y);
+				}
+				fprintf(out, "\n");
+			}
+		}
+	}
+
+	fclose(out);
+	Printf("Capture: wrote navigation graph -> %s (%u nodes, %u edges, "
+		"digest %08x)\n", path, graph.NodeCount(), graph.EdgeCount(),
+		(unsigned int)graph.Digest());
+}
+
 void OpenTraces()
 {
 	if(!g_commandTracePath.IsEmpty())
@@ -1289,6 +1393,11 @@ void PreTic()
 	{
 		WriteTraversalMap(g_traversalPath.GetChars());
 		g_traversalPath = "";
+	}
+	if(!g_navPath.IsEmpty())
+	{
+		WriteNavMap(g_navPath.GetChars());
+		g_navPath = "";
 	}
 
 	if(!g_giveClass.IsEmpty() && !g_giveDone && players[ConsolePlayer].mo)

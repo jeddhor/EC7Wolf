@@ -111,6 +111,7 @@ multiplayer_menu
 multiplayer_arenas
 multiplayer_starts
 bot_traversal
+bot_navigation
 multiplayer_rules
 multiplayer_classes
 multiplayer_presentation

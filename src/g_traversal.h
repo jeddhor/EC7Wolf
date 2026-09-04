@@ -44,6 +44,24 @@ struct Body
 	// Excluded from the actor test: whatever is being moved cannot block
 	// itself.
 	const AActor *ignore = NULL;
+
+	// Treat this one door spot's sliding faces as already open.
+	//
+	// Planning has to ask what the world will be like once a door the body is
+	// allowed to open has opened, and that is a different question from what
+	// the world is like now. Movement never sets this: a pawn crosses a door
+	// when the door is really open, and the same query says so because the
+	// engine has by then set slideAmount itself.
+	//
+	// A rule rather than a temporary write to the map. The alternative --
+	// opening the door, asking, and closing it again -- puts simulation state
+	// in the hands of a query, which is how a question turns into a change
+	// nobody was expecting.
+	MapSpot openDoor = NULL;
+	// Which of its faces, as bits indexed by Tile::Side. The faces that do not
+	// slide are jambs and stay solid, so a route cannot enter a door through
+	// its side wall.
+	BYTE openDoorSides = 0;
 };
 
 // Called while the position is being checked, by the caller that is allowed to
@@ -77,6 +95,46 @@ bool CanOccupyTile(const Body &body, unsigned int tileX, unsigned int tileY);
 // be able to stand in both tiles and unable to pass between them, which is
 // most of what makes a doorway a doorway.
 bool CanStepBetweenTiles(const Body &body, unsigned int fromX, unsigned int fromY,
+	unsigned int toX, unsigned int toY);
+
+// What a door in a cell is, as far as anything that wants to plan through one
+// needs to know.
+//
+// A closed door is not somewhere a body can stand, and CanOccupyTile says so
+// correctly: it asks whether a body fits *now*. Planning asks a different
+// question -- whether a body could stand there shortly, having done something
+// a player is allowed to do -- and conflating the two would either put routes
+// through walls or refuse to route through doors.
+struct DoorInfo
+{
+	bool	exists = false;
+	// The key this door demands, or 0. Not consulted while building: which
+	// keys a bot holds changes during a match and the graph does not, so the
+	// lock travels on the edge and possession is checked when it is used.
+	int		lock = 0;
+	// Which of the tile's four faces can be walked through once it opens.
+	// Corridor 7 doors are directional and approaching the wrong face is a
+	// way of standing in front of a door pressing use forever.
+	bool	passable[4] = { false, false, false, false };
+};
+
+// Is there a player-usable door in this cell?
+//
+// Read from the same triggers the player's use action runs, so a door a human
+// cannot open is not one a bot believes in.
+DoorInfo DoorAt(unsigned int tileX, unsigned int tileY);
+
+// Can the body stand in the middle of this tile, treating a closed door as if
+// it were already open?
+//
+// The planning counterpart to CanOccupyTile. Identical for every cell that is
+// not a door.
+bool CanOccupyTileOrDoor(const Body &body, unsigned int tileX, unsigned int tileY);
+
+// And the step between two of them, same allowance. A step with a door at
+// both ends is refused: crossing two boundaries at once is not something the
+// follower's one-door-at-a-time protocol can drive.
+bool CanStepBetweenTilesOrDoor(const Body &body, unsigned int fromX, unsigned int fromY,
 	unsigned int toX, unsigned int toY);
 
 // The body an ordinary player of this class has. Used by the graph, which is

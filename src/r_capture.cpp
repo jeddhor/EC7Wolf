@@ -254,6 +254,7 @@ namespace
 	// Invulnerability Sphere's strobe cannot be photographed any other way.
 	FString  g_giveClass;
 	bool     g_giveDone       = false;
+	bool     g_giveEveryone   = false;   // --capture-give-all: every slot, not just ours
 
 	bool     g_c7Map          = false;   // --capture-c7map: raise the C7 inset panel
 	bool     g_c7FloorPlan    = false;   // --capture-floorplan: as if the plan were picked up
@@ -552,8 +553,16 @@ namespace
 		// machines agree.
 		if(Bot::Count() > 0)
 		{
-			Printf("Capture: bots %u brain=%08x\n",
-				Bot::Count(), (unsigned int)Bot::BrainDigest());
+			const Bot::Totals tally = Bot::Tally();
+			Printf("Capture: bots %u brain=%08x planned=%u arrived=%u "
+				"abandoned=%u refused=%u nogoal=%u doors=%u doorsfailed=%u "
+				"unstuck=%u respawns=%u\n",
+				Bot::Count(), (unsigned int)Bot::BrainDigest(),
+				tally.routesPlanned, tally.routesCompleted,
+				tally.routesAbandoned, tally.stepsRefused,
+				tally.goalSearchFailures, tally.doorsOpened,
+				tally.doorsGivenUp, tally.unstuckEntered,
+				tally.respawnsRequested);
 		}
 		Bot::CloseTrace();
 	}
@@ -690,6 +699,19 @@ void ParseArgs(int argc, char **argv)
 		else if(strcmp(arg, "--capture-commands") == 0 && i + 1 < argc)
 		{
 			g_commandTracePath = argv[++i];
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-give-all") == 0 && i + 1 < argc)
+		{
+			g_giveClass = argv[++i];
+			g_giveEveryone = true;
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-bot-goal") == 0 && i + 2 < argc)
+		{
+			const int gx = atoi(argv[++i]);
+			const int gy = atoi(argv[++i]);
+			Bot::SetForcedGoal(gx, gy);
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-bots") == 0 && i + 1 < argc)
@@ -1246,9 +1268,37 @@ static void WriteNavMap(const char *path)
 		return;
 	}
 
-	fprintf(out, "# nav nodes %u edges %u digest %08x radius %d\n",
+	unsigned int largestRegion = 0;
+	const unsigned int regions = graph.Regions(&largestRegion);
+	fprintf(out, "# nav nodes %u edges %u digest %08x radius %d regions %u largest %u\n",
 		graph.NodeCount(), graph.EdgeCount(),
-		(unsigned int)graph.Digest(), (int)(body.radius>>10));
+		(unsigned int)graph.Digest(), (int)(body.radius>>10),
+		regions, largestRegion);
+
+	// Every trigger in the map, so that "the graph has no doors in it" and
+	// "the map has no doors in it" are separable questions. They were not,
+	// and guessing which one was true would have been guessing.
+	for(unsigned int ty = 0;ty < map->GetHeader().height;++ty)
+	{
+		for(unsigned int tx = 0;tx < map->GetHeader().width;++tx)
+		{
+			MapSpot spot = map->GetSpot(tx, ty, 0);
+			if(spot == NULL)
+				continue;
+			for(unsigned int i = 0;i < spot->triggers.Size();++i)
+			{
+				const MapTrigger &trig = spot->triggers[i];
+				fprintf(out, "trigger %u %u action %u args %d %d %d %d %d"
+					" use %d cross %d monster %d tile %d activate %d%d%d%d\n",
+					tx, ty, trig.action,
+					trig.arg[0], trig.arg[1], trig.arg[2], trig.arg[3], trig.arg[4],
+					trig.playerUse ? 1 : 0, trig.playerCross ? 1 : 0,
+					trig.monsterUse ? 1 : 0, spot->tile != NULL ? 1 : 0,
+					trig.activate[0] ? 1 : 0, trig.activate[1] ? 1 : 0,
+					trig.activate[2] ? 1 : 0, trig.activate[3] ? 1 : 0);
+			}
+		}
+	}
 
 	// Every edge, so a gate can check symmetry and that each one is a step the
 	// traversal query agrees with.
@@ -1406,6 +1456,22 @@ void PreTic()
 		const ClassDef *cls = ClassDef::FindClass(g_giveClass);
 		if(cls == NULL)
 			Printf("Capture: no such class '%s' to give.\n", g_giveClass.GetChars());
+		else if(g_giveEveryone)
+		{
+			// Every slot, not only the one with a keyboard. A bot cannot be
+			// handed anything through the console, and a locked door needs
+			// the card in the hand of whoever is standing in front of it.
+			unsigned int given = 0;
+			for(unsigned int i = 0;i < MAXPLAYERS;++i)
+			{
+				if(players[i].mo == NULL)
+					continue;
+				players[i].mo->GiveInventory(cls, 0, true);
+				++given;
+			}
+			Printf("Capture: gave %u player(s) %s.\n", given,
+				g_giveClass.GetChars());
+		}
 		else
 		{
 			players[ConsolePlayer].mo->GiveInventory(cls, 0, true);

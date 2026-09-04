@@ -6,6 +6,7 @@
 */
 
 #include "g_traversal.h"
+#include "lnspec.h"
 #include "actor.h"
 #include "wl_def.h"
 #include "wl_agent.h"
@@ -84,6 +85,12 @@ bool CheckPositionAt(const Body &body, fixed x, fixed y, const Hooks *hooks)
 			{
 				if(spot->sideSolid[i] && spot->slideAmount[i] != 0xffff && checkLines[i])
 				{
+					// A door this body is planning to open, on a face that
+					// actually opens. Nothing is written; the question is
+					// simply asked of the state that will exist.
+					if(body.openDoor == spot && (body.openDoorSides & (1<<i)))
+						continue;
+
 					// Whatever the caller wants to do about being blocked --
 					// Corridor 7 zaps a player leaning on wall IDs 6 and 14 --
 					// happens through the hook, not here. A question has no
@@ -180,6 +187,134 @@ bool CanStepBetweenTiles(const Body &body, unsigned int fromX, unsigned int from
 		const fixed x = ax + (fixed)(((int64_t)(bx - ax)*i)/Samples);
 		const fixed y = ay + (fixed)(((int64_t)(by - ay)*i)/Samples);
 		if(!CheckPositionAt(body, x, y, NULL))
+			return false;
+	}
+	return true;
+}
+
+DoorInfo DoorAt(unsigned int tileX, unsigned int tileY)
+{
+	DoorInfo info;
+	if(map == NULL)
+		return info;
+
+	MapSpot spot = map->GetSpot(tileX, tileY, 0);
+	if(spot == NULL || spot->tile == NULL)
+		return info;
+
+	for(unsigned int i = 0;i < spot->triggers.Size();++i)
+	{
+		const MapTrigger &trig = spot->triggers[i];
+		if(trig.action != Specials::Door_Open || !trig.playerUse)
+			continue;
+		// A trigger with a tag operates doors somewhere else: that is a
+		// switch, and a switch is a different edge type with a different
+		// protocol. Only a door that opens itself is a door here.
+		if(trig.arg[0] != 0)
+			continue;
+
+		info.exists = true;
+		// Whatever key the trigger demands, recorded and not acted on. Which
+		// keys a bot is carrying changes during a match; the graph does not.
+		info.lock = trig.arg[3];
+
+		// EVDoor slides sides `direction` and `direction+2` together, and
+		// Side is East, North, West, South -- so bit 0 of arg[4] picks the
+		// axis, and the two faces that open are the ones on it.
+		const int axis = trig.arg[4] & 1;
+		info.passable[axis] = true;
+		info.passable[axis + 2] = true;
+		break;
+	}
+
+	return info;
+}
+
+// Fill in the open-door rule for whichever of these cells has a door in it.
+// Returns false when a cell has a door this body must not plan through.
+static bool PlanningBody(const Body &in, Body &out, unsigned int tileX,
+	unsigned int tileY)
+{
+	out = in;
+	const DoorInfo info = DoorAt(tileX, tileY);
+	if(!info.exists)
+		return true;
+
+	out.openDoor = map->GetSpot(tileX, tileY, 0);
+	out.openDoorSides = 0;
+	for(unsigned int i = 0;i < 4;++i)
+	{
+		if(info.passable[i])
+			out.openDoorSides |= (BYTE)(1<<i);
+	}
+	return out.openDoorSides != 0;
+}
+
+bool CanOccupyTileOrDoor(const Body &body, unsigned int tileX, unsigned int tileY)
+{
+	if(map == NULL)
+		return false;
+	MapSpot spot = map->GetSpot(tileX, tileY, 0);
+	if(spot == NULL || spot->sector == NULL)
+		return false;
+
+	// The wall rejection in CanOccupyTile is what refuses a door cell, and it
+	// refuses it for the right reason: a closed door is a wall. Ask the same
+	// question of the open state instead.
+	if(spot->tile != NULL)
+	{
+		// An ordinary wall, and it stays a wall. Without this the centre of
+		// every solid cell answers yes -- a body of radius 22 in a 64-unit
+		// tile reaches none of that tile's own faces, so there is nothing for
+		// the position check to collide with. That mistake turns a 64 by 64
+		// arena into 4096 standable cells, which is exactly what it did.
+		if(!Traversal::DoorAt(tileX, tileY).exists)
+			return false;
+
+		Body planning;
+		if(!PlanningBody(body, planning, tileX, tileY))
+			return false;
+
+		const fixed x = (fixed)((tileX<<TILESHIFT) + (1<<(TILESHIFT-1)));
+		const fixed y = (fixed)((tileY<<TILESHIFT) + (1<<(TILESHIFT-1)));
+		return CheckPositionAt(planning, x, y, NULL);
+	}
+
+	return CanOccupyTile(body, tileX, tileY);
+}
+
+bool CanStepBetweenTilesOrDoor(const Body &body, unsigned int fromX, unsigned int fromY,
+	unsigned int toX, unsigned int toY)
+{
+	if(!CanOccupyTileOrDoor(body, fromX, fromY) ||
+		!CanOccupyTileOrDoor(body, toX, toY))
+		return false;
+
+	// At most one end of a step is a door: two doors side by side share a
+	// face, and a body crossing between them is crossing two boundaries at
+	// once, which the follower's one-door-at-a-time protocol cannot drive.
+	Body planning = body;
+	const bool fromDoor = DoorAt(fromX, fromY).exists;
+	const bool toDoor = DoorAt(toX, toY).exists;
+	if(fromDoor && toDoor)
+		return false;
+	if(fromDoor && !PlanningBody(body, planning, fromX, fromY))
+		return false;
+	if(toDoor && !PlanningBody(body, planning, toX, toY))
+		return false;
+
+	const fixed halfTile = (fixed)(1<<(TILESHIFT-1));
+	const fixed ax = (fixed)((fromX<<TILESHIFT)) + halfTile;
+	const fixed ay = (fixed)((fromY<<TILESHIFT)) + halfTile;
+	const fixed bx = (fixed)((toX<<TILESHIFT)) + halfTile;
+	const fixed by = (fixed)((toY<<TILESHIFT)) + halfTile;
+
+	const unsigned int Samples = 8;
+	for(unsigned int i = 1;i < Samples;++i)
+	{
+		const fixed x = ax + (fixed)(((int64_t)(bx - ax)*i)/Samples);
+		const fixed y = ay + (fixed)(((int64_t)(by - ay)*i)/Samples);
+		if(!CheckPositionAt(planning, x, y, NULL))
 			return false;
 	}
 	return true;

@@ -50,13 +50,20 @@ bool Graph::Build(const Traversal::Body &body)
 	{
 		for(unsigned int x = 0;x < width;++x)
 		{
-			if(!Traversal::CanOccupyTile(body, x, y))
+			// Doors are cells too. A closed door is not somewhere a body can
+			// stand and is somewhere it can stand shortly, and a graph that
+			// only holds the first kind is a graph of a map with its doors
+			// bricked up -- which is what MAP60 looked like: five regions, the
+			// largest holding half the arena.
+			const Traversal::DoorInfo door = Traversal::DoorAt(x, y);
+			if(!Traversal::CanOccupyTileOrDoor(body, x, y))
 				continue;
 			if(nodes.Size() >= NO_NODE)
 				break;		// 65535 nodes is sixteen times a Corridor 7 arena
 			Node node;
 			node.x = (uint16_t)x;
 			node.y = (uint16_t)y;
+			node.isDoor = door.exists;
 			lookup[y*width + x] = (NodeId)nodes.Size();
 			nodes.Push(node);
 		}
@@ -88,6 +95,39 @@ bool Graph::Build(const Traversal::Body &body)
 				continue;
 
 			const bool diagonal = d >= 4;
+
+			// A door is entered and left square-on, through a face that
+			// actually opens. Approaching one cornerwise means standing in the
+			// jamb, and crossing one cornerwise means clipping the panel.
+			const bool doorStep = nodes[n].isDoor || nodes[to].isDoor;
+			if(doorStep)
+			{
+				if(diagonal)
+					continue;
+
+				const Node &doorNode = nodes[n].isDoor ? nodes[n] : nodes[to];
+				const Traversal::DoorInfo info =
+					Traversal::DoorAt(doorNode.x, doorNode.y);
+				// Sides are East, North, West, South; bit 0 of the door's axis
+				// picks the pair. Compare on the axis rather than on a named
+				// side, because which of North and South is +y is exactly the
+				// kind of thing that has been wrong here before.
+				//
+				// Measured, and currently redundant, exactly like the corner
+				// rule below: removing this check leaves MAP51's graph
+				// byte-identical -- same 5822 edges, same digest. The sweep
+				// already refuses these, because only the sliding pair of
+				// faces is opened for planning and the jambs stay solid, so a
+				// step across one collides.
+				//
+				// Kept and labelled rather than quietly left in. It is the
+				// guarantee; the sweep is what happens to be enforcing it.
+				const bool alongX = info.passable[0];
+				const bool stepAlongX = (dy[d] == 0);
+				if(stepAlongX != alongX)
+					continue;
+			}
+
 			if(diagonal)
 			{
 				// A diagonal may not cut a corner: squeezing between two
@@ -113,16 +153,25 @@ bool Graph::Build(const Traversal::Body &body)
 					continue;
 			}
 
-			// And the sweep itself, asked of the same code the pawn obeys.
-			if(!Traversal::CanStepBetweenTiles(body, node.x, node.y,
+			// And the sweep itself, asked of the same code the pawn obeys --
+			// of the state that will exist once the door is open, when one of
+			// the two ends is a door.
+			if(!Traversal::CanStepBetweenTilesOrDoor(body, node.x, node.y,
 				(unsigned)nx, (unsigned)ny))
 				continue;
 
 			Edge edge;
 			edge.from = (NodeId)n;
 			edge.to = to;
-			edge.cost = diagonal ? COST_DIAGONAL : COST_CARDINAL;
-			edge.type = diagonal ? EdgeType::WalkDiagonal : EdgeType::WalkCardinal;
+			edge.cost = doorStep ? COST_DOOR :
+				(diagonal ? COST_DIAGONAL : COST_CARDINAL);
+			edge.type = doorStep ? EdgeType::UseDoor :
+				(diagonal ? EdgeType::WalkDiagonal : EdgeType::WalkCardinal);
+			if(doorStep)
+			{
+				const Node &doorNode = nodes[n].isDoor ? nodes[n] : nodes[to];
+				edge.lock = Traversal::DoorAt(doorNode.x, doorNode.y).lock;
+			}
 			edges.Push(edge);
 			++node.edgeCount;
 		}
@@ -130,6 +179,56 @@ bool Graph::Build(const Traversal::Body &body)
 
 	built = true;
 	return true;
+}
+
+unsigned int Graph::Regions(unsigned int *largest) const
+{
+	if(largest != NULL)
+		*largest = 0;
+	if(!built || nodes.Size() == 0)
+		return 0;
+
+	// Flood fill over the edges, in node order so the answer does not depend
+	// on which node happened to be visited first.
+	TArray<BYTE> seen;
+	seen.Resize(nodes.Size());
+	for(unsigned int i = 0;i < seen.Size();++i)
+		seen[i] = 0;
+
+	TArray<NodeId> stack;
+	unsigned int regions = 0;
+	for(unsigned int start = 0;start < nodes.Size();++start)
+	{
+		if(seen[start])
+			continue;
+
+		++regions;
+		unsigned int size = 0;
+		stack.Clear();
+		stack.Push((NodeId)start);
+		seen[start] = 1;
+		while(stack.Size() > 0)
+		{
+			const NodeId n = stack[stack.Size()-1];
+			stack.Delete(stack.Size()-1);
+			++size;
+
+			const Node &node = nodes[n];
+			for(unsigned int e = 0;e < node.edgeCount;++e)
+			{
+				const NodeId to = edges[node.firstEdge + e].to;
+				if(seen[to])
+					continue;
+				seen[to] = 1;
+				stack.Push(to);
+			}
+		}
+
+		if(largest != NULL && size > *largest)
+			*largest = size;
+	}
+
+	return regions;
 }
 
 bool Graph::FindPath(NodeId from, NodeId to, TArray<NodeId> &path,
@@ -371,6 +470,8 @@ uint32_t Graph::Digest() const
 		Fold::Bytes(hash, &nodes[i].x, sizeof(nodes[i].x));
 		Fold::Bytes(hash, &nodes[i].y, sizeof(nodes[i].y));
 		Fold::Bytes(hash, &nodes[i].edgeCount, sizeof(nodes[i].edgeCount));
+		const uint8_t isDoor = nodes[i].isDoor ? 1 : 0;
+		Fold::Bytes(hash, &isDoor, sizeof(isDoor));
 	}
 	for(unsigned int i = 0;i < edges.Size();++i)
 	{
@@ -379,8 +480,92 @@ uint32_t Graph::Digest() const
 		Fold::Bytes(hash, &edges[i].cost, sizeof(edges[i].cost));
 		const uint8_t type = (uint8_t)edges[i].type;
 		Fold::Bytes(hash, &type, sizeof(type));
+		const int32_t lock = (int32_t)edges[i].lock;
+		Fold::Bytes(hash, &lock, sizeof(lock));
 	}
 	return hash;
+}
+
+// arctan(2^-i) in angle_t units, where 2^32 is a full turn.
+static const uint32_t kArcTan[16] =
+{
+	536870912u, 316933406u, 167458907u, 85004756u,
+	42667331u,  21354465u,  10679838u,  5340245u,
+	2670163u,   1335087u,   667544u,    333772u,
+	166886u,    83443u,     41722u,     20861u
+};
+
+angle_t BearingTo(fixed fromX, fixed fromY, fixed toX, fixed toY)
+{
+	// The engine's angles run counter-clockwise from east while y increases
+	// downward, so a southward step is a negative rotation. Flipping dy here
+	// is what makes the rest of this ordinary trigonometry.
+	int64_t x = (int64_t)toX - (int64_t)fromX;
+	int64_t y = -((int64_t)toY - (int64_t)fromY);
+
+	if(x == 0 && y == 0)
+		return 0;
+
+	// Fold into the right half plane; the quadrant is put back at the end.
+	angle_t quadrant = 0;
+	if(x < 0)
+	{
+		if(y >= 0)
+		{
+			const int64_t t = x; x = y; y = -t;		// rotate +90
+			quadrant = ANGLE_90;
+		}
+		else
+		{
+			const int64_t t = x; x = -y; y = t;		// rotate -90
+			quadrant = (angle_t)(0u - (uint32_t)ANGLE_90);
+		}
+	}
+
+	// Scale down so sixteen doublings cannot overflow.
+	while(x > (int64_t)1<<40 || y > (int64_t)1<<40 || y < -((int64_t)1<<40))
+	{
+		x >>= 1;
+		y >>= 1;
+	}
+
+	// CORDIC in vectoring mode: rotate the vector onto the x axis and
+	// accumulate what it took to get there.
+	uint32_t angle = 0;
+	for(unsigned int i = 0;i < 16;++i)
+	{
+		const int64_t dx = x >> i;
+		const int64_t dy = y >> i;
+		if(y > 0)
+		{
+			x += dy;
+			y -= dx;
+			angle += kArcTan[i];
+		}
+		else if(y < 0)
+		{
+			x -= dy;
+			y += dx;
+			angle -= kArcTan[i];
+		}
+		else
+		{
+			break;
+		}
+	}
+
+	return (angle_t)(angle + quadrant);
+}
+
+int32_t ShortestTurn(angle_t from, angle_t to)
+{
+	// Unsigned difference, read as signed: the wrap is the arithmetic rather
+	// than something to special-case around.
+	const uint32_t delta = (uint32_t)to - (uint32_t)from;
+	// A positive controlx decreases the angle, so turning toward a larger
+	// angle is a negative command. The sign is applied by the caller; this
+	// reports the rotation needed, positive meaning counter-clockwise.
+	return (int32_t)delta;
 }
 
 Graph &Current()

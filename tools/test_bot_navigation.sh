@@ -116,15 +116,32 @@ for line in open(work + "/a.trav"):
         standable.add((f[0], f[1]))
 
 nodes, edges, paths, smooths = set(), set(), [], []
+# Door cells, read from the map's own triggers rather than from the graph, so
+# that "the graph thinks this is a door" and "this is a door" stay separable.
+# A self-opening, player-usable Door_Open (special 1, no tag) is a door; a
+# tagged one operates something elsewhere and is a switch.
+doors = {}
 summary = {}
 for line in open(work + "/a.nav"):
     if line.startswith("#"):
         parts = line.split()
-        for key in ("nodes", "edges", "digest", "radius"):
+        for key in ("nodes", "edges", "digest", "radius", "regions"):
             if key in parts:
                 summary[key] = parts[parts.index(key) + 1]
         continue
     f = line.split()
+    if f[0] == "trigger":
+        # Keyword-delimited, so read by name: the line is
+        # "trigger X Y action N args a0..a4 use U cross C monster M tile T ..."
+        at = f.index("args") + 1
+        args = [int(v) for v in f[at:at + 5]]
+        action = int(f[f.index("action") + 1])
+        use = int(f[f.index("use") + 1])
+        if action == 1 and use and args[0] == 0:
+            # bit 0 of arg[4] picks the axis the panel slides on: 0 is the
+            # East/West pair, so the cell is entered along X.
+            doors[(int(f[1]), int(f[2]))] = "x" if (args[4] & 1) == 0 else "y"
+        continue
     if f[0] == "edge":
         a = (int(f[1]), int(f[2])); b = (int(f[3]), int(f[4]))
         edges.add((a, b, int(f[5])))
@@ -139,9 +156,13 @@ problems = []
 # The graph is a view of the world, not a second opinion about it. Isolated
 # cells legitimately have no edges, so compare against the node count the
 # engine reported rather than against the cells that turned up in edges.
-if int(summary.get("nodes", 0)) != len(standable):
-    problems.append("%s nodes against %d standable cells"
-                    % (summary.get("nodes"), len(standable)))
+# A door cell is a node even though a body cannot stand in it while the door is
+# shut: the graph is about where a body can get to, and the traversal dump is
+# about where one fits right now. Everything else must match exactly.
+reachable = standable | set(doors)
+if int(summary.get("nodes", 0)) != len(reachable):
+    problems.append("%s nodes against %d standable cells and %d door cells"
+                    % (summary.get("nodes"), len(standable), len(doors)))
 
 if int(summary.get("radius", 0)) < 8:
     problems.append("graph built for a body of radius %s"
@@ -160,16 +181,49 @@ for (a, b, cost) in edges:
     dx, dy = b[0] - a[0], b[1] - a[1]
     if abs(dx) != 1 or abs(dy) != 1:
         continue
-    if (a[0] + dx, a[1]) not in standable or (a[0], a[1] + dy) not in standable:
+    if (a[0] + dx, a[1]) not in reachable or (a[0], a[1] + dy) not in reachable:
         cutters.append((a, b))
 if cutters:
     problems.append("%d diagonals cut a corner, e.g. %s"
                     % (len(cutters), cutters[:3]))
 
-# Costs must be the two the graph declares, or a route's length means nothing.
-odd = set(c for (_, _, c) in edges) - {100, 141}
+# Costs must be the three the graph declares, or a route's length means
+# nothing.
+odd = set(c for (_, _, c) in edges) - {100, 141, 600}
 if odd:
     problems.append("unexpected edge costs %s" % sorted(odd))
+
+# A door edge is priced at 600, and nothing else is. Both directions of the
+# claim: every 600 touches a door, and every edge touching a door costs 600 --
+# the second is what would catch a door quietly priced as an ordinary step.
+for (a, b, cost) in edges:
+    touches = (a in doors) or (b in doors)
+    if cost == 600 and not touches:
+        problems.append("a 600-cost edge %s->%s touches no door" % (a, b))
+        break
+    if touches and cost != 600:
+        problems.append("edge %s->%s touches a door and costs %d" % (a, b, cost))
+        break
+
+# And a door is entered square-on, on the axis its panel slides along.
+# Approaching cornerwise means standing in the jamb.
+#
+# A guarantee rather than a check that currently bites: the builder's own axis
+# rule is redundant today -- removing it leaves MAP51's graph byte-identical,
+# because the sampled sweep refuses an off-axis step anyway. This is here so
+# that a future body, or a future door, cannot quietly lose the property.
+for (a, b, cost) in edges:
+    cell = a if a in doors else (b if b in doors else None)
+    if cell is None:
+        continue
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    if dx and dy:
+        problems.append("diagonal edge %s->%s into the door at %s" % (a, b, cell))
+        break
+    if (doors[cell] == "x") != (dy == 0):
+        problems.append("edge %s->%s crosses the door at %s off its axis"
+                        % (a, b, cell))
+        break
 
 # Every route is a chain of real edges.
 adjacency = set((a, b) for (a, b, _) in edges)

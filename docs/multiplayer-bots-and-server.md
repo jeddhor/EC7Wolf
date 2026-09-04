@@ -2778,6 +2778,117 @@ respawns through input; it never mutates actor state outside commands; the
 manager constructs against a session with **no local player**; synthetic
 navigation parity tests and a `MAP53` roam baseline pass.
 
+### B2 step 5 record — doors, unstuck, respawn
+
+**The arenas have one door.** Not one kind of door: one door, at `MAP51`
+(25,38), in all eight of them. `MAP52`, `MAP53`, `MAP54`, `MAP55`, `MAP57` and
+`MAP60` contain none. That number is why this step ships with a named-goal test
+affordance rather than a roam baseline: one cell in 960, behind a 600-cost
+edge, is not a cell a random walk visits during a match.
+
+**A correction to something I asserted while planning step 4.** I reported that
+`MAP60`'s graph came apart into five regions because doors were not edges yet.
+That was wrong, and measuring it was what showed it. `MAP60` has no doors; it
+has *sixteen transporters*, and those are what separate its regions. Door edges
+merged `MAP51` from two regions into one and changed no other arena by a single
+node. Reconnecting the fragmented arenas is B3's transporter work, not this
+step's.
+
+Region counts are now a measurement rather than a claim -- `Graph::Regions()`,
+reported in the `--capture-nav` header:
+
+| Arena | Nodes | Regions | Largest | Doors | Transporters |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| MAP51 | 960 | **1** (was 2) | 960 | 1 | 0 |
+| MAP52 | 1230 | 1 | 1230 | 0 | 0 |
+| MAP53 | 1394 | 1 | 1394 | 0 | 0 |
+| MAP54 | 1338 | 1 | 1338 | 0 | 0 |
+| MAP55 | 1005 | 5 | 970 | 0 | 0 |
+| MAP56 | 1498 | 5 | 970 | 0 | 8 |
+| MAP57 | 1480 | 2 | 1153 | 0 | 6 |
+| MAP60 | 545 | 5 | 274 | 0 | 16 |
+
+`MAP55` has neither a door nor a transporter and is still in five pieces, so
+something else divides it. That is B3's to find; recording it here so it is not
+discovered twice.
+
+**Planning asks a different question from moving, and the difference is a rule,
+not a write.** A closed door is not somewhere a body can stand, and
+`CanOccupyTile` is right to say so. A planner needs to know where a body could
+stand once a door it is allowed to open has opened. The first implementation
+answered that by opening the door, asking, and closing it again -- a query
+mutating simulation state, which is exactly what `g_traversal.h` promises not
+to do. It is a field on the body instead: `openDoor` plus the faces that
+actually slide, read by the same wall test the pawn obeys.
+
+**Two bugs the region count caught immediately.** Treating door cells as
+standable initially made *every* cell standable -- 4096 nodes on a 64 by 64
+map -- because a body of radius 22 at the centre of a 64-unit tile reaches none
+of that tile's own faces, so nothing collides and every wall answers yes. The
+guard that rejects wall tiles is the only thing that ever refused them, and the
+door path had walked around it. Having the region count in front of me turned
+that from a subtle wrong-routes bug into an obvious one.
+
+**Pressing use twice shuts the door.** `Door_Open` hands an already-open door to
+`Reactivate`, which closes it. A follower that pulses use while waiting
+therefore opens the door and shuts it again, forever. From outside this is
+indistinguishable from a door that will not open -- and the instrumented engine
+reported the trigger firing 292 times while the boundary was never once
+crossable. The protocol presses once and then watches, re-pressing only after
+105 tics of nothing. This is what §12.4's "observe whether the door actually
+began opening rather than assuming success" is protecting against, and it is a
+sharper hazard than it sounds.
+
+**The crossing test cannot be asked from inside the doorway.** `pawn -> door`
+is a step to itself once the pawn is in the door cell, and a door cell still
+holds a tile, so `CanOccupyTile` refuses it and the protocol never notices it
+has succeeded. Standing in the doorway is checked first, and success advances
+the route past the door node -- without that the follower hands back a waypoint
+that is still the door, re-enters, succeeds again, and reports one door opened
+517 times in a single match.
+
+**The lock is enforced through ordinary possession, and it is satisfied.**
+`MAP51`'s door is lock 2, RED, requiring `C7Static001`. Battle players spawn
+holding both access cards: a battle player reports `cards RB` at spawn where a
+single player reports `cards --`. So the bot passes the same `P_CheckKeys` a
+human passes, with no AI exception, and the gate would fail rather than quietly
+test an unlocked door if that ever changed. I briefly concluded the opposite --
+that battle granted no keys -- on the strength of a grep that found no granting
+code; the inventory at the moment of use is what settled it.
+
+**Unstuck moves before it replans.** A route is a function of where the bot is
+standing, so replanning from the corner it is wedged in returns a route that
+begins by walking into the same wall. It backs off and turns for 24 tics first.
+Exercised twice on `MAP60` in a 2400-tic match.
+
+**Respawn is a keypress.** The engine respawns a dead player on `bt_use` once
+`RespawnEligible` passes, and gives up waiting 100 tics later -- so a bot that
+pressed nothing would still come back, always late and never by its own doing.
+It presses use, pulsed for the same reason a door is.
+
+**The axis rule is redundant, like the corner rule.** A door may only be
+entered along the axis its panel slides on. Removing that check from the
+builder leaves `MAP51`'s graph byte-identical -- same 5822 edges, same digest
+`ca9f4b5e` -- because the sampled sweep already refuses an off-axis step: only
+the sliding pair of faces is opened for planning, so the jambs stay solid and a
+step across one collides. Kept and labelled as the guarantee it is, in the same
+terms §12.3's corner rule is, rather than left in implying it does work it does
+not currently do.
+
+**Gates:** `tools/test_bot_doors.sh` is new. A bot routed through the door
+opens it and arrives; a bot routed to the near side of the same door never
+touches it, which is what distinguishes a door protocol from a bot that presses
+use constantly; one press, not a train; and the same match twice produces the
+same brain. Proven able to fail by restoring the pulse train: 292 presses, 0
+doors opened, four checks red.
+
+`tools/test_bot_navigation.sh` learned what a door is, from the map's own
+triggers rather than from the graph, so that "the graph thinks this is a door"
+and "this is a door" stay separable. It now checks the claim both ways -- every
+600-cost edge touches a door, and every edge touching a door costs 600 -- since
+only the second catches a door quietly priced as an ordinary step. Proven able
+to fail by pricing `COST_DOOR` at 100.
+
 ### B3 — Complete arena traversal
 
 **Work:** physical-cache invalidation plus per-bot belief for doors,

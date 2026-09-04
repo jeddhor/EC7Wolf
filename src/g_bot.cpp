@@ -383,8 +383,8 @@ public:
 			if(!bot->doorUseLastTic)
 			{
 				out.press[bt_use] = true;
-				if(bot->respawnsRequested < 0xFFFFFFFFu)
-					++bot->respawnsRequested;
+				if(bot->respawnPresses < 0xFFFFFFFFu)
+					++bot->respawnPresses;
 			}
 			bot->doorUseLastTic = out.press[bt_use];
 
@@ -397,6 +397,7 @@ public:
 			// Back in the world. Orienting first is not decoration: it is the
 			// gap in which a bot has no business acting on anything it saw
 			// before it died.
+			++bot->respawnsCompleted;
 			bot->behavior = Behavior::SpawnOrient;
 			bot->behaviorSince = sequence;
 			TraceEvent(forSlot, "behavior", BehaviorName(bot->behavior));
@@ -882,7 +883,8 @@ Totals Tally()
 		total.doorsOpened += g_state[i].doorsOpened;
 		total.doorsGivenUp += g_state[i].doorsGivenUp;
 		total.unstuckEntered += g_state[i].unstuckEntered;
-		total.respawnsRequested += g_state[i].respawnsRequested;
+		total.respawnPresses += g_state[i].respawnPresses;
+		total.respawnsCompleted += g_state[i].respawnsCompleted;
 	}
 	return total;
 }
@@ -903,6 +905,55 @@ bool ForcedGoal(int &tileX, int &tileY)
 	tileX = g_forcedGoalX;
 	tileY = g_forcedGoalY;
 	return true;
+}
+
+static int g_overlay = 0;
+
+int  Overlay() { return g_overlay; }
+void SetOverlay(int level)
+{
+	g_overlay = level < 0 ? 0 : (level >= OVERLAY_LEVELS ? OVERLAY_LEVELS - 1 : level);
+}
+
+bool RouteOf(Session::PlayerSlot slot, TArray<uint16_t> &tileX,
+	TArray<uint16_t> &tileY, unsigned int &waypoint)
+{
+	tileX.Clear();
+	tileY.Clear();
+	waypoint = 0;
+	if(slot >= MAXPLAYERS || !g_active[slot])
+		return false;
+
+	const State &bot = g_state[slot];
+	const BotNav::Graph &graph = BotNav::Current();
+	if(!graph.Built())
+		return false;
+
+	waypoint = bot.waypoint;
+	for(unsigned int i = 0;i < bot.route.Size();++i)
+	{
+		const BotNav::Node &node = graph.NodeOf(bot.route[i]);
+		tileX.Push(node.x);
+		tileY.Push(node.y);
+	}
+	return true;
+}
+
+bool WhereIs(Session::PlayerSlot slot, fixed &x, fixed &y)
+{
+	AActor *const pawn = OwnPawn(slot);
+	if(pawn == NULL || slot >= MAXPLAYERS || !g_active[slot])
+		return false;
+	x = pawn->x;
+	y = pawn->y;
+	return true;
+}
+
+const char *BehaviorOf(Session::PlayerSlot slot)
+{
+	if(slot >= MAXPLAYERS || !g_active[slot])
+		return NULL;
+	return BehaviorName(g_state[slot].behavior);
 }
 
 int Requested() { return g_requested; }

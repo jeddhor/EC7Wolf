@@ -114,6 +114,8 @@ bot_traversal
 bot_navigation
 bot_roam
 bot_doors
+bot_lifecycle
+bot_overlay
 multiplayer_rules
 multiplayer_classes
 multiplayer_presentation

@@ -35,6 +35,8 @@
 #include "wl_def.h"
 #include "g_session.h"
 #include "am_map.h"
+#include "g_bot.h"
+#include "g_botnav.h"
 #include "colormatcher.h"
 #include "id_ca.h"
 #include "id_in.h"
@@ -477,6 +479,9 @@ void AutoMap::Draw()
 
 	DrawVector(AM_Arrow, 8, FixedMul(playerx - ofsx, scale), FixedMul(playery - ofsy, scale), scale, (amFlags & AMF_Rotate) ? 0 : ANGLE_90-players[ConsolePlayer].mo->angle, ArrowColor);
 
+	if(Bot::Overlay())
+		DrawBotRoutes(ofsx, ofsy, scale);
+
 	if((amFlags & AMF_ShowThings) && (am_cheat || gamestate.fullmap))
 	{
 		for(AActor::Iterator iter = AActor::GetIterator();iter.Next();)
@@ -487,6 +492,129 @@ void AutoMap::Draw()
 	}
 
 	DrawStats();
+}
+
+// Every active bot's remaining route, drawn on the automap.
+//
+// Read-only: the overlay asks the bot manager for a copy of the route and the
+// name of a behaviour, and can reach nothing else. Drawing code that could
+// disturb a brain would make the debugger part of the bug, and a route is
+// exactly the thing you want to look at when a bot is doing something strange.
+//
+// Waypoints already passed are drawn dimmer than the ones still to come, so
+// "where is it going" and "where has it been" are one glance rather than two.
+void AutoMap::DrawBotRoutes(fixed ofsx, fixed ofsy, fixed scale) const
+{
+	// Assigned through operator=, not brace-initialized. It fills in the
+	// palette index by matching the colour, and the software renderer draws
+	// with that index -- a hand-written 0 there is black, which is why the
+	// first version of this drew a route nobody could see.
+	static Color Ahead, Behind;
+	static bool colored = false;
+	if(!colored)
+	{
+		colored = true;
+		Ahead = MAKERGB(255, 216, 0);
+		Behind = MAKERGB(120, 100, 0);
+	}
+
+	static Color GraphColor;
+	const fixed half = (fixed)(1<<(TILESHIFT-1));
+
+	// A lambda would be tidier; this is C++98 in places, so a small local
+	// helper struct it is. Map units in, screen pixels out, through the same
+	// rotation and offset the rest of the automap uses.
+	struct Project
+	{
+		fixed ofsx, ofsy, scale, cs, sn;
+		int sizex, sizey, ox, oy;
+		void operator()(fixed wx, fixed wy, int &sx, int &sy) const
+		{
+			const fixed px = FixedMul(wx - ofsx, scale);
+			const fixed py = FixedMul(wy - ofsy, scale);
+			sx = ((FixedMul(px, cs) - FixedMul(py, sn) +
+				(sizex<<(FRACBITS-1)))>>FRACBITS) + ox;
+			sy = ((FixedMul(px, sn) + FixedMul(py, cs) +
+				(sizey<<(FRACBITS-1)))>>FRACBITS) + oy;
+		}
+	};
+	const Project project = { ofsx, ofsy, scale, amcos, amsin,
+		amsizex, amsizey, amx, amy };
+
+	// The graph itself, at level 2. Every edge once -- the graph stores both
+	// directions -- and dim, because it is the backdrop a route is read
+	// against rather than the thing being read.
+	if(Bot::Overlay() >= 2)
+	{
+		if(GraphColor.palcolor == 0)
+			GraphColor = MAKERGB(0, 90, 130);
+		const BotNav::Graph &graph = BotNav::Current();
+		if(graph.Built())
+		{
+			for(unsigned int e = 0;e < graph.EdgeCount();++e)
+			{
+				const BotNav::Edge &edge = graph.EdgeOf(e);
+				if(edge.from > edge.to)
+					continue;			// drawn from the other end already
+				const BotNav::Node &a = graph.NodeOf(edge.from);
+				const BotNav::Node &b = graph.NodeOf(edge.to);
+				int ax, ay, bx, by;
+				project((fixed)(a.x<<TILESHIFT) + half,
+					(fixed)(a.y<<TILESHIFT) + half, ax, ay);
+				project((fixed)(b.x<<TILESHIFT) + half,
+					(fixed)(b.y<<TILESHIFT) + half, bx, by);
+				DrawClippedLine(ax, ay, bx, by,
+					GraphColor.palcolor, GraphColor.color);
+			}
+		}
+	}
+
+	TArray<uint16_t> rx, ry;
+	unsigned int waypoint = 0;
+
+	for(unsigned int slot = 0;slot < MAXPLAYERS;++slot)
+	{
+		if(!Bot::RouteOf(slot, rx, ry, waypoint) || rx.Size() < 2)
+			continue;
+
+		int px = 0, py = 0;
+		for(unsigned int i = 0;i < rx.Size();++i)
+		{
+			const fixed wx = (fixed)(rx[i]<<TILESHIFT) + half;
+			const fixed wy = (fixed)(ry[i]<<TILESHIFT) + half;
+
+			int x, y;
+			project(wx, wy, x, y);
+
+			if(i > 0)
+			{
+				const Color &c = i <= waypoint ? Behind : Ahead;
+				DrawClippedLine(px, py, x, y, c.palcolor, c.color);
+			}
+			px = x;
+			py = y;
+		}
+
+		// And what it thinks it is doing, written where it is standing. A
+		// route says where a bot is going; only the behaviour says whether it
+		// is going there because it chose to, because it is stuck, or because
+		// it is waiting on a door.
+		fixed bx = 0, by = 0;
+		const char *what = Bot::BehaviorOf(slot);
+		if(what != NULL && Bot::WhereIs(slot, bx, by))
+		{
+			int sx, sy;
+			project(bx, by, sx, sy);
+			if(sx >= amx && sx < amx + (int)amsizex &&
+				sy >= amy && sy < amy + (int)amsizey)
+			{
+				FString label;
+				label.Format("%u:%s", slot, what);
+				screen->DrawText(SmallFont, gameinfo.automap.FontColor,
+					sx + 2, sy - SmallFont->GetHeight()/2, label, TAG_DONE);
+			}
+		}
+	}
 }
 
 void AutoMap::DrawActor(AActor *actor, fixed x, fixed y, fixed scale)

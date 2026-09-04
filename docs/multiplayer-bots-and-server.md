@@ -2778,6 +2778,8 @@ respawns through input; it never mutates actor state outside commands; the
 manager constructs against a session with **no local player**; synthetic
 navigation parity tests and a `MAP53` roam baseline pass.
 
+**Status: complete.** See the B2 record below.
+
 ### B2 step 5 record — doors, unstuck, respawn
 
 **The arenas have one door.** Not one kind of door: one door, at `MAP51`
@@ -2888,6 +2890,67 @@ and "this is a door" stay separable. It now checks the claim both ways -- every
 600-cost edge touches a door, and every edge touching a door costs 600 -- since
 only the second catches a door quietly priced as an ordinary step. Proven able
 to fail by pricing `COST_DOOR` at 100.
+
+### B2 record — the milestone closed
+
+Every exit criterion, and what shows it:
+
+| Exit criterion | Shown by |
+| --- | --- |
+| a bot spawns | `test_bot_roam.sh` |
+| roams simple regions | `test_bot_roam.sh` — MAP53, MAP51, MAP60 |
+| uses a normal door | `test_bot_doors.sh` |
+| dies, and respawns through input | `test_bot_lifecycle.sh` |
+| never mutates actor state outside commands | `test_bot_lifecycle.sh`, source check |
+| constructs against a session with no local player | `--bottest`, `test_multiplayer_session.sh` |
+| navigation parity tests | `test_bot_navigation.sh`, `test_bot_traversal.sh` |
+| a MAP53 roam baseline | `test_bot_roam.sh` |
+| graph, path, and state overlays and trace | `test_bot_overlay.sh`, `--capture-bots` |
+
+**Respawning cannot be seen by watching it happen.** The engine returns a dead
+player to the world on `bt_use` once `RespawnEligible` has passed, and gives up
+waiting a hundred tics later. So a bot that pressed nothing still comes back --
+always late, never by its own doing -- and "it respawned" is not evidence of
+anything. The latency is: measured at 72 tics as shipped and 171 with the press
+disabled, against the engine's 70 and 170. The gate asserts under 100, which is
+the only form of this check that can fail.
+
+Killing a bot needed `--capture-kill-slot SLOT TIC`, through `TakeDamage`
+rather than by assigning health, so the lifecycle that runs is the one a real
+death runs. Nothing in a B2 arena can otherwise kill a bot: they have no combat
+until B6, and nothing else has a reason to shoot them.
+
+**The overlay is three things** -- routes, the graph they were planned on, and
+what each bot thinks it is doing, on debug key J or `--capture-bot-overlay`.
+It reads bot state through copies and can write none of it, which is the
+property `test_bot_overlay.sh` checks first: same seed and tic count, the world
+checksum and the brain digest are identical at every level. A debug view that
+perturbs what it shows is worse than none, because it sends you hunting a bug
+that exists only while you are looking.
+
+**And a gate that could not fail, caught by its own control.** The three checks
+that the overlay actually draws compared rendered frames, and passed against a
+build with the drawing disabled outright. The frames were not reproducible:
+the view is interpolated between tics by a fraction that depends on how fast
+the frame arrived, so two identical runs snapshotted at the same tic differ.
+The gate now runs with `R_Interpolate = 0` and asserts *first* that the same
+level twice renders the same frame -- without that control, "the overlay drew
+something" and "frames are noise" are the same observation. With it, disabling
+the drawing fails two checks and the control still passes.
+
+This is the only gate in the milestone that went green on the very fault it was
+written to catch, and it was found the same way the others were checked: by
+breaking the code on purpose and expecting red. Worth separating from the two
+neighbouring cases it resembles and is not. The door gate never falsely passed
+-- it was written after the pulse-train fix and fails on it. And the navigation
+gate's axis check cannot currently fail at all, but that is a redundant
+guarantee held up by the sweep, not a broken test: it asserts something true
+that nothing is presently able to violate.
+
+The distinction that matters: a check that cannot fail because the property is
+over-determined is fine and should be labelled. A check that cannot fail
+because it is measuring noise is worthless and looks exactly like a passing
+test. Only running it against a deliberately broken build tells them apart.
 
 ### B3 — Complete arena traversal
 

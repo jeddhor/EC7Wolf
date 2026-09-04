@@ -18,6 +18,7 @@
 #include "g_session.h"
 #include "g_command.h"
 #include "g_bot.h"
+#include "am_map.h"
 #include "g_traversal.h"
 #include "g_botnav.h"
 #include "wl_play.h"
@@ -255,6 +256,14 @@ namespace
 	FString  g_giveClass;
 	bool     g_giveDone       = false;
 	bool     g_giveEveryone   = false;   // --capture-give-all: every slot, not just ours
+	// --capture-kill-slot SLOT TIC: kill one slot's pawn at a tic, through the
+	// ordinary damage path. A bot has no way to die otherwise until B6 gives
+	// anything a reason to shoot it, and "dies, and respawns through input" is
+	// a B2 exit criterion that cannot be checked without one.
+	bool     g_botOverlayMap  = false;   // --capture-bot-overlay opens the automap
+	int      g_killSlot       = -1;
+	long     g_killTic        = -1;
+	bool     g_killDone       = false;
 
 	bool     g_c7Map          = false;   // --capture-c7map: raise the C7 inset panel
 	bool     g_c7FloorPlan    = false;   // --capture-floorplan: as if the plan were picked up
@@ -556,13 +565,13 @@ namespace
 			const Bot::Totals tally = Bot::Tally();
 			Printf("Capture: bots %u brain=%08x planned=%u arrived=%u "
 				"abandoned=%u refused=%u nogoal=%u doors=%u doorsfailed=%u "
-				"unstuck=%u respawns=%u\n",
+				"unstuck=%u respawnpresses=%u respawns=%u\n",
 				Bot::Count(), (unsigned int)Bot::BrainDigest(),
 				tally.routesPlanned, tally.routesCompleted,
 				tally.routesAbandoned, tally.stepsRefused,
 				tally.goalSearchFailures, tally.doorsOpened,
 				tally.doorsGivenUp, tally.unstuckEntered,
-				tally.respawnsRequested);
+				tally.respawnPresses, tally.respawnsCompleted);
 		}
 		Bot::CloseTrace();
 	}
@@ -699,6 +708,32 @@ void ParseArgs(int argc, char **argv)
 		else if(strcmp(arg, "--capture-commands") == 0 && i + 1 < argc)
 		{
 			g_commandTracePath = argv[++i];
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-automap") == 0)
+		{
+			g_botOverlayMap = true;
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-bot-overlay") == 0)
+		{
+			// The routes are drawn on the automap, so opening it is part of
+			// asking to see them: a capture that turned the overlay on and
+			// left the automap shut would render an identical frame and look
+			// like the overlay was broken.
+			// An optional level follows, the way --capture-duel takes an
+			// optional third number: 1 is routes, 2 adds the graph.
+			int level = 1;
+			if(i + 1 < argc && argv[i+1][0] >= '0' && argv[i+1][0] <= '9')
+				level = atoi(argv[++i]);
+			Bot::SetOverlay(level);
+			g_botOverlayMap = true;
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-kill-slot") == 0 && i + 2 < argc)
+		{
+			g_killSlot = atoi(argv[++i]);
+			g_killTic = atol(argv[++i]);
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-give-all") == 0 && i + 1 < argc)
@@ -1477,6 +1512,31 @@ void PreTic()
 			players[ConsolePlayer].mo->GiveInventory(cls, 0, true);
 			Printf("Capture: gave the player %s.\n", g_giveClass.GetChars());
 		}
+	}
+
+	if(g_botOverlayMap && automap == AMA_Off)
+	{
+		// Overlay mode, not the full-screen automap. The full one pauses the
+		// game -- AM_ShouldPauseGame is true by default -- so a capture that
+		// opened it recorded four hundred frames of a world that had run for
+		// exactly one tic, with the bots standing where they spawned and no
+		// route to draw. Watching bots move requires them to be moving.
+		am_overlay = 1;			// AMO_On
+		AM_UpdateFlags();
+		automap = AMA_Overlay;
+	}
+
+	if(g_killSlot >= 0 && g_killSlot < MAXPLAYERS && !g_killDone &&
+		(long)gamestate.TimeCount >= g_killTic && players[g_killSlot].mo != NULL &&
+		players[g_killSlot].health > 0)
+	{
+		g_killDone = true;
+		// Through TakeDamage, not by assigning health: death has to run the
+		// same lifecycle a real one does, or what gets tested is a bot
+		// reacting to a state the game never actually produces.
+		Printf("Capture: killing slot %d at tic %lu\n", g_killSlot,
+			(unsigned long)gamestate.TimeCount);
+		players[g_killSlot].TakeDamage(10000, NULL);
 	}
 
 	if(g_exitLevelTic >= 0 && !g_exitLevelDone &&

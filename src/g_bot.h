@@ -163,8 +163,12 @@ struct State
 	int          unstuckStrafe = 0;
 	unsigned int unstuckEntered = 0;
 
-	// Respawns asked for by pressing use, which is how a person does it.
-	unsigned int respawnsRequested = 0;
+	// Presses made while dead, and lives actually returned to. Two numbers,
+	// because a bot pulses use for as long as it takes and one respawn can
+	// cost thirty-six presses: "asked" and "came back" answer different
+	// questions and only the second is an outcome.
+	unsigned int respawnPresses = 0;
+	unsigned int respawnsCompleted = 0;
 
 	// Provenance, for the assertions in section 11.6 and for the trace.
 	unsigned int commandsProduced = 0;
@@ -240,7 +244,8 @@ struct Totals
 	unsigned int doorsOpened = 0;
 	unsigned int doorsGivenUp = 0;
 	unsigned int unstuckEntered = 0;
-	unsigned int respawnsRequested = 0;
+	unsigned int respawnPresses = 0;
+	unsigned int respawnsCompleted = 0;
 };
 Totals Tally();
 
@@ -254,6 +259,31 @@ Totals Tally();
 // follower.
 void SetForcedGoal(int tileX, int tileY);
 bool ForcedGoal(int &tileX, int &tileY);
+
+// Debug overlay support.
+//
+// Read-only views, by copy, of what a bot is currently doing. The drawing code
+// gets no pointer into a brain and so cannot disturb one: a debug view that
+// perturbs the thing it shows sends you hunting a bug that exists only while
+// you are looking at it. test_bot_overlay.sh checks the world and the brains
+// come out identical with the overlay off, on, and drawing the whole graph.
+
+// 0 off, 1 routes and state, 2 adds the graph the routes were planned on. A
+// level rather than a flag because the graph is thousands of edges: useful
+// when the question is "could it have gone that way", noise otherwise.
+int  Overlay();
+void SetOverlay(int level);
+enum { OVERLAY_LEVELS = 3 };
+
+// An active bot's route as tile coordinates, and how far along it the bot has
+// got. False when the slot holds no active bot, or there is no graph yet.
+bool RouteOf(Session::PlayerSlot slot, TArray<uint16_t> &tileX,
+	TArray<uint16_t> &tileY, unsigned int &waypoint);
+// What it thinks it is doing. NULL for a slot with no active bot.
+const char *BehaviorOf(Session::PlayerSlot slot);
+// And where its pawn is, in map units, so the overlay can label it there
+// without reaching for the pawn itself.
+bool WhereIs(Session::PlayerSlot slot, fixed &x, fixed &y);
 
 // Constructs brains against a session with no local player and no socket, and
 // checks the private random is reproducible, independent per purpose, and

@@ -142,6 +142,7 @@ namespace
 	// themselves needs three separate presses to reproduce, which one window
 	// each could not express.
 	TArray<PressWindow> g_forwardWindows;
+	TArray<PressWindow> g_turnWindows;
 	TArray<PressWindow> g_useWindows;
 
 	// --capture-place TIC X Y [ANGLE]: put the player at one exact spot, once.
@@ -677,6 +678,18 @@ void ParseArgs(int argc, char **argv)
 				? atol(argv[++i]) : 0;
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-turn") == 0)
+		{
+			PressWindow window = { 0, -1 };
+			if(i + 1 < argc && argv[i+1][0] >= '0' && argv[i+1][0] <= '9')
+			{
+				window.from = atol(argv[++i]);
+				if(i + 1 < argc && argv[i+1][0] >= '0' && argv[i+1][0] <= '9')
+					window.tics = atol(argv[++i]);
+			}
+			g_turnWindows.Push(window);
+			g_armed = true;
+		}
 		else if(strcmp(arg, "--capture-forward") == 0 || strcmp(arg, "--capture-use") == 0)
 		{
 			PressWindow window = { 0, -1 };
@@ -1095,6 +1108,14 @@ void InjectControls(TicCmd_t &cmd)
 		cmd.controly = -RUNMOVE;
 		cmd.buttonstate[bt_run] = true;
 	}
+
+	// A steady turn, so that "walk forward" becomes "try to leave" rather than
+	// "try to leave in the one direction this start happened to face". Arena
+	// starts are dealt a random facing out of eight, so a third of them point
+	// at a wall, and a player who does not move is otherwise indistinguishable
+	// from a player who cannot.
+	if(InWindow(g_turnWindows))
+		cmd.controlx = 25;
 
 	if(InWindow(g_useWindows))
 		cmd.buttonstate[bt_use] = true;

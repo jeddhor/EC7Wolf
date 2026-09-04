@@ -109,6 +109,7 @@ multiplayer_authority
 multiplayer_latency
 multiplayer_menu
 multiplayer_arenas
+multiplayer_starts
 multiplayer_rules
 multiplayer_classes
 multiplayer_presentation

@@ -37,13 +37,15 @@ class Vectors:
         self.types = {}
         self.sizes = {}
         self.offsets = {}
+        self.offsets_bundle = {}
         self.values = {}
         self.golden = b""
         with open(path, "r") as handle:
             for line in handle:
                 self._read(line.split())
-        for need in ("RequestConnection", "ConnectionStart", "Ack", "TicCmd",
-                     "NewGame", "BlockPlaysim", "InAck", "DebugCmd", "EndGame"):
+        for need in ("RequestConnection", "ConnectionStart", "Ack",
+                     "TicCmdBundle", "NewGame", "BlockPlaysim", "InAck",
+                     "DebugCmd", "EndGame"):
             if need not in self.types:
                 raise SystemExit("netfuzz: %s names no %s" % (path, need))
         if not self.golden:
@@ -63,6 +65,8 @@ class Vectors:
             self.golden = bytes.fromhex(value)
         elif key.startswith("start.offset."):
             self.offsets[key[len("start.offset."):]] = int(value)
+        elif key.startswith("bundle.offset."):
+            self.offsets_bundle[key[len("bundle.offset."):]] = int(value)
         elif key == "start.size.client":
             self.values["client"] = int(value)
         elif key == "magic":
@@ -95,6 +99,32 @@ class Vectors:
             one = bytearray(entry)
             struct.pack_into("<I", one, 0, 0x0100007F)
             struct.pack_into("<H", one, 4, 5029 + i)
+            body += one
+        return bytes(head) + bytes(body)
+
+    def bundle_packet(self, slots, claim=None, timecount=1,
+                      buttons=None):
+        """A command bundle, or a lie about one.
+
+        `claim` is what slotCount says, which is deliberately allowed to
+        disagree with how many entries are actually present.
+        """
+        head = bytearray(self.sizes["TicCmdBundle"])
+        head[0] = self.types["TicCmdBundle"]
+        head[self.offsets_bundle["slotCount"]] = \
+            (len(slots) if claim is None else claim) & 0xFF
+        struct.pack_into("<i", head, self.offsets_bundle["TimeCount"], timecount)
+
+        entry_size = self.values["bundle.size.slot"]
+        nbuttons = self.values["bundle.buttons"]
+        body = bytearray()
+        for slot in slots:
+            one = bytearray(entry_size)
+            one[0] = slot & 0xFF
+            struct.pack_into("<iii", one, 1, 0, 0, 0)
+            if buttons is not None:
+                one[13:13 + min(nbuttons, len(buttons))] = \
+                    buttons[:min(nbuttons, len(buttons))]
             body += one
         return bytes(head) + bytes(body)
 
@@ -190,10 +220,27 @@ def cases(v):
     out.append(("debug command truncated inside its string",
                 struct.pack("<Biii", dbg, 0, 0, 0) + b"A" * 8))
 
-    # Tic commands with nothing sensible in them.
-    tic = v.types["TicCmd"]
-    out.append(("tic command of zeros", bytes([tic]) + b"\x00" * 200))
-    out.append(("tic command of 0xFF", bytes([tic]) + b"\xFF" * 200))
+    # Command bundles with nothing sensible in them. The bundle is the second
+    # packet that ends in an array whose length it declares itself, so it gets
+    # the same treatment the start packet does: claim more entries than the
+    # datagram holds and see whether anything walks off the end looking for
+    # them.
+    tic = v.types["TicCmdBundle"]
+    out.append(("bundle of zeros", bytes([tic]) + b"\x00" * 200))
+    out.append(("bundle of 0xFF", bytes([tic]) + b"\xFF" * 200))
+    out.append(("bundle claiming 255 slots, no entries",
+                v.bundle_packet(slots=[], claim=255)))
+    out.append(("bundle claiming 255 slots, one entry",
+                v.bundle_packet(slots=[0], claim=255)))
+    out.append(("bundle claiming 11 slots with room for one",
+                v.bundle_packet(slots=[0], claim=11)))
+    out.append(("bundle naming a slot outside the roster",
+                v.bundle_packet(slots=[200])))
+    out.append(("bundle naming one slot twice",
+                v.bundle_packet(slots=[1, 1])))
+    out.append(("bundle with zero slots", v.bundle_packet(slots=[], claim=0)))
+    out.append(("bundle pressing every button",
+                v.bundle_packet(slots=[0], buttons=b"\x01" * 64)))
 
     # Things only somebody already in the match is allowed to say.
     out.append(("ack for an unknown type",

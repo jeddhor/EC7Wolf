@@ -2672,6 +2672,98 @@ wire. Phase S4 proved the seam in process; this proves it on a network.
 - Version mismatch is refused with a clear message.
 - No AI code exists beyond the scripted producer.
 
+### B1 record
+
+**The plan named three things this needed and there were four.** "Extend the
+tic exchange so the authority sends a bundle covering every slot it owns" is
+necessary and not sufficient: on the first networked run the host had three
+slots and the client had two. A slot with no peer cannot be *inferred* from an
+address list -- it exists because the authority says so, and until it says so
+on the wire it exists on exactly one machine, which is one machine's worth of
+extra pawns and an immediate disagreement about how many commands a tic needs.
+`NewGamePacket` carries the authority's slot table now, and every peer adopts
+it at roster lock.
+
+**On the wire.** `TicCmdPacket` became `TicCmdBundlePacket` and the protocol
+version went to 3. A sender names the slots it speaks for instead of implying
+one from its address. `buttonheld` came off the wire entirely: S4 derives it at
+installation, so sending it was sending something the receiver overwrites, and
+handing a hostile sender a field to lie in for no purpose. The buffer is keyed
+by slot rather than by peer -- those were the same array because they were the
+same thing.
+
+**The zero-delay path is gone**, and this is a simplification rather than a
+removal. It was a synchronous exchange that sent the command for the tic about
+to run and blocked on an acknowledgement; the delayed ring stamps for
+`TicSeq + 0 + 1`, which is the tic about to run, and blocks until it has
+arrived. Two implementations of one idea, and only one of them was ever going
+to learn about slots that own no socket. Zero delay is still a menu option and
+still passes the loopback gate at the same checksum.
+
+**Ownership could not be tested from outside the game.** An unknown sender is
+refused long before ownership is consulted, so a forged datagram proves
+nothing. The check is exercised by a genuine, connected peer misbehaving on
+purpose (`--capture-forge-slot`, test scaffolding): the host refused 94
+commands for a slot the sender did not own, and the world was unaffected.
+Breaking the check makes the gate fail exactly where it should -- the two
+machines diverge at tic 13, on precisely the forged slot.
+
+**Impairment gained duplication.** `netdelay.py` had delay, jitter and loss.
+Duplication is the impairment a lockstep game is least likely to be tested
+against and most likely to get wrong, because a resend that arrives twice has
+to be idempotent and a receiver that stores both copies fills its ring with one
+sequence. The gate runs at 25 ms delay, 12 ms jitter, 3% loss, 8% duplication,
+and both machines still finalize byte-identical commands.
+
+### The bug the gate suite caught, and the one I nearly believed
+
+**Sender-side sanitization was missing.** B1 made a receiver refuse any bundle
+containing a button that is not a gameplay control -- correct, and the same
+rule S4 applies at installation. But the host put its *raw sampled* command on
+the wire:
+
+```cpp
+authored = control[slot];   // everything, including bt_scoreboard
+```
+
+So the moment a player held the scoreboard key, every peer refused every bundle
+from them and **the match stopped dead**. Not a cosmetic failure: a hang. Every
+manual networked test passed because none of them held a UI key;
+`test_multiplayer_presentation.sh` holds one deliberately, to photograph the
+scoreboard, and caught it.
+
+The asymmetry was the mistake. Producers went through `ProduceForWire()`, which
+sanitizes; sampled input took a different route to the same wire. There is one
+function now, `SanitizeForWire()`, and the comment above it says what
+forgetting it costs.
+
+**And a measurement I contaminated.** Diagnosing that failure, I ran three
+overlapping copies of a gate that uses a fixed display and fixed ports. The
+second and third collided with the first: every host log truncated identically
+at startup, no client logs at all. I read that as "the fix did not work" when it
+was "the test environment is no longer valid". Only the first run -- the clean
+one -- was evidence, and it had already identified the bug correctly.
+
+Two rules follow, and both are about the harness rather than the engine: gates
+with fixed ports and displays cannot be run concurrently with themselves, and a
+failure whose signature changes between runs is a fact about the harness before
+it is a fact about the code.
+
+### A pre-existing defect found on the way, and not fixed here
+
+`GameMap::GenerateDeathmatchStarts()` can choose a cell a player cannot leave.
+On `MAP51` a third slot spawned at tile (1,37), against the map edge, and did
+not move for a hundred tics with full forward held. The generator requires a
+cell to have a sector and no wall tile and to be five tiles from another start;
+none of that establishes that the cell connects to the rest of the arena.
+
+This is not a B1 defect -- it predates every milestone here and affects a third
+*human* player identically -- and the arenas gate does not catch it because it
+tests two players, which take the first two starts. It is recorded here rather
+than fixed because folding an unrelated map-generation change into a transport
+milestone would make both harder to review. It wants its own change, and a
+reachability check (flood fill from one start) rather than a spacing check.
+
 ### B2 — Bot manager, lifecycle, basic locomotion
 
 **Work:** `BotManager`, per-slot state, private PRNG streams, update scheduling,

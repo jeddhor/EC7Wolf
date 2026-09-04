@@ -194,6 +194,13 @@ bool ReserveSlots(unsigned int n);
 // no peer" -- what is actually driving it is the command layer's business.
 // Returns the new slot, or an out-of-range value if there is no room.
 unsigned int AddAuthoritySlot(uint32_t profile, uint64_t seed);
+
+// Adopt the authority's slot table. A slot with no peer exists because the
+// authority says so, and until it says so on the wire it exists on exactly one
+// machine -- which is one machine's worth of extra pawns, and an immediate
+// disagreement about how many commands a tic needs. Clients call this with
+// what the arbiter sent.
+void AdoptAuthoritySlots(unsigned int count, const uint8_t *kinds);
 bool SlotActive(PlayerSlot slot);
 SlotKind KindOf(PlayerSlot slot);
 bool SlotIsBot(PlayerSlot slot);

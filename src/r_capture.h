@@ -93,6 +93,14 @@ namespace Capture
 	// socket gets a command, and nothing in the shipped game uses it.
 	void SetupScriptedSlots(FName (&playerClassNames)[MAXPLAYERS]);
 
+	// --capture-forge-slot: put a command for a slot this machine does not own
+	// into its outgoing bundle, so the receiver's ownership check can be shown
+	// to refuse it. Returns -1 normally. The ownership rule cannot be tested
+	// from outside the game -- an unknown sender is rejected before ownership
+	// is ever consulted -- so the only way to exercise it is to have a genuine
+	// peer misbehave.
+	int ForgedSlot();
+
 	// Force a full-screen palette blend (--capture-blend R G B A) just before the
 	// scene is rendered, after the gameplay palette shifts have run so it is not
 	// clobbered. Lets a flashed frame be captured deterministically to prove the

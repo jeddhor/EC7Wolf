@@ -94,6 +94,25 @@ void BeginFrame(uint32_t sequence);
 void InstallSampled(Session::PlayerSlot slot, const TicCmd_t &sampled);
 // Run the registered producer for a slot and install what it says.
 void ProduceAndInstall(Session::PlayerSlot slot, uint32_t sequence);
+// Run it for a sequence some way in the future and hand back the result
+// without applying it: the authority authors a bot's command a delay window
+// before it runs, puts it on the wire, and applies it later out of the same
+// buffer every other machine reads it from.
+//
+// Clamped and whitelisted, but the held state is left alone -- it is derived
+// at installation from what was actually applied last, which is not knowable
+// here and is not carried on the wire.
+bool ProduceForWire(Session::PlayerSlot slot, uint32_t sequence, TicCmd_t &out);
+
+// Make a sampled command fit to send. The local human's command is sampled
+// with everything on it, including the buttons that work this machine's own
+// screen -- and those must not travel, both because they are nobody else's
+// business and because the receiver refuses a bundle containing one.
+//
+// Producers get this via ProduceForWire. Sampled input needs it too, and
+// forgetting that is not a subtle failure: the match stops dead, because every
+// peer rejects every bundle the moment somebody holds the scoreboard key.
+void SanitizeForWire(TicCmd_t &cmd);
 // Every active slot has a command. In debug builds, says so loudly if not.
 void FinishFrame();
 

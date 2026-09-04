@@ -115,6 +115,14 @@ else
 	tail -3 "$work/netvectors.log" 2>/dev/null | sed 's/^/         /'
 	exit 1
 fi
+# The version this build speaks, read from what the engine just said rather
+# than written down here. A gate that hardcodes it passes until somebody bumps
+# the protocol and then fails for a reason that has nothing to do with what it
+# tests -- which is exactly what happened when the command bundle arrived.
+protocol=$(sed -n 's/^protocol \([0-9]*\)$/\1/p' "$vectors")
+[ -n "$protocol" ] || { printf 'FAIL: the vectors name no protocol version\n'; exit 1; }
+printf '  ..   this build speaks network protocol %s\n' "$protocol"
+
 # --rounds 0 fires nothing: this is the fuzzer rebuilding the engine's own
 # golden start packet and refusing to run if the bytes differ.
 check "the fuzzer builds the same bytes the engine emits" \
@@ -236,7 +244,7 @@ while [ "$waited" -lt 100 ]; do
 	waited=$((waited + 1))
 done
 if grep -q "Host speaks network protocol 1" "$work/version.log" 2>/dev/null &&
-	grep -q "this game speaks 2" "$work/version.log" 2>/dev/null; then
+	grep -q "this game speaks $protocol" "$work/version.log" 2>/dev/null; then
 	printf '  ok   it named both protocol versions\n'
 else
 	printf '  FAIL it did not say the versions differed\n'
@@ -268,7 +276,7 @@ while [ "$waited" -lt 100 ]; do
 	sleep 0.1
 	waited=$((waited + 1))
 done
-if grep -q "network protocol 1, expected 2" "$work/lonehost.log" 2>/dev/null; then
+if grep -q "network protocol 1, expected $protocol" "$work/lonehost.log" 2>/dev/null; then
 	printf '  ok   the host refused it and said why\n'
 else
 	printf '  FAIL the host did not refuse a request from another protocol\n'

@@ -54,6 +54,7 @@ namespace
 
 	FString  g_checksumPath;
 	TArray<FString> g_tapes;
+	int g_forgeSlot = -1;
 	FString  g_commandTracePath;
 	FILE    *g_checksumFile   = NULL;
 
@@ -658,6 +659,11 @@ void ParseArgs(int argc, char **argv)
 				g_duelC = atoi(argv[++i]);
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-forge-slot") == 0 && i + 1 < argc)
+		{
+			g_forgeSlot = atoi(argv[++i]);
+			g_armed = true;
+		}
 		else if(strcmp(arg, "--capture-tape") == 0 && i + 1 < argc)
 		{
 			g_tapes.Push(argv[++i]);
@@ -1109,6 +1115,8 @@ namespace Capture
 // applied to the pawn directly: the point of the gate this exists for is that
 // two machines agree about a fight, and a shot that never traveled over the
 // wire would prove nothing about that.
+int ForgedSlot() { return g_forgeSlot; }
+
 void SetupScriptedSlots(FName (&playerClassNames)[MAXPLAYERS])
 {
 	if(!g_commandTracePath.IsEmpty())

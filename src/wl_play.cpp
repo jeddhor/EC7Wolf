@@ -808,9 +808,15 @@ void PollControls (bool absolutes)
 	{
 		const uint32_t sequence = (uint32_t)gamestate.TimeCount;
 		Command::BeginFrame(sequence);
+		// Offline, a slot with a producer is asked here, at the moment its
+		// command runs. On a network it was asked a delay window ago by
+		// whichever machine owns it, and the answer arrived in the same ring
+		// as everyone else's -- so asking again here would produce a second,
+		// different command, and only this machine would have it.
+		const bool produceLocally = !Net::IsNetworked();
 		for(unsigned int slot = 0;slot < Session::ActiveSlotCount();++slot)
 		{
-			if(Command::HasProducer(slot))
+			if(produceLocally && Command::HasProducer(slot))
 				Command::ProduceAndInstall(slot, sequence);
 			else
 				Command::InstallSampled(slot, control[slot]);

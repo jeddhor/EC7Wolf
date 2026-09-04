@@ -105,17 +105,29 @@ void Record(Session::PlayerSlot slot, const TicCmd_t &cmd)
 	}
 	pressed[NUMBUTTONS] = held[NUMBUTTONS] = '\0';
 
+	// The slot's kind, not the name of whatever produced it. Which producer a
+	// machine happens to hold is a local fact -- the authority has a tape
+	// where a client has only the commands it received -- and putting a local
+	// fact in a file whose whole purpose is cross-machine comparison makes
+	// every line differ for a reason nobody cares about.
+	const char *kind = "human";
+	switch(Session::KindOf(slot))
+	{
+		case Session::SlotKind::Bot:   kind = "authority"; break;
+		case Session::SlotKind::Empty: kind = "empty"; break;
+		default: break;
+	}
+
 	fprintf(g_trace, "%u %u %d %d %d %s %s %s\n",
 		(unsigned)seq, (unsigned)slot,
 		cmd.controlx, cmd.controly, cmd.controlstrafe,
-		pressed, held,
-		HasProducer(slot) ? ProducerFor(slot)->Describe() : "sampled");
+		pressed, held, kind);
 }
 
-// Finalization, in one place, for every producer and every packet. Clamps the
-// axes, strips anything that is not a gameplay control, and derives the held
-// state from the previous command applied to this slot.
-void Finalize(Session::PlayerSlot slot, TicCmd_t &cmd)
+// The half of finalization that does not depend on when the command will run:
+// what a producer may say at all. Shared by the apply path and by the
+// authority authoring a command for a sequence some way ahead.
+void FinalizeShared(TicCmd_t &cmd)
 {
 	cmd.controlx = ClampAxis(cmd.controlx, &g_violations.clampedAxes);
 	cmd.controly = ClampAxis(cmd.controly, &g_violations.clampedAxes);
@@ -133,6 +145,12 @@ void Finalize(Session::PlayerSlot slot, TicCmd_t &cmd)
 			++g_violations.strippedButtons;
 		}
 	}
+}
+
+// Finalization, in one place, for every producer and every packet.
+void Finalize(Session::PlayerSlot slot, TicCmd_t &cmd)
+{
+	FinalizeShared(cmd);
 
 	// Held is "this button, in the command applied to this slot last time".
 	// Not what the producer claimed, and not what a packet asserted: a
@@ -219,6 +237,37 @@ void ProduceAndInstall(Session::PlayerSlot slot, uint32_t sequence)
 	// and repeating a command is how a dead controller keeps firing.
 
 	Apply(slot, cmd);
+}
+
+void SanitizeForWire(TicCmd_t &cmd)
+{
+	FinalizeShared(cmd);
+}
+
+bool ProduceForWire(Session::PlayerSlot slot, uint32_t sequence, TicCmd_t &out)
+{
+	memset(&out, 0, sizeof(out));
+	if(slot >= MAXPLAYERS)
+		return false;
+
+	Producer *producer = g_producers[slot];
+	Intent intent;
+	if(producer == NULL || !producer->Produce(slot, sequence, intent))
+	{
+		// Nothing to say: a neutral command travels rather than nothing at
+		// all, so the receiving machines are not left waiting on a slot whose
+		// controller has run out of things to do.
+		FinalizeShared(out);
+		return true;
+	}
+
+	out.controlx = intent.turn;
+	out.controly = intent.forward;
+	out.controlstrafe = intent.strafe;
+	for(int i = 0;i < NUMBUTTONS;++i)
+		out.buttonstate[i] = intent.press[i] ? 1 : 0;
+	FinalizeShared(out);
+	return true;
 }
 
 void FinishFrame()
@@ -486,7 +535,7 @@ void OpenTrace(const char *path)
 	CloseTrace();
 	g_trace = fopen(path, "w");
 	if(g_trace != NULL)
-		fprintf(g_trace, "# sequence slot turn forward strafe pressed held producer\n");
+		fprintf(g_trace, "# sequence slot turn forward strafe pressed held kind\n");
 }
 
 void CloseTrace()

@@ -29,11 +29,17 @@ import time
 
 class Relay:
     def __init__(self, listen: int, forward: tuple[str, int], delay_ms: float,
-                 jitter_ms: float, loss: float, seed: int):
+                 jitter_ms: float, loss: float, seed: int,
+                 duplicate: float = 0.0):
         self.forward = forward
         self.delay = delay_ms / 1000.0
         self.jitter = jitter_ms / 1000.0
         self.loss = loss / 100.0
+        # Duplication is the impairment a lockstep game is least likely to be
+        # tested against and most likely to get wrong: a resend that arrives
+        # twice has to be idempotent, and a receiver that stores both copies
+        # fills its ring with the same sequence.
+        self.duplicate = duplicate / 100.0
         self.random = random.Random(seed)
 
         self.near = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -42,7 +48,8 @@ class Relay:
         self.far.bind(("127.0.0.1", 0))
 
         self.client_address: tuple[str, int] | None = None
-        self.counts = {"to_far": 0, "to_near": 0, "dropped": 0}
+        self.counts = {"to_far": 0, "to_near": 0, "dropped": 0,
+                       "duplicated": 0}
         self.lock = threading.Lock()
 
     def _later(self, send) -> None:
@@ -54,9 +61,21 @@ class Relay:
             wait = self.delay
             if self.jitter:
                 wait += self.random.uniform(-self.jitter, self.jitter)
+            # A second copy on a timer of its own, so it can land either side
+            # of the first. Jitter already reorders; this adds the case where
+            # the same sequence arrives twice.
+            again = self.random.random() < self.duplicate
+            extra = 0.0
+            if again:
+                self.counts["duplicated"] += 1
+                extra = max(0.0, wait + self.random.uniform(0.0, 0.004))
         timer = threading.Timer(max(0.0, wait), send)
         timer.daemon = True
         timer.start()
+        if again:
+            twin = threading.Timer(extra, send)
+            twin.daemon = True
+            twin.start()
 
     def run(self) -> None:
         selector = selectors.DefaultSelector()
@@ -94,16 +113,20 @@ def main() -> int:
                         help="one-way delay in ms; round trip is twice this")
     parser.add_argument("--jitter", type=float, default=0.0, metavar="MS")
     parser.add_argument("--loss", type=float, default=0.0, metavar="PERCENT")
+    parser.add_argument("--duplicate", type=float, default=0.0,
+                        metavar="PERCENT", help="send this share twice")
     parser.add_argument("--seed", type=int, default=1,
                         help="so a run that fails can be repeated")
     arguments = parser.parse_args()
 
     host, port = arguments.forward.rsplit(":", 1)
     relay = Relay(arguments.listen, (host, int(port)), arguments.delay,
-                  arguments.jitter, arguments.loss, arguments.seed)
+                  arguments.jitter, arguments.loss, arguments.seed,
+                  arguments.duplicate)
     print(f"relay :{arguments.listen} -> {host}:{port}  "
           f"delay {arguments.delay}ms one way, jitter {arguments.jitter}ms, "
-          f"loss {arguments.loss}%", flush=True)
+          f"loss {arguments.loss}%, duplicate {arguments.duplicate}%",
+          flush=True)
     try:
         relay.run()
     except KeyboardInterrupt:

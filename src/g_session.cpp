@@ -116,6 +116,33 @@ unsigned int AddAuthoritySlot(uint32_t profile, uint64_t seed)
 	return slot;
 }
 
+void AdoptAuthoritySlots(unsigned int count, const uint8_t *kinds)
+{
+	State &s = Live();
+	if(count > MAX_PLAYER_SLOTS)
+		count = MAX_PLAYER_SLOTS;
+
+	for(unsigned int slot = 0;slot < count;++slot)
+	{
+		const SlotKind kind = (SlotKind)kinds[slot];
+		if(kind != SlotKind::Bot)
+			continue;	// human slots came from the handshake already
+		if(slot < s.activeSlots && s.slots[slot].kind == SlotKind::Bot)
+			continue;	// this machine owns it and already knows
+
+		s.slots[slot] = PlayerSlotInfo();
+		s.slots[slot].kind = SlotKind::Bot;
+		s.slots[slot].botProfile = (uint32_t)0;
+		s.slots[slot].controllerSeed = (uint64_t)slot;
+		s.slots[slot].name.Format("Slot %u", slot + 1);
+	}
+	if(count > s.activeSlots)
+		s.activeSlots = count;
+	if(s.reservedSlots < s.activeSlots)
+		s.reservedSlots = s.activeSlots;
+	AssertValid(s);
+}
+
 bool ReserveSlots(unsigned int n)
 {
 	if(n < Live().activeSlots || n > MAX_PLAYER_SLOTS)

@@ -8,6 +8,7 @@
 
 #include "wl_def.h"
 #include "g_session.h"
+#include "g_bot.h"
 #include "wl_menu.h"
 #include "id_ca.h"
 #include "id_sd.h"
@@ -155,8 +156,11 @@ void NewGame (int difficulty, FString map, bool displayBriefing, FName playerCla
 	FName playerClassNames[MAXPLAYERS];
 	playerClassNames[ConsolePlayer] = playerClass != NAME_None ? playerClass : gameinfo.PlayerClasses[0];
 
-	// Any --capture-tape slots join the roster *before* the exchange, because
-	// the exchange is what tells the other machines they exist.
+	// Bots and any --capture-tape slots join the roster *before* the
+	// exchange, because the exchange is what tells the other machines they
+	// exist. Traces first, so that setting a controller up is itself traced.
+	Capture::OpenTraces();
+	Bot::SetupSlots(playerClassNames);
 	Capture::SetupScriptedSlots(playerClassNames);
 
 	Net::NewGame(difficulty, map, playerClassNames);
@@ -1294,6 +1298,14 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 				Net::InitVars.ticDelay = (byte)delay;
 			}
 		}
+		else IFARG("--bots")
+		{
+			// Registered here rather than peeked at elsewhere: this engine has
+			// several independent argv loops and only the last has a catch-all,
+			// so an option that is merely looked at becomes a filename.
+			if(++i < argc)
+				Bot::SetRequested(atoi(argv[i]));
+		}
 		else IFARG("--host")
 		{
 			if(++i < argc)
@@ -1360,6 +1372,7 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 		else IFARG("--flictest") { ++i; }
 		else IFARG("--netvectors") { ++i; }
 		else IFARG("--sessiontest") {}
+		else IFARG("--bottest") {}
 		else IFARG("--capture-tape") { ++i; }
 		else IFARG("--capture-forge-slot") { ++i; }
 		else IFARG("--capture-commands") { ++i; }
@@ -1578,6 +1591,8 @@ int WL_Main (int argc, char *argv[])
 		{
 			if(strcmp(argv[si], "--sessiontest") == 0)
 				return Session::SelfTest();
+			if(strcmp(argv[si], "--bottest") == 0)
+				return Bot::SelfTest();
 		}
 
 #ifdef ECWOLF_RENDERER_OPENGL

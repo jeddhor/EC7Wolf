@@ -91,6 +91,10 @@ namespace Capture
 	// classes are resolved, because a slot that appears later never spawns.
 	// Test scaffolding: the tape proves a slot with neither a keyboard nor a
 	// socket gets a command, and nothing in the shipped game uses it.
+	// Opened before any roster is built, because the first thing worth
+	// tracing is a controller being configured and that happens during setup.
+	void OpenTraces();
+
 	void SetupScriptedSlots(FName (&playerClassNames)[MAXPLAYERS]);
 
 	// --capture-forge-slot: put a command for a slot this machine does not own

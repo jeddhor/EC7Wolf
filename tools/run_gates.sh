@@ -73,7 +73,7 @@ done
 # gl_selftest is here rather than below because --gltest is handled before the
 # IWAD is opened: it needs no game data, and it is the only thing that proves the
 # shaders actually compile on the runner's driver. A broken shader still links.
-data_free_gates='definitions names ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3 ec7edit_e4 ec7edit_e5 ec7edit_e6 ec7edit_e7 ec7edit_e8 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic multiplayer_session installer installer_gui installer_kde installer_windows installer_lifecycle ec7edit_e12 ec7edit_package'
+data_free_gates='definitions names ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3 ec7edit_e4 ec7edit_e5 ec7edit_e6 ec7edit_e7 ec7edit_e8 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic multiplayer_session bot_model installer installer_gui installer_kde installer_windows installer_lifecycle ec7edit_e12 ec7edit_package'
 
 data_gates='
 corridor7
@@ -110,6 +110,7 @@ multiplayer_latency
 multiplayer_menu
 multiplayer_arenas
 multiplayer_starts
+bot_traversal
 multiplayer_rules
 multiplayer_classes
 multiplayer_presentation
@@ -424,6 +425,14 @@ for g in $data_free_gates; do
 				skip_gate "$g" "no ec7wolf in $build_dir"
 			else
 				run_gate "$g" "FLIC decoder" "$here/test_corridor7_flic.sh" "$build_dir"
+			fi ;;
+		bot_model)
+			# Build-only: brains are constructed against a session that has no
+			# player, which needs no game data and no window.
+			if [ ! -x "$build_dir/ec7wolf" ]; then
+				skip_gate "$g" "no ec7wolf in $build_dir"
+			else
+				run_gate "$g" "bot model" "$build_dir/ec7wolf" --bottest
 			fi ;;
 		multiplayer_session)
 			# Also build-only: the session model is checked before any game

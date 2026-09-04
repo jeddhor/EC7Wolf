@@ -17,6 +17,8 @@
 #include "wl_def.h"
 #include "g_session.h"
 #include "g_command.h"
+#include "g_bot.h"
+#include "g_traversal.h"
 #include "wl_play.h"
 #include "actor.h"
 #include "wl_agent.h"
@@ -56,6 +58,8 @@ namespace
 	TArray<FString> g_tapes;
 	int g_forgeSlot = -1;
 	FString  g_commandTracePath;
+	FString  g_botTracePath;
+	FString  g_traversalPath;
 	FILE    *g_checksumFile   = NULL;
 
 	int      g_captureFrame   = -1;      // 1-based rendered frame to shoot
@@ -539,6 +543,17 @@ namespace
 		Printf("Capture: commands digest=%08x clamped=%u stripped=%u missing=%u\n",
 			(unsigned int)Command::Digest(),
 			bad.clampedAxes, bad.strippedButtons, bad.missingCommands);
+
+		// Authority-only, and never compared with a client: clients do not run
+		// these brains. It answers "did this machine's bots do the same thing
+		// they did last run", which is a different question from whether two
+		// machines agree.
+		if(Bot::Count() > 0)
+		{
+			Printf("Capture: bots %u brain=%08x\n",
+				Bot::Count(), (unsigned int)Bot::BrainDigest());
+		}
+		Bot::CloseTrace();
 	}
 
 	// Set for every argv index this harness consumed -- see ClaimArg in the
@@ -673,6 +688,16 @@ void ParseArgs(int argc, char **argv)
 		else if(strcmp(arg, "--capture-commands") == 0 && i + 1 < argc)
 		{
 			g_commandTracePath = argv[++i];
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-bots") == 0 && i + 1 < argc)
+		{
+			g_botTracePath = argv[++i];
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-traversal") == 0 && i + 1 < argc)
+		{
+			g_traversalPath = argv[++i];
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-tally") == 0 && i + 1 < argc)
@@ -1130,11 +1155,71 @@ namespace Capture
 // wire would prove nothing about that.
 int ForgedSlot() { return g_forgeSlot; }
 
-void SetupScriptedSlots(FName (&playerClassNames)[MAXPLAYERS])
+// What the traversal query believes about every cell of the map, written once
+// so a gate can hold it against where a pawn actually goes.
+//
+// The point is not the file. The point is that a navigator's opinion of the
+// world has to be checkable against the world, and the way that goes wrong is
+// for the two to be produced by different code that agrees today.
+static void WriteTraversalMap(const char *path)
+{
+	if(map == NULL)
+		return;
+	FILE *out = fopen(path, "w");
+	if(out == NULL)
+	{
+		Printf("Capture: FAILED to open traversal map '%s'\n", path);
+		return;
+	}
+
+	const unsigned int width = map->GetHeader().width;
+	const unsigned int height = map->GetHeader().height;
+
+	// The pawn's own radius when there is a pawn, the class default before
+	// there is one. Preferring the pawn matters because the class default is
+	// what a class was written with and the pawn is what the match is actually
+	// running.
+	Traversal::Body body = Traversal::PlayerBody(gamestate.playerClass[0]);
+	if(players[0].mo != NULL)
+		body.radius = players[0].mo->radius;
+
+	// In map units, not tiles: a tile is 1<<TILESHIFT and a body is a fraction
+	// of one, so shifting by TILESHIFT reports every player as a point. Sixty
+	// four units to the tile, so ten bits.
+	fprintf(out, "# traversal map %ux%u radius %d units (%d raw)\n",
+		width, height, (int)(body.radius>>10), (int)body.radius);
+	fprintf(out, "# x y occupy east north west south\n");
+	for(unsigned int y = 0;y < height;++y)
+	{
+		for(unsigned int x = 0;x < width;++x)
+		{
+			const bool occupy = Traversal::CanOccupyTile(body, x, y);
+			const bool east  = x + 1 < width &&
+				Traversal::CanStepBetweenTiles(body, x, y, x + 1, y);
+			const bool north = y > 0 &&
+				Traversal::CanStepBetweenTiles(body, x, y, x, y - 1);
+			const bool west  = x > 0 &&
+				Traversal::CanStepBetweenTiles(body, x, y, x - 1, y);
+			const bool south = y + 1 < height &&
+				Traversal::CanStepBetweenTiles(body, x, y, x, y + 1);
+			fprintf(out, "%u %u %d %d %d %d %d\n", x, y, occupy ? 1 : 0,
+				east ? 1 : 0, north ? 1 : 0, west ? 1 : 0, south ? 1 : 0);
+		}
+	}
+	fclose(out);
+	Printf("Capture: wrote traversal map -> %s\n", path);
+}
+
+void OpenTraces()
 {
 	if(!g_commandTracePath.IsEmpty())
 		Command::OpenTrace(g_commandTracePath.GetChars());
+	if(!g_botTracePath.IsEmpty())
+		Bot::OpenTrace(g_botTracePath.GetChars());
+}
 
+void SetupScriptedSlots(FName (&playerClassNames)[MAXPLAYERS])
+{
 	for(unsigned int i = 0;i < g_tapes.Size();++i)
 	{
 		FString error;
@@ -1196,6 +1281,15 @@ void PreTic()
 {
 	if(!g_armed || map == NULL)
 		return;
+
+	// Once, on the first tic the map exists: the answer is about the map's
+	// static geometry, and writing it every tic would say the same thing four
+	// thousand times.
+	if(!g_traversalPath.IsEmpty())
+	{
+		WriteTraversalMap(g_traversalPath.GetChars());
+		g_traversalPath = "";
+	}
 
 	if(!g_giveClass.IsEmpty() && !g_giveDone && players[ConsolePlayer].mo)
 	{

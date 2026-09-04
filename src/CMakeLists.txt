@@ -102,6 +102,8 @@ initial_sources(
 	filesys_steam.cpp
 	g_conversation.cpp
 	g_intermission.cpp
+	g_bot.cpp
+	g_traversal.cpp
 	g_command.cpp
 	g_session.cpp
 	g_mapinfo.cpp

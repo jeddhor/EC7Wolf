@@ -5,6 +5,7 @@
 
 #include "doomerrors.h"
 #include "wl_def.h"
+#include "g_traversal.h"
 #include "g_session.h"
 #include "id_ca.h"
 #include "id_sd.h"
@@ -553,6 +554,45 @@ void C7TouchLaserBarriers(APlayerPawn *pawn)
 	}
 }
 
+// The three things only a real move may do. The geometry that decides whether
+// the move happens at all lives in g_traversal.cpp, and is the same code a
+// navigator asks -- which is the point: a graph that predicts movement
+// differently from ClipMove is not a graph, it is a second opinion.
+namespace
+{
+	struct MoveEffects
+	{
+		AActor *ob;
+	};
+
+	void OnWallBlocked(void *context, MapSpot spot)
+	{
+		MoveEffects *fx = (MoveEffects *)context;
+		// Corridor 7's original collision routine applies the electric contact
+		// effect to wall tile IDs 6 and 14. The plane-one marker is not part
+		// of that decision. The barriers stay solid: pressing against one zaps
+		// the player on contact, and again on every repeated contact, but
+		// never lets them through.
+		if(IWad::CheckGameFilter("Corridor7") && fx->ob->player &&
+			(spot->corridor7WallID == 6 || spot->corridor7WallID == 14))
+		{
+			DamageC7ElectricField(static_cast<APlayerPawn *>(fx->ob), fx->ob);
+		}
+	}
+
+	void OnOverlap(void *context, AActor *other)
+	{
+		MoveEffects *fx = (MoveEffects *)context;
+		// The laser barrier statics (map objects 28/84) never block movement:
+		// walking through the hidden beams zaps the player through the
+		// standard rank/armor damage path on a cooldown, exactly as the
+		// released game does.
+		if(fx->ob->player && Corridor7IsLaserBarrierActor(other))
+			DamageC7LaserBarrier(static_cast<APlayerPawn *>(fx->ob));
+		other->Touch(fx->ob);
+	}
+}
+
 static bool TryMove (AActor *ob)
 {
 	if (noclip)
@@ -562,121 +602,18 @@ static bool TryMove (AActor *ob)
 			&& ob->y+ob->radius < (((int32_t)(map->GetHeader().height))<<TILESHIFT) );
 	}
 
-	int xl,yl,xh,yh,x,y;
+	Traversal::Body body;
+	body.radius = ob->radius;
+	body.isPlayer = ob->player != NULL;
+	body.ignore = ob;
 
-	xl = (ob->x-ob->radius) >>TILESHIFT;
-	yl = (ob->y-ob->radius) >>TILESHIFT;
+	MoveEffects fx = { ob };
+	Traversal::Hooks hooks;
+	hooks.onWallBlocked = OnWallBlocked;
+	hooks.onOverlap = OnOverlap;
+	hooks.context = &fx;
 
-	xh = (ob->x+ob->radius) >>TILESHIFT;
-	yh = (ob->y+ob->radius) >>TILESHIFT;
-
-	//
-	// check for solid walls
-	//
-	for (y=yl;y<=yh;y++)
-	{
-		for (x=xl;x<=xh;x++)
-		{
-			const bool checkLines[4] =
-			{
-				(ob->x+ob->radius) > ((x+1)<<TILESHIFT),
-				(ob->y-ob->radius) < (y<<TILESHIFT),
-				(ob->x-ob->radius) < (x<<TILESHIFT),
-				(ob->y+ob->radius) > ((y+1)<<TILESHIFT)
-			};
-			MapSpot spot = map->GetSpot(x, y, 0);
-			if(spot->tile)
-			{
-				// Check pushwall backs
-				if(spot->pushAmount != 0)
-				{
-					switch(spot->pushDirection)
-					{
-						case MapTile::North:
-							if(ob->y-ob->radius <= static_cast<fixed>((y<<TILESHIFT)+((63-spot->pushAmount)<<10)))
-								return false;
-							break;
-						case MapTile::West:
-							if(ob->x-ob->radius <= static_cast<fixed>((x<<TILESHIFT)+((63-spot->pushAmount)<<10)))
-								return false;
-							break;
-						case MapTile::East:
-							if(ob->x+ob->radius >= static_cast<fixed>((x<<TILESHIFT)+(spot->pushAmount<<10)))
-								return false;
-							break;
-						case MapTile::South:
-							if(ob->y+ob->radius >= static_cast<fixed>((y<<TILESHIFT)+(spot->pushAmount<<10)))
-								return false;
-							break;
-					}
-				}
-				else
-				{
-					for(unsigned short i = 0;i < 4;++i)
-					{
-						if(spot->sideSolid[i] && spot->slideAmount[i] != 0xffff && checkLines[i])
-						{
-							// Corridor 7's original collision routine applies the
-							// electric contact effect to wall tile IDs 6 and 14.  The
-							// plane-one marker is not part of that decision.  The
-							// barriers stay solid: pressing against one zaps the
-							// player on contact, and again on every repeated
-							// contact, but never lets them through.
-							if(IWad::CheckGameFilter("Corridor7") && ob->player &&
-								(spot->corridor7WallID == 6 || spot->corridor7WallID == 14))
-							{
-								DamageC7ElectricField(static_cast<APlayerPawn *>(ob), ob);
-							}
-							return false;
-						}
-					}
-				}
-			}
-		}
-	}
-
-	//
-	// check for actors
-	//
-	for(AActor::Iterator iter = AActor::GetIterator().Next();iter;)
-	{
-		// We need to iterate a little awkwardly since the object may disappear
-		// on us rendering the next pointer invalid.
-		AActor *check = iter;
-		iter.Next();
-
-		if(check == ob)
-			continue;
-
-		// Allow players to clip through each other for now.
-		if(check->player && ob->player)
-			continue;
-
-		fixed r = check->radius + ob->radius;
-		if(check->flags & FL_SOLID)
-		{
-			if(abs(ob->x - check->x) > r ||
-				abs(ob->y - check->y) > r)
-				continue;
-			return false;
-		}
-		else
-		{
-			if(abs(ob->x - check->x) <= r &&
-				abs(ob->y - check->y) <= r)
-			{
-				// The laser barrier statics (map objects 28/84) never
-				// block movement: walking through the hidden beams zaps
-				// the player through the standard rank/armor damage path
-				// on a cooldown, exactly as the released game does.
-				if(ob->player && Corridor7IsLaserBarrierActor(check))
-					DamageC7LaserBarrier(static_cast<APlayerPawn *>(ob));
-				check->Touch(ob);
-			}
-		}
-	}
-
-	return true;
+	return Traversal::CheckPositionAt(body, ob->x, ob->y, &hooks);
 }
 
 static void ExecuteWalkTriggers(AActor *ob, MapSpot spot, MapTrigger::Side dir)

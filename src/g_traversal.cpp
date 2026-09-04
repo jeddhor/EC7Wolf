@@ -192,6 +192,55 @@ bool CanStepBetweenTiles(const Body &body, unsigned int fromX, unsigned int from
 	return true;
 }
 
+bool ContactDamageWallAt(unsigned int tileX, unsigned int tileY)
+{
+	if(map == NULL)
+		return false;
+	MapSpot spot = map->GetSpot(tileX, tileY, 0);
+	if(spot == NULL || spot->tile == NULL)
+		return false;
+	// The same two IDs the movement path zaps on, read the same way, so the
+	// planner and the damage cannot disagree about which walls are live.
+	return spot->corridor7WallID == 6 || spot->corridor7WallID == 14;
+}
+
+TransporterInfo TransporterAt(unsigned int tileX, unsigned int tileY)
+{
+	enum { TELEPORT_NoStop = 1 };
+
+	TransporterInfo info;
+	if(map == NULL)
+		return info;
+
+	MapSpot spot = map->GetSpot(tileX, tileY, 0);
+	if(spot == NULL)
+		return info;
+
+	for(unsigned int i = 0;i < spot->triggers.Size();++i)
+	{
+		const MapTrigger &trig = spot->triggers[i];
+		// Crossed, not used: these are floor cells a player walks over. A
+		// transporter that had to be operated would be a different protocol.
+		if(trig.action != Specials::Teleport_Relative || !trig.playerCross)
+			continue;
+
+		MapSpot dest = NULL;
+		while((dest = map->GetSpotByTag(trig.arg[0], dest)))
+		{
+			info.destX.Push((uint16_t)dest->GetX());
+			info.destY.Push((uint16_t)dest->GetY());
+		}
+		if(info.destX.Size() == 0)
+			continue;			// a tag nothing answers to
+
+		info.exists = true;
+		info.freezes = (trig.arg[2] & TELEPORT_NoStop) == 0;
+		break;
+	}
+
+	return info;
+}
+
 DoorInfo DoorAt(unsigned int tileX, unsigned int tileY)
 {
 	DoorInfo info;

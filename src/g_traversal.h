@@ -118,6 +118,39 @@ struct DoorInfo
 	bool	passable[4] = { false, false, false, false };
 };
 
+// Where a transporter in this cell can put a body.
+//
+// The teleport is relative -- arrival is the body's position plus the offset
+// between the trigger tile and the destination tile -- so a body that crosses
+// while inside the trigger tile always arrives inside the destination tile,
+// whether or not the centring flag is set. The destination tile is therefore
+// the whole answer as far as a tile graph is concerned.
+struct TransporterInfo
+{
+	bool exists = false;
+	// The 35-tic movement freeze. Set unless the trigger asks for NoStop; it
+	// is traversal time to a planner, and a span during which the follower
+	// must emit no movement because the engine will ignore it anyway.
+	bool freezes = false;
+	// Destination tiles. More than one when the tag names several spots: the
+	// engine picks between them at random on every crossing, so a planner has
+	// to treat each as possible rather than assume the first.
+	TArray<uint16_t> destX;
+	TArray<uint16_t> destY;
+};
+
+// Does this cell hold a wall that hurts whoever touches it?
+//
+// Corridor 7 energizes wall IDs 6 and 14: solid, and two points of damage
+// every 35 tics for as long as a player is in contact. Nothing about them
+// looks different to a traversal query -- they are walls, and the query
+// correctly refuses to stand in them -- so a planner that does not ask this
+// will happily route along one and grind down its own health.
+bool ContactDamageWallAt(unsigned int tileX, unsigned int tileY);
+
+// Is there a transporter in this cell that an ordinary player crosses?
+TransporterInfo TransporterAt(unsigned int tileX, unsigned int tileY);
+
 // Is there a player-usable door in this cell?
 //
 // Read from the same triggers the player's use action runs, so a door a human

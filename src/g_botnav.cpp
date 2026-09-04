@@ -64,6 +64,7 @@ bool Graph::Build(const Traversal::Body &body)
 			node.x = (uint16_t)x;
 			node.y = (uint16_t)y;
 			node.isDoor = door.exists;
+			node.isTransporter = Traversal::TransporterAt(x, y).exists;
 			lookup[y*width + x] = (NodeId)nodes.Size();
 			nodes.Push(node);
 		}
@@ -175,6 +176,93 @@ bool Graph::Build(const Traversal::Body &body)
 			edges.Push(edge);
 			++node.edgeCount;
 		}
+
+		// And the transporter under this cell, if there is one.
+		//
+		// Directed, and appended after the walk edges so the node's edges stay
+		// one contiguous run. A transporter is crossed by walking onto it, so
+		// nothing here needs a new kind of movement -- what it needs is for
+		// the planner to know that stepping on this cell puts the body
+		// somewhere else entirely.
+		const Traversal::TransporterInfo port =
+			Traversal::TransporterAt(node.x, node.y);
+		for(unsigned int d = 0;d < port.destX.Size();++d)
+		{
+			if(port.destX[d] >= width || port.destY[d] >= height)
+				continue;
+			// lookup, not NodeAt: NodeAt answers for a finished graph and
+			// refuses while `built` is still false, which it is for the whole
+			// of Build. Asking it here returned NO_NODE for all sixteen of
+			// MAP60's transporters and built a graph identical to the one
+			// with no transporter code in it at all.
+			const NodeId to =
+				lookup[(unsigned)port.destY[d]*width + (unsigned)port.destX[d]];
+			if(to == NO_NODE || to == (NodeId)n)
+				continue;
+
+			Edge edge;
+			edge.from = (NodeId)n;
+			edge.to = to;
+			// Every destination of a multi-destination transporter costs the
+			// same, because the engine chooses between them at random and the
+			// planner does not get a say.
+			edge.cost = port.freezes ? COST_TRANSPORTER : COST_CARDINAL;
+			edge.type = EdgeType::Transporter;
+			edges.Push(edge);
+			++node.edgeCount;
+		}
+	}
+
+	// Which cells touch an energized wall. Four-neighbour, not eight: a body
+	// is only in contact with a wall it shares an edge with, and a diagonal
+	// neighbour is a corner it can round without touching.
+	for(unsigned int i = 0;i < nodes.Size();++i)
+	{
+		static const int hx[4] = { 1, 0, -1, 0 };
+		static const int hy[4] = { 0, -1, 0, 1 };
+		for(unsigned int d = 0;d < 4;++d)
+		{
+			const int nx = (int)nodes[i].x + hx[d];
+			const int ny = (int)nodes[i].y + hy[d];
+			if(nx < 0 || ny < 0 || (unsigned)nx >= width || (unsigned)ny >= height)
+				continue;
+			if(Traversal::ContactDamageWallAt((unsigned)nx, (unsigned)ny))
+			{
+				nodes[i].nearHazard = true;
+				break;
+			}
+		}
+	}
+
+	// And the cost of going there, applied to every edge that enters one.
+	// On the edge rather than the node because that is where a search reads
+	// it, and it is the act of moving in that costs.
+	for(unsigned int e = 0;e < edges.Size();++e)
+	{
+		if(nodes[edges[e].to].nearHazard)
+			edges[e].cost = (uint16_t)(edges[e].cost + COST_HAZARD);
+	}
+
+	// Which cells are close enough to a transporter to be taken by one. Done
+	// after the edges because it is a property of the finished node set.
+	for(unsigned int i = 0;i < nodes.Size();++i)
+	{
+		if(!nodes[i].isTransporter)
+			continue;
+		nodes[i].nearTransporter = true;
+		for(int oy = -1;oy <= 1;++oy)
+		{
+			for(int ox = -1;ox <= 1;++ox)
+			{
+				const int nx = (int)nodes[i].x + ox;
+				const int ny = (int)nodes[i].y + oy;
+				if(nx < 0 || ny < 0 || (unsigned)nx >= width || (unsigned)ny >= height)
+					continue;
+				const NodeId id = lookup[(unsigned)ny*width + (unsigned)nx];
+				if(id != NO_NODE)
+					nodes[id].nearTransporter = true;
+			}
+		}
 	}
 
 	built = true;
@@ -194,6 +282,31 @@ unsigned int Graph::Regions(unsigned int *largest) const
 	seen.Resize(nodes.Size());
 	for(unsigned int i = 0;i < seen.Size();++i)
 		seen[i] = 0;
+
+	// Reverse adjacency, so a one-way transporter still joins the two areas it
+	// links. Built once rather than searched per node.
+	TArray<unsigned int> backStart, backCount;
+	TArray<NodeId> back;
+	backStart.Resize(nodes.Size());
+	backCount.Resize(nodes.Size());
+	for(unsigned int i = 0;i < nodes.Size();++i)
+		backCount[i] = 0;
+	for(unsigned int e = 0;e < edges.Size();++e)
+		++backCount[edges[e].to];
+	unsigned int running = 0;
+	for(unsigned int i = 0;i < nodes.Size();++i)
+	{
+		backStart[i] = running;
+		running += backCount[i];
+		backCount[i] = 0;
+	}
+	back.Resize(running);
+	for(unsigned int e = 0;e < edges.Size();++e)
+	{
+		const NodeId to = edges[e].to;
+		back[backStart[to] + backCount[to]] = edges[e].from;
+		++backCount[to];
+	}
 
 	TArray<NodeId> stack;
 	unsigned int regions = 0;
@@ -222,6 +335,14 @@ unsigned int Graph::Regions(unsigned int *largest) const
 				seen[to] = 1;
 				stack.Push(to);
 			}
+			for(unsigned int b = 0;b < backCount[n];++b)
+			{
+				const NodeId from = back[backStart[n] + b];
+				if(seen[from])
+					continue;
+				seen[from] = 1;
+				stack.Push(from);
+			}
 		}
 
 		if(largest != NULL && size > *largest)
@@ -232,8 +353,13 @@ unsigned int Graph::Regions(unsigned int *largest) const
 }
 
 bool Graph::FindPath(NodeId from, NodeId to, TArray<NodeId> &path,
-	SearchStats &stats, unsigned int maxExpansions) const
+	SearchStats &stats, unsigned int maxExpansions,
+	const SearchOptions *options) const
 {
+	static const SearchOptions defaults;
+	if(options == NULL)
+		options = &defaults;
+
 	path.Clear();
 	stats = SearchStats();
 
@@ -256,14 +382,19 @@ bool Graph::FindPath(NodeId from, NodeId to, TArray<NodeId> &path,
 	TArray<uint32_t> best;
 	TArray<NodeId>   cameFrom;
 	TArray<bool>     closed;
+	// How each node was arrived at, because for a transporter that decides
+	// what may be done next.
+	TArray<EdgeType> arrivedBy;
 	best.Resize(nodes.Size());
 	cameFrom.Resize(nodes.Size());
 	closed.Resize(nodes.Size());
+	arrivedBy.Resize(nodes.Size());
 	for(unsigned int i = 0;i < nodes.Size();++i)
 	{
 		best[i] = Unreached;
 		cameFrom[i] = NO_NODE;
 		closed[i] = false;
+		arrivedBy[i] = EdgeType::WalkCardinal;
 	}
 
 	struct Entry
@@ -346,18 +477,47 @@ bool Graph::FindPath(NodeId from, NodeId to, TArray<NodeId> &path,
 		}
 
 		const Node &node = nodes[current.node];
+
+		// Walking into a transporter is the whole interaction: the engine
+		// fires the crossing trigger on entry and the body is somewhere else
+		// before it can take another step. So a transporter reached by walking
+		// has exactly one way onward, and it is not walking.
+		//
+		// What matters is how the pad was arrived at, not that it is a pad.
+		// Arriving by teleport leaves the body standing on it with nothing
+		// fired -- the trigger runs on crossing in, and being put there is not
+		// crossing in -- so it can walk off in any direction. The start node
+		// is the same case: a bot planning while stood on a pad is stood on
+		// it, not entering it.
+		//
+		// Conflating the two costs the whole map. Treating a teleport arrival
+		// as an entry forces an immediate second teleport, and MAP60's 545
+		// cells collapse into reachable pockets of 27, 57, 170 and 280 -- an
+		// arena that cannot be walked around, which is not what the map is.
+		const bool mustTeleport = node.isTransporter &&
+			current.node != from && arrivedBy[current.node] != EdgeType::Transporter;
+
 		for(unsigned int e = 0;e < node.edgeCount;++e)
 		{
 			const Edge &edge = edges[node.firstEdge + e];
+			if(mustTeleport && edge.type != EdgeType::Transporter)
+				continue;
+			if(options->avoidTransporters && nodes[edge.to].nearTransporter &&
+				edge.to != to)
+				continue;
 			if(closed[edge.to])
 				continue;
-			const uint32_t through = current.cost + edge.cost;
+			uint32_t through = current.cost + edge.cost;
+			if(options->blocked != NULL &&
+				options->blocked->Blocked(edge.to, options->now))
+				through += COST_BLOCKED;
 			if(through >= best[edge.to])
 				continue;
 			if(best[edge.to] != Unreached)
 				++stats.reopenings;
 			best[edge.to] = through;
 			cameFrom[edge.to] = current.node;
+			arrivedBy[edge.to] = edge.type;
 			Entry next = { through, edge.to };
 			Heap::Push(heap, next);
 		}
@@ -431,6 +591,18 @@ void Graph::Smooth(const Traversal::Body &body, TArray<NodeId> &path) const
 		unsigned int furthest = anchor + 1;
 		for(unsigned int probe = anchor + 2;probe < path.Size();++probe)
 		{
+			// A node that has to be interacted with is never skipped, however
+			// well the straight line fits: section 12.9's "retain typed
+			// interaction nodes even when geometrically skippable".
+			//
+			// Skipping a door would drop the step where it gets opened, and
+			// skipping a transporter is worse -- the line passes over the pad,
+			// the pawn walks onto it, and the route continues from somewhere
+			// else entirely. The geometry is fine in both cases, which is
+			// exactly why geometry is the wrong question.
+			const Node &prev = nodes[path[probe - 1]];
+			if(prev.isDoor || prev.isTransporter)
+				break;
 			if(!StraightLineFits(body, path[anchor], path[probe]))
 				break;
 			furthest = probe;
@@ -472,6 +644,12 @@ uint32_t Graph::Digest() const
 		Fold::Bytes(hash, &nodes[i].edgeCount, sizeof(nodes[i].edgeCount));
 		const uint8_t isDoor = nodes[i].isDoor ? 1 : 0;
 		Fold::Bytes(hash, &isDoor, sizeof(isDoor));
+		const uint8_t isPort = nodes[i].isTransporter ? 1 : 0;
+		Fold::Bytes(hash, &isPort, sizeof(isPort));
+		const uint8_t nearPort = nodes[i].nearTransporter ? 1 : 0;
+		Fold::Bytes(hash, &nearPort, sizeof(nearPort));
+		const uint8_t hazard = nodes[i].nearHazard ? 1 : 0;
+		Fold::Bytes(hash, &hazard, sizeof(hazard));
 	}
 	for(unsigned int i = 0;i < edges.Size();++i)
 	{

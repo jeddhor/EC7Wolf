@@ -116,6 +116,8 @@ bot_roam
 bot_doors
 bot_lifecycle
 bot_overlay
+bot_transporters
+bot_arenas
 multiplayer_rules
 multiplayer_classes
 multiplayer_presentation

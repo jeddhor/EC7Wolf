@@ -2964,6 +2964,126 @@ arena start, region, and special.
 every transporter pair is exercised; no permanent stuck state within the soak
 threshold; battle exit switches are never activated.
 
+**Status: complete.** See the B3 record below.
+
+### B3 record — what actually connects these arenas
+
+**Transporters, and the correction they force.** Adding transporter edges is
+what makes three arenas whole:
+
+| Arena | Regions before | after | Largest region | Pads |
+| --- | ---: | ---: | ---: | ---: |
+| MAP56 | 5 | **1** | 970 → 1498 | 8 |
+| MAP57 | 2 | **1** | 1153 → 1480 | 6 |
+| MAP60 | 5 | **1** | 274 → 545 | 16 |
+
+MAP60 roaming coverage went from 75 tiles to 176 over the same match.
+
+**MAP55 is not fragmented, and never was.** It has no doors and no
+transporters and stays in five pieces. Four of them are 14, 13, 4 and 4 cells:
+strips sealed behind masked walls -- markers 104 and 105, which change a wall's
+rendering and sight behaviour and leave it solid. 970 of its 1005 cells are one
+region and the other 35 are decoration no player can reach either. Any arena
+check therefore measures the share of cells in the largest region, not whether
+there is exactly one; demanding one region fails a correct map.
+
+**Entering a transporter is the whole interaction.** `CheckWalkTriggers` fires
+on crossing into a tile, from any side on every shipped pad, so a route cannot
+walk across one and continue -- the body is elsewhere before it takes another
+step. The search models that: a pad reached by walking has exactly one way
+onward.
+
+What that turns on is *how the pad was arrived at*. Arriving by teleport leaves
+the body standing on it with nothing fired, free to walk off in any direction.
+Treating that the same as walking in forces an immediate second teleport, and
+MAP60's 545 cells collapse into reachable pockets of 27, 57, 170 and 280 -- an
+arena that cannot be walked around. The implausibility of those numbers is what
+exposed the bug; the fix is to record the edge type each node was reached by.
+Every cell now reaches all 545.
+
+**The bounce.** A relative teleport applies its offset to wherever the body is
+when the trigger fires, which is often a tile short of the pad, and on MAP56
+that lands directly beside the pad that sends it back. Bots ping-ponged every
+38 tics -- freeze, three steps, back again -- for as long as the match ran.
+
+Three fixes went in before one of them worked, and the first two were inert:
+the assignment that set the cooldown had been lost to an aborted edit, so
+`avoidTransporters` was never true. Worth recording as a diagnostic lesson --
+three consecutive changes produced byte-identical traces, and identical output
+across a real change is evidence the change is not running, not evidence it did
+not help.
+
+The fix that worked has two parts. Avoidance covers the pad *and the ring of
+cells around it*, because the trigger fires when the body comes within one
+movement step of the boundary rather than on entry. And the unrestricted
+fallback applies only when no goal anywhere is reachable under the restriction,
+not per candidate: goals are drawn from the whole map, most are across a
+transporter, so a per-candidate fallback succeeds every time and the route goes
+straight back through the pad.
+
+**Hazards, and an honest null result.** Corridor 7 energizes wall IDs 6 and 14:
+solid, two damage per 35 tics of contact. MAP51, MAP55 and MAP60 have 19, 10
+and 14 such cells. Cells touching one are annotated and priced at +200, about
+two tiles of detour, which is section 12.7's cost with urgency and contact
+probability held at one until health and armour are modelled.
+
+It changes routes and does not change outcomes. Measured health lost across
+three bots over 1400 tics on all three maps, with the cost and without: **zero
+either way**. Bots do not touch these walls, because the follower routes centre
+to centre and the traversal query already keeps a 22-unit body clear of
+geometry. The annotation is 1-4% of edges and is kept as the baseline the plan
+asks for, but no benefit has been demonstrated and none should be claimed until
+combat pushes bots into contact.
+
+**The recovery ladder** now escalates rather than doing one thing. A first
+failure gets a nudge -- keep the route, strafe out of it, retry the same
+waypoint. A second records the cell in a short per-bot memory that prices it up
+in that bot's searches and nobody else's, and backs up properly. A third gives
+the goal away with a cooldown. The stage resets on progress, so three failures
+means three at the same obstruction.
+
+That memory is checked in the data-free self-test rather than by playing,
+deliberately: player pawns do not collide in this game, so nothing routinely
+blocks a bot and a healthy match never reaches these rungs. Code that only runs
+when things go wrong cannot be left to be exercised by luck.
+
+**Exit switches.** Every arena has an `Exit_Normal` on a wall tile, playerUse,
+that ends the match for everyone. Bots press use in two places -- at a door
+they are opening, and while dead asking to respawn -- and neither can reach
+one: a dead player never runs `Cmd_Use`, and the door protocol only presses
+square-on to a door. That is an accident of what bots currently do rather than
+a property, so `test_bot_arenas.sh` asserts every match runs its full length,
+which a fired exit would cut short.
+
+**The exit criteria, measured.** All eight arenas on two seeds, three bots,
+900 tics each: every match ran its full length, no step the graph offered was
+refused, no bot ever failed to find a goal, and coverage ran 147 to 298 tiles.
+Connectivity is 100% of cells in the largest region everywhere except MAP55,
+which is 96% for the reason above.
+
+Every transporter pair is exercised by naming each pad as a goal in turn --
+thirty of them across MAP56, MAP57 and MAP60 -- because roaming visits only a
+handful per match. Walking onto a pad is the crossing, so the bot never
+"arrives": it is somewhere else before the arrival check runs, and that is the
+event being counted.
+
+The budget is part of that test's correctness, which the first version got
+wrong. At 450 tics a pad, MAP56's western pair came back as never crossed; they
+sit at the far edge of a 1498-cell arena and a bot spawning across the map
+spends most of that walking. At 1200 the same bot crosses one of them seventeen
+times. A coverage check that is too impatient reports a working thing as
+broken, in exactly the language of a real failure. The sweep runs at 700 and
+takes about seven minutes, nearly all of it process startup rather than
+simulation.
+
+**Gates:** `tools/test_bot_transporters.sh` and `tools/test_bot_arenas.sh` are
+new. `test_bot_navigation.sh` now derives every edge's cost independently --
+base by type plus the hazard surcharge where the destination touches a live
+wall, computed from the map's own wall list -- so "the graph priced this
+correctly" is a real question rather than a restatement. All three proven able
+to fail: the bounce check against a build with the cooldown disabled, the cost
+check against `COST_HAZARD = 150`.
+
 ### B4 — Perception, hearing, memory
 
 **Work:** immutable observations and sensor-only world access; FOV and gameplay

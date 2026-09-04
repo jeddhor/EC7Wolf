@@ -121,6 +121,10 @@ nodes, edges, paths, smooths = set(), set(), [], []
 # A self-opening, player-usable Door_Open (special 1, no tag) is a door; a
 # tagged one operates something elsewhere and is a switch.
 doors = {}
+# Edge type per (from, to): 0 walk, 1 diagonal, 2 door, 4 transporter.
+kinds = {}
+ports = {}
+live = set()
 summary = {}
 for line in open(work + "/a.nav"):
     if line.startswith("#"):
@@ -130,6 +134,16 @@ for line in open(work + "/a.nav"):
                 summary[key] = parts[parts.index(key) + 1]
         continue
     f = line.split()
+    if f and f[0] == "wall":
+        # Corridor 7 energizes wall IDs 6 and 14: solid, and two points of
+        # damage every 35 tics of contact.
+        if int(f[f.index("id") + 1]) in (6, 14):
+            live.add((int(f[1]), int(f[2])))
+        continue
+    if f and f[0] == "transporter":
+        ports[(int(f[1]), int(f[2]))] = [
+            tuple(int(v) for v in d.split(",")) for d in f[7:]]
+        continue
     if f[0] == "trigger":
         # Keyword-delimited, so read by name: the line is
         # "trigger X Y action N args a0..a4 use U cross C monster M tile T ..."
@@ -145,6 +159,7 @@ for line in open(work + "/a.nav"):
     if f[0] == "edge":
         a = (int(f[1]), int(f[2])); b = (int(f[3]), int(f[4]))
         edges.add((a, b, int(f[5])))
+        kinds[(a, b)] = int(f[6])
         nodes.add(a); nodes.add(b)
     elif f[0] == "path":
         paths.append((f[1:5], f[5], f[6], f[7], f[8:]))
@@ -168,9 +183,13 @@ if int(summary.get("radius", 0)) < 8:
     problems.append("graph built for a body of radius %s"
                     % summary.get("radius"))
 
-# Crossing a gap is the same gap either way.
-asym = [(a, b) for (a, b, c) in edges if not any(
-    x == b and y == a for (x, y, _) in edges)]
+# Crossing a gap is the same gap either way -- except a transporter, which is
+# one-way by nature. The shipped arenas happen to pair theirs up, so this check
+# would pass on them either way; it is excluded by type rather than by luck,
+# because a map with a one-way transporter is a legal map.
+asym = [(a, b) for (a, b, c) in edges
+        if kinds.get((a, b)) != 4
+        and not any(x == b and y == a for (x, y, _) in edges)]
 if asym:
     problems.append("%d edges exist one way only, e.g. %s"
                     % (len(asym), asym[:3]))
@@ -189,9 +208,29 @@ if cutters:
 
 # Costs must be the three the graph declares, or a route's length means
 # nothing.
-odd = set(c for (_, _, c) in edges) - {100, 141, 600}
-if odd:
-    problems.append("unexpected edge costs %s" % sorted(odd))
+# Every edge's cost, derived independently: the base for its type, plus the
+# hazard surcharge when the cell it enters shares an edge with a live wall.
+# Computed from the map's own wall list rather than from anything the graph
+# says about itself, so "the graph priced this correctly" is a real question.
+BASE = {0: 100, 1: 141, 2: 600, 4: 390}
+HAZARD = 200
+def touches_live(cell):
+    x, y = cell
+    return any((x + dx, y + dy) in live
+               for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+
+hazardous = set(n for n in nodes if touches_live(n))
+for (a, b, cost) in edges:
+    base = BASE.get(kinds.get((a, b)))
+    if base is None:
+        problems.append("edge %s->%s has unknown type %s" % (a, b, kinds.get((a, b))))
+        break
+    want = base + (HAZARD if b in hazardous else 0)
+    if cost != want:
+        problems.append("edge %s->%s costs %d, expected %d (%s)"
+                        % (a, b, cost, want,
+                           "beside a live wall" if b in hazardous else "clear"))
+        break
 
 # A door edge is priced at 600, and nothing else is. Both directions of the
 # claim: every 600 touches a door, and every edge touching a door costs 600 --
@@ -203,6 +242,25 @@ for (a, b, cost) in edges:
         break
     if touches and cost != 600:
         problems.append("edge %s->%s touches a door and costs %d" % (a, b, cost))
+        break
+
+# A transporter edge costs the freeze and goes where the map says. The
+# destination is nominal: a relative teleport applies the offset to wherever the
+# body is when the trigger fires, which is often a tile short of the pad, so the
+# real arrival can be one tile off and the follower replans from wherever it
+# actually lands. The graph still has to agree with the map about the pair.
+for (a, b, cost) in edges:
+    if kinds.get((a, b)) != 4:
+        continue
+    if a not in ports:
+        problems.append("transporter edge %s->%s from a cell with no transporter" % (a, b))
+        break
+    if b not in ports[a]:
+        problems.append("transporter edge %s->%s but the map sends it to %s"
+                        % (a, b, ports[a]))
+        break
+    if cost not in (390, 390 + 200):
+        problems.append("transporter edge %s->%s costs %d" % (a, b, cost))
         break
 
 # And a door is entered square-on, on the axis its panel slides along.

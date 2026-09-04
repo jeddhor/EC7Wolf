@@ -230,6 +230,13 @@ bool ChooseRoamGoal(State &bot, const BotNav::Graph &graph, AActor *pawn,
 	// A named destination, for a gate that needs the bot to go somewhere
 	// specific rather than somewhere random. Everything after this point is
 	// the ordinary follower, so what gets tested is the real thing.
+	// One set of rules for both planners below: whatever this bot may not
+	// route through at this moment.
+	BotNav::SearchOptions options;
+	options.avoidTransporters = sequence < bot.portCooldownUntil;
+	options.blocked = &bot.blocked;
+	options.now = sequence;
+
 	int forcedX = 0, forcedY = 0;
 	if(ForcedGoal(forcedX, forcedY))
 	{
@@ -238,7 +245,14 @@ bool ChooseRoamGoal(State &bot, const BotNav::Graph &graph, AActor *pawn,
 			return false;
 
 		BotNav::SearchStats stats;
-		if(!graph.FindPath(here, target, bot.route, stats))
+		// Keeping clear of transporters is a preference, not a rule. A bot
+		// that has just arrived is standing inside the zone it is trying to
+		// avoid, and on a map where the pads sit in a corridor there may be no
+		// way out that does not pass one. Refusing to move at all is worse
+		// than crossing a pad again, so a failed search is retried without the
+		// restriction rather than reported as nowhere to go.
+		if(!graph.FindPath(here, target, bot.route, stats, 0, &options) &&
+			!graph.FindPath(here, target, bot.route, stats))
 		{
 			++bot.goalSearchFailures;
 			bot.nextGoalSearch = sequence + 35;
@@ -271,8 +285,21 @@ bool ChooseRoamGoal(State &bot, const BotNav::Graph &graph, AActor *pawn,
 	// because one door is all eight shipped arenas contain between them.
 	//
 	// A bot in a cupboard should pace the cupboard.
-	for(unsigned int pass = 0;pass < 2;++pass)
+	//
+	// Three passes, not two, while a transporter cooldown is running. The
+	// first two look for somewhere reachable without going near a pad; only if
+	// the whole map offers nothing does the third drop the restriction.
+	//
+	// Trying unrestricted *per candidate* instead -- which is what the first
+	// version did -- defeats the whole thing: goals are drawn from the entire
+	// map, most of them are across a transporter, so the restricted search
+	// fails, the fallback succeeds, and the route goes straight back through
+	// the pad the bot just came out of. It bounced between two pads every 38
+	// tics with the avoidance apparently in place.
+	const unsigned int passes = options.avoidTransporters ? 3 : 2;
+	for(unsigned int pass = 0;pass < passes;++pass)
 	{
+		const bool restricted = options.avoidTransporters && pass < 2;
 		const int wantDistanceSquared = pass == 0 ? 36 : 1;
 		for(unsigned int attempt = 0;attempt < 8;++attempt)
 		{
@@ -289,7 +316,9 @@ bool ChooseRoamGoal(State &bot, const BotNav::Graph &graph, AActor *pawn,
 
 		BotNav::SearchStats stats;
 		TArray<BotNav::NodeId> route;
-		if(!graph.FindPath(here, candidate, route, stats))
+		BotNav::SearchOptions pass_options = options;
+		pass_options.avoidTransporters = restricted;
+		if(!graph.FindPath(here, candidate, route, stats, 0, &pass_options))
 			continue;
 
 		// Followed unsmoothed, on purpose.
@@ -371,6 +400,9 @@ public:
 				bot->goal = BotNav::NO_NODE;
 				bot->doorNode = BotNav::NO_NODE;
 				bot->unstuckUntil = 0;
+				// Coming back somewhere else is not a teleport to be reasoned
+				// about; it is a new life. Forget where the body was.
+				bot->haveSeenTile = false;
 				TraceEvent(forSlot, "behavior", BehaviorName(bot->behavior));
 			}
 
@@ -388,6 +420,62 @@ public:
 			}
 			bot->doorUseLastTic = out.press[bt_use];
 
+			Record(*bot, sequence, forSlot);
+			return true;
+		}
+
+		// The world can move a pawn without the bot asking. A transporter is
+		// the case that matters here: crossing one is an ordinary step onto an
+		// ordinary cell, and the reply is arriving somewhere else entirely,
+		// frozen for half a second.
+		//
+		// Detected by the size of the jump rather than by the route, so it
+		// holds for anything that relocates a pawn -- a transporter the bot
+		// planned for, one it wandered onto, or whatever a future map special
+		// does. A step is one tile; more than that was not walking.
+		if(bot->haveSeenTile)
+		{
+			const int jx = abs((int)pawn->tilex - (int)bot->seenTileX);
+			const int jy = abs((int)pawn->tiley - (int)bot->seenTileY);
+			if(jx > 1 || jy > 1)
+			{
+				++bot->teleports;
+				FString detail;
+				detail.Format("from=%u,%u to=%d,%d", bot->seenTileX,
+					bot->seenTileY, pawn->tilex, pawn->tiley);
+				TraceEvent(forSlot, "teleported", detail.GetChars());
+
+				// Replan from where the body actually is. Every waypoint left
+				// in the route was chosen from somewhere else, and steering at
+				// them from here would walk a line no one planned.
+				bot->route.Clear();
+				bot->waypoint = 0;
+				bot->goal = BotNav::NO_NODE;
+				bot->doorNode = BotNav::NO_NODE;
+				bot->unstuckUntil = 0;
+				bot->lastProgressSeq = sequence;
+				bot->wasAskedToMove = false;
+				bot->portCooldownUntil = sequence + PORT_COOLDOWN;
+				if(bot->behavior != Behavior::SpawnOrient)
+				{
+					bot->behavior = Behavior::Roam;
+					bot->behaviorSince = sequence;
+				}
+			}
+		}
+		bot->seenTileX = (uint16_t)pawn->tilex;
+		bot->seenTileY = (uint16_t)pawn->tiley;
+		bot->haveSeenTile = true;
+
+		// Frozen: the engine skips ControlMovement entirely while sighttime
+		// runs, so a command sent now is a command thrown away. Send none, and
+		// do not let the stuck clock count the half second as a failure to
+		// move -- it is traversal time, and the plan prices it as such.
+		if(pawn->sighttime > 0)
+		{
+			++bot->frozenTics;
+			bot->wasAskedToMove = false;
+			bot->lastProgressSeq = sequence;
 			Record(*bot, sequence, forSlot);
 			return true;
 		}
@@ -669,6 +757,8 @@ private:
 			bot.lastTileX = (uint16_t)pawn->tilex;
 			bot.lastTileY = (uint16_t)pawn->tiley;
 			bot.lastProgressSeq = sequence;
+			// Got somewhere: whatever the trouble was, it is behind us.
+			bot.stuckStage = 0;
 		}
 		else if(!tryingToMove)
 		{
@@ -676,29 +766,73 @@ private:
 		}
 		else if(sequence - bot.lastProgressSeq > STUCK_TICS)
 		{
-			// The graph offered a step the pawn could not walk. This is the
-			// one number the traversal gate cannot produce, because it can
+			// Section 12.11's ladder. Which rung depends on how many times
+			// this has already happened without progress in between: a bot
+			// that clips a corner should lose a moment, and one genuinely
+			// walled in should end up somewhere else entirely.
+			//
+			// The stage resets on progress, so "three failures" means three
+			// failures at the same obstruction, not three in the match.
+			if(sequence > bot.stageResetAt)
+				bot.stuckStage = 0;
+			++bot.stuckStage;
+			bot.stageResetAt = sequence + STAGE_MEMORY;
+
+			const BotNav::NodeId blockedAt = bot.route[MIN(bot.waypoint,
+				(unsigned int)bot.route.Size() - 1)];
+			const BotNav::Node &target = graph.NodeOf(blockedAt);
+
+			FString detail;
+			detail.Format("stage=%u at=%d,%d toward=%u,%u after=%u tics",
+				bot.stuckStage, pawn->tilex, pawn->tiley, target.x, target.y,
+				sequence - bot.lastProgressSeq);
+			TraceEvent(bot.slot, "stuck", detail.GetChars());
+
+			bot.lastProgressSeq = sequence;
+
+			// Rung 1: a nudge. Keep the goal and the route, strafe out of
+			// whatever is being leaned on, and try the same waypoint again.
+			// Most obstructions are a corner clipped at a shallow angle and
+			// this is the whole of the fix.
+			if(bot.stuckStage == 1)
+			{
+				bot.behavior = Behavior::Unstuck;
+				bot.behaviorSince = sequence;
+				bot.unstuckUntil = sequence + NUDGE_TICS;
+				bot.unstuckStrafe =
+					bot.rng[(unsigned int)Stream::Movement].Below(2)
+						? BASEMOVE : -BASEMOVE;
+				++bot.unstuckEntered;
+				TraceEvent(bot.slot, "behavior", BehaviorName(bot.behavior));
+				return;
+			}
+
+			// The graph offered a step the pawn could not walk, twice. This is
+			// the one number the traversal gate cannot produce, because it can
 			// only check that the pawn never went somewhere the query forbade
 			// -- never that everything the query allowed was walkable.
 			++bot.stepsRefused;
-			++bot.routesAbandoned;
 
-			FString detail;
-			const BotNav::Node &target =
-				graph.NodeOf(bot.route[MIN(bot.waypoint,
-					(unsigned int)bot.route.Size() - 1)]);
-			detail.Format("at=%d,%d toward=%u,%u after=%u tics",
-				pawn->tilex, pawn->tiley, target.x, target.y,
-				sequence - bot.lastProgressSeq);
-			TraceEvent(bot.slot, "refused", detail.GetChars());
+			// Rungs 4 and 5: remember that this cell did not work, and plan
+			// around it. Per bot, and with an expiry, because whatever was in
+			// the way was probably another player and will move.
+			bot.blocked.Add(blockedAt, sequence + BLOCK_MEMORY);
+			++bot.cellsBlocked;
 
 			bot.route.Clear();
-			bot.goal = BotNav::NO_NODE;
-			bot.lastProgressSeq = sequence;
+			// Rung 6: from the third failure, give the goal away too. Keeping
+			// it means planning another route to the same unreachable place.
+			if(bot.stuckStage >= 3)
+			{
+				++bot.routesAbandoned;
+				bot.goal = BotNav::NO_NODE;
+				bot.nextGoalSearch = sequence + GOAL_COOLDOWN;
+			}
 
-			// Move before replanning. A route is a function of where the bot
-			// is standing, so replanning from the corner it is wedged in
-			// produces a route that starts by walking into the same wall.
+			// Rung 2: back up and commit to a side. A route is a function of
+			// where the bot is standing, so replanning from the corner it is
+			// wedged in produces a route that starts by walking into the same
+			// wall.
 			bot.behavior = Behavior::Unstuck;
 			bot.behaviorSince = sequence;
 			bot.unstuckUntil = sequence + UNSTUCK_TICS;
@@ -793,7 +927,23 @@ private:
 		// pressing again would close it -- and short enough to recover from a
 		// press that did nothing at all.
 		DOOR_REPULSE = 105,
-		UNSTUCK_TICS = 24
+		UNSTUCK_TICS = 24,
+		// Three seconds without planning another transporter. Long enough to
+		// walk clear of the arrival pad and its counterpart; short enough that
+		// a bot which genuinely wants to cross again is only briefly stopped
+		// from doing so.
+		PORT_COOLDOWN = 210,
+		// A short shove for a first failure, the full back-up for a second.
+		NUDGE_TICS = 10,
+		// How long a failure stays on the ladder. Longer than a recovery takes
+		// so that a second failure at the same place escalates, short enough
+		// that two unrelated bumps a match apart do not.
+		STAGE_MEMORY = 210,
+		// How long a cell that could not be got through stays expensive.
+		// Whatever was in the way was most likely another player.
+		BLOCK_MEMORY = 350,
+		// And how long to leave a goal alone after giving it away.
+		GOAL_COOLDOWN = 70
 	};
 };
 
@@ -885,6 +1035,9 @@ Totals Tally()
 		total.unstuckEntered += g_state[i].unstuckEntered;
 		total.respawnPresses += g_state[i].respawnPresses;
 		total.respawnsCompleted += g_state[i].respawnsCompleted;
+		total.teleports += g_state[i].teleports;
+		total.frozenTics += g_state[i].frozenTics;
+		total.cellsBlocked += g_state[i].cellsBlocked;
 	}
 	return total;
 }
@@ -1195,6 +1348,38 @@ int SelfTest()
 
 		Reset();
 		Check(Count() == 0, "and Reset leaves nothing behind");
+	}
+
+	// Section 12.11's rungs 4 and 5 keep a short per-bot memory of places that
+	// did not work. It is defensive code that a healthy match never reaches --
+	// bots do not collide with one another in this game, so nothing routinely
+	// blocks one -- which is exactly why it is checked here rather than left
+	// to be exercised by luck.
+	Printf("\nBlocked-cell memory\n");
+	{
+		BotNav::BlockedCells b;
+		Check(!b.Blocked(5, 0), "nothing is blocked to begin with");
+
+		b.Add(5, 100);
+		Check(b.Blocked(5, 50), "a cell that failed is avoided");
+		Check(!b.Blocked(5, 100), "until its expiry passes");
+		Check(!b.Blocked(6, 50), "and only that cell");
+
+		b.Add(5, 200);
+		Check(b.Blocked(5, 150), "re-failing the same cell extends it");
+		Check(b.count == 1, "without recording it twice");
+
+		// Fill it, then one more: the entry expiring soonest is the one to
+		// lose, because it is the one that was about to stop mattering.
+		BotNav::BlockedCells full;
+		for(unsigned int i = 0;i < BotNav::MAX_BLOCKED;++i)
+			full.Add((BotNav::NodeId)(100 + i), 500 + i*10);
+		Check(full.count == BotNav::MAX_BLOCKED, "the list fills to its bound");
+		full.Add(999, 900);
+		Check(full.count == BotNav::MAX_BLOCKED, "and stays there");
+		Check(full.Blocked(999, 600), "the new cell is remembered");
+		Check(!full.Blocked(100, 400), "the soonest to expire was dropped");
+		Check(full.Blocked(107, 560), "and the others were kept");
 		Command::ClearProducers();
 	}
 

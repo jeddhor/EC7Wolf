@@ -565,13 +565,14 @@ namespace
 			const Bot::Totals tally = Bot::Tally();
 			Printf("Capture: bots %u brain=%08x planned=%u arrived=%u "
 				"abandoned=%u refused=%u nogoal=%u doors=%u doorsfailed=%u "
-				"unstuck=%u respawnpresses=%u respawns=%u\n",
+				"unstuck=%u respawnpresses=%u respawns=%u ports=%u frozen=%u blocked=%u\n",
 				Bot::Count(), (unsigned int)Bot::BrainDigest(),
 				tally.routesPlanned, tally.routesCompleted,
 				tally.routesAbandoned, tally.stepsRefused,
 				tally.goalSearchFailures, tally.doorsOpened,
 				tally.doorsGivenUp, tally.unstuckEntered,
-				tally.respawnPresses, tally.respawnsCompleted);
+				tally.respawnPresses, tally.respawnsCompleted,
+				tally.teleports, tally.frozenTics, tally.cellsBlocked);
 		}
 		Bot::CloseTrace();
 	}
@@ -1332,6 +1333,48 @@ static void WriteNavMap(const char *path)
 					trig.activate[0] ? 1 : 0, trig.activate[1] ? 1 : 0,
 					trig.activate[2] ? 1 : 0, trig.activate[3] ? 1 : 0);
 			}
+		}
+	}
+
+	// Solid cells that are something other than plain wall: Corridor 7's wall
+	// markers and its masked-wall types. Section 12.5's boundaries -- force
+	// fields, masked walls, removable walls -- are all cells that look solid
+	// to the traversal query and may not stay that way, and telling them apart
+	// from ordinary geometry is the first thing anything reasoning about them
+	// has to do.
+	for(unsigned int ty = 0;ty < map->GetHeader().height;++ty)
+	{
+		for(unsigned int tx = 0;tx < map->GetHeader().width;++tx)
+		{
+			MapSpot spot = map->GetSpot(tx, ty, 0);
+			if(spot == NULL || spot->tile == NULL)
+				continue;
+			if(spot->corridor7WallMarker == 0 && spot->maskedWallType == 0 &&
+				spot->corridor7WallID == 0)
+				continue;
+			fprintf(out, "wall %u %u marker %u masked %u id %u sight %d\n",
+				tx, ty, (unsigned)spot->corridor7WallMarker,
+				(unsigned)spot->maskedWallType, (unsigned)spot->corridor7WallID,
+				spot->corridor7SightTransparent ? 1 : 0);
+		}
+	}
+
+	// Every transporter, and where the engine says it goes. Separate from the
+	// edges so that "the map has a transporter here" and "the graph built an
+	// edge for it" stay separable questions -- the same reason the triggers
+	// above are dumped.
+	for(unsigned int ty = 0;ty < map->GetHeader().height;++ty)
+	{
+		for(unsigned int tx = 0;tx < map->GetHeader().width;++tx)
+		{
+			const Traversal::TransporterInfo port = Traversal::TransporterAt(tx, ty);
+			if(!port.exists)
+				continue;
+			fprintf(out, "transporter %u %u freeze %d dests %u",
+				tx, ty, port.freezes ? 1 : 0, port.destX.Size());
+			for(unsigned int d = 0;d < port.destX.Size();++d)
+				fprintf(out, " %u,%u", port.destX[d], port.destY[d]);
+			fprintf(out, "\n");
 		}
 	}
 

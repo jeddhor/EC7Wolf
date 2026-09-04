@@ -51,6 +51,9 @@ enum class EdgeType : uint8_t
 	UseDoor,
 	// Not built yet. Declared so the shape does not change when they are.
 	UseSwitchOrField,
+	// Crossing a transporter. The only directed edge type: a transporter
+	// sends a body one way, and whether anything sends it back depends on
+	// whether the far end has a transporter of its own.
 	Transporter
 };
 
@@ -65,6 +68,24 @@ enum { COST_CARDINAL = 100, COST_DIAGONAL = 141 };
 // human shows, and the reason this is a cost rather than a prohibition.
 enum { COST_DOOR = 600 };
 
+// A transporter costs the 35-tic freeze it imposes and nothing else: the
+// distance it covers is free, which is the entire point of one. Priced against
+// a run of about nine tics to the tile, so 35 tics is a touch under four
+// tiles' worth -- enough that a bot walks to somewhere three tiles away rather
+// than teleporting, and takes the transporter for anything further.
+enum { COST_TRANSPORTER = 390 };
+
+// Entering a cell that touches an energized wall. Two tiles' worth of walking,
+// so a route takes a detour of up to two tiles to keep off one and squeezes
+// past when the detour is longer than that.
+//
+// A flat number, and deliberately the simplest form of section 12.7's cost:
+// expected damage times urgency times contact probability, with urgency and
+// probability held at one. Health, armour and invulnerability are what turn it
+// into the real thing, and none of them are modelled until the bot has a
+// reason to care about its own condition.
+enum { COST_HAZARD = 200 };
+
 struct Node
 {
 	uint16_t x = 0;
@@ -75,6 +96,18 @@ struct Node
 	uint16_t edgeCount = 0;
 	// A cell whose door has to be opened before it can be walked through.
 	bool     isDoor = false;
+	// A cell that moves whoever steps into it. Walking in is the whole of the
+	// interaction; there is no walking on through.
+	bool     isTransporter = false;
+	// This cell, or one touching it. The engine fires a crossing trigger when
+	// the body comes within a single movement step of the boundary rather than
+	// on entering the tile, so standing next to a transporter is already close
+	// enough to be taken by it: avoiding the pad alone does not avoid the pad.
+	bool     nearTransporter = false;
+	// Touching one of Corridor 7's energized walls. Not a reason to refuse the
+	// cell -- a corridor lined with them is still a corridor, and sometimes
+	// the only way through -- but a reason to prefer going round.
+	bool     nearHazard = false;
 };
 
 struct Edge
@@ -101,6 +134,102 @@ struct SearchStats
 	bool         found = false;
 };
 
+// What a particular search is allowed to do, beyond what the graph says.
+//
+// Per-search rather than baked into edge costs, because these are properties of
+// the bot doing the searching and the moment it is searching in, not of the
+// map. Two bots planning on one graph in the same tic can want different
+// answers.
+// Cells this particular bot has recently failed to get through, and until
+// when. Section 12.9's "recent edge failure penalty", and the memory rungs 4
+// and 5 of the recovery ladder need: a bot that could not get past something
+// should stop planning routes through it for a while, without that becoming a
+// fact about the map that every other bot inherits.
+//
+// Small and fixed: a bot that is failing in eight different places has a
+// problem no bookkeeping will fix, and the oldest entry is the least
+// interesting one to keep.
+enum { MAX_BLOCKED = 8 };
+struct BlockedCells
+{
+	NodeId   node[MAX_BLOCKED];
+	uint32_t until[MAX_BLOCKED];
+	unsigned int count = 0;
+
+	BlockedCells()
+	{
+		for(unsigned int i = 0;i < MAX_BLOCKED;++i)
+		{
+			node[i] = NO_NODE;
+			until[i] = 0;
+		}
+	}
+
+	void Add(NodeId id, uint32_t expires)
+	{
+		for(unsigned int i = 0;i < count;++i)
+		{
+			if(node[i] == id)
+			{
+				until[i] = expires;
+				return;
+			}
+		}
+		if(count < MAX_BLOCKED)
+		{
+			node[count] = id;
+			until[count] = expires;
+			++count;
+			return;
+		}
+		// Full: replace whichever entry expires soonest.
+		unsigned int oldest = 0;
+		for(unsigned int i = 1;i < count;++i)
+		{
+			if(until[i] < until[oldest])
+				oldest = i;
+		}
+		node[oldest] = id;
+		until[oldest] = expires;
+	}
+
+	bool Blocked(NodeId id, uint32_t now) const
+	{
+		for(unsigned int i = 0;i < count;++i)
+		{
+			if(node[i] == id && now < until[i])
+				return true;
+		}
+		return false;
+	}
+};
+
+// What entering a cell this bot recently failed at costs. Steep enough that
+// any way round is preferred, finite so that a bot walled into a corner by its
+// own history can still plan out of it.
+enum { COST_BLOCKED = 1500 };
+
+struct SearchOptions
+{
+	// Keep clear of transporters entirely -- the pads and the ring of cells
+	// around them. Set for a short while after using one.
+	//
+	// The ring is the part that matters. A relative teleport lands a body a
+	// tile short of the nominal destination, which on MAP56 is directly beside
+	// the pad that sends it back; the trigger then fires as soon as the body
+	// moves within one step of that pad's edge. Avoiding only the pad cell
+	// leaves the bot standing next to the return trip, and it bounced between
+	// two pads every 38 tics -- freeze, three steps, back again.
+	//
+	// Start and goal are exempt, because the bot may well be standing on a pad
+	// when it plans, and a pad is a legitimate place to be going.
+	bool avoidTransporters = false;
+
+	// Cells to price up, and the sequence to judge their expiry against.
+	const BlockedCells *blocked = NULL;
+	uint32_t now = 0;
+};
+
 class Graph
 {
 public:
@@ -125,7 +254,8 @@ public:
 	// than returning a path it did not finish finding. Zero means the graph's
 	// own size, which is the most a complete search can ever need.
 	bool FindPath(NodeId from, NodeId to, TArray<NodeId> &path,
-		SearchStats &stats, unsigned int maxExpansions = 0) const;
+		SearchStats &stats, unsigned int maxExpansions = 0,
+		const SearchOptions *options = NULL) const;
 
 	// Can a body walk straight between two nodes, ignoring the grid? The
 	// question a shortcut asks, and the one a follower asks before cutting a
@@ -141,8 +271,14 @@ public:
 	// graphs that hash alike are the same graph.
 	uint32_t Digest() const;
 
-	// How many mutually unreachable pieces the graph is in, and how big the
-	// largest one is. This is the number that says whether a bot dropped into
+	// How many pieces the graph is in, treating every edge as two-way, and how
+	// big the largest is.
+	//
+	// Undirected deliberately, including over transporters. The question this
+	// answers is "how much of this arena hangs together", and a one-way link
+	// still joins two areas into one arena. Counting reachability instead
+	// would make the answer depend on which node the walk happened to start
+	// from, which is not a property of the map. This is the number that says whether a bot dropped into
 	// an arena can get anywhere in it: a map in five regions is five separate
 	// arenas as far as walking is concerned.
 	//

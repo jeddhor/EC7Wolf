@@ -162,6 +162,16 @@ struct State
 	uint32_t     unstuckUntil = 0;
 	int          unstuckStrafe = 0;
 	unsigned int unstuckEntered = 0;
+	// Which rung of section 12.11's ladder the next failure gets. Escalates
+	// while failures keep happening in the same place and resets on progress,
+	// so an ordinary bump costs a moment of strafing and a genuine blockage
+	// works its way up to giving the goal away.
+	unsigned int stuckStage = 0;
+	uint32_t     stageResetAt = 0;
+	// Cells this bot could not get through lately, priced up in its own
+	// searches and nobody else's.
+	BotNav::BlockedCells blocked;
+	unsigned int cellsBlocked = 0;
 
 	// Presses made while dead, and lives actually returned to. Two numbers,
 	// because a bot pulses use for as long as it takes and one respawn can
@@ -169,6 +179,20 @@ struct State
 	// questions and only the second is an outcome.
 	unsigned int respawnPresses = 0;
 	unsigned int respawnsCompleted = 0;
+
+	// Where the pawn was last tic, for spotting a jump. Distinct from the
+	// stuck clock's lastTile, which only moves when progress is made: this one
+	// moves every tic and exists to notice when the world moved the pawn
+	// rather than the bot.
+	uint16_t     seenTileX = 0;
+	uint16_t     seenTileY = 0;
+	bool         haveSeenTile = false;
+	unsigned int teleports = 0;
+	unsigned int frozenTics = 0;
+	// Plan no transporters until this sequence. Set on arrival, because the
+	// cell a transporter lands you on is usually beside its counterpart and
+	// the cheapest way out of the arrival area is often straight back.
+	uint32_t     portCooldownUntil = 0;
 
 	// Provenance, for the assertions in section 11.6 and for the trace.
 	unsigned int commandsProduced = 0;
@@ -246,6 +270,9 @@ struct Totals
 	unsigned int unstuckEntered = 0;
 	unsigned int respawnPresses = 0;
 	unsigned int respawnsCompleted = 0;
+	unsigned int teleports = 0;
+	unsigned int frozenTics = 0;
+	unsigned int cellsBlocked = 0;
 };
 Totals Tally();
 

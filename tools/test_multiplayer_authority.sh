@@ -94,8 +94,8 @@ play() {   # play NAME ROLE_ARGS...
 	  echo $? > "$work/$name.rc" ) &
 }
 
-compare() {  # compare LABEL HOSTNAME CLIENTNAME
-	label=$1; h=$2; c=$3
+compare() {  # compare LABEL HOSTNAME CLIENTNAME [SLACK_TICS]
+	label=$1; h=$2; c=$3; slack=${4:-0}
 	hslots=$(awk 'NR>1{print $2}' "$work/$h.players" 2>/dev/null | sort -u | tr -d '\n')
 	cslots=$(awk 'NR>1{print $2}' "$work/$c.players" 2>/dev/null | sort -u | tr -d '\n')
 	printf '  ..   slots with a pawn: host %s, client %s\n' \
@@ -103,29 +103,77 @@ compare() {  # compare LABEL HOSTNAME CLIENTNAME
 	check "$label: the client knows about the slot it was told about" \
 		test "$hslots" = "$cslots" -a "$hslots" = "012"
 
+	# The two machines do not have to stop on the same tic. When the end
+	# signal arrives the host may have finalized a few commands the client
+	# never received, and under loss that is a shutdown race rather than a
+	# disagreement. Comparing whole files calls it a desync: this gate failed
+	# two runs in three that way, on a diff that was pure tail truncation with
+	# every shared line identical.
+	#
+	# So compare what both machines actually committed to -- every tic present
+	# on both -- and check the lag as its own question with its own bound. A
+	# genuine desync still fails the first check, and a client that falls
+	# badly behind still fails the second, which comparing whole files could
+	# not distinguish from either.
 	if [ -s "$work/$h.commands" ] && [ -s "$work/$c.commands" ]; then
-		if diff -q "$work/$h.commands" "$work/$c.commands" >/dev/null; then
-			printf '  ok   %s: both machines finalized byte-identical commands\n' "$label"
+		hlast=$(awk 'END{print $1+0}' "$work/$h.commands")
+		clast=$(awk 'END{print $1+0}' "$work/$c.commands")
+		common=$hlast
+		[ "$clast" -lt "$common" ] && common=$clast
+		for f in "$h" "$c"; do
+			awk -v t="$common" '$1+0 <= t' "$work/$f.commands" > "$work/$f.common"
+		done
+		if diff -q "$work/$h.common" "$work/$c.common" >/dev/null; then
+			printf '  ok   %s: both machines finalized byte-identical commands through tic %s\n' \
+				"$label" "$common"
 		else
 			printf '  FAIL %s: the two disagreed about what was pressed\n' "$label"
-			diff "$work/$h.commands" "$work/$c.commands" | head -4 |
+			diff "$work/$h.common" "$work/$c.common" | head -4 |
 				sed 's/^/         /'
 			status=1
 		fi
+		printf '  ..   last tic: host %s, client %s\n' "$hlast" "$clast"
+		check "$label: and neither machine fell far behind the other" \
+			test $((hlast - clast < 0 ? clast - hlast : hlast - clast)) -le 8
 	else
 		printf '  FAIL %s: no command trace\n' "$label"
 		status=1
 	fi
 
-	if cmp -s "$work/$h.checksum" "$work/$c.checksum"; then
-		printf '  ok   %s: and simulated identical worlds\n' "$label"
+	# Same argument for the world: a checksum taken at tic 149 and one taken
+	# at tic 146 are not evidence of anything. Compare them at the last tic
+	# both machines reached.
+	for f in "$h" "$c"; do
+		awk -v t="${common:-0}" '$1=="tic" && $2+0 <= t' "$work/$f.checksum" \
+			> "$work/$f.checksum.common"
+	done
+	if [ -s "$work/$h.checksum.common" ] &&
+		cmp -s "$work/$h.checksum.common" "$work/$c.checksum.common"; then
+		printf '  ok   %s: and simulated identical worlds through that tic\n' "$label"
 	else
 		printf '  FAIL %s: identical commands but different worlds\n' "$label"
+		diff "$work/$h.checksum.common" "$work/$c.checksum.common" 2>/dev/null |
+			head -4 | sed 's/^/         /'
 		status=1
 	fi
 
+	# How close to the full run counts as finishing depends on the link. On a
+	# clean link the answer is every tic, with no allowance: nothing is
+	# interfering, so a match that stops early stopped for a reason worth
+	# failing over. On a lossy one a few tics of shortfall is the loss doing
+	# what loss does, and demanding all 150 makes this gate fail about one run
+	# in three on correct code.
+	#
+	# Two tolerances rather than one loose one, so the clean leg keeps its
+	# teeth.
 	ticsrun=$(grep -c '^tic ' "$work/$h.checksum" 2>/dev/null || true)
-	check "$label: the match ran to the end" test "${ticsrun:-0}" -ge "$tics"
+	floor=$((tics - slack))
+	if [ "$slack" -gt 0 ]; then
+		check "$label: the match ran to the end (>= $floor of $tics)" \
+			test "${ticsrun:-0}" -ge "$floor"
+	else
+		check "$label: the match ran to the end" test "${ticsrun:-0}" -ge "$tics"
+	fi
 }
 
 # ---------------------------------------------------------------------------
@@ -166,7 +214,7 @@ wait "$host_pid" "$client_pid" 2>/dev/null || true
 host_pid=; client_pid=
 kill_pids "${relay_pid:-}"; relay_pid=
 sed -n 's/.*\(dropped [0-9]*\).*/  ..   the link \1/p' "$work/relay.log" | tail -1
-compare impaired ih ic
+compare impaired ih ic 8
 
 # ---------------------------------------------------------------------------
 printf '\nA peer claiming a slot that is not its own\n'

@@ -15,6 +15,8 @@
 #include "wl_def.h"
 #include "wl_play.h"
 #include "wl_state.h"
+#include "gamemap.h"
+#include "id_ca.h"
 
 namespace Perception {
 
@@ -24,6 +26,24 @@ Observation  g_observation[MAXPLAYERS];
 unsigned int g_observers = 0;
 FILE        *g_trace = NULL;
 
+// Noises made during the tic now finishing, read by the next tic's sense
+// update. A tic of latency, which is both harmless -- the reaction delay is
+// twenty times longer -- and correct: a sound made by a command applied this
+// tic cannot be heard by a decision taken before that command ran.
+struct RawSound
+{
+	SoundKind kind;
+	int16_t   sourceSlot;
+	fixed     x, y;
+	const MapZone *zone;
+	int       loudnessTiles;
+};
+enum { MAX_SOUNDS = 64 };
+RawSound     g_pending[MAX_SOUNDS];
+unsigned int g_pendingCount = 0;
+RawSound     g_current[MAX_SOUNDS];
+unsigned int g_currentCount = 0;
+
 // Fold a signed angular difference to 0..180 degrees worth of angle_t.
 angle_t OffAxis(angle_t facing, angle_t toward)
 {
@@ -31,6 +51,40 @@ angle_t OffAxis(angle_t facing, angle_t toward)
 	return diff <= ANGLE_180 ? diff : (angle_t)(0u - diff);
 }
 
+}
+
+const char *SoundName(SoundKind kind)
+{
+	switch(kind)
+	{
+		case SoundKind::Weapon: return "weapon";
+		case SoundKind::Door:   return "door";
+		case SoundKind::Pain:   return "pain";
+		case SoundKind::Death:  return "death";
+		default:                return "?";
+	}
+}
+
+void Emit(SoundKind kind, const AActor *source, int loudnessTiles)
+{
+	if(source == NULL || g_pendingCount >= MAX_SOUNDS)
+		return;
+
+	RawSound &ev = g_pending[g_pendingCount++];
+	ev.kind = kind;
+	ev.x = source->x;
+	ev.y = source->y;
+	ev.zone = source->GetZone();
+	ev.loudnessTiles = loudnessTiles;
+	ev.sourceSlot = -1;
+	for(unsigned int i = 0;i < MAXPLAYERS;++i)
+	{
+		if(players[i].mo == source)
+		{
+			ev.sourceSlot = (int16_t)i;
+			break;
+		}
+	}
 }
 
 const PlayerSighting *Observation::Seen(Session::PlayerSlot slot) const
@@ -49,8 +103,11 @@ void Reset()
 	{
 		g_observation[i] = Observation();
 		g_observation[i].players.Clear();
+		g_observation[i].sounds.Clear();
 	}
 	g_observers = 0;
+	g_pendingCount = 0;
+	g_currentCount = 0;
 }
 
 unsigned int Observers() { return g_observers; }
@@ -79,6 +136,13 @@ void BeginFrame(uint32_t sequence)
 {
 	g_observers = 0;
 
+	// Take the noises made during the tic just finished, and start a fresh
+	// list for the tic about to run.
+	g_currentCount = g_pendingCount;
+	for(unsigned int i = 0;i < g_pendingCount;++i)
+		g_current[i] = g_pending[i];
+	g_pendingCount = 0;
+
 	// Ascending slot order, so that anything downstream which breaks a tie on
 	// "the first one seen" breaks it the same way twice.
 	for(unsigned int slot = 0;slot < MAXPLAYERS;++slot)
@@ -86,6 +150,7 @@ void BeginFrame(uint32_t sequence)
 		Observation &obs = g_observation[slot];
 		obs = Observation();
 		obs.players.Clear();
+		obs.sounds.Clear();
 		obs.sequence = sequence;
 
 		if(!Bot::Active(slot))
@@ -111,6 +176,71 @@ void BeginFrame(uint32_t sequence)
 		obs.self.health = players[slot].health;
 		obs.self.alive = true;
 		++g_observers;
+
+		// Hearing, before vision, so that a sound from somebody already in
+		// view can be attributed and one from a stranger cannot. Iterated in
+		// emission order, which is the order the world made them in.
+		for(unsigned int e = 0;e < g_currentCount;++e)
+		{
+			const RawSound &raw = g_current[e];
+			if(raw.sourceSlot == (int16_t)slot)
+				continue;			// you do not startle yourself
+
+			const int64_t dxt = ((int64_t)raw.x - eye->x)>>TILESHIFT;
+			const int64_t dyt = ((int64_t)raw.y - eye->y)>>TILESHIFT;
+			int64_t a = dxt < 0 ? -dxt : dxt;
+			int64_t b = dyt < 0 ? -dyt : dyt;
+			if(a < b) { const int64_t t = a; a = b; b = t; }
+			const int32_t range = (int32_t)((a*1007 + b*441)>>10);
+			if(range > raw.loudnessTiles)
+				continue;
+
+			// Corridor 7's sound zones, and the doors between them. A floor
+			// word of zero is no zone at all, and nothing can be heard from
+			// there or in it -- which is the map saying "this is outside the
+			// audible world", not an oversight to be worked around.
+			const MapZone *const ear = eye->GetZone();
+			if(raw.zone == NULL || ear == NULL)
+				continue;
+			if(raw.zone != ear && !map->CheckLink(raw.zone, ear, true))
+				continue;
+
+			AudibleEvent heard;
+			heard.kind = raw.kind;
+			heard.heardAt = sequence;
+			// Quantised to a 45-degree sector. A player hears a shot off to
+			// the left; they do not hear a bearing.
+			const angle_t exact = BotNav::BearingTo(eye->x, eye->y, raw.x, raw.y);
+			heard.bearing = (angle_t)((exact / ANGLE_45) * ANGLE_45) +
+				(angle_t)(ANGLE_45/2);
+			// And banded rather than measured: close, nearby, somewhere off.
+			heard.band = range <= 4 ? 0 : (range <= 12 ? 1 : 2);
+			// Whose it was, only if they are already in plain sight.
+			heard.sourceSlot = -1;
+			if(raw.sourceSlot >= 0 && raw.sourceSlot < (int16_t)MAXPLAYERS)
+			{
+				AActor *const who = players[raw.sourceSlot].mo;
+				if(who != NULL && players[raw.sourceSlot].health > 0 &&
+					OffAxis(eye->angle, BotNav::BearingTo(eye->x, eye->y,
+						who->x, who->y)) <= FOV_HALF &&
+					CheckLine(eye, who))
+					heard.sourceSlot = raw.sourceSlot;
+			}
+			obs.sounds.Push(heard);
+
+			if(g_trace != NULL)
+			{
+				// The true range and loudness go in the trace but not in the
+				// observation: a gate needs to check the sound carried no
+				// further than it should have, and the brain needs not to
+				// know the distance to a shooter it cannot see.
+				fprintf(g_trace,
+					"sound %u %u %s band %d bearing %u from %d range %d loud %d\n",
+					sequence, slot, SoundName(raw.kind), heard.band,
+					(unsigned)(heard.bearing/ANGLE_1), heard.sourceSlot,
+					range, raw.loudnessTiles);
+			}
+		}
 
 		for(unsigned int other = 0;other < MAXPLAYERS;++other)
 		{

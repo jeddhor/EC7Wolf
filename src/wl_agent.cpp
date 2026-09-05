@@ -27,6 +27,7 @@
 #include "wl_loadsave.h"
 #include "wl_net.h"
 #include "wl_state.h"
+#include "g_perception.h"
 #include "wl_play.h"
 #include "templates.h"
 
@@ -368,6 +369,13 @@ void player_t::TakeDamage (int points, AActor *attacker)
 		}
 	}
 	NetDPrintf("%s %d points\n", __FUNCTION__, points);
+
+	// Getting hurt is audible, and dying more so. Emitted from the damage
+	// path rather than from wherever the sample is played, so a server with no
+	// sound still produces the event.
+	if(mo != NULL && points > 0)
+		Perception::Emit(health - points <= 0 ? Perception::SoundKind::Death
+			: Perception::SoundKind::Pain, mo, health - points <= 0 ? 20 : 12);
 
 	if (!godmode)
 		mo->health = health -= points;
@@ -1387,7 +1395,12 @@ ACTION_FUNCTION(A_CustomPunch)
 		range = 64;
 
 	if(!(player->ReadyWeapon->weaponFlags & WF_NOALERT))
+	{
 		madenoise = true;
+		// The same fact, with a source, a place and a kind on it. madenoise is
+		// one global boolean: no who, no where, no what, and no history.
+		Perception::Emit(Perception::SoundKind::Weapon, self, 24);
+	}
 
 	// actually fire
 	int dist = 0x7fffffff;
@@ -1481,7 +1494,12 @@ ACTION_FUNCTION(A_GunAttack)
 		self->SetState(self->MeleeState);
 
 	if(!(player->ReadyWeapon->weaponFlags & WF_NOALERT))
+	{
 		madenoise = true;
+		// The same fact, with a source, a place and a kind on it. madenoise is
+		// one global boolean: no who, no where, no what, and no history.
+		Perception::Emit(Perception::SoundKind::Weapon, self, 24);
+	}
 
 	AActor *closest = player->FindTarget();
 	if(!closest)
@@ -1549,7 +1567,12 @@ ACTION_FUNCTION(A_C7GunAttack)
 	if(self->MeleeState)
 		self->SetState(self->MeleeState);
 	if(!(player->ReadyWeapon->weaponFlags & WF_NOALERT))
+	{
 		madenoise = true;
+		// The same fact, with a source, a place and a kind on it. madenoise is
+		// one global boolean: no who, no where, no what, and no history.
+		Perception::Emit(Perception::SoundKind::Weapon, self, 24);
+	}
 
 	// The disintegrator damages every visible target in its broad firing band.
 	// The DOS single-player path passes a fixed 1000-point hit to each target.
@@ -1708,7 +1731,12 @@ ACTION_FUNCTION(A_FireCustomMissile)
 	}
 
 	if(!(player->ReadyWeapon->weaponFlags & WF_NOALERT))
+	{
 		madenoise = true;
+		// The same fact, with a source, a place and a kind on it. madenoise is
+		// one global boolean: no who, no where, no what, and no history.
+		Perception::Emit(Perception::SoundKind::Weapon, self, 24);
+	}
 
 	if(self->MeleeState)
 		self->SetState(self->MeleeState);

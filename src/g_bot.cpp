@@ -453,10 +453,19 @@ public:
 				if(now && !was)
 				{
 					++bot->contactsGained;
+
+					// Seen, not yet known. The decision layer is told when
+					// the reaction delay expires and not before.
+					const unsigned int delay = REACT_BASE +
+						bot->rng[(unsigned int)Stream::Timing].Below(REACT_SPREAD);
+					bot->sightedAt[who] = sequence;
+					bot->noticeAt[who] = sequence + delay;
+					bot->reactionTicsTotal += delay;
+
 					FString detail;
-					detail.Format("slot=%u at=%u,%u range=%d", who,
+					detail.Format("slot=%u at=%u,%u range=%d in=%u", who,
 						bot->lastSeenTileX[who], bot->lastSeenTileY[who],
-						seen->distanceTiles);
+						seen->distanceTiles, delay);
 					TraceEvent(forSlot, "sighted", detail.GetChars());
 				}
 				else if(!now && was)
@@ -469,8 +478,26 @@ public:
 					detail.Format("slot=%u lastseen=%u,%u", who,
 						bot->lastSeenTileX[who], bot->lastSeenTileY[who]);
 					TraceEvent(forSlot, "lost", detail.GetChars());
+					// Losing sight cancels a notice that has not landed. A
+					// glimpse too brief to react to is a glimpse the brain
+					// never gets to act on, which is the point of the delay.
+					bot->noticeAt[who] = 0;
+					bot->knownNow[who] = false;
 				}
 				bot->visibleNow[who] = now;
+
+				// Release. One tic, one transition, so the gate can read the
+				// delay straight off the trace.
+				if(now && !bot->knownNow[who] && bot->noticeAt[who] != 0 &&
+					sequence >= bot->noticeAt[who])
+				{
+					bot->knownNow[who] = true;
+					++bot->contactsNoticed;
+					FString detail;
+					detail.Format("slot=%u after=%u tics", who,
+						sequence - bot->sightedAt[who]);
+					TraceEvent(forSlot, "noticed", detail.GetChars());
+				}
 			}
 		}
 
@@ -983,6 +1010,12 @@ private:
 		// a bot which genuinely wants to cross again is only briefly stopped
 		// from doing so.
 		PORT_COOLDOWN = 210,
+		// Reaction time, in tics, at 70 to the second. A person takes about a
+		// fifth of a second to react to something appearing, so 14 tics, with
+		// a seeded spread on top so that two bots seeing the same thing do not
+		// move on the same tic.
+		REACT_BASE = 14,
+		REACT_SPREAD = 7,
 		// A short shove for a first failure, the full back-up for a second.
 		NUDGE_TICS = 10,
 		// How long a failure stays on the ladder. Longer than a recovery takes
@@ -1090,6 +1123,8 @@ Totals Tally()
 		total.cellsBlocked += g_state[i].cellsBlocked;
 		total.contactsGained += g_state[i].contactsGained;
 		total.contactsLost += g_state[i].contactsLost;
+		total.contactsNoticed += g_state[i].contactsNoticed;
+		total.reactionTicsTotal += g_state[i].reactionTicsTotal;
 	}
 	return total;
 }

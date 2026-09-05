@@ -75,6 +75,40 @@ struct PlayerSighting
 	uint32_t seenAt = 0;
 };
 
+// What kind of thing made a noise. Semantic, and emitted where the gameplay
+// action happens -- never by asking the audio mixer, which a dedicated server
+// does not have and which knows about samples rather than events.
+enum class SoundKind : uint8_t
+{
+	Weapon,
+	Door,
+	Pain,
+	Death,
+	NUM
+};
+
+const char *SoundName(SoundKind kind);
+
+// One noise, as the listening bot received it.
+//
+// Deliberately not a coordinate. Section 13.4: the released observation gives
+// an approximate bearing or region and never an exact unseen position -- a
+// player hears a shot somewhere off to the left, and does not learn the
+// shooter's map reference. The bearing is quantised to a sector and the range
+// to a band for exactly that reason.
+struct AudibleEvent
+{
+	SoundKind kind = SoundKind::Weapon;
+	// Centre of the 45-degree sector the sound came from.
+	angle_t  bearing = 0;
+	// Banded: 0 is close, then further out. Not a measurement.
+	int32_t  band = 0;
+	// Only when the listener can already see who made it. Hearing a gun does
+	// not tell you whose it is.
+	int16_t  sourceSlot = -1;
+	uint32_t heardAt = 0;
+};
+
 // Everything one bot perceived on one update.
 struct Observation
 {
@@ -82,6 +116,7 @@ struct Observation
 	bool     valid = false;
 	OwnState self;
 	TArray<PlayerSighting> players;
+	TArray<AudibleEvent> sounds;
 
 	const PlayerSighting *Seen(Session::PlayerSlot slot) const;
 };
@@ -98,6 +133,13 @@ struct Observation
 // rather than a bug, but the edge of a bot's vision is not a good place to
 // keep one.
 #define FOV_HALF ((angle_t)ANGLE_45)
+
+// Something happened that a person in the room would hear. Called from the
+// gameplay action point, not from the sound code: the two coincide today and
+// there is no reason they must, and a server plays nothing at all.
+//
+// Loudness is in tiles and is a radius, before zones and doors are considered.
+void Emit(SoundKind kind, const AActor *source, int loudnessTiles);
 
 // Build every active bot's observation for this tic, from the world as it
 // stands before any of this tic's commands are applied. Cheap enough to do for

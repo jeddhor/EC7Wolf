@@ -194,6 +194,25 @@ struct State
 	// Kept as values with a tic on them rather than as a live query, because
 	// the difference between "I can see you" and "I saw you a moment ago" is
 	// the whole of what stops a bot tracking somebody through a wall.
+	// When the decision layer is allowed to know about each contact, as
+	// opposed to when the sensor saw it. Section 13.3: detection and action
+	// are separate, and a bot that acts on the tic its eye caught something is
+	// a bot with no reaction time at all.
+	//
+	// Paid on acquisition only. A target held in view keeps updating at the
+	// tracking cadence without buying the delay again, which is how a person
+	// works: noticing costs, following does not.
+	// When the sensor first caught this contact, and when the brain is
+	// allowed to know. Both, because the gap between them is the reaction
+	// time and a gate has to be able to read it off the trace.
+	uint32_t     sightedAt[MAXPLAYERS];
+	uint32_t     noticeAt[MAXPLAYERS];
+	bool         knownNow[MAXPLAYERS];
+	unsigned int contactsNoticed = 0;
+	// Summed release delay, so a gate can check the average rather than only
+	// the bounds.
+	unsigned int reactionTicsTotal = 0;
+
 	uint32_t     lastSeenAt[MAXPLAYERS];
 	uint16_t     lastSeenTileX[MAXPLAYERS];
 	uint16_t     lastSeenTileY[MAXPLAYERS];
@@ -294,6 +313,8 @@ struct Totals
 	unsigned int cellsBlocked = 0;
 	unsigned int contactsGained = 0;
 	unsigned int contactsLost = 0;
+	unsigned int contactsNoticed = 0;
+	unsigned int reactionTicsTotal = 0;
 };
 Totals Tally();
 

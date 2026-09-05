@@ -3097,6 +3097,74 @@ player with exactly the expected timing; adversarial tests find no through-wall,
 hidden-position, or unseen-item leak; renderer and `ConsolePlayer` state have no
 effect on any result.
 
+### B4 record — the sensor boundary (steps 1-2)
+
+**Why a boundary at all.** A brain holding an `AActor*` can see through walls
+without anybody writing a line of code that means it to. So an observation is
+values and stable ids, taken once, and a brain reads that and nothing else.
+Every bot senses the same completed world in `Command::BeginFrame`, before any
+of the tic's commands are applied -- sensing inside each `Produce` would let
+the second bot react to the first one's move within the tic that made it, which
+is both a small unfairness and an ordering dependency between bots that would
+not survive two machines.
+
+Vision is the profile's field of view plus `CheckLine`, the gameplay sight
+check the game's own monsters use. Never a renderer visibility mark and never
+`ConsolePlayer`'s camera: rendering may not run at all on a server, and when it
+does it describes one screen rather than what eight bots can each see.
+
+**The gate re-derives the answer rather than restating it.** It marches every
+sight line itself over the map's solid cells and fails if one passes through a
+wall. With `CheckLine` removed, MAP53's sightings go from 446 to 2607 and 1721
+are flagged; with it, 1508 sightings across three maps and none. Software and
+OpenGL produce byte-identical perception.
+
+Two corrections to that check, both instructive. It first ran at tile
+precision, because the trace rounded positions to tile indices -- so the line
+being checked was not the line the engine tested, and fifteen sightings in four
+hundred came back as leaks that were nothing of the sort. Then one survived: a
+line grazing a wall face for a full tile of travel while never more than 0.08
+of a tile inside it, which is looking along a surface rather than through it.
+The check measures penetration depth now. **A check less precise than the thing
+it checks manufactures failures, and they read exactly like real ones.**
+
+**Detection and action are separate.** A sighting is released to the decision
+layer 14 to 20 tics later -- about a fifth of a second, seeded so two bots
+seeing the same thing do not move on the same tic. Paid on acquisition only: a
+target held in view keeps updating without buying the delay again, because
+noticing costs and following does not. Losing sight cancels an unreleased
+notice, so a glimpse too brief to react to never reaches the brain; that
+happens in the gate's own run, where 7 sightings produce 6 releases.
+
+**Hearing replaces a boolean.** `madenoise` is one global with no source, no
+place, no kind and no history. Semantic events are emitted at the four player
+attack sites and at the damage path, with a source, a position and a sound
+zone, and filtered per bot by distance, by Corridor 7's sound zones and by the
+doors between them.
+
+What the brain receives is deliberately worse than what the sensor knows: a
+bearing quantised to a 45-degree sector, a range as one of three bands, and a
+source slot **only when the listener can already see who made the noise**. The
+true range is in the trace so a gate can bound it, and not in the observation.
+Attributing every sound to its source would leak 93 of 107 sounds to listeners
+who could not see the shooter, which is what the check reports when the rule is
+removed.
+
+**Gates:** `test_bot_perception.sh` covers wall leaks, field of view, reaction
+timing, and hearing; `--percepttest` checks the angle folding and the
+field-of-view edges with no map and no window. Every check proven able to fail:
+LOS removed, FOV widened to 90 degrees, `REACT_BASE` set to 0, and attribution
+unconditional.
+
+Two smaller things worth keeping. The half-FOV is written `ANGLE_45` and not
+`45*ANGLE_1`, which falls 32 units short because `ANGLE_1` is a truncated
+division -- a rounding artifact sitting exactly on the edge of a bot's vision.
+And a distance typed `fixed` while holding whole tiles produced a unit error
+within the hour; the field says `distanceTiles` now.
+
+**Still open in B4:** damage cues, infrared-gated laser perception, static
+pickup memory, and confidence decay with search-and-forget behaviour.
+
 ### B5 — Goals and resource play
 
 **Work:** utility candidates, need and value model, path-cost queries,

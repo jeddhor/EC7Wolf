@@ -73,6 +73,7 @@ run() {  # run MAP TAG RENDERER
 		--config "$work/$2.cfg" --savedir "$work/$2-saves" \
 		--capture-rngseed 1 \
 		--capture-perception "$work/$2.see" \
+		--capture-bots "$work/$2.bots" \
 		--capture-nav "$work/$2.nav" \
 		--capture-maxtics "$tics" \
 		--tedlevel "$1" --skill 2 --battle --bots 3 ) >"$work/$2.log" 2>&1 || true
@@ -181,6 +182,136 @@ print("  ok   %s: every sighting had a clear line and was in view" % mapname)
 PY
 	[ $? -eq 0 ] || status=1
 done
+
+# Reaction time. Section 13.3 separates detection from action: the sensor sees,
+# and the decision layer is told a fifth of a second later. Read straight off
+# the trace, which records the delay it chose when it sighted something and the
+# tic it actually released.
+run MAP53 react software
+python3 - "$work/react.bots" <<'PY'
+import sys, re
+
+sighted, noticed, lost = {}, [], []
+for line in open(sys.argv[1]):
+    f = line.split()
+    if len(f) < 4 or f[0].startswith("#"):
+        continue
+    tic, slot, event = int(f[0]), f[1], f[2]
+    who = re.search(r"slot=(\d+)", line)
+    if not who:
+        continue
+    key = (slot, who.group(1))
+    if event == "sighted":
+        promised = int(re.search(r"in=(\d+)", line).group(1))
+        sighted[key] = (tic, promised)
+    elif event == "noticed":
+        after = int(re.search(r"after=(\d+)", line).group(1))
+        noticed.append((tic, key, after, sighted.get(key)))
+    elif event == "lost":
+        lost.append((tic, key))
+
+problems = []
+if not noticed:
+    problems.append("nothing was ever noticed; the timing was not tested")
+
+for tic, key, after, origin in noticed:
+    if origin is None:
+        problems.append("slot %s noticed %s having never sighted it" % key)
+        break
+    seen_at, promised = origin
+    if after != promised:
+        problems.append("delay was %d tics, not the %d it chose" % (after, promised))
+        break
+    if tic - seen_at != promised:
+        problems.append("released %d tics after sighting, promised %d"
+                        % (tic - seen_at, promised))
+        break
+    # 14 base plus a spread of 7, from g_bot.cpp.
+    if not (14 <= after <= 20):
+        problems.append("delay %d is outside the declared 14-20 tics" % after)
+        break
+
+print("  ..   reaction: %d sightings, %d released, delays %s"
+      % (len(sighted), len(noticed),
+         sorted(set(a for _, _, a, _ in noticed)) if noticed else "none"))
+if problems:
+    for p in problems:
+        print("  FAIL reaction: %s" % p)
+    sys.exit(1)
+print("  ok   reaction: nothing was known before it was seen, or sooner than promised")
+PY
+[ $? -eq 0 ] || status=1
+
+# Hearing. Nothing in a bot match makes a noise yet -- bots have no weapons
+# until B6 -- so the scripted player fires and the bots listen.
+run_fire() {
+	mkdir -p "$work/hear-saves"
+	( cd "$data_dir"
+	  DISPLAY=$display SDL_VIDEODRIVER=x11 SDL_AUDIODRIVER=dummy \
+	  timeout 250 "$build_dir/ec7wolf" --data CO7 --res 320 200 --nowait \
+		--vid-renderer software \
+		--config "$work/hear.cfg" --savedir "$work/hear-saves" \
+		--capture-rngseed 1 --capture-fire 100 \
+		--capture-perception "$work/hear.see" \
+		--capture-maxtics 600 \
+		--tedlevel MAP53 --skill 2 --battle --bots 3 ) >"$work/hear.log" 2>&1 || true
+}
+run_fire
+python3 - "$work/hear.see" <<'PY'
+import sys
+
+sounds, sights = [], set()
+for line in open(sys.argv[1]):
+    f = line.split()
+    if not f or f[0].startswith("#"):
+        continue
+    if f[0] == "sound":
+        # sound tic listener kind band N bearing B from S range R loud L
+        sounds.append(dict(tic=int(f[1]), listener=f[2], kind=f[3],
+                           band=int(f[5]), bearing=int(f[7]),
+                           source=int(f[9]), rng=int(f[11]), loud=int(f[13])))
+    else:
+        sights.add((int(f[0]), f[1], f[4]))
+
+problems = []
+if len(sounds) < 10:
+    problems.append("only %d sounds heard; hearing was not tested" % len(sounds))
+
+# Nothing carries further than its loudness.
+far = [s for s in sounds if s["rng"] > s["loud"]]
+if far:
+    problems.append("%d sounds heard beyond their radius, e.g. %s" % (len(far), far[0]))
+
+# A bearing is a sector, not a direction. Sector centres are 22, 67, 112 ...
+odd = [s for s in sounds if s["bearing"] % 45 != 22]
+if odd:
+    problems.append("%d bearings were not sector centres, e.g. %s"
+                    % (len(odd), odd[0]["bearing"]))
+
+# And a band, not a range: three values and no more.
+bands = set(s["band"] for s in sounds)
+if not bands <= {0, 1, 2}:
+    problems.append("range bands outside 0-2: %s" % sorted(bands))
+
+# The one that matters. A sound is attributed to a slot only when the listener
+# can see that slot at that moment; hearing a gun does not tell you whose.
+named = [s for s in sounds if s["source"] >= 0]
+leaked = [s for s in named
+          if (s["tic"], s["listener"], str(s["source"])) not in sights]
+if leaked:
+    problems.append("%d sounds named a source the listener could not see, e.g. %s"
+                    % (len(leaked), leaked[0]))
+
+print("  ..   hearing: %d sounds, %d named a source, bands %s"
+      % (len(sounds), len(named), sorted(bands)))
+if problems:
+    for p in problems:
+        print("  FAIL hearing: %s" % p)
+    sys.exit(1)
+print("  ok   hearing: heard within earshot, as a sector and a band, "
+      "and named nobody it could not see")
+PY
+[ $? -eq 0 ] || status=1
 
 # The same match, drawn two different ways, and drawn not at all as far as the
 # bots are concerned.

@@ -14,6 +14,7 @@
 #include "m_random.h"
 #include "wl_game.h"
 #include "g_botnav.h"
+#include "g_perception.h"
 #include "actor.h"
 #include "wl_agent.h"
 #include "name.h"
@@ -183,9 +184,15 @@ const fixed ARRIVE_WITHIN = (fixed)(24<<10);
 // working. Generous: a legitimate turn at a corner can take most of a second.
 const unsigned int STUCK_TICS = 105;
 
+}   // anonymous
+
 // The bot's own pawn, and nothing else's. Section 11.4 permits a bot exact
-// knowledge of itself and nothing about anyone else; this is the only place a
-// bot reads the world at all until perception arrives in step five.
+// knowledge of itself and nothing about anyone else.
+//
+// No longer file-private: the sensor layer needs somewhere to look from. It is
+// still the only place a bot's own body is read, and nothing that calls this
+// may hand the pointer on to a brain -- a brain holding an actor can see
+// through walls without anyone writing code that means it to.
 AActor *OwnPawn(Session::PlayerSlot slot)
 {
 	if(slot >= MAXPLAYERS)
@@ -194,6 +201,8 @@ AActor *OwnPawn(Session::PlayerSlot slot)
 		return NULL;
 	return players[slot].mo;
 }
+
+namespace {
 
 // The private state a repeat run has to reproduce. Not the command: that is
 // in the world digest already, by way of the pawn it moves.
@@ -422,6 +431,47 @@ public:
 
 			Record(*bot, sequence, forSlot);
 			return true;
+		}
+
+		// Read what the sensor saw this tic. The brain never looks at the
+		// world; it looks at this.
+		{
+			const Perception::Observation *obs = Perception::For(forSlot);
+			for(unsigned int who = 0;who < MAXPLAYERS;++who)
+			{
+				const Perception::PlayerSighting *seen =
+					obs != NULL ? obs->Seen((Session::PlayerSlot)who) : NULL;
+				const bool was = bot->visibleNow[who];
+				const bool now = seen != NULL;
+
+				if(now)
+				{
+					bot->lastSeenAt[who] = sequence;
+					bot->lastSeenTileX[who] = (uint16_t)(seen->x>>TILESHIFT);
+					bot->lastSeenTileY[who] = (uint16_t)(seen->y>>TILESHIFT);
+				}
+				if(now && !was)
+				{
+					++bot->contactsGained;
+					FString detail;
+					detail.Format("slot=%u at=%u,%u range=%d", who,
+						bot->lastSeenTileX[who], bot->lastSeenTileY[who],
+						seen->distanceTiles);
+					TraceEvent(forSlot, "sighted", detail.GetChars());
+				}
+				else if(!now && was)
+				{
+					// Lost sight. The last known position stays -- that is
+					// memory, and a player keeps it too -- but it stops being
+					// refreshed, which is the part that matters.
+					++bot->contactsLost;
+					FString detail;
+					detail.Format("slot=%u lastseen=%u,%u", who,
+						bot->lastSeenTileX[who], bot->lastSeenTileY[who]);
+					TraceEvent(forSlot, "lost", detail.GetChars());
+				}
+				bot->visibleNow[who] = now;
+			}
 		}
 
 		// The world can move a pawn without the bot asking. A transporter is
@@ -1038,6 +1088,8 @@ Totals Tally()
 		total.teleports += g_state[i].teleports;
 		total.frozenTics += g_state[i].frozenTics;
 		total.cellsBlocked += g_state[i].cellsBlocked;
+		total.contactsGained += g_state[i].contactsGained;
+		total.contactsLost += g_state[i].contactsLost;
 	}
 	return total;
 }

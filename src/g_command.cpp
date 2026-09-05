@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "g_command.h"
+#include "g_perception.h"
 #include "wl_play.h"
 #include "wl_main.h"
 #include "files.h"
@@ -220,6 +221,13 @@ void BeginFrame(uint32_t sequence)
 	g_sequence = sequence;
 	g_inFrame = true;
 	memset(g_installedThisFrame, 0, sizeof(g_installedThisFrame));
+
+	// Everyone senses the same world, here, before a single command for this
+	// tic is applied. Doing it per bot inside its own Produce would let the
+	// second bot react to the first one's move within the tic that made it --
+	// a small unfairness that compounds, and an ordering dependency between
+	// bots that would not survive being run on two machines.
+	Perception::BeginFrame(sequence);
 }
 
 void InstallSampled(Session::PlayerSlot slot, const TicCmd_t &sampled)

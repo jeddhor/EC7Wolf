@@ -18,6 +18,7 @@
 #include "g_session.h"
 #include "g_command.h"
 #include "g_bot.h"
+#include "g_perception.h"
 #include "am_map.h"
 #include "g_traversal.h"
 #include "g_botnav.h"
@@ -261,6 +262,9 @@ namespace
 	// anything a reason to shoot it, and "dies, and respawns through input" is
 	// a B2 exit criterion that cannot be checked without one.
 	bool     g_botOverlayMap  = false;   // --capture-bot-overlay opens the automap
+	// --capture-perception PATH: one line per sighting, so a gate can check
+	// that nothing was perceived which should not have been.
+	FString  g_perceptionPath;
 	int      g_killSlot       = -1;
 	long     g_killTic        = -1;
 	bool     g_killDone       = false;
@@ -565,16 +569,19 @@ namespace
 			const Bot::Totals tally = Bot::Tally();
 			Printf("Capture: bots %u brain=%08x planned=%u arrived=%u "
 				"abandoned=%u refused=%u nogoal=%u doors=%u doorsfailed=%u "
-				"unstuck=%u respawnpresses=%u respawns=%u ports=%u frozen=%u blocked=%u\n",
+				"unstuck=%u respawnpresses=%u respawns=%u ports=%u frozen=%u blocked=%u "
+				"seen=%u lost=%u\n",
 				Bot::Count(), (unsigned int)Bot::BrainDigest(),
 				tally.routesPlanned, tally.routesCompleted,
 				tally.routesAbandoned, tally.stepsRefused,
 				tally.goalSearchFailures, tally.doorsOpened,
 				tally.doorsGivenUp, tally.unstuckEntered,
 				tally.respawnPresses, tally.respawnsCompleted,
-				tally.teleports, tally.frozenTics, tally.cellsBlocked);
+				tally.teleports, tally.frozenTics, tally.cellsBlocked,
+				tally.contactsGained, tally.contactsLost);
 		}
 		Bot::CloseTrace();
+		Perception::CloseTrace();
 	}
 
 	// Set for every argv index this harness consumed -- see ClaimArg in the
@@ -714,6 +721,11 @@ void ParseArgs(int argc, char **argv)
 		else if(strcmp(arg, "--capture-automap") == 0)
 		{
 			g_botOverlayMap = true;
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-perception") == 0 && i + 1 < argc)
+		{
+			g_perceptionPath = argv[++i];
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-bot-overlay") == 0)
@@ -1349,9 +1361,11 @@ static void WriteNavMap(const char *path)
 			MapSpot spot = map->GetSpot(tx, ty, 0);
 			if(spot == NULL || spot->tile == NULL)
 				continue;
-			if(spot->corridor7WallMarker == 0 && spot->maskedWallType == 0 &&
-				spot->corridor7WallID == 0)
-				continue;
+			// Every solid cell, not only the ones with a marker on them. A
+			// gate that wants to check a line of sight for itself needs to
+			// know where the walls are, and "has an interesting wall ID" is
+			// not the same set as "is solid".
+
 			fprintf(out, "wall %u %u marker %u masked %u id %u sight %d\n",
 				tx, ty, (unsigned)spot->corridor7WallMarker,
 				(unsigned)spot->maskedWallType, (unsigned)spot->corridor7WallID,
@@ -1448,6 +1462,8 @@ void OpenTraces()
 		Command::OpenTrace(g_commandTracePath.GetChars());
 	if(!g_botTracePath.IsEmpty())
 		Bot::OpenTrace(g_botTracePath.GetChars());
+	if(!g_perceptionPath.IsEmpty())
+		Perception::OpenTrace(g_perceptionPath.GetChars());
 }
 
 void SetupScriptedSlots(FName (&playerClassNames)[MAXPLAYERS])

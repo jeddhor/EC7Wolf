@@ -9,6 +9,7 @@
 #include "wl_def.h"
 #include "g_session.h"
 #include "g_bot.h"
+#include "g_perception.h"
 #include "wl_menu.h"
 #include "id_ca.h"
 #include "id_sd.h"
@@ -1373,6 +1374,7 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 		else IFARG("--netvectors") { ++i; }
 		else IFARG("--sessiontest") {}
 		else IFARG("--bottest") {}
+		else IFARG("--percepttest") {}
 		else IFARG("--capture-tape") { ++i; }
 		else IFARG("--capture-forge-slot") { ++i; }
 		else IFARG("--capture-commands") { ++i; }
@@ -1593,6 +1595,8 @@ int WL_Main (int argc, char *argv[])
 				return Session::SelfTest();
 			if(strcmp(argv[si], "--bottest") == 0)
 				return Bot::SelfTest();
+			if(strcmp(argv[si], "--percepttest") == 0)
+				return Perception::SelfTest();
 		}
 
 #ifdef ECWOLF_RENDERER_OPENGL

@@ -187,6 +187,20 @@ struct State
 	uint16_t     seenTileX = 0;
 	uint16_t     seenTileY = 0;
 	bool         haveSeenTile = false;
+	// What this bot can see, and what it last saw. Section 13.7's contact
+	// memory in its first form: who was visible on the last sense update, and
+	// when each slot was last actually seen.
+	//
+	// Kept as values with a tic on them rather than as a live query, because
+	// the difference between "I can see you" and "I saw you a moment ago" is
+	// the whole of what stops a bot tracking somebody through a wall.
+	uint32_t     lastSeenAt[MAXPLAYERS];
+	uint16_t     lastSeenTileX[MAXPLAYERS];
+	uint16_t     lastSeenTileY[MAXPLAYERS];
+	bool         visibleNow[MAXPLAYERS];
+	unsigned int contactsGained = 0;
+	unsigned int contactsLost = 0;
+
 	unsigned int teleports = 0;
 	unsigned int frozenTics = 0;
 	// Plan no transporters until this sequence. Set on arrival, because the
@@ -215,6 +229,11 @@ void Reset();
 // machine has, so two runs of the same match produce the same bot.
 void Configure(Session::PlayerSlot slot, uint32_t profile, uint64_t matchSeed);
 bool Active(Session::PlayerSlot slot);
+
+// The pawn a bot is driving, or NULL when it is dead or has not spawned.
+// Exposed for the sensor layer, which needs an eye to look from; nothing that
+// reads this may hand the pointer to a brain.
+AActor *OwnPawn(Session::PlayerSlot slot);
 State *StateFor(Session::PlayerSlot slot);
 unsigned int Count();
 
@@ -273,6 +292,8 @@ struct Totals
 	unsigned int teleports = 0;
 	unsigned int frozenTics = 0;
 	unsigned int cellsBlocked = 0;
+	unsigned int contactsGained = 0;
+	unsigned int contactsLost = 0;
 };
 Totals Tally();
 

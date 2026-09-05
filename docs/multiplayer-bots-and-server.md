@@ -3462,6 +3462,86 @@ tuning; personality biases that do not change skill fairness.
 **Exit:** mine, visor, disintegrator, plasma, hazard, transporter, and door
 tests all pass; no equipment action bypasses normal input or inventory.
 
+### B7 record, part one — equipment a bot has a reason to use
+
+**The visor is a causal chain, not a setting.** A bot cannot see a laser
+barrier without infrared and cannot learn one is there except by walking into
+it, so the trigger for switching is *having been hurt by one*. It then cycles
+`bt_zoom` exactly as a player does -- modes run 1, 2, 3 and wrap, so reaching
+infrared costs two presses -- and burns the same charge, keeping a reserve.
+
+Measured: 8 barriers learned by contact, then 448 seen; 2 zoom presses on the
+map with barriers and **0 on the map without**. A bot with nothing to look for
+leaves the visor alone.
+
+The obvious implementation is impossible, which is worth stating: "turn on
+infrared when near a laser" requires knowing where lasers are, and that is
+precisely the knowledge infrared exists to provide.
+
+**Retreat took four attempts and only one was a bug in the ordinary sense.**
+
+`RetreatOrRecover` was added to the enum, the state was set, the route was
+cleared -- and the behaviour was never added to the dispatch chain, so a
+retreating bot dropped its target and stood perfectly still. Then `RETREAT_NEED`
+went into the producer class where the free-function goal chooser cannot see it,
+which is the identical scope mistake `ITEM_THINK_INTERVAL` made an hour before.
+Then the decision fired but the item scan is rate-limited to once every seventy
+tics, which is fine for "should I fetch a shotgun" and fatal at sixteen percent
+health: both bots died still holding the decision. Then the threshold itself --
+400 reads as "a third of health gone", but damage arrives in ten and twenty
+point pieces, so a bot checked at 40% and found itself at 16%, thirteen tiles
+from the nearest dispenser, and died walking.
+
+Only the first is a defect. The other three worked exactly as written and did
+not do the job.
+
+**Health was there all along, on the walls.** B5 recorded that these arenas
+carry almost no health; they carry plenty, as `C7_Dispenser` triggers -- 16
+health and 34 ammunition on MAP53 alone. Missing them was an annotation gap,
+not a map property, and the B5 record is corrected in place.
+
+A dispenser is furniture rather than a pickup, which changes two rules. Its
+availability is not "is there an actor here" -- looking for one marked every
+dispenser gone the first time a bot glanced at a wall. And a bot may head for
+one it has never seen: section 12.8's "an annotation is not availability" is
+about things that can be *taken away*, and a wall cannot. Treating both the
+same left a bot bleeding to death beside a dispenser it had not happened to
+look at.
+
+*Known gap:* a bot does not track whether a dispenser is drained. The engine
+does, and a player can see it in the wall texture. A bot will walk to an empty
+one and get nothing -- a wasted trip rather than an unfair advantage, which is
+the right direction to err in, but it is a gap.
+
+**An exclusion zone has to let you out of it.**
+
+Three fixes went in before the transporter bounce on MAP56 was understood, and
+the first two were real defects that would be fixed again: a pad should not be
+a roam goal, and should not be a search goal either -- bots get *seen* standing
+on pads, so the place a contact was last seen can be one. Neither was the
+cause.
+
+The cause was the B3 mitigation itself. Avoidance covers a pad and the ring of
+cells around it, because the crossing trigger fires within one movement step of
+the boundary. That is right for a bot approaching from outside and fatal for
+one that has just arrived: it is standing at the centre of the exclusion zone,
+every first step is forbidden, the restricted search returns nothing, and the
+last-resort fallback drops the restriction and routes it straight back over the
+pad. **The avoidance was producing the bounce it existed to prevent.**
+
+The fix is one clause -- the first step away from where the bot is standing is
+always allowed -- and it removed the stall as well as the bounce: stuck events
+on MAP56 went from 2 to 0. The two symptoms were one bug, and I had been
+treating them as separate.
+
+This generalises. Any hard exclusion zone acquires this bug for an agent
+already inside it. Hazard cost does not have it today only because it is a
+preference of +200 rather than a prohibition, so a route out always exists at
+some price; if that ever becomes a filter, it will need the same clause.
+
+**Still open in B7:** mines and self-risk, door combat behaviour, per-weapon
+tuning carried over from B6, and personality biases.
+
 ### B8 — Humanization and skill calibration
 
 **Work:** the four profile mappings and fairness clamps; calibration of

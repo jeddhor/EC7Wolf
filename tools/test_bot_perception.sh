@@ -345,16 +345,28 @@ laser() {  # laser TAG [EXTRA...]
 laser blind
 laser lit --capture-visor-all 3
 
-blind_seen=$(awk '$1=="hazard" && $NF=="seen"' "$work/blind.see" 2>/dev/null | wc -l)
-lit_seen=$(awk '$1=="hazard" && $NF=="seen"' "$work/lit.see" 2>/dev/null | wc -l)
+blind_seen=$(awk '$1=="hazard" && $6=="seen"' "$work/blind.see" 2>/dev/null | wc -l)
+lit_seen=$(awk '$1=="hazard" && $6=="seen"' "$work/lit.see" 2>/dev/null | wc -l)
 printf '  ..   lasers: %s seen without the visor, %s with it\n' "$blind_seen" "$lit_seen"
 
 check "the map has barriers, so this tests something" test "${lit_seen:-0}" -ge 20
-check "a bot without infrared cannot see a laser barrier" test "${blind_seen:-0}" -eq 0
+
+# The rule, checked per observation rather than per run.
+#
+# "A bot with no visor sees no barriers" was a run-level claim and it expired
+# the moment bots could turn the visor up themselves: a bot that walks into a
+# barrier, works out it needs infrared and switches to it then sees them
+# perfectly legitimately, and the run-level check called that a leak. What
+# holds regardless of who is wearing what is that no single sighting ever
+# happens outside infrared.
+offmode=$(cat "$work/blind.see" "$work/lit.see" 2>/dev/null |
+	awk '$1=="hazard" && $6=="seen" && $8!=3' | wc -l)
+printf '  ..   lasers: %s sightings made outside infrared\n' "$offmode"
+check "no barrier is ever seen except in infrared" test "${offmode:-1}" -eq 0
 
 # And the honest way to find one in the dark: walk into it. Driven at a tile
 # the lit run reported a barrier on, with no visor.
-target=$(awk '$1=="hazard" && $NF=="seen"{print $4" "$5; exit}' "$work/lit.see")
+target=$(awk '$1=="hazard" && $6=="seen"{print $4" "$5; exit}' "$work/lit.see")
 if [ -n "$target" ]; then
 	tx=${target% *}; ty=${target#* }
 	mkdir -p "$work/bump-saves"
@@ -367,14 +379,39 @@ if [ -n "$target" ]; then
 		--capture-perception "$work/bump.see" \
 		--capture-maxtics 900 \
 		--tedlevel MAP51 --skill 2 --battle --bots 1 ) >"$work/bump.log" 2>&1 || true
-	bumped=$(awk '$1=="hazard" && $NF=="contact"' "$work/bump.see" 2>/dev/null | wc -l)
-	blind_still=$(awk '$1=="hazard" && $NF=="seen"' "$work/bump.see" 2>/dev/null | wc -l)
+	bumped=$(awk '$1=="hazard" && $6=="contact"' "$work/bump.see" 2>/dev/null | wc -l)
+	blind_still=$(awk '$1=="hazard" && $6=="seen"' "$work/bump.see" 2>/dev/null | wc -l)
 	printf '  ..   lasers: walked at (%s,%s) with no visor -- %s by contact, %s seen\n' \
 		"$tx" "$ty" "$bumped" "$blind_still"
 	check "walking into one in the dark is still a way to learn about it" \
 		test "${bumped:-0}" -ge 1
-	check "and it is the only way, with the visor off" test "${blind_still:-0}" -eq 0
+	bumpoff=$(awk '$1=="hazard" && $6=="seen" && $8!=3' "$work/bump.see" | wc -l)
+	check "and nothing was seen while the visor was off" test "${bumpoff:-1}" -eq 0
+
+	# And then it does something about it. Section 16.7: the visor mode is
+	# chosen from what is worth seeing, and reached by pressing the same zoom
+	# button a player presses, burning the same charge.
+	#
+	# The causal chain is the check: bump into a barrier, learn one exists,
+	# turn the visor up, start seeing them. A bot that had the visor on from
+	# the start would show sightings with no contact before them, and a bot
+	# that never turned it on would show contact and nothing after.
+	pulses=$(sed -n 's/.*Capture: bots .*visor=\([0-9]*\).*/\1/p' "$work/bump.log" | tail -1)
+	after=$(awk -v t="$(awk '$1=="hazard" && $6=="contact"{print $2; exit}' "$work/bump.see")" \
+		'$1=="hazard" && $6=="seen" && $2 > t' "$work/bump.see" | wc -l)
+	printf '  ..   lasers: %s zoom presses, %s barriers seen after the first contact\n' \
+		"${pulses:-0}" "$after"
+	check "it turned the visor up after learning it needed one" \
+		test "${pulses:-0}" -ge 1
+	check "and could then see what it could not see before" test "${after:-0}" -ge 1
 fi
+
+# The control: a map with no barriers gives no reason to spend the charge.
+run MAP53 novisor software
+novisor=$(sed -n 's/.*Capture: bots .*visor=\([0-9]*\).*/\1/p' "$work/novisor.log" | tail -1)
+printf '  ..   lasers: %s zoom presses on a map with no barriers\n' "${novisor:-0}"
+check "a bot with nothing to look for leaves the visor alone" \
+	test "${novisor:-0}" -eq 0
 
 # Item beliefs. Section 12.8: where a pickup spawns is map knowledge a player
 # builds by playing an arena, and whether it is there right now is not. So a

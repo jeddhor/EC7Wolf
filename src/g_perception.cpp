@@ -58,6 +58,16 @@ TArray<HazardKnowledge> g_hazards[MAXPLAYERS];
 // Does this player have the infrared visor running? Read from that player's
 // own inventory -- never from ConsolePlayer's camera, which is what the
 // renderer uses and which describes one screen rather than eight bots.
+// What visor mode this player is in: 1 normal, 2 night vision, 3 infrared.
+int VisorMode(unsigned int slot)
+{
+	if(slot >= MAXPLAYERS || players[slot].mo == NULL)
+		return 0;
+	AInventory *const mode =
+		players[slot].mo->FindInventory(ClassDef::FindClass("C7VisorMode"));
+	return mode != NULL ? (int)mode->amount : 0;
+}
+
 bool HasInfrared(unsigned int slot)
 {
 	if(slot >= MAXPLAYERS || players[slot].mo == NULL)
@@ -396,8 +406,19 @@ void BeginFrame(uint32_t sequence)
 				continue;
 
 			// In view. Is one actually there?
-			bool present = false;
-			for(AActor::Iterator iter = AActor::GetIterator();iter.Next();)
+			//
+			// A wall dispenser is furniture rather than a pickup: there is no
+			// actor to find, and looking for one would mark every dispenser on
+			// the map as gone the first time a bot glanced at it. It is
+			// present because it is a wall and the wall is still there.
+			//
+			// What this does not model is a dispenser that has been drained.
+			// The engine tracks that and a player can see it in the wall's
+			// texture; a bot will walk to an empty one and get nothing, which
+			// is a wasted trip rather than an unfair advantage.
+			bool present = note.dispenser;
+			for(AActor::Iterator iter = AActor::GetIterator();
+				!note.dispenser && iter.Next();)
 			{
 				AActor *const thing = iter;
 				if((unsigned)thing->tilex != note.tileX ||
@@ -461,8 +482,9 @@ void BeginFrame(uint32_t sequence)
 				Remember(slot, seen.tileX, seen.tileY, false, sequence);
 
 				if(g_trace != NULL)
-					fprintf(g_trace, "hazard %u %u %d %d seen\n",
-						sequence, slot, thing->tilex, thing->tiley);
+					fprintf(g_trace, "hazard %u %u %d %d seen visor %d\n",
+						sequence, slot, thing->tilex, thing->tiley,
+						VisorMode(slot));
 			}
 		}
 

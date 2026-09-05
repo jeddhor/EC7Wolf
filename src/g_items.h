@@ -57,6 +57,10 @@ struct Annotation
 	uint16_t tileY = 0;
 	FName    cls = NAME_None;
 	Category category = Category::Other;
+	// A wall dispenser rather than something lying on the floor. Used by
+	// standing next to it and pressing use, not by walking over it, so a bot
+	// heading for one wants an adjacent cell and not the tile itself.
+	bool     dispenser = false;
 };
 
 // What one bot currently thinks about one annotation.

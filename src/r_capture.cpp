@@ -20,6 +20,7 @@
 #include "g_bot.h"
 #include "g_perception.h"
 #include "g_items.h"
+#include "lnspec.h"
 #include "am_map.h"
 #include "g_traversal.h"
 #include "g_botnav.h"
@@ -572,7 +573,8 @@ namespace
 			Printf("Capture: bots %u brain=%08x planned=%u arrived=%u "
 				"abandoned=%u refused=%u nogoal=%u doors=%u doorsfailed=%u "
 				"unstuck=%u respawnpresses=%u respawns=%u ports=%u frozen=%u blocked=%u "
-				"seen=%u lost=%u targets=%u shots=%u oncone=%u guns=%u\n",
+				"seen=%u lost=%u targets=%u shots=%u oncone=%u guns=%u "
+				"visor=%u retreats=%u dispensers=%u\n",
 				Bot::Count(), (unsigned int)Bot::BrainDigest(),
 				tally.routesPlanned, tally.routesCompleted,
 				tally.routesAbandoned, tally.stepsRefused,
@@ -582,7 +584,8 @@ namespace
 				tally.teleports, tally.frozenTics, tally.cellsBlocked,
 				tally.contactsGained, tally.contactsLost,
 				tally.targetsAcquired, tally.shotsFired, tally.ticsOnTarget,
-				tally.weaponSwitches);
+				tally.weaponSwitches, tally.visorPulses, tally.retreats,
+				tally.healUses);
 		}
 		// What each bot ended up carrying. The outcome of B5's item goals, and
 		// the only visible one: weapon-stay means the pickup is still lying
@@ -1395,6 +1398,29 @@ static void WriteNavMap(const char *path)
 			continue;
 		fprintf(out, "item %d %d %s\n", thing->tilex, thing->tiley,
 			thing->GetClass()->GetName().GetChars());
+	}
+
+	// Wall dispensers, dumped alongside the pickups so a gate reading this
+	// file sees the same set of resource locations the bot annotates. They are
+	// C7_Dispenser triggers rather than actors -- args[0] of 1 for health, 2
+	// for ammunition -- which is why the loop above misses them.
+	for(unsigned int ty = 0;ty < map->GetHeader().height;++ty)
+	{
+		for(unsigned int tx = 0;tx < map->GetHeader().width;++tx)
+		{
+			MapSpot spot = map->GetSpot(tx, ty, 0);
+			if(spot == NULL || spot->tile == NULL)
+				continue;
+			for(unsigned int t = 0;t < spot->triggers.Size();++t)
+			{
+				const MapTrigger &trig = spot->triggers[t];
+				if(trig.action != Specials::C7_Dispenser || !trig.playerUse)
+					continue;
+				fprintf(out, "item %u %u %s\n", tx, ty,
+					trig.arg[0] == 1 ? "dispenser-health" : "dispenser-ammo");
+				break;
+			}
+		}
 	}
 
 	// Solid cells that are something other than plain wall: Corridor 7's wall

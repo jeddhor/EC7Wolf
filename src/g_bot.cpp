@@ -16,6 +16,8 @@
 #include "g_botnav.h"
 #include "g_perception.h"
 #include "g_items.h"
+#include "thingdef/thingdef.h"
+#include "a_inventory.h"
 #include "actor.h"
 #include "wl_agent.h"
 #include "name.h"
@@ -190,6 +192,20 @@ const unsigned int STUCK_TICS = 105;
 // indecisive, and this is the cheapest half of the answer.
 const uint32_t ITEM_THINK_INTERVAL = 70;
 
+// Health need at which a bot stops fighting and goes to fix it. The need curve
+// is quadratic, so 400 is roughly a third of health gone.
+//
+// At namespace scope because both the producer and the goal chooser ask it,
+// and the goal chooser is a free function: the same scope trap that caught
+// ITEM_THINK_INTERVAL an hour earlier.
+// Set at 250, which is half health, and deliberately not lower-sounding than
+// it reads: the curve is quadratic, so 400 is a third of health left and by
+// the time a bot notices it is usually well past that -- combat damage arrives
+// in ten and twenty point pieces, so a bot checked at 40% and found itself at
+// 16%. At that point the nearest dispenser is thirteen tiles away and it dies
+// on the way, which is a retreat in name only.
+const int RETREAT_NEED = 250;
+
 }   // anonymous
 
 // The bot's own pawn, and nothing else's. Section 11.4 permits a bot exact
@@ -252,6 +268,26 @@ bool ChooseRoamGoal(State &bot, const BotNav::Graph &graph, AActor *pawn,
 	options.blocked = &bot.blocked;
 	options.now = sequence;
 
+	// A transporter is never a destination.
+	//
+	// Walking onto one is the whole interaction: the bot arrives somewhere
+	// else and the route it was following is void. Stated here rather than at
+	// each site because the first version of this rule was applied only to
+	// randomly chosen roam goals, and the very next match produced the same
+	// stall from the *search* goal instead -- a bot had been seen standing on
+	// a pad, so the place it was last seen was a pad, so that is where the
+	// searcher went.
+	//
+	// The forced goal stays exempt: naming a pad is how the per-pad coverage
+	// test drives one.
+	struct Destination
+	{
+		static bool Usable(const BotNav::Graph &g, BotNav::NodeId id)
+		{
+			return id != BotNav::NO_NODE && !g.NodeOf(id).isTransporter;
+		}
+	};
+
 	// Somewhere a contact was last seen, if this bot is looking for one. The
 	// route is planned like any other and walked by the ordinary follower: a
 	// bot searching is a bot walking to a place it has a reason to walk to,
@@ -266,7 +302,7 @@ bool ChooseRoamGoal(State &bot, const BotNav::Graph &graph, AActor *pawn,
 		const BotNav::NodeId target =
 			graph.NodeAt(bot.lastSeenTileX[who], bot.lastSeenTileY[who]);
 		bot.searchingFor = MAXPLAYERS;		// one attempt, then ordinary roaming
-		if(target != BotNav::NO_NODE && target != here)
+		if(Destination::Usable(graph, target) && target != here)
 		{
 			BotNav::SearchStats stats;
 			if(graph.FindPath(here, target, bot.route, stats, 0, &options))
@@ -312,6 +348,14 @@ bool ChooseRoamGoal(State &bot, const BotNav::Graph &graph, AActor *pawn,
 		// text, which explains nothing to anybody.
 		unsigned int rejected[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
+		// A bot that broke off a fight because it is bleeding wants health,
+		// not the nearest useful thing. Without this it walks to whichever
+		// dispenser scores highest -- and on MAP53, where ammunition
+		// dispensers outnumber health ones two to one, that is usually
+		// ammunition. Correct arithmetic, wrong answer: it is about to die.
+		const bool wantsHealth =
+			Items::Need(bot.slot, Items::Category::Health) >= RETREAT_NEED;
+
 		for(unsigned int i = 0;i < Items::Count();++i)
 		{
 			const Items::Annotation &note = Items::At(i);
@@ -319,10 +363,28 @@ bool ChooseRoamGoal(State &bot, const BotNav::Graph &graph, AActor *pawn,
 			Items::Reject why = Items::Reject::None;
 			int need = 0, cost = 0, utility = 0;
 
-			if(known == NULL || known->belief != Items::Belief::Present)
+			if(wantsHealth && note.category != Items::Category::Health)
 			{
-				// Unknown is not absent -- but it is not a reason to walk
-				// somewhere either. A bot goes for what it has seen.
+				++rejected[(unsigned int)Items::Reject::NoNeed];
+				continue;
+			}
+
+			// A pickup has to have been seen; a wall dispenser does not.
+			//
+			// Section 12.8's rule is that a spawn annotation is not current
+			// availability, and it is about things that can be taken away: the
+			// shotgun somebody else already collected is not there any more.
+			// A dispenser is a wall. It does not move, it cannot be carried
+			// off, and a player who has walked this arena once knows where the
+			// health is without having to look at it again.
+			//
+			// Treating both the same left a bot bleeding to death beside a
+			// health dispenser it had never happened to glance at.
+			const bool believable = known != NULL &&
+				(known->belief == Items::Belief::Present ||
+					(note.dispenser && known->belief != Items::Belief::Gone));
+			if(!believable)
+			{
 				why = known != NULL && known->belief == Items::Belief::Unknown
 					? Items::Reject::Stale : Items::Reject::NotPresent;
 			}
@@ -338,10 +400,34 @@ bool ChooseRoamGoal(State &bot, const BotNav::Graph &graph, AActor *pawn,
 				}
 				else
 				{
-					const BotNav::NodeId to = graph.NodeAt(note.tileX, note.tileY);
+					// A dispenser is a wall: the bot goes to a cell beside it
+					// and presses use, so the routing target is a neighbour
+					// rather than the tile itself.
+					BotNav::NodeId to = BotNav::NO_NODE;
+					if(note.dispenser)
+					{
+						static const int ax[4] = { 1, 0, -1, 0 };
+						static const int ay[4] = { 0, -1, 0, 1 };
+						for(unsigned int d = 0;d < 4;++d)
+						{
+							const int nx = (int)note.tileX + ax[d];
+							const int ny = (int)note.tileY + ay[d];
+							if(nx < 0 || ny < 0)
+								continue;
+							const BotNav::NodeId beside =
+								graph.NodeAt((unsigned)nx, (unsigned)ny);
+							if(beside != BotNav::NO_NODE)
+							{
+								to = beside;
+								break;
+							}
+						}
+					}
+					else
+						to = graph.NodeAt(note.tileX, note.tileY);
 					TArray<BotNav::NodeId> route;
 					BotNav::SearchStats stats;
-					if(to == BotNav::NO_NODE || to == here ||
+					if(!Destination::Usable(graph, to) || to == here ||
 						!graph.FindPath(here, to, route, stats, 0, &options))
 						why = Items::Reject::Unreachable;
 					else
@@ -400,9 +486,17 @@ bool ChooseRoamGoal(State &bot, const BotNav::Graph &graph, AActor *pawn,
 			bot.waypoint = 0;
 			++bot.routesPlanned;
 			++bot.itemGoals;
+			// Remember a dispenser so the follower knows to use it on arrival
+			// rather than just standing next to a wall.
+			bot.healing = won.dispenser;
+			bot.healTileX = won.tileX;
+			bot.healTileY = won.tileY;
+			bot.healUses = 0;
+
 			FString detail;
-			detail.Format("item %s at=%u,%u utility=%d len=%u",
-				Items::CategoryName(won.category), won.tileX, won.tileY,
+			detail.Format("item %s%s at=%u,%u utility=%d len=%u",
+				Items::CategoryName(won.category),
+				won.dispenser ? " dispenser" : "", won.tileX, won.tileY,
 				bestUtility, bot.route.Size());
 			TraceEvent(bot.slot, "route", detail.GetChars());
 			return true;
@@ -478,6 +572,19 @@ bool ChooseRoamGoal(State &bot, const BotNav::Graph &graph, AActor *pawn,
 		const BotNav::NodeId candidate =
 			(BotNav::NodeId)bot.Draw(Stream::GoalTieBreak).Below(graph.NodeCount());
 		if(candidate == here)
+			continue;
+
+		// A transporter is not a destination. Walking onto one is the whole
+		// interaction: the bot arrives somewhere else, the route it was
+		// following is void, and to an observer it has bounced.
+		//
+		// The search already refuses to route *through* a pad while a cooldown
+		// runs, with the goal exempt so that a named goal can still be a pad
+		// for testing. That exemption is what let a roam goal land on one --
+		// a bot stood on MAP56's western pad with the eastern pad as its
+		// destination, could not make progress for a hundred tics, and was
+		// thrown back the moment its unstuck nudge put it over the edge.
+		if(!Destination::Usable(graph, candidate))
 			continue;
 
 		const BotNav::Node &there = graph.NodeOf(candidate);
@@ -777,7 +884,43 @@ public:
 			}
 		}
 
+		// The visor, before anything else: it costs a button a person also
+		// presses, and it changes what the next sense update can see.
+		MindTheVisor(*bot, pawn, sequence, out);
+
+		// Badly hurt is a reason to stop fighting.
+		//
+		// Decided on this bot's own health and nothing about anybody else's:
+		// section 14.4 forbids using an enemy's unseen condition to decide a
+		// fight is winnable, and the same rule read the other way forbids
+		// using it to decide the fight is lost.
+		const int hurt = Items::Need(forSlot, Items::Category::Health);
+		if(hurt >= RETREAT_NEED)
+		{
+			if(bot->target != MAXPLAYERS)
+			{
+				++bot->retreats;
+				FString detail;
+				detail.Format("hurt=%d dropping slot=%u", hurt, bot->target);
+				TraceEvent(forSlot, "retreat", detail.GetChars());
+				bot->target = MAXPLAYERS;
+				// Drop the route too: it was chosen by a bot that was not in
+				// trouble, and the item scan below will now be dominated by a
+				// health need that has grown enormous.
+				bot->route.Clear();
+				bot->goal = BotNav::NO_NODE;
+				// And decide where to go *now*. The item scan normally runs
+				// at most every seventy tics, which is fine for wondering
+				// whether to fetch a shotgun and fatal at sixteen percent
+				// health: the first two retreats in a match both died waiting
+				// for the next scheduled think.
+				bot->nextItemThink = 0;
+				bot->behavior = Behavior::RetreatOrRecover;
+				bot->behaviorSince = sequence;
+			}
+		}
 		// Somebody to shoot at takes precedence over somewhere to go.
+		else
 		ChooseTarget(*bot, pawn, sequence);
 		if(bot->target != MAXPLAYERS)
 		{
@@ -791,6 +934,33 @@ public:
 			Record(*bot, sequence, forSlot);
 			return true;
 		}
+		// Standing next to the dispenser it walked to: face it and press use,
+		// exactly as a player does. The engine decides whether anything comes
+		// out, including refusing an empty one.
+		if(bot->healing && pawn != NULL)
+		{
+			const int dx = (int)bot->healTileX - pawn->tilex;
+			const int dy = (int)bot->healTileY - pawn->tiley;
+			if(abs(dx) + abs(dy) <= 1)
+			{
+				const fixed hx = (fixed)(bot->healTileX<<TILESHIFT) + (1<<(TILESHIFT-1));
+				const fixed hy = (fixed)(bot->healTileY<<TILESHIFT) + (1<<(TILESHIFT-1));
+				const uint32_t off = FaceToward(pawn, hx, hy, out);
+				out.forward = 0;
+				bot->wasAskedToMove = false;
+				if(off <= (uint32_t)ANGLE_45/3 && sequence >= bot->nextHealUse)
+				{
+					out.press[bt_use] = true;
+					++bot->healUses;
+					bot->nextHealUse = sequence + 21;
+					if(bot->healUses > 6 || hurt < RETREAT_NEED/2)
+						bot->healing = false;	// fixed, or it is not working
+				}
+				Record(*bot, sequence, forSlot);
+				return true;
+			}
+		}
+
 		if(bot->behavior == Behavior::EngageEnemy)
 		{
 			// Lost them. Back to whatever it was doing, which the contact
@@ -804,8 +974,19 @@ public:
 			Unstuck(*bot, pawn, sequence, out);
 		else if(bot->behavior == Behavior::UseTraversal)
 			WorkDoor(*bot, pawn, sequence, out);
-		else if(bot->behavior == Behavior::Roam)
+		else if(bot->behavior == Behavior::Roam ||
+			bot->behavior == Behavior::RetreatOrRecover)
+		{
+			// Retreating is walking somewhere, so it walks the same way. The
+			// difference is in what the goal chooser will pick while the bot
+			// is hurt, not in how it gets there.
+			//
+			// Adding a behaviour without adding it here is a bot that stands
+			// perfectly still: the first version of the retreat set the state,
+			// cleared the route, and then fell through every branch of this
+			// chain doing nothing at all.
 			Steer(*bot, pawn, sequence, out);
+		}
 
 		Record(*bot, sequence, forSlot);
 		return true;
@@ -1001,6 +1182,51 @@ private:
 		// into it, not a run at it.
 		out.forward = BASEMOVE;
 		bot.wasAskedToMove = true;
+	}
+
+	// How much of something this bot is carrying, or -1 if it has none.
+	static int Carrying(Session::PlayerSlot slot, const char *className)
+	{
+		if(slot >= MAXPLAYERS || players[slot].mo == NULL)
+			return -1;
+		const ClassDef *cls = ClassDef::FindClass(className);
+		if(cls == NULL)
+			return -1;
+		AInventory *const held = players[slot].mo->FindInventory(cls);
+		return held != NULL ? (int)held->amount : -1;
+	}
+
+	// Turn the visor up when there is something only it can show, and down
+	// when there is not.
+	//
+	// Cycled with bt_zoom exactly as a player cycles it: modes run 1, 2, 3 and
+	// wrap, so reaching infrared from normal costs two presses and every tic
+	// above mode 1 costs charge. Nothing here sets the mode directly.
+	static void MindTheVisor(State &bot, AActor *pawn, uint32_t sequence,
+		Command::Intent &out)
+	{
+		const int mode = Carrying(bot.slot, "C7VisorMode");
+		const int charge = Carrying(bot.slot, "C7VisorCharge");
+		if(mode < 0 || charge < 0)
+			return;
+
+		// Worth it if this bot has learned about a barrier the hard way and
+		// still has charge to spare. It cannot see them any other way, and
+		// walking into another costs ten points.
+		const TArray<Perception::HazardKnowledge> *known =
+			Perception::HazardsKnownTo(bot.slot);
+		const bool wantsInfrared = known != NULL && known->Size() > 0 &&
+			charge > VISOR_CHARGE_FLOOR;
+
+		bot.visorWant = wantsInfrared ? 3 : 1;
+		if((unsigned int)mode == bot.visorWant)
+			return;
+		if(sequence < bot.nextVisorPulse)
+			return;
+
+		out.press[bt_zoom] = true;
+		++bot.visorPulses;
+		bot.nextVisorPulse = sequence + VISOR_PULSE_INTERVAL;
 	}
 
 	// Pick somebody to shoot at, and keep picking them.
@@ -1471,6 +1697,11 @@ private:
 		// The range a bot tries to hold, in tiles. Close enough to hit, far
 		// enough not to be walked over.
 		PREFER_RANGE = 8,
+		// Charge to keep in reserve, and how often the zoom may be pressed.
+		// The cycle wraps 1-2-3, so a mistimed second press lands on the wrong
+		// mode and the next one has to go all the way round again.
+		VISOR_CHARGE_FLOOR = 15,
+		VISOR_PULSE_INTERVAL = 14,
 		TRIGGER_INTERVAL = 12,
 		TRIGGER_JITTER = 10,
 		REACT_BASE = 14,
@@ -1593,6 +1824,9 @@ Totals Tally()
 		total.targetsAcquired += g_state[i].targetsAcquired;
 		total.shotsFired += g_state[i].shotsFired;
 		total.weaponSwitches += g_state[i].weaponSwitches;
+		total.visorPulses += g_state[i].visorPulses;
+		total.retreats += g_state[i].retreats;
+		total.healUses += g_state[i].healUses;
 		total.ticsOnTarget += g_state[i].ticsOnTarget;
 		total.reactionTicsTotal += g_state[i].reactionTicsTotal;
 	}

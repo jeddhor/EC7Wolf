@@ -10,6 +10,9 @@
 #include "thingdef/thingdef.h"
 #include "wl_def.h"
 #include "wl_play.h"
+#include "lnspec.h"
+#include "id_ca.h"
+#include "gamemap.h"
 #include "wl_agent.h"
 
 namespace Items {
@@ -100,6 +103,41 @@ void Annotate()
 		note.cls = thing->GetClass()->GetName();
 		note.category = Classify(thing);
 		g_annotations.Push(note);
+	}
+
+	// Wall dispensers, which are where health in these arenas actually comes
+	// from. Not pickup actors: a C7_Dispenser trigger on a wall tile, used by
+	// pressing use while facing it, with args[0] of 1 for health and 2 for
+	// ammunition.
+	//
+	// Missing these is why B5 recorded "these arenas carry almost no health".
+	// They carry plenty; it is on the walls.
+	if(map != NULL)
+	{
+		for(unsigned int ty = 0;ty < map->GetHeader().height;++ty)
+		{
+			for(unsigned int tx = 0;tx < map->GetHeader().width;++tx)
+			{
+				MapSpot spot = map->GetSpot(tx, ty, 0);
+				if(spot == NULL || spot->tile == NULL)
+					continue;
+				for(unsigned int t = 0;t < spot->triggers.Size();++t)
+				{
+					const MapTrigger &trig = spot->triggers[t];
+					if(trig.action != Specials::C7_Dispenser || !trig.playerUse)
+						continue;
+					Annotation note;
+					note.tileX = (uint16_t)tx;
+					note.tileY = (uint16_t)ty;
+					note.cls = NAME_None;
+					note.category = trig.arg[0] == 1 ? Category::Health
+						: Category::Ammo;
+					note.dispenser = true;
+					g_annotations.Push(note);
+					break;
+				}
+			}
+		}
 	}
 
 	for(unsigned int i = 0;i < MAXPLAYERS;++i)

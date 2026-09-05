@@ -102,7 +102,17 @@ run() {  # run SEED TAG
 
 field() { sed -n "s/.*Capture: bots .*$2=\([0-9a-f]*\).*/\1/p" "$work/$1.log" | tail -1; }
 
-for seed in 1 5; do
+# Equipment behaviour is counted across the seeds rather than demanded of
+# each. A bot only retreats if something hurts it badly enough, and only
+# reaches the dispenser if it survives the walk -- on seed 1 both bots retreat,
+# route to health, and die on the way, which is a realistic outcome and not a
+# fault. What must be true is that the behaviour happens, not that it happens
+# every time.
+retreats_total=0
+dispensers_total=0
+healthgoals_total=0
+
+for seed in 1 5 9; do
 	tag="s$seed"
 	run "$seed" "$tag"
 	if [ ! -s "$work/$tag.bots" ]; then
@@ -123,6 +133,14 @@ for seed in 1 5; do
 		"$seed" "${targets:-?}" "${shots:-?}" "$accuracy" "$frags" "$deaths"
 
 	guns=$(field "$tag" guns)
+	retreats=$(field "$tag" retreats)
+	dispensers=$(field "$tag" dispensers)
+	healthgoals=$(grep -c 'route item health dispenser' "$work/$tag.bots" || true)
+	retreats_total=$((retreats_total + ${retreats:-0}))
+	dispensers_total=$((dispensers_total + ${dispensers:-0}))
+	healthgoals_total=$((healthgoals_total + ${healthgoals:-0}))
+	printf '  ..   seed %s: %s retreats, %s health goals, %s dispenser uses\n' \
+		"$seed" "${retreats:-0}" "${healthgoals:-0}" "${dispensers:-0}"
 	check "seed $seed: bots found somebody to shoot at" test "${targets:-0}" -ge 1
 	check "seed $seed: and picked a weapon for the range" test "${guns:-0}" -ge 1
 	check "seed $seed: and shot at them" test "${shots:-0}" -ge 5
@@ -163,6 +181,15 @@ print("  ok   seed: every target was a contact the bot had been told about")
 PY
 	[ $? -eq 0 ] || status=1
 done
+
+# Section 14.4: badly hurt with a known way to fix it is a reason to stop
+# shooting. Decided on the bot's own health and never on the enemy's, which it
+# is not allowed to know.
+printf '  ..   across seeds: %s retreats, %s health goals, %s dispenser uses\n' \
+	"$retreats_total" "$healthgoals_total" "$dispensers_total"
+check "a badly hurt bot breaks off somewhere" test "$retreats_total" -ge 1
+check "and goes looking for health when it does" test "$healthgoals_total" -ge 1
+check "and dispensers get used" test "$dispensers_total" -ge 1
 
 d1=$(field s1 brain); d2=$(field s5 brain)
 printf '  ..   brain digests %s and %s\n' "${d1:-?}" "${d2:-?}"

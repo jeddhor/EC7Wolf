@@ -502,8 +502,20 @@ bool Graph::FindPath(NodeId from, NodeId to, TArray<NodeId> &path,
 			const Edge &edge = edges[node.firstEdge + e];
 			if(mustTeleport && edge.type != EdgeType::Transporter)
 				continue;
+			// Keeping clear of transporters cannot mean refusing to walk away
+			// from one.
+			//
+			// A bot that has just arrived is standing on a pad, so every cell
+			// touching it is inside the ring being avoided -- there is no
+			// legal first step, the search finds nothing at all, and the
+			// unrestricted fallback then routes it straight back over the pad
+			// it was trying to get away from. The avoidance produced exactly
+			// the bounce it exists to prevent.
+			//
+			// So the first step out is always allowed, and the restriction
+			// applies from the second onwards.
 			if(options->avoidTransporters && nodes[edge.to].nearTransporter &&
-				edge.to != to)
+				edge.to != to && current.node != from)
 				continue;
 			if(closed[edge.to])
 				continue;

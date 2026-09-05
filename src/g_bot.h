@@ -214,6 +214,31 @@ struct State
 	// the bounds.
 	unsigned int reactionTicsTotal = 0;
 
+	// Breaking off. Section 14.4's RetreatOrRecover: badly hurt with a known
+	// way to fix it is a reason to stop shooting and go and fix it.
+	//
+	// Never decided on the enemy's condition -- a bot may not know how hurt
+	// somebody else is, so it cannot reason about finishing them off. It knows
+	// its own health, which a player also does.
+	unsigned int retreats = 0;
+	// The dispenser being walked to, and the cell to use it from.
+	uint16_t     healTileX = 0;
+	uint16_t     healTileY = 0;
+	bool         healing = false;
+	uint32_t     nextHealUse = 0;
+	unsigned int healUses = 0;
+
+	// The visor. Section 16.7: choose a mode from what is worth seeing, but
+	// issue the same zoom action a player does and burn the same charge.
+	//
+	// A bot cannot see laser barriers without infrared, and cannot learn one
+	// is there except by walking into it. So the trigger is having been hurt
+	// by one: the bot turns the visor up *because* it discovered the hard way
+	// that it needs it, which is the same reason a person would.
+	unsigned int visorWant = 1;
+	uint32_t     nextVisorPulse = 0;
+	unsigned int visorPulses = 0;
+
 	// Combat. Section 16.
 	//
 	// The target is a slot this bot has been *told about* -- a released
@@ -370,6 +395,9 @@ struct Totals
 	unsigned int shotsFired = 0;
 	unsigned int ticsOnTarget = 0;
 	unsigned int weaponSwitches = 0;
+	unsigned int visorPulses = 0;
+	unsigned int retreats = 0;
+	unsigned int healUses = 0;
 };
 Totals Tally();
 

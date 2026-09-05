@@ -33,6 +33,7 @@
 */
 
 #include "a_inventory.h"
+#include "g_items.h"
 #include "g_conversation.h"
 #include "id_sd.h"
 #include "templates.h"
@@ -230,6 +231,11 @@ void AInventory::Touch(AActor *toucher)
 
 	if(!CallTryPickup(toucher))
 		return;
+
+	// The pickup actually happened. Recorded here rather than inferred from
+	// what somebody is carrying later, because dying returns a player to its
+	// starting inventory and erases the evidence.
+	Items::NotePickup(toucher);
 
 	if(flags & FL_COUNTITEM)
 		++gamestate.treasurecount;

@@ -68,7 +68,18 @@ check() {
 
 map=MAP53
 tics=320
-shot_at=300
+# Snapshotted before anybody starts shooting.
+#
+# Once bots fight (B6) the console player gets hit, and the red damage flash
+# decays with `damagecount -= tics` on every *frame* -- so its intensity at a
+# given tic depends on how the tics fell across frames, and two runs of an
+# identical simulation produce different pictures. That is a real property of
+# the effect rather than a fault, and it is not what this gate is about.
+#
+# First contact in these matches is around tic 110. Routes exist from about
+# tic 25, so ninety is comfortably after there is something to draw and before
+# there is anything to flash.
+shot_at=90
 
 # A frame is only comparable between runs with interpolation off. The view is
 # otherwise drawn part way between two tics, at a fraction that depends on how

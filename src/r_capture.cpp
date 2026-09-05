@@ -572,7 +572,7 @@ namespace
 			Printf("Capture: bots %u brain=%08x planned=%u arrived=%u "
 				"abandoned=%u refused=%u nogoal=%u doors=%u doorsfailed=%u "
 				"unstuck=%u respawnpresses=%u respawns=%u ports=%u frozen=%u blocked=%u "
-				"seen=%u lost=%u\n",
+				"seen=%u lost=%u targets=%u shots=%u oncone=%u guns=%u\n",
 				Bot::Count(), (unsigned int)Bot::BrainDigest(),
 				tally.routesPlanned, tally.routesCompleted,
 				tally.routesAbandoned, tally.stepsRefused,
@@ -580,7 +580,9 @@ namespace
 				tally.doorsGivenUp, tally.unstuckEntered,
 				tally.respawnPresses, tally.respawnsCompleted,
 				tally.teleports, tally.frozenTics, tally.cellsBlocked,
-				tally.contactsGained, tally.contactsLost);
+				tally.contactsGained, tally.contactsLost,
+				tally.targetsAcquired, tally.shotsFired, tally.ticsOnTarget,
+				tally.weaponSwitches);
 		}
 		// What each bot ended up carrying. The outcome of B5's item goals, and
 		// the only visible one: weapon-stay means the pickup is still lying
@@ -592,12 +594,14 @@ namespace
 				if(!Bot::Active(i))
 					continue;
 				FString one;
-				one.Format("%s%u:%u", held.IsEmpty() ? "" : ",", i,
-					Items::WeaponsHeld(i));
+				// Held now, and picked up ever. The second is the one that
+				// survives a bot being killed.
+				one.Format("%s%u:%u/%u", held.IsEmpty() ? "" : ",", i,
+					Items::WeaponsHeld(i), Items::PickupsBy(i));
 				held += one;
 			}
 			if(!held.IsEmpty())
-				Printf("Capture: bot weapons %s\n", held.GetChars());
+				Printf("Capture: bot weapons %s (held/collected)\n", held.GetChars());
 		}
 
 		Bot::CloseTrace();

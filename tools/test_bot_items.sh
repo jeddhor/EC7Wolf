@@ -92,11 +92,19 @@ for map in $maps; do
 		spawns=$(grep -c '^item ' "$work/$tag.nav" || true)
 		scans=$(grep -c 'item-scan' "$work/$tag.bots" || true)
 		goals=$(grep -c 'route item' "$work/$tag.bots" || true)
-		weapons=$(sed -n 's/.*Capture: bot weapons \(.*\)/\1/p' "$work/$tag.log" | tail -1)
-		# A C7Player spawns with two weapons: the M16 and the bayonet.
+		weapons=$(sed -n 's/.*Capture: bot weapons \(.*\) (held.*/\1/p' "$work/$tag.log" | tail -1)
+		# Pickups made, not weapons still held.
+		#
+		# Holding more than the two a C7Player spawns with was the original
+		# check, and it stopped meaning anything the moment bots could die:
+		# death returns a player to its starting inventory, so a bot that
+		# collected two weapons and was then killed reports as having
+		# collected nothing. It did exactly that on MAP53 seed 5, while the
+		# same run's rejection reasons still showed "already-have" -- which
+		# only happens to a bot that owns the thing it is considering.
 		extra=$(printf '%s' "$weapons" | tr ',' '\n' |
-			awk -F: '{ if ($2 > 2) n += $2 - 2 } END { print n+0 }')
-		printf '  ..   %s/%s: %s spawns, %s decisions, %s item goals, weapons %s (+%s collected)\n' \
+			awk -F'[:/]' '{ n += $3 } END { print n+0 }')
+		printf '  ..   %s/%s: %s spawns, %s decisions, %s item goals, held/collected %s (%s picked up)\n' \
 			"$map" "$seed" "$spawns" "$scans" "$goals" "${weapons:-none}" "$extra"
 
 		check "$map/$seed: the map annotates its pickups" test "${spawns:-0}" -ge 3

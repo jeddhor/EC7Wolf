@@ -777,6 +777,29 @@ public:
 			}
 		}
 
+		// Somebody to shoot at takes precedence over somewhere to go.
+		ChooseTarget(*bot, pawn, sequence);
+		if(bot->target != MAXPLAYERS)
+		{
+			if(bot->behavior != Behavior::EngageEnemy)
+			{
+				bot->behavior = Behavior::EngageEnemy;
+				bot->behaviorSince = sequence;
+				TraceEvent(forSlot, "behavior", BehaviorName(bot->behavior));
+			}
+			Engage(*bot, pawn, sequence, out);
+			Record(*bot, sequence, forSlot);
+			return true;
+		}
+		if(bot->behavior == Behavior::EngageEnemy)
+		{
+			// Lost them. Back to whatever it was doing, which the contact
+			// machinery has already turned into a search.
+			bot->behavior = Behavior::Roam;
+			bot->behaviorSince = sequence;
+			TraceEvent(forSlot, "behavior", BehaviorName(bot->behavior));
+		}
+
 		if(bot->behavior == Behavior::Unstuck)
 			Unstuck(*bot, pawn, sequence, out);
 		else if(bot->behavior == Behavior::UseTraversal)
@@ -978,6 +1001,227 @@ private:
 		// into it, not a run at it.
 		out.forward = BASEMOVE;
 		bot.wasAskedToMove = true;
+	}
+
+	// Pick somebody to shoot at, and keep picking them.
+	//
+	// Candidates are contacts the brain has been told about, never sightings
+	// the sensor made this tic: acting on an observation before the reaction
+	// delay has released it is the same as having no reaction time. Section
+	// 16.1 also forbids scoring on anything unseen -- health, ammunition, frag
+	// value -- so this scores on distance and on staying with what it has.
+	static void ChooseTarget(State &bot, AActor *pawn, uint32_t sequence)
+	{
+		unsigned int best = MAXPLAYERS;
+		int bestScore = 0;
+
+		for(unsigned int who = 0;who < MAXPLAYERS;++who)
+		{
+			if(who == bot.slot || !bot.knownNow[who])
+				continue;
+			const Perception::Observation *obs = Perception::For(bot.slot);
+			const Perception::PlayerSighting *seen =
+				obs ? obs->Seen((Session::PlayerSlot)who) : NULL;
+			if(seen == NULL)
+				continue;
+
+			// Nearer is better, and that is nearly all of it. Everything else
+			// section 16.1 permits needs a threat model that does not exist
+			// until something shoots back.
+			int score = 1000 - seen->distanceTiles*10;
+			if(score < 1)
+				score = 1;
+
+			// Staying with the current target is worth something. Two
+			// distance scores alternating by a tile is exactly the
+			// indecision section 14.3 exists to prevent.
+			if(who == bot.target)
+				score += 250;
+
+			if(score > bestScore || (score == bestScore && who < best))
+			{
+				bestScore = score;
+				best = who;
+			}
+		}
+
+		if(best == bot.target)
+			return;
+
+		if(best == MAXPLAYERS)
+		{
+			bot.target = MAXPLAYERS;
+			return;
+		}
+
+		if(bot.target != MAXPLAYERS)
+			++bot.targetSwitches;
+		++bot.targetsAcquired;
+		bot.target = best;
+		bot.targetSince = sequence;
+		bot.seenHead = 0;
+		for(unsigned int i = 0;i < State::AIM_HISTORY;++i)
+			bot.seenWhen[i] = 0;
+		bot.aim.Reset();
+
+		FString detail;
+		detail.Format("slot=%u", best);
+		TraceEvent(bot.slot, "target", detail.GetChars());
+	}
+
+	// Aim at where the target was, miss sometimes, and pull the trigger.
+	static void Engage(State &bot, AActor *pawn, uint32_t sequence,
+		Command::Intent &out)
+	{
+		const Perception::Observation *obs = Perception::For(bot.slot);
+		const Perception::PlayerSighting *seen = obs
+			? obs->Seen((Session::PlayerSlot)bot.target) : NULL;
+
+		if(seen != NULL)
+		{
+			bot.seenX[bot.seenHead] = seen->x;
+			bot.seenY[bot.seenHead] = seen->y;
+			bot.seenWhen[bot.seenHead] = sequence;
+			bot.seenHead = (bot.seenHead + 1) % State::AIM_HISTORY;
+		}
+
+		// The oldest sample still inside the tracking window, so the aim is
+		// always pointed at where the target *was*. A moving target is then
+		// genuinely not where the bot is pointing, which is the only reason a
+		// ten-degree auto-aim cone can ever be missed.
+		fixed atX = 0, atY = 0;
+		bool have = false;
+		uint32_t bestAge = 0;
+		for(unsigned int i = 0;i < State::AIM_HISTORY;++i)
+		{
+			if(bot.seenWhen[i] == 0)
+				continue;
+			const uint32_t age = sequence - bot.seenWhen[i];
+			if(age < AIM_DELAY)
+				continue;
+			if(!have || age < bestAge)
+			{
+				have = true;
+				bestAge = age;
+				atX = bot.seenX[i];
+				atY = bot.seenY[i];
+			}
+		}
+		if(!have && seen != NULL)
+		{
+			// Nothing old enough yet: just acquired. Use the newest sample and
+			// let the acquisition hesitation below cover it.
+			atX = seen->x;
+			atY = seen->y;
+			have = true;
+		}
+		if(!have)
+			return;
+
+		Combat::Step(bot.aim, bot.rng[(unsigned int)Stream::Aim], sequence,
+			AIM_ENVELOPE);
+
+		const angle_t want =
+			(angle_t)(BotNav::BearingTo(pawn->x, pawn->y, atX, atY) + bot.aim.angle);
+		const int32_t rotate = BotNav::ShortestTurn(pawn->angle, want);
+		int turn = -(int)((int64_t)rotate/(int64_t)(ANGLE_1/20));
+		if(turn > MAX_YAW) turn = MAX_YAW;
+		if(turn < -MAX_YAW) turn = -MAX_YAW;
+		out.turn = turn;
+
+		// Carry the right gun for the range.
+		//
+		// Requested by pulsing the slot button, exactly as a player does, and
+		// then left alone: the weapon state machine runs the switch and
+		// decides when it is finished. Section 16.6 forbids assigning
+		// PendingWeapon or ReadyWeapon, and the reason is the same as with the
+		// trigger -- a bot that sets the weapon directly switches instantly,
+		// which no player can.
+		if(seen != NULL && sequence >= bot.nextWeaponThink)
+		{
+			bot.nextWeaponThink = sequence + WEAPON_THINK_INTERVAL;
+			const int want = Combat::ChooseSlot(bot.slot, seen->distanceTiles);
+			if(want > 0 && want != bot.holdingSlot)
+			{
+				out.press[bt_slot1 + want - 1] = true;
+				bot.holdingSlot = want;
+				++bot.weaponSwitches;
+				FString detail;
+				detail.Format("slot=%d range=%d", want, seen->distanceTiles);
+				TraceEvent(bot.slot, "weapon", detail.GetChars());
+			}
+		}
+
+		// Move while fighting. Standing still is both a poor opponent and an
+		// easy one: a bot that never strafes is a stationary target that only
+		// has to be aimed at once.
+		//
+		// The side is held for a commitment interval rather than chosen each
+		// tic, for the same reason the aim error drifts rather than jumping --
+		// alternating every tic averages to standing still while looking
+		// frantic.
+		if(sequence >= bot.strafeUntil)
+		{
+			bot.strafeUntil = sequence + STRAFE_COMMIT +
+				bot.rng[(unsigned int)Stream::Movement].Below(STRAFE_JITTER);
+			bot.strafeSide = bot.rng[(unsigned int)Stream::Movement].Below(2)
+				? BASEMOVE : -BASEMOVE;
+		}
+		out.strafe = bot.strafeSide;
+
+		// And keep a sensible distance: close if far away, back off if almost
+		// touching. Range is the observed one, so a target that has moved
+		// since is one the bot is wrong about, which is correct.
+		if(seen != NULL)
+		{
+			if(seen->distanceTiles > PREFER_RANGE + 2)
+				out.forward = BASEMOVE;
+			else if(seen->distanceTiles < PREFER_RANGE - 2)
+				out.forward = -BASEMOVE;
+			else
+				out.forward = 0;
+		}
+		bot.wasAskedToMove = out.forward != 0 || out.strafe != 0;
+
+		// The trigger. Requested through the ordinary button; the weapon state
+		// machine decides whether a shot actually happens, and this never
+		// touches ammunition, cooldown or psprite state.
+		if(sequence < bot.nextTrigger)
+			return;
+		if(sequence - bot.targetSince < ACQUIRE_HESITATION)
+			return;			// still reacting to having found somebody
+
+		const uint32_t off = (uint32_t)rotate < 0x80000000u
+			? (uint32_t)rotate : (uint32_t)(0u - (uint32_t)rotate);
+		// Fires a little outside the cone as well as inside it. Section 16.5
+		// asks for exactly this: a trigger pulled while the aim is still
+		// swinging through is how a bot misses without being blind.
+		if(off > (uint32_t)(AUTO_AIM_CONE + AUTO_AIM_CONE/2))
+			return;
+
+		out.press[bt_attack] = true;
+		++bot.shotsFired;
+		bot.nextTrigger = sequence + TRIGGER_INTERVAL +
+			bot.rng[(unsigned int)Stream::Timing].Below(TRIGGER_JITTER);
+
+		// Was that shot actually on target?
+		//
+		// Not the same question as "had the bot finished turning", which is
+		// what `off` answers -- that measures convergence on the aim point,
+		// and the aim point already has the error baked into it, so a bot that
+		// settles neatly onto a badly wrong bearing scores perfectly. The
+		// number that decides a hit is the angle between where the pawn is
+		// facing and where the target really is.
+		if(seen != NULL)
+		{
+			const angle_t truth =
+				BotNav::BearingTo(pawn->x, pawn->y, seen->x, seen->y);
+			const int32_t miss = BotNav::ShortestTurn(pawn->angle, truth);
+			const uint32_t magnitude = (uint32_t)miss < 0x80000000u
+				? (uint32_t)miss : (uint32_t)(0u - (uint32_t)miss);
+			if(magnitude <= (uint32_t)AUTO_AIM_CONE)
+				++bot.ticsOnTarget;
+		}
 	}
 
 	// Walk the route, one waypoint at a time.
@@ -1209,6 +1453,26 @@ private:
 		// fifth of a second to react to something appearing, so 14 tics, with
 		// a seeded spread on top so that two bots seeing the same thing do not
 		// move on the same tic.
+		// How far behind the aim runs. Twelve tics of tracking delay, so a
+		// target moving across the bot's view is genuinely somewhere else by
+		// the time the shot goes.
+		AIM_DELAY = 12,
+		// The width of the aim error, at the one skill that exists so far.
+		// Twice the auto-aim cone, so it spends real time outside it -- an
+		// envelope inside the cone is a bot that cannot miss.
+		AIM_ENVELOPE = (ANGLE_90/9)*2,
+		// A moment between finding somebody and shooting at them.
+		ACQUIRE_HESITATION = 21,
+		// How often the weapon choice is revisited, and how long a strafe
+		// direction is held.
+		WEAPON_THINK_INTERVAL = 35,
+		STRAFE_COMMIT = 21,
+		STRAFE_JITTER = 28,
+		// The range a bot tries to hold, in tiles. Close enough to hit, far
+		// enough not to be walked over.
+		PREFER_RANGE = 8,
+		TRIGGER_INTERVAL = 12,
+		TRIGGER_JITTER = 10,
 		REACT_BASE = 14,
 		REACT_SPREAD = 7,
 		// Five seconds without seeing somebody and the contact is gone. Long
@@ -1325,6 +1589,11 @@ Totals Tally()
 		total.contactsNoticed += g_state[i].contactsNoticed;
 		total.searchesStarted += g_state[i].searchesStarted;
 		total.contactsForgotten += g_state[i].contactsForgotten;
+		total.itemGoals += g_state[i].itemGoals;
+		total.targetsAcquired += g_state[i].targetsAcquired;
+		total.shotsFired += g_state[i].shotsFired;
+		total.weaponSwitches += g_state[i].weaponSwitches;
+		total.ticsOnTarget += g_state[i].ticsOnTarget;
 		total.reactionTicsTotal += g_state[i].reactionTicsTotal;
 	}
 	return total;

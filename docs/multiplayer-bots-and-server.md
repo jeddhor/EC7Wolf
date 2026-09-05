@@ -3344,9 +3344,15 @@ behaviour has broken for a good reason, after the arena-start episode. Such
 checks want framing as "somewhere, sometimes" rather than "here, always", or
 they encode today's behaviour as tomorrow's requirement.
 
-**What these maps cannot exercise.** The arenas carry weapons, charge packs and
-mine packs and almost no health or armour, and nothing damages a bot except a
-laser barrier. The health term's nonlinear shape is implemented and unit-tested
+**What these maps cannot exercise.** *(Corrected during B6: the arenas do carry
+health, as wall dispensers -- `C7_Dispenser` with `args[0]` of 1, thirty-odd
+per map -- rather than as floor pickups. Bots have no way to use one yet, which
+is a gap in the bot rather than an absence in the map. And bots damage each
+other now, so the second half of this paragraph no longer holds either.)*
+
+The arenas carry weapons, charge packs and mine packs and almost no health or
+armour as collectable items, and at the time of writing nothing damaged a bot
+except a laser barrier. The health term's nonlinear shape is implemented and unit-tested
 and *no match in these arenas has driven a bot below full health*. Like damage
 attribution in B4, the code is there and the behaviour is unverified in play
 until B6 gives bots a reason to get hurt. Recorded rather than left implied by
@@ -3374,6 +3380,78 @@ bounds; no fairness invariant fails.
 
 *This milestone completes the first playable slice: one human against one
 visibly fallible bot on `MAP53`, offline, with no server in existence.*
+
+### B6 record — an opponent that misses
+
+**The fact the milestone turns on, verified rather than assumed.** Corridor 7's
+hitscan weapons call `player_t::FindTarget`, which acquires anything within ten
+degrees -- `CheckVisibility(check, ANGLE_90/9)`, an absolute angular difference
+against a ten-degree tolerance -- and then applies ordinary weapon randomness.
+
+So an aim error of two degrees is not an aim error. A bot with a slightly noisy
+reticle that fires only while pointed at its target hits every time, and no
+amount of tuning the noise changes it. This is measured, not argued: narrowing
+the error envelope to a third of the cone produces **100% accuracy on both
+seeds**, and the gate's ceiling catches it.
+
+Missing therefore comes from an envelope wide enough to leave the cone, a
+tracking delay that points the aim at where the target *was*, and a trigger
+pulled while the aim is still swinging. At twice the cone the bot runs at 44 to
+67 percent, which is an opponent rather than an execution.
+
+**The error drifts, and that is not decoration.** Section 16.4 forbids an
+independent random angle per tic, and the reason is arithmetic: independent
+noise averages out over the handful of tics a shot takes to line up, which is
+another way of never missing. The error springs weakly toward a bias that is
+re-chosen every half to one and a half seconds, and the self-test checks a
+single tic cannot move it across the envelope.
+
+**I measured the wrong angle first.** The initial accuracy counter scored 36 of
+37, because it measured how well the bot had converged on *its own aim point* --
+and the aim point already contains the error, so a bot settling neatly onto a
+badly wrong bearing scores perfectly. Measured against where the target really
+is, the same run is 25 of 37.
+
+**Weapons are a table, chosen by pulsing a slot button.** Eight descriptors with
+range bands and a support flag; the disintegrator is present and deliberately
+unsupported, because an enormous energy cost and a broad multi-target attack
+want their own tests before a bot reaches for one. `ChooseSlotFrom(carried,
+range)` is a pure function so the per-weapon cases section 16.6 asks for can be
+tested without a running match -- a rule only exercisable by playing is a rule
+tested by luck.
+
+Nothing assigns `PendingWeapon`, `ReadyWeapon`, `attackheld` or a psprite. The
+gate greps for it, on code with comments stripped: the first version failed on
+a comment promising the code does not do it.
+
+**Two things B4 and B5 recorded as untestable are now tested.** Damage
+attribution has evidence in both directions -- 10 of 17 cues name an attacker
+the victim could see, the rest are correctly anonymous -- which was impossible
+until bots shot each other. And bots die and respawn through input in ordinary
+play rather than only under a scripted kill.
+
+**A gate that was right to fail, and nearly diagnosed wrongly.** `bot_items`
+checked that bots end a match holding more weapons than they spawn with. That
+stopped meaning anything the moment bots could die, because death returns a
+player to its starting inventory: a bot that collected two weapons and was
+killed reported as having collected nothing. What prevented me relaxing the
+bound was the same run's rejection reasons showing `already-have`, which only
+happens to a bot that owns the thing it is considering. The trace contradicted
+the metric, and the metric was wrong. Pickups are counted as events now.
+
+That is the third time this session an end-state proxy expired: coverage once
+bots stopped to fight, transporter crossings once they had somewhere to be,
+weapons held once they could die. Each time the capability was intact and the
+measurement had quietly stopped measuring it.
+
+**Still open in B6:** retreat behaviour, and mines and the visor, which section
+16.7 stages behind ordinary guns being solid. Combat movement is strafing and
+range-keeping; there is no breaking off when badly hurt, which wants the health
+route that B7's dispenser work would provide.
+
+**Gates:** `tools/test_bot_combat.sh` is new and `--combattest` covers the aim
+model and weapon selection with no map. Proven able to fail: the aim envelope
+narrowed inside the auto-aim cone (100% accuracy, caught by the ceiling).
 
 ### B7 — Special equipment and behavioral depth
 

@@ -34,6 +34,7 @@
 #include "name.h"
 #include "wl_play.h"
 #include "g_botnav.h"
+#include "g_combat.h"
 
 namespace Bot {
 
@@ -213,6 +214,41 @@ struct State
 	// the bounds.
 	unsigned int reactionTicsTotal = 0;
 
+	// Combat. Section 16.
+	//
+	// The target is a slot this bot has been *told about* -- a released
+	// observation, not a sighting the sensor made this tic and the brain has
+	// not yet reacted to.
+	unsigned int target = MAXPLAYERS;
+	uint32_t     targetSince = 0;
+	unsigned int targetsAcquired = 0;
+	unsigned int targetSwitches = 0;
+	unsigned int shotsFired = 0;
+	// Tics spent with a target and a clear enough shot to take it.
+	unsigned int ticsOnTarget = 0;
+	Combat::AimError aim;
+	// When the trigger may next be considered, so a bot does not decide about
+	// firing on every single tic.
+	uint32_t     nextTrigger = 0;
+	// The weapon being carried, as a slot number, and when to reconsider.
+	int          holdingSlot = 0;
+	uint32_t     nextWeaponThink = 0;
+	unsigned int weaponSwitches = 0;
+	// Combat strafing, held for a commitment interval rather than rechosen
+	// every tic.
+	uint32_t     strafeUntil = 0;
+	int          strafeSide = 0;
+
+	// A short history of where the target was seen, so the aimer can use a
+	// sample no newer than its tracking delay. Section 16.3: an aimer reading
+	// the current position is an aimer that cannot be made to miss a moving
+	// target, however much error is added afterwards.
+	enum { AIM_HISTORY = 16 };
+	fixed        seenX[AIM_HISTORY];
+	fixed        seenY[AIM_HISTORY];
+	uint32_t     seenWhen[AIM_HISTORY];
+	unsigned int seenHead = 0;
+
 	uint32_t     lastSeenAt[MAXPLAYERS];
 	uint16_t     lastSeenTileX[MAXPLAYERS];
 	uint16_t     lastSeenTileY[MAXPLAYERS];
@@ -330,6 +366,10 @@ struct Totals
 	unsigned int searchesStarted = 0;
 	unsigned int contactsForgotten = 0;
 	unsigned int itemGoals = 0;
+	unsigned int targetsAcquired = 0;
+	unsigned int shotsFired = 0;
+	unsigned int ticsOnTarget = 0;
+	unsigned int weaponSwitches = 0;
 };
 Totals Tally();
 

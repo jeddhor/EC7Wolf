@@ -152,6 +152,18 @@ struct Candidate
 	Reject   why = Reject::None;
 };
 
+// Somebody picked something up. Called from the pickup path, because that is
+// the event; the alternative -- counting what a bot is holding when the match
+// ends -- stops meaning anything the moment bots start dying, since death
+// returns a player to its starting inventory. That check passed until combat
+// arrived and then reported a bot which had collected two weapons and been
+// killed as having collected nothing.
+void NotePickup(const AActor *taker);
+
+// How many things this slot has picked up during the match, ever, whatever
+// happened to them afterwards.
+unsigned int PickupsBy(Session::PlayerSlot slot);
+
 // How many weapons this slot is carrying.
 //
 // The measurable outcome of a weapon goal, and the only one there is: under

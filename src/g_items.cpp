@@ -17,6 +17,8 @@ namespace Items {
 namespace {
 
 TArray<Annotation> g_annotations;
+// Pickups actually made, per slot, for the whole match.
+unsigned int       g_pickups[MAXPLAYERS] = { 0 };
 // [slot][annotation]. A flat array per slot rather than a map: there are at
 // most a couple of dozen pickups in a Corridor 7 arena.
 TArray<Knowledge>  g_belief[MAXPLAYERS];
@@ -72,6 +74,8 @@ const char *CategoryName(Category category)
 
 void Reset()
 {
+	for(unsigned int i = 0;i < MAXPLAYERS;++i)
+		g_pickups[i] = 0;
 	g_annotations.Clear();
 	for(unsigned int i = 0;i < MAXPLAYERS;++i)
 		g_belief[i].Clear();
@@ -250,6 +254,25 @@ int NeedWeapon(Session::PlayerSlot slot, FName cls)
 	if(players[slot].mo->FindInventory(def) != NULL)
 		return 0;
 	return Need(slot, Category::Weapon);
+}
+
+void NotePickup(const AActor *taker)
+{
+	if(taker == NULL)
+		return;
+	for(unsigned int i = 0;i < MAXPLAYERS;++i)
+	{
+		if(players[i].mo == taker)
+		{
+			++g_pickups[i];
+			break;
+		}
+	}
+}
+
+unsigned int PickupsBy(Session::PlayerSlot slot)
+{
+	return slot < MAXPLAYERS ? g_pickups[slot] : 0;
 }
 
 unsigned int WeaponsHeld(Session::PlayerSlot slot)

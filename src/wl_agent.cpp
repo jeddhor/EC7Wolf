@@ -374,8 +374,13 @@ void player_t::TakeDamage (int points, AActor *attacker)
 	// path rather than from wherever the sample is played, so a server with no
 	// sound still produces the event.
 	if(mo != NULL && points > 0)
+	{
 		Perception::Emit(health - points <= 0 ? Perception::SoundKind::Death
 			: Perception::SoundKind::Pain, mo, health - points <= 0 ? 20 : 12);
+		// What the player is told: how much, and what is left. The game shows
+		// a screen-wide flash with no direction in it, so neither does this.
+		Perception::NoteDamage(mo, points, health - points, attacker);
+	}
 
 	if (!godmode)
 		mo->health = health -= points;

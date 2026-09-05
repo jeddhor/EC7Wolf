@@ -3194,8 +3194,74 @@ and it is what makes the answer right on a server that draws nothing.
 Contact knowledge is recorded at the place it happened, for the bot it happened
 to, and for nobody else. Losing the visor does not erase what was learned.
 
-**Still open in B4:** damage cues, static pickup memory, and confidence decay
-with search-and-forget behaviour.
+**Damage cues (step 4).** `StartDamageFlash` takes a number of points and no
+direction: Corridor 7 shows a screen-wide red flash and nothing else. So a hit
+tells a bot how much and what it left, and never where it came from. The
+attacker's identity is included only when the victim could already see them --
+being shot by somebody in plain view tells you who shot you, and being shot
+from behind does not. Section 13.5 names this exact trap: do not hand the AI an
+unseen attacker merely because `killerobj` holds one.
+
+**Searching is walking, not a mode.** A bot that loses a contact it was
+actually told about routes to the last *observed* position through the ordinary
+planner and follower. That position is stale by construction -- it is where the
+contact was, not where it is -- so a bot that arrives and finds nobody has
+learned exactly what a player learns. A contact the bot never noticed starts no
+search, because it does not know anything was there.
+
+**Forgetting is what stops a permanent lock.** After 350 tics without a
+sighting the contact stops being a fact about anybody's position and becomes
+nothing. Section 13.7's "may never keep an exact lock on a hidden player", made
+mechanical. Observed in a real match: lost at tic 290, a twenty-waypoint search
+route at 425, forgotten at 981 -- exactly 350 tics later.
+
+**The engine's own sight check leaks, and bots do not inherit it.**
+
+`CheckLine` walks the grid a tile at a time and, at some slopes, steps past a
+corner it should have hit. The engine knows: `wl_state.cpp` carries a helper
+called `CheckAdjacentTileBlockage` whose comment is "Helps prevent leakage
+cases", and that mitigation does not cover every case. One sighting in 699 on
+MAP51 ran squarely through the interior of a solid cell, nearly a third of a
+tile deep, and `CheckLine` allowed it.
+
+Monsters have always had that, and a bot could reasonably inherit it -- "bots
+see exactly what the game's own AI sees" is a defensible story. It does not,
+because the promise worth keeping is not *sees what a monster sees* but **never
+sees through a wall**, and the second is the one a person losing a deathmatch
+cares about. Bot vision is a strict subset of the engine's now: `CheckLine` must
+pass, and so must a sampled geometric check that looks every eighth of a tile
+and rejects anything ten map units inside a sight-blocking cell. It removed
+exactly one sighting: 699 became 698, and 4009 sightings across three maps now
+cross nothing.
+
+Two things about how this was found. It only appeared because the match length
+went from 900 tics to 1400 for the memory tests, taking MAP51 from 425
+sightings to 699 -- **a rare leak needs volume before it shows**, and this one
+would have shipped green. And it was findable at all because the gate
+re-derives the geometry itself: a check that called `CheckLine` to verify
+`CheckLine` would have agreed with the leak forever.
+
+**What the fairness checks do and do not cover.** Every rule is proven able to
+fail by breaking it on purpose:
+
+| Rule | Leak direction | Permitted direction |
+| --- | --- | --- |
+| Line of sight | 1721 leaks when removed | 1508 sightings |
+| Field of view | 53 wide when widened to 90 | in view |
+| Reaction delay | caught at 0 tics | 14-20 tics |
+| Sound attribution | 93 leaked when unconditional | 14 named, all visible |
+| Infrared lasers | 734 seen when ungated | 8 learned by contact |
+| Damage attribution | shares the sighting check | **not yet tested** |
+| Forgetting | caught at 60 tics | 2 at exactly 350 |
+
+The gap is real and worth stating rather than leaving implied by a green tick.
+Damage cues report zero named attackers because the only damage available is a
+laser barrier, which has no attacker at all. The no-leak direction holds; there
+is no evidence yet that the *permitted* case works, and there cannot be until
+bots shoot each other in B6.
+
+**Still open in B4:** static pickup memory, which wants items worth remembering
+and so belongs with B5's resource play.
 
 ### B5 — Goals and resource play
 

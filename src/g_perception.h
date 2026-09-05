@@ -130,6 +130,26 @@ struct HazardKnowledge
 	uint32_t knownAt = 0;
 };
 
+// Being hurt, as much as the game actually tells the player.
+//
+// Corridor 7 shows a screen-wide red flash and nothing else -- StartDamageFlash
+// takes a number of points and no direction. So a damage cue carries how much
+// and what it left, and no bearing whatsoever. Handing a bot the attacker's
+// position because `killerobj` happens to hold it would give it a sense the
+// human sitting next to it does not have, which is section 13.5's example of
+// exactly what not to do.
+//
+// The attacker's identity is included only when the victim could already see
+// them: being shot by someone in plain view tells you who shot you, and being
+// shot from behind does not.
+struct DamageCue
+{
+	int      points = 0;
+	int      healthAfter = 0;
+	int16_t  attackerSlot = -1;
+	uint32_t at = 0;
+};
+
 // Everything one bot perceived on one update.
 struct Observation
 {
@@ -141,6 +161,8 @@ struct Observation
 	// Barriers currently visible to this bot. Empty without infrared, always,
 	// however many are in front of it.
 	TArray<HazardKnowledge> hazards;
+	// Hits taken since the last sense update.
+	TArray<DamageCue> damage;
 
 	const PlayerSighting *Seen(Session::PlayerSlot slot) const;
 };
@@ -169,6 +191,11 @@ void Emit(SoundKind kind, const AActor *source, int loudnessTiles);
 // because that is the moment the fact becomes known to whoever it happened
 // to -- and to nobody else.
 void NoteHazardContact(const AActor *victim);
+
+// Somebody was hurt. Called from the damage path, with whatever the game knows
+// about the attacker; what reaches the victim's brain is filtered here.
+void NoteDamage(const AActor *victim, int points, int healthAfter,
+	const AActor *attacker);
 
 // What this bot has learned about barriers, however it learned it. Persists
 // across the visor being switched off; ages, but is not erased.

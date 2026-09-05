@@ -88,6 +88,82 @@ void Remember(unsigned int slot, uint16_t tx, uint16_t ty, bool byContact,
 	known.Push(fresh);
 }
 
+// Does this cell stop a sight line? The same three conditions wl_state.cpp
+// uses, so the two agree about what a wall is.
+bool BlocksSight(unsigned int tx, unsigned int ty)
+{
+	if(map == NULL)
+		return false;
+	MapSpot spot = map->GetSpot(tx, ty, 0);
+	if(spot == NULL || spot->tile == NULL)
+		return false;
+	if(spot->tile->sightTransparent || spot->corridor7SightTransparent)
+		return false;
+	// An open door is not a wall. slideAmount reaches 0xffff when the panel
+	// has finished sliding, which is the same test the collision path uses.
+	for(unsigned int i = 0;i < 4;++i)
+	{
+		if(spot->slideAmount[i] == 0xffff)
+			return false;
+	}
+	return true;
+}
+
+// A stricter sight line than CheckLine's.
+//
+// CheckLine is the engine's gameplay LOS and it leaks: it walks the grid a
+// tile at a time and, at some slopes, steps past a corner it should have hit.
+// The engine knows -- wl_state.cpp carries a helper called
+// CheckAdjacentTileBlockage whose comment is "Helps prevent leakage cases" --
+// and that mitigation does not cover every case. One sighting in 699 on MAP51
+// ran squarely through the interior of a solid cell, nearly a third of a tile
+// deep, and CheckLine allowed it.
+//
+// Monsters have always had that, and a bot could reasonably inherit it. It
+// does not, because the promise being kept here is not "sees what a monster
+// sees" but "never sees through a wall", and the second is the one a person
+// losing a deathmatch will care about. Bot vision is therefore a strict subset
+// of the engine's: CheckLine must pass, and so must this.
+bool ClearLine(fixed ax, fixed ay, fixed bx, fixed by)
+{
+	// Every 8 map units, an eighth of a tile, so nothing thinner than that
+	// can hide between two samples.
+	const int64_t dx = (int64_t)bx - ax;
+	const int64_t dy = (int64_t)by - ay;
+	int64_t span = (dx < 0 ? -dx : dx) + (dy < 0 ? -dy : dy);
+	int steps = (int)(span/(8<<10));
+	if(steps < 8) steps = 8;
+	if(steps > 512) steps = 512;
+
+	// Ignore the two end cells: the observer and the subject each stand in
+	// one, and neither is an obstruction.
+	const unsigned int ex = (unsigned int)(ax>>TILESHIFT);
+	const unsigned int ey = (unsigned int)(ay>>TILESHIFT);
+	const unsigned int sx = (unsigned int)(bx>>TILESHIFT);
+	const unsigned int sy = (unsigned int)(by>>TILESHIFT);
+
+	for(int i = 1;i < steps;++i)
+	{
+		const fixed x = (fixed)(ax + dx*i/steps);
+		const fixed y = (fixed)(ay + dy*i/steps);
+		const unsigned int tx = (unsigned int)(x>>TILESHIFT);
+		const unsigned int ty = (unsigned int)(y>>TILESHIFT);
+		if((tx == ex && ty == ey) || (tx == sx && ty == sy))
+			continue;
+		if(!BlocksSight(tx, ty))
+			continue;
+		// How far inside the cell this sample is, in map units. A line running
+		// along a wall's face is looking past it, not through it, and the
+		// engine allows that; ten units in is not a graze.
+		const int fx = (int)((x>>10) & 63);
+		const int fy = (int)((y>>10) & 63);
+		const int depth = MIN(MIN(fx, 63 - fx), MIN(fy, 63 - fy));
+		if(depth >= 10)
+			return false;
+	}
+	return true;
+}
+
 // Fold a signed angular difference to 0..180 degrees worth of angle_t.
 angle_t OffAxis(angle_t facing, angle_t toward)
 {
@@ -151,6 +227,47 @@ void NoteHazardContact(const AActor *victim)
 	}
 }
 
+void NoteDamage(const AActor *victim, int points, int healthAfter,
+	const AActor *attacker)
+{
+	if(victim == NULL || points <= 0)
+		return;
+
+	for(unsigned int i = 0;i < MAXPLAYERS;++i)
+	{
+		if(players[i].mo != victim)
+			continue;
+
+		DamageCue cue;
+		cue.points = points;
+		cue.healthAfter = healthAfter;
+		cue.at = gamestate.TimeCount;
+		cue.attackerSlot = -1;
+
+		// Who did it, only if the victim can see them right now. This
+		// observation was built at the start of the tic, before any of it
+		// happened, which is the same thing the player's eyes had.
+		if(attacker != NULL)
+		{
+			for(unsigned int a = 0;a < MAXPLAYERS;++a)
+			{
+				if(players[a].mo != attacker)
+					continue;
+				if(g_observation[i].Seen((Session::PlayerSlot)a) != NULL)
+					cue.attackerSlot = (int16_t)a;
+				break;
+			}
+		}
+
+		g_observation[i].damage.Push(cue);
+		if(g_trace != NULL)
+			fprintf(g_trace, "damage %lu %u points %d left %d from %d\n",
+				(unsigned long)gamestate.TimeCount, i, points, healthAfter,
+				cue.attackerSlot);
+		break;
+	}
+}
+
 const TArray<HazardKnowledge> *HazardsKnownTo(Session::PlayerSlot slot)
 {
 	if(slot >= MAXPLAYERS)
@@ -176,6 +293,7 @@ void Reset()
 		g_observation[i].players.Clear();
 		g_observation[i].sounds.Clear();
 		g_observation[i].hazards.Clear();
+		g_observation[i].damage.Clear();
 		g_hazards[i].Clear();
 	}
 	g_observers = 0;
@@ -225,6 +343,7 @@ void BeginFrame(uint32_t sequence)
 		obs.players.Clear();
 		obs.sounds.Clear();
 		obs.hazards.Clear();
+		obs.damage.Clear();
 		obs.sequence = sequence;
 
 		if(!Bot::Active(slot))
@@ -268,6 +387,8 @@ void BeginFrame(uint32_t sequence)
 				if(OffAxis(eye->angle, toward) > FOV_HALF)
 					continue;
 				if(!CheckLine(eye, thing))
+					continue;
+				if(!ClearLine(eye->x, eye->y, thing->x, thing->y))
 					continue;
 
 				HazardKnowledge seen;
@@ -373,6 +494,9 @@ void BeginFrame(uint32_t sequence)
 			// monsters use. Not a renderer visibility mark: those describe one
 			// camera and are not computed at all when nothing is drawn.
 			if(!CheckLine(eye, target))
+				continue;
+			// And the stricter check, because CheckLine leaks at some slopes.
+			if(!ClearLine(eye->x, eye->y, target->x, target->y))
 				continue;
 
 			PlayerSighting sighting;

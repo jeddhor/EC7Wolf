@@ -219,6 +219,14 @@ struct State
 	bool         visibleNow[MAXPLAYERS];
 	unsigned int contactsGained = 0;
 	unsigned int contactsLost = 0;
+	// Contacts walked to the last place they were seen, and contacts given up
+	// on. Section 13.7: a bot may search a last known location or abandon the
+	// contact, and may never keep an exact lock on somebody hidden.
+	unsigned int searchesStarted = 0;
+	unsigned int contactsForgotten = 0;
+	// The slot being searched for, and where. NO_NODE-ish: MAXPLAYERS means
+	// nobody.
+	unsigned int searchingFor = MAXPLAYERS;
 
 	unsigned int teleports = 0;
 	unsigned int frozenTics = 0;
@@ -315,6 +323,8 @@ struct Totals
 	unsigned int contactsLost = 0;
 	unsigned int contactsNoticed = 0;
 	unsigned int reactionTicsTotal = 0;
+	unsigned int searchesStarted = 0;
+	unsigned int contactsForgotten = 0;
 };
 Totals Tally();
 

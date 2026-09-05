@@ -246,6 +246,38 @@ bool ChooseRoamGoal(State &bot, const BotNav::Graph &graph, AActor *pawn,
 	options.blocked = &bot.blocked;
 	options.now = sequence;
 
+	// Somewhere a contact was last seen, if this bot is looking for one. The
+	// route is planned like any other and walked by the ordinary follower: a
+	// bot searching is a bot walking to a place it has a reason to walk to,
+	// not a special mode.
+	//
+	// It goes at the last *observed* position, which by now is old. That is
+	// the point -- it is where the contact was, not where it is, and a bot
+	// that arrives and finds nobody has learned what a player learns.
+	if(bot.searchingFor < MAXPLAYERS)
+	{
+		const unsigned int who = bot.searchingFor;
+		const BotNav::NodeId target =
+			graph.NodeAt(bot.lastSeenTileX[who], bot.lastSeenTileY[who]);
+		bot.searchingFor = MAXPLAYERS;		// one attempt, then ordinary roaming
+		if(target != BotNav::NO_NODE && target != here)
+		{
+			BotNav::SearchStats stats;
+			if(graph.FindPath(here, target, bot.route, stats, 0, &options))
+			{
+				bot.goal = target;
+				bot.waypoint = 0;
+				++bot.routesPlanned;
+				FString detail;
+				detail.Format("search slot=%u to=%u,%u len=%u", who,
+					bot.lastSeenTileX[who], bot.lastSeenTileY[who],
+					bot.route.Size());
+				TraceEvent(bot.slot, "route", detail.GetChars());
+				return true;
+			}
+		}
+	}
+
 	int forcedX = 0, forcedY = 0;
 	if(ForcedGoal(forcedX, forcedY))
 	{
@@ -481,6 +513,18 @@ public:
 					// Losing sight cancels a notice that has not landed. A
 					// glimpse too brief to react to is a glimpse the brain
 					// never gets to act on, which is the point of the delay.
+					// A contact the brain had actually been told about is
+					// worth going to look for. One it never noticed is not:
+					// the bot does not know it was there.
+					if(bot->knownNow[who] && bot->searchingFor == MAXPLAYERS)
+					{
+						bot->searchingFor = who;
+						++bot->searchesStarted;
+						FString where;
+						where.Format("slot=%u to=%u,%u", who,
+							bot->lastSeenTileX[who], bot->lastSeenTileY[who]);
+						TraceEvent(forSlot, "searching", where.GetChars());
+					}
 					bot->noticeAt[who] = 0;
 					bot->knownNow[who] = false;
 				}
@@ -499,6 +543,26 @@ public:
 					TraceEvent(forSlot, "noticed", detail.GetChars());
 				}
 			}
+		}
+
+		// Forgetting. A contact not seen for long enough stops being a fact
+		// about where somebody is and becomes nothing at all -- which is the
+		// rule that stops a bot holding an exact lock on a hidden player for
+		// the rest of the match.
+		for(unsigned int who = 0;who < MAXPLAYERS;++who)
+		{
+			if(bot->lastSeenAt[who] == 0 || bot->visibleNow[who])
+				continue;
+			if(sequence - bot->lastSeenAt[who] < FORGET_TICS)
+				continue;
+			++bot->contactsForgotten;
+			FString detail;
+			detail.Format("slot=%u after=%u tics", who,
+				sequence - bot->lastSeenAt[who]);
+			TraceEvent(forSlot, "forgot", detail.GetChars());
+			bot->lastSeenAt[who] = 0;
+			if(bot->searchingFor == who)
+				bot->searchingFor = MAXPLAYERS;
 		}
 
 		// The world can move a pawn without the bot asking. A transporter is
@@ -1016,6 +1080,10 @@ private:
 		// move on the same tic.
 		REACT_BASE = 14,
 		REACT_SPREAD = 7,
+		// Five seconds without seeing somebody and the contact is gone. Long
+		// enough to be worth walking over to look, short enough that a bot is
+		// not still acting on a sighting from half a minute ago.
+		FORGET_TICS = 350,
 		// A short shove for a first failure, the full back-up for a second.
 		NUDGE_TICS = 10,
 		// How long a failure stays on the ladder. Longer than a recovery takes
@@ -1124,6 +1192,8 @@ Totals Tally()
 		total.contactsGained += g_state[i].contactsGained;
 		total.contactsLost += g_state[i].contactsLost;
 		total.contactsNoticed += g_state[i].contactsNoticed;
+		total.searchesStarted += g_state[i].searchesStarted;
+		total.contactsForgotten += g_state[i].contactsForgotten;
 		total.reactionTicsTotal += g_state[i].reactionTicsTotal;
 	}
 	return total;

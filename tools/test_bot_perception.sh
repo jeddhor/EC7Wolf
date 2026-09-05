@@ -61,14 +61,14 @@ check() {
 	else printf '  FAIL %s\n' "$message"; status=1; fi
 }
 
-tics=900
+tics=1400
 maps=${MAPS:-"MAP53 MAP51 MAP60"}
 
 run() {  # run MAP TAG RENDERER
 	mkdir -p "$work/$2-saves"
 	( cd "$data_dir"
 	  DISPLAY=$display SDL_VIDEODRIVER=x11 SDL_AUDIODRIVER=dummy \
-	  timeout 250 "$build_dir/ec7wolf" --data CO7 --res 320 200 --nowait \
+	  timeout 300 "$build_dir/ec7wolf" --data CO7 --res 320 200 --nowait \
 		--vid-renderer "$3" \
 		--config "$work/$2.cfg" --savedir "$work/$2-saves" \
 		--capture-rngseed 1 \
@@ -231,7 +231,11 @@ for tic, key, after, origin in noticed:
         problems.append("delay %d is outside the declared 14-20 tics" % after)
         break
 
-print("  ..   reaction: %d sightings, %d released, delays %s"
+# len(sighted) is the number of distinct (bot, subject) pairs, because the dict
+# holds only the most recent sighting for each -- not the number of sighting
+# events, which is larger. Said plainly here because "8 sightings, 17 released"
+# reads as impossible otherwise.
+print("  ..   reaction: %d contact pairs, %d releases, delays %s"
       % (len(sighted), len(noticed),
          sorted(set(a for _, _, a, _ in noticed)) if noticed else "none"))
 if problems:
@@ -366,6 +370,106 @@ if [ -n "$target" ]; then
 		test "${bumped:-0}" -ge 1
 	check "and it is the only way, with the visor off" test "${blind_still:-0}" -eq 0
 fi
+
+# Damage cues, and memory that ages.
+#
+# Corridor 7 shows a screen-wide red flash with no direction in it, so a hit
+# tells a bot how much and what is left, and never where it came from. The
+# attacker's identity is allowed only when the victim could already see them --
+# the same rule as sound attribution, and checked the same way.
+#
+# The laser run above provides the damage: walking into a barrier costs ten
+# points and has no attacker at all.
+if [ -s "$work/bump.see" ]; then
+	python3 - "$work/bump.see" <<'PY'
+import sys
+cues, sights = [], set()
+for line in open(sys.argv[1]):
+    f = line.split()
+    if not f or f[0].startswith("#"):
+        continue
+    if f[0] == "damage":
+        cues.append(dict(tic=int(f[1]), victim=f[2], points=int(f[4]),
+                         left=int(f[6]), attacker=int(f[8])))
+    elif f[0] not in ("sound", "hazard"):
+        sights.add((int(f[0]), f[1], f[4]))
+
+problems = []
+if not cues:
+    problems.append("nothing was hurt; damage cues were not tested")
+named = [c for c in cues if c["attacker"] >= 0]
+leaked = [c for c in named
+          if (c["tic"], c["victim"], str(c["attacker"])) not in sights]
+if leaked:
+    problems.append("%d cues named an attacker the victim could not see, e.g. %s"
+                    % (len(leaked), leaked[0]))
+odd = [c for c in cues if c["points"] <= 0]
+if odd:
+    problems.append("a cue reported %d points" % odd[0]["points"])
+
+print("  ..   damage: %d cues, %d named an attacker" % (len(cues), len(named)))
+if problems:
+    for p in problems:
+        print("  FAIL damage: %s" % p)
+    sys.exit(1)
+print("  ok   damage: told how much and what was left, and nothing it could not see")
+PY
+	[ $? -eq 0 ] || status=1
+fi
+
+# Searching and forgetting: the last two verbs in the milestone's exit line.
+run MAP53 mem software
+python3 - "$work/mem.bots" <<'PY'
+import sys, re
+
+events = []
+for line in open(sys.argv[1]):
+    f = line.split()
+    if len(f) < 3 or f[0].startswith("#"):
+        continue
+    who = re.search(r"slot=(\d+)", line)
+    events.append((int(f[0]), f[1], f[2], who.group(1) if who else None, line))
+
+noticed = set()
+searches, forgets = [], []
+lost_at = {}
+problems = []
+
+for tic, bot, ev, who, line in events:
+    key = (bot, who)
+    if ev == "noticed":
+        noticed.add(key)
+    elif ev == "lost":
+        lost_at[key] = tic
+    elif ev == "searching":
+        # A bot only goes looking for somebody it was actually told about.
+        if key not in noticed:
+            problems.append("bot %s searched for %s it never noticed" % key)
+            break
+        searches.append((tic, key))
+    elif ev == "forgot":
+        after = int(re.search(r"after=(\d+)", line).group(1))
+        # 350 tics, from FORGET_TICS in g_bot.cpp.
+        if after < 350:
+            problems.append("forgot after %d tics, sooner than the 350 declared" % after)
+            break
+        forgets.append((tic, key, after))
+
+if not searches:
+    problems.append("nobody went looking; searching was not tested")
+if not forgets:
+    problems.append("nothing was forgotten; memory ageing was not tested")
+
+print("  ..   memory: %d searches, %d forgotten, ages %s"
+      % (len(searches), len(forgets),
+         sorted(set(a for _, _, a in forgets)) if forgets else "none"))
+if problems:
+    for p in problems:
+        print("  FAIL memory: %s" % p)
+    sys.exit(1)
+print("  ok   memory: looked where it last saw them, and gave up on time")
+PY
+[ $? -eq 0 ] || status=1
 
 # The same match, drawn two different ways, and drawn not at all as far as the
 # bots are concerned.

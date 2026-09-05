@@ -313,6 +313,60 @@ print("  ok   hearing: heard within earshot, as a sector and a band, "
 PY
 [ $? -eq 0 ] || status=1
 
+# Laser barriers, which are invisible without the infrared visor and are the
+# one thing here a bot could cheat at without ever looking odd -- it would
+# simply stop walking into them.
+#
+# MAP51 has them; MAP53, MAP55 and MAP60 have none, so this runs on MAP51 or it
+# tests nothing.
+laser() {  # laser TAG [EXTRA...]
+	tag=$1; shift
+	mkdir -p "$work/$tag-saves"
+	( cd "$data_dir"
+	  DISPLAY=$display SDL_VIDEODRIVER=x11 SDL_AUDIODRIVER=dummy \
+	  timeout 250 "$build_dir/ec7wolf" --data CO7 --res 320 200 --nowait \
+		--vid-renderer software \
+		--config "$work/$tag.cfg" --savedir "$work/$tag-saves" \
+		--capture-rngseed 1 \
+		--capture-perception "$work/$tag.see" \
+		--capture-maxtics 500 \
+		--tedlevel MAP51 --skill 2 --battle --bots 3 "$@" ) >"$work/$tag.log" 2>&1 || true
+}
+
+laser blind
+laser lit --capture-visor-all 3
+
+blind_seen=$(awk '$1=="hazard" && $NF=="seen"' "$work/blind.see" 2>/dev/null | wc -l)
+lit_seen=$(awk '$1=="hazard" && $NF=="seen"' "$work/lit.see" 2>/dev/null | wc -l)
+printf '  ..   lasers: %s seen without the visor, %s with it\n' "$blind_seen" "$lit_seen"
+
+check "the map has barriers, so this tests something" test "${lit_seen:-0}" -ge 20
+check "a bot without infrared cannot see a laser barrier" test "${blind_seen:-0}" -eq 0
+
+# And the honest way to find one in the dark: walk into it. Driven at a tile
+# the lit run reported a barrier on, with no visor.
+target=$(awk '$1=="hazard" && $NF=="seen"{print $4" "$5; exit}' "$work/lit.see")
+if [ -n "$target" ]; then
+	tx=${target% *}; ty=${target#* }
+	mkdir -p "$work/bump-saves"
+	( cd "$data_dir"
+	  DISPLAY=$display SDL_VIDEODRIVER=x11 SDL_AUDIODRIVER=dummy \
+	  timeout 250 "$build_dir/ec7wolf" --data CO7 --res 320 200 --nowait \
+		--vid-renderer software \
+		--config "$work/bump.cfg" --savedir "$work/bump-saves" \
+		--capture-rngseed 1 --capture-bot-goal "$tx" "$ty" \
+		--capture-perception "$work/bump.see" \
+		--capture-maxtics 900 \
+		--tedlevel MAP51 --skill 2 --battle --bots 1 ) >"$work/bump.log" 2>&1 || true
+	bumped=$(awk '$1=="hazard" && $NF=="contact"' "$work/bump.see" 2>/dev/null | wc -l)
+	blind_still=$(awk '$1=="hazard" && $NF=="seen"' "$work/bump.see" 2>/dev/null | wc -l)
+	printf '  ..   lasers: walked at (%s,%s) with no visor -- %s by contact, %s seen\n' \
+		"$tx" "$ty" "$bumped" "$blind_still"
+	check "walking into one in the dark is still a way to learn about it" \
+		test "${bumped:-0}" -ge 1
+	check "and it is the only way, with the visor off" test "${blind_still:-0}" -eq 0
+fi
+
 # The same match, drawn two different ways, and drawn not at all as far as the
 # bots are concerned.
 run MAP53 sw software

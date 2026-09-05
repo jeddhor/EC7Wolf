@@ -17,6 +17,10 @@
 #include "wl_state.h"
 #include "gamemap.h"
 #include "id_ca.h"
+#include "thingdef/thingdef.h"
+#include "wl_game.h"
+#include "g_shared/a_inventory.h"
+#include "wl_draw.h"
 
 namespace Perception {
 
@@ -43,6 +47,46 @@ RawSound     g_pending[MAX_SOUNDS];
 unsigned int g_pendingCount = 0;
 RawSound     g_current[MAX_SOUNDS];
 unsigned int g_currentCount = 0;
+
+// What each bot has learned about laser barriers, kept between tics. This is
+// memory rather than perception: it survives the visor being switched off,
+// which is the point of learning something.
+TArray<HazardKnowledge> g_hazards[MAXPLAYERS];
+
+// Does this player have the infrared visor running? Read from that player's
+// own inventory -- never from ConsolePlayer's camera, which is what the
+// renderer uses and which describes one screen rather than eight bots.
+bool HasInfrared(unsigned int slot)
+{
+	if(slot >= MAXPLAYERS || players[slot].mo == NULL)
+		return false;
+	AInventory *const mode =
+		players[slot].mo->FindInventory(ClassDef::FindClass("C7VisorMode"));
+	return mode != NULL && mode->amount == 3;
+}
+
+void Remember(unsigned int slot, uint16_t tx, uint16_t ty, bool byContact,
+	uint32_t when)
+{
+	if(slot >= MAXPLAYERS)
+		return;
+	TArray<HazardKnowledge> &known = g_hazards[slot];
+	for(unsigned int i = 0;i < known.Size();++i)
+	{
+		if(known[i].tileX == tx && known[i].tileY == ty)
+		{
+			known[i].knownAt = when;
+			known[i].byContact = known[i].byContact || byContact;
+			return;
+		}
+	}
+	HazardKnowledge fresh;
+	fresh.tileX = tx;
+	fresh.tileY = ty;
+	fresh.byContact = byContact;
+	fresh.knownAt = when;
+	known.Push(fresh);
+}
 
 // Fold a signed angular difference to 0..180 degrees worth of angle_t.
 angle_t OffAxis(angle_t facing, angle_t toward)
@@ -87,6 +131,33 @@ void Emit(SoundKind kind, const AActor *source, int loudnessTiles)
 	}
 }
 
+void NoteHazardContact(const AActor *victim)
+{
+	if(victim == NULL)
+		return;
+	for(unsigned int i = 0;i < MAXPLAYERS;++i)
+	{
+		if(players[i].mo != victim)
+			continue;
+		// Learned the hard way, at the place it happened, by the one it
+		// happened to. Nobody else is told.
+		Remember(i, (uint16_t)victim->tilex, (uint16_t)victim->tiley, true,
+			gamestate.TimeCount);
+		if(g_trace != NULL)
+			fprintf(g_trace, "hazard %lu %u %d %d contact\n",
+				(unsigned long)gamestate.TimeCount, i,
+				victim->tilex, victim->tiley);
+		break;
+	}
+}
+
+const TArray<HazardKnowledge> *HazardsKnownTo(Session::PlayerSlot slot)
+{
+	if(slot >= MAXPLAYERS)
+		return NULL;
+	return &g_hazards[slot];
+}
+
 const PlayerSighting *Observation::Seen(Session::PlayerSlot slot) const
 {
 	for(unsigned int i = 0;i < players.Size();++i)
@@ -104,6 +175,8 @@ void Reset()
 		g_observation[i] = Observation();
 		g_observation[i].players.Clear();
 		g_observation[i].sounds.Clear();
+		g_observation[i].hazards.Clear();
+		g_hazards[i].Clear();
 	}
 	g_observers = 0;
 	g_pendingCount = 0;
@@ -151,6 +224,7 @@ void BeginFrame(uint32_t sequence)
 		obs = Observation();
 		obs.players.Clear();
 		obs.sounds.Clear();
+		obs.hazards.Clear();
 		obs.sequence = sequence;
 
 		if(!Bot::Active(slot))
@@ -176,6 +250,39 @@ void BeginFrame(uint32_t sequence)
 		obs.self.health = players[slot].health;
 		obs.self.alive = true;
 		++g_observers;
+
+		// Laser barriers, and only with the visor on. Without infrared this
+		// loop does not run at all -- not "runs and filters", does not run.
+		// An actor scan that happened to be filtered later is one refactor
+		// away from being a scan that is not.
+		if(HasInfrared(slot))
+		{
+			for(AActor::Iterator iter = AActor::GetIterator();iter.Next();)
+			{
+				AActor *const thing = iter;
+				if(!Corridor7IsLaserBarrierActor(thing))
+					continue;
+
+				const angle_t toward = BotNav::BearingTo(eye->x, eye->y,
+					thing->x, thing->y);
+				if(OffAxis(eye->angle, toward) > FOV_HALF)
+					continue;
+				if(!CheckLine(eye, thing))
+					continue;
+
+				HazardKnowledge seen;
+				seen.tileX = (uint16_t)thing->tilex;
+				seen.tileY = (uint16_t)thing->tiley;
+				seen.byContact = false;
+				seen.knownAt = sequence;
+				obs.hazards.Push(seen);
+				Remember(slot, seen.tileX, seen.tileY, false, sequence);
+
+				if(g_trace != NULL)
+					fprintf(g_trace, "hazard %u %u %d %d seen\n",
+						sequence, slot, thing->tilex, thing->tiley);
+			}
+		}
 
 		// Hearing, before vision, so that a sound from somebody already in
 		// view can be attributed and one from a stranger cannot. Iterated in

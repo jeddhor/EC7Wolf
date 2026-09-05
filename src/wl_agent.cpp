@@ -527,6 +527,9 @@ static void DamageC7LaserBarrier(APlayerPawn *pawn)
 	}
 	c7LastLaserDamageTic[playerNumber] = gamestate.TimeCount;
 	PlaySoundLocActor("c7/electric/damage", pawn);
+	// Walking into it is the honest way to find one. The fact goes to whoever
+	// it happened to and to nobody else.
+	Perception::NoteHazardContact(pawn);
 	pawn->player->TakeDamage(10, NULL);
 }
 

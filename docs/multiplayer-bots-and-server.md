@@ -3162,8 +3162,40 @@ division -- a rounding artifact sitting exactly on the edge of a bot's vision.
 And a distance typed `fixed` while holding whole tiles produced a unit error
 within the hour; the field says `distanceTiles` now.
 
-**Still open in B4:** damage cues, infrared-gated laser perception, static
-pickup memory, and confidence decay with search-and-forget behaviour.
+**Infrared-gated lasers (step 3).** Corridor 7's laser barriers -- actor
+classes `C7Static005` and `C7Static061`, which are the plane-1 markers 28 and
+84 under a different numbering -- are invisible without the infrared visor, and
+that invisibility is their whole design.
+
+This is the one place in B4 a bot could cheat without ever looking wrong. It
+would not behave oddly; it would simply stop walking into them, and every
+behavioural test would stay green while it played a different game from the
+human beside it. So the rule is checked directly rather than inferred from
+conduct.
+
+Two honest ways to know, and only those two:
+
+| Condition | Barriers seen | Learned by contact |
+| --- | ---: | ---: |
+| No visor | **0** | 8 |
+| Infrared on | 734 | — |
+| With the gate removed | 734 | — |
+
+Measured on MAP51, which has them; MAP53, MAP55 and MAP60 have none, so running
+this there would have proved nothing at all.
+
+Two details worth keeping. The actor scan does not run without infrared -- not
+"runs and is filtered afterwards", because a filtered scan is one refactor away
+from an unfiltered one. And the visor is read from **the observing bot's own
+inventory**, never from `ConsolePlayer`'s camera the way the renderer's
+equivalent check does; that is the same requirement as renderer independence,
+and it is what makes the answer right on a server that draws nothing.
+
+Contact knowledge is recorded at the place it happened, for the bot it happened
+to, and for nobody else. Losing the visor does not erase what was learned.
+
+**Still open in B4:** damage cues, static pickup memory, and confidence decay
+with search-and-forget behaviour.
 
 ### B5 — Goals and resource play
 

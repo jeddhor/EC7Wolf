@@ -265,6 +265,7 @@ namespace
 	// --capture-perception PATH: one line per sighting, so a gate can check
 	// that nothing was perceived which should not have been.
 	FString  g_perceptionPath;
+	int      g_visorAll       = -1;      // --capture-visor-all: every player's visor mode
 	int      g_killSlot       = -1;
 	long     g_killTic        = -1;
 	bool     g_killDone       = false;
@@ -721,6 +722,15 @@ void ParseArgs(int argc, char **argv)
 		else if(strcmp(arg, "--capture-automap") == 0)
 		{
 			g_botOverlayMap = true;
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-visor-all") == 0 && i + 1 < argc)
+		{
+			// Every player's own visor, not the console player's. The existing
+			// --capture-visormode drives the view; a bot's perception reads
+			// its own inventory, so testing an infrared-gated sense needs the
+			// bot to actually be wearing one.
+			g_visorAll = atoi(argv[++i]);
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-perception") == 0 && i + 1 < argc)
@@ -1583,6 +1593,24 @@ void PreTic()
 		am_overlay = 1;			// AMO_On
 		AM_UpdateFlags();
 		automap = AMA_Overlay;
+	}
+
+	if(g_visorAll >= 0)
+	{
+		const ClassDef *cls = ClassDef::FindClass("C7VisorMode");
+		for(unsigned int i = 0;i < MAXPLAYERS && cls != NULL;++i)
+		{
+			if(players[i].mo == NULL)
+				continue;
+			AInventory *mode = players[i].mo->FindInventory(cls);
+			if(mode == NULL)
+			{
+				players[i].mo->GiveInventory(cls, 0, true);
+				mode = players[i].mo->FindInventory(cls);
+			}
+			if(mode != NULL)
+				mode->amount = (unsigned int)g_visorAll;
+		}
 	}
 
 	if(g_killSlot >= 0 && g_killSlot < MAXPLAYERS && !g_killDone &&

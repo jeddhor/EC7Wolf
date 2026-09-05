@@ -109,6 +109,27 @@ struct AudibleEvent
 	uint32_t heardAt = 0;
 };
 
+// A laser barrier this bot knows about.
+//
+// Corridor 7's barriers (map statics 28 and 84) are invisible without the
+// infrared visor, and that is the whole of their design: walking into an
+// unlit corridor and losing ten points is the intended experience. So a bot
+// must not learn where they are by scanning actors, which is the one way it
+// could trivially cheat here and the one that would never show up as odd
+// behaviour -- it would just stop walking into them.
+//
+// Two honest ways to know: see it with infrared on, or walk into it.
+struct HazardKnowledge
+{
+	uint16_t tileX = 0;
+	uint16_t tileY = 0;
+	// Seen with the visor, or discovered the hard way.
+	bool     byContact = false;
+	// When it was last confirmed. Memory ages from here; losing infrared does
+	// not erase what was already learned.
+	uint32_t knownAt = 0;
+};
+
 // Everything one bot perceived on one update.
 struct Observation
 {
@@ -117,6 +138,9 @@ struct Observation
 	OwnState self;
 	TArray<PlayerSighting> players;
 	TArray<AudibleEvent> sounds;
+	// Barriers currently visible to this bot. Empty without infrared, always,
+	// however many are in front of it.
+	TArray<HazardKnowledge> hazards;
 
 	const PlayerSighting *Seen(Session::PlayerSlot slot) const;
 };
@@ -140,6 +164,15 @@ struct Observation
 //
 // Loudness is in tiles and is a radius, before zones and doors are considered.
 void Emit(SoundKind kind, const AActor *source, int loudnessTiles);
+
+// A player just walked into a laser barrier. Called from the damage path,
+// because that is the moment the fact becomes known to whoever it happened
+// to -- and to nobody else.
+void NoteHazardContact(const AActor *victim);
+
+// What this bot has learned about barriers, however it learned it. Persists
+// across the visor being switched off; ages, but is not erased.
+const TArray<HazardKnowledge> *HazardsKnownTo(Session::PlayerSlot slot);
 
 // Build every active bot's observation for this tic, from the world as it
 // stands before any of this tic's commands are applied. Cheap enough to do for

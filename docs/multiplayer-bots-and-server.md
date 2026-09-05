@@ -3274,6 +3274,89 @@ inactive-item and weapon-stay semantics; state and goal explanation trace.
 explainable reasons; goals do not thrash and never use unseen availability;
 arena item-navigation soak progresses without unbounded replans.
 
+**Status: complete.** See the B5 record below.
+
+### B5 record — wanting things, and being able to say why
+
+**A spawn is not an availability.** Section 12.8's distinction is the whole
+design. Where a pickup spawns is map knowledge -- a player who has played an
+arena twice knows where the shotgun is, and a bot knowing the same is not
+cheating. Whether it is there *now* has only two honest sources: having just
+looked, or having looked recently with no reason to think otherwise.
+
+So annotations are built once at level load from the map's own placement, and
+belief is per bot and moves only when that bot sees the place. The failure this
+prevents is quiet in the same way the laser one was: a bot walking the global
+actor list would collect everything the moment it respawned, from anywhere, and
+would look exactly like a bot with good item timing.
+
+Removing the visibility gate produces 33 beliefs instead of 8, with 18 outside
+the field of view and 16 through walls.
+
+**Stale decays to unknown, never to absent.** Section 13.6 is explicit and the
+reason is behavioural: a bot that lets old news become "there is nothing there"
+stops going to look and never finds out otherwise. Checked directly in
+`--itemtest`.
+
+**The need model.** Health rises nonlinearly as health falls -- the gap between
+100 and 80 is not worth crossing a map for, and the gap between 20 and 40 is
+the difference between winning the next fight and not. Ammunition is worth
+nothing at capacity and nothing at all for a weapon the bot does not carry.
+A weapon already held is worth *nothing* rather than less, because under
+multiplayer stay-in-world rules it stays in the world and collecting it again
+does nothing whatsoever.
+
+**Collection is not visible as a disappearance.** Weapon-stay leaves the pickup
+lying there afterwards, so the map looks identical and a belief of "present"
+stays correct -- I went looking for "gone" observations and was right to find
+none. What changes is whose backpack it is in, so that is what is measured:
+bots end a MAP60 match holding 3 and 4 weapons against the 2 they spawn with.
+The `already-have` rejection appearing afterwards is how we know a bot stopped
+wanting what it just collected.
+
+**The explanation is the deliverable.** The exit criterion says "for
+explainable reasons", so every decision emits one line:
+
+```text
+item-scan considered=11 stale=8 already-have=1 no-need=2
+```
+
+The first version logged each rejected candidate separately: eleven
+annotations, three bots, twenty decisions, six hundred nearly identical lines
+that explain nothing to anybody. Same information, bounded length, legible.
+
+**Thrash and replans.** Item choice happens only when a route runs out, so a
+bot finishes what it starts rather than re-deliberating each tic: 4 to 5
+decisions per bot per match, and 13 to 25 committed routes per match against a
+runaway bound of 150.
+
+**A gate that failed for a good reason.** MAP57's roaming transporter
+crossings went from 2 to 0 once bots had items to fetch -- they now have
+somewhere specific to be, and its pickups do not happen to lie across a pad.
+Two properties were being conflated in one check: that *every pad works*, which
+the per-pad sweep proves exhaustively and still does, and that *bots use
+transporters unprompted*, which is a property of routing rather than of any
+arena. The second is now summed across the arenas, and still fails (0
+crossings) if the planner is made to avoid them.
+
+This is the second time this session a probabilistic assertion about emergent
+behaviour has broken for a good reason, after the arena-start episode. Such
+checks want framing as "somewhere, sometimes" rather than "here, always", or
+they encode today's behaviour as tomorrow's requirement.
+
+**What these maps cannot exercise.** The arenas carry weapons, charge packs and
+mine packs and almost no health or armour, and nothing damages a bot except a
+laser barrier. The health term's nonlinear shape is implemented and unit-tested
+and *no match in these arenas has driven a bot below full health*. Like damage
+attribution in B4, the code is there and the behaviour is unverified in play
+until B6 gives bots a reason to get hurt. Recorded rather than left implied by
+a passing gate.
+
+**Gates:** `tools/test_bot_items.sh` is new, `--itemtest` checks belief and
+ageing with no map, and `test_bot_arenas.sh` gained the replan bound. Proven
+able to fail: item visibility removed, and the planner forced to avoid
+transporters.
+
 ### B6 — Baseline deathmatch combat
 
 **Purpose:** the first genuinely playable opponent.

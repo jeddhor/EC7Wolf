@@ -134,6 +134,20 @@ for map in $maps; do
 		# means they are shuffling on the spot rather than going anywhere.
 		check "$map/$seed: and covered ground rather than milling about" \
 			test "$tiles" -ge 40
+
+		# B5's last exit clause: item navigation must not replan without bound.
+		#
+		# Every route a bot commits to is one line in the trace, so the count
+		# is the number of times it changed its mind about where to go. Three
+		# bots deciding afresh every tic for 900 tics would be 2700; a bot that
+		# finishes what it starts is nearer thirty. The bound is deliberately
+		# loose -- this is a check against runaway, not a performance target --
+		# and it is per match rather than per bot because a single bot stuck in
+		# a replan loop is exactly what it should catch.
+		routes=$(grep -c ' route ' "$work/$tag.bots" || true)
+		printf '  ..   %s/%s: %s routes committed to\n' "$map" "$seed" "$routes"
+		check "$map/$seed: it replanned a bounded number of times" \
+			test "${routes:-0}" -le 150
 	done
 done
 

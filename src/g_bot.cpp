@@ -15,6 +15,7 @@
 #include "wl_game.h"
 #include "g_botnav.h"
 #include "g_perception.h"
+#include "g_items.h"
 #include "actor.h"
 #include "wl_agent.h"
 #include "name.h"
@@ -184,6 +185,11 @@ const fixed ARRIVE_WITHIN = (fixed)(24<<10);
 // working. Generous: a legitimate turn at a corner can take most of a second.
 const unsigned int STUCK_TICS = 105;
 
+// How often a bot reconsiders what to fetch. Not every tic: section 14.3's
+// point is that noisy utility recomputed constantly makes a bot visibly
+// indecisive, and this is the cheapest half of the answer.
+const uint32_t ITEM_THINK_INTERVAL = 70;
+
 }   // anonymous
 
 // The bot's own pawn, and nothing else's. Section 11.4 permits a bot exact
@@ -275,6 +281,131 @@ bool ChooseRoamGoal(State &bot, const BotNav::Graph &graph, AActor *pawn,
 				TraceEvent(bot.slot, "route", detail.GetChars());
 				return true;
 			}
+		}
+	}
+
+	// Something worth fetching.
+	//
+	// Section 14.2's utility, in the form the milestone actually needs:
+	//
+	//     utility = need - route cost
+	//
+	// with the terms that require combat or a threat model left for B6 rather
+	// than written as zeroes now. Every candidate is scored and every
+	// rejection is named, because the exit criterion is that a bot collects
+	// the expected thing *for explainable reasons*, and a choice nobody can
+	// read is not explainable.
+	int ignoredX = 0, ignoredY = 0;
+	if(sequence >= bot.nextItemThink && !ForcedGoal(ignoredX, ignoredY))
+	{
+		bot.nextItemThink = sequence + ITEM_THINK_INTERVAL;
+
+		unsigned int bestIndex = 0;
+		int bestUtility = 0;
+		bool haveBest = false;
+		TArray<BotNav::NodeId> bestRoute;
+
+		// Counted rather than logged one by one. Every candidate's fate is
+		// still explained, in a line whose length does not grow with the
+		// number of pickups on the map -- eleven annotations times three bots
+		// times twenty decisions is six hundred lines of nearly identical
+		// text, which explains nothing to anybody.
+		unsigned int rejected[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
+		for(unsigned int i = 0;i < Items::Count();++i)
+		{
+			const Items::Annotation &note = Items::At(i);
+			const Items::Knowledge *known = Items::KnownTo(bot.slot, i);
+			Items::Reject why = Items::Reject::None;
+			int need = 0, cost = 0, utility = 0;
+
+			if(known == NULL || known->belief != Items::Belief::Present)
+			{
+				// Unknown is not absent -- but it is not a reason to walk
+				// somewhere either. A bot goes for what it has seen.
+				why = known != NULL && known->belief == Items::Belief::Unknown
+					? Items::Reject::Stale : Items::Reject::NotPresent;
+			}
+			else
+			{
+				need = note.category == Items::Category::Weapon
+					? Items::NeedWeapon(bot.slot, note.cls)
+					: Items::Need(bot.slot, note.category);
+				if(need <= 0)
+				{
+					why = note.category == Items::Category::Weapon
+						? Items::Reject::AlreadyHave : Items::Reject::NoNeed;
+				}
+				else
+				{
+					const BotNav::NodeId to = graph.NodeAt(note.tileX, note.tileY);
+					TArray<BotNav::NodeId> route;
+					BotNav::SearchStats stats;
+					if(to == BotNav::NO_NODE || to == here ||
+						!graph.FindPath(here, to, route, stats, 0, &options))
+						why = Items::Reject::Unreachable;
+					else
+					{
+						// Route cost is in the graph's units, a cardinal step
+						// being 100. Divided down so that a need of 1000 pays
+						// for roughly thirty tiles of walking, which is most
+						// of an arena and about right for something a bot
+						// actually wants.
+						cost = (int)(route.Size()*100)/3;
+						utility = need - cost;
+						if(utility <= 0)
+							why = Items::Reject::TooFar;
+						else if(haveBest && utility <= bestUtility)
+							why = Items::Reject::LostToBetter;
+						else
+						{
+							if(haveBest)
+								++rejected[(unsigned int)Items::Reject::LostToBetter];
+							haveBest = true;
+							bestIndex = i;
+							bestUtility = utility;
+							bestRoute = route;
+						}
+					}
+				}
+			}
+
+			if(why != Items::Reject::None)
+				++rejected[(unsigned int)why];
+		}
+
+		// One line saying what was considered and why nearly all of it lost.
+		{
+			FString why;
+			for(unsigned int r = 1;r < 8;++r)
+			{
+				if(rejected[r] == 0)
+					continue;
+				FString one;
+				one.Format("%s%s=%u", why.IsEmpty() ? "" : " ",
+					Items::RejectName((Items::Reject)r), rejected[r]);
+				why += one;
+			}
+			FString detail;
+			detail.Format("considered=%u %s", Items::Count(),
+				why.IsEmpty() ? "none-rejected" : why.GetChars());
+			TraceEvent(bot.slot, "item-scan", detail.GetChars());
+		}
+
+		if(haveBest)
+		{
+			const Items::Annotation &won = Items::At(bestIndex);
+			bot.route = bestRoute;
+			bot.goal = graph.NodeAt(won.tileX, won.tileY);
+			bot.waypoint = 0;
+			++bot.routesPlanned;
+			++bot.itemGoals;
+			FString detail;
+			detail.Format("item %s at=%u,%u utility=%d len=%u",
+				Items::CategoryName(won.category), won.tileX, won.tileY,
+				bestUtility, bot.route.Size());
+			TraceEvent(bot.slot, "route", detail.GetChars());
+			return true;
 		}
 	}
 

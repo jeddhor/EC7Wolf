@@ -19,6 +19,7 @@
 #include "g_command.h"
 #include "g_bot.h"
 #include "g_perception.h"
+#include "g_items.h"
 #include "am_map.h"
 #include "g_traversal.h"
 #include "g_botnav.h"
@@ -581,6 +582,24 @@ namespace
 				tally.teleports, tally.frozenTics, tally.cellsBlocked,
 				tally.contactsGained, tally.contactsLost);
 		}
+		// What each bot ended up carrying. The outcome of B5's item goals, and
+		// the only visible one: weapon-stay means the pickup is still lying
+		// there afterwards, so the world looks the same either way.
+		{
+			FString held;
+			for(unsigned int i = 0;i < MAXPLAYERS;++i)
+			{
+				if(!Bot::Active(i))
+					continue;
+				FString one;
+				one.Format("%s%u:%u", held.IsEmpty() ? "" : ",", i,
+					Items::WeaponsHeld(i));
+				held += one;
+			}
+			if(!held.IsEmpty())
+				Printf("Capture: bot weapons %s\n", held.GetChars());
+		}
+
 		Bot::CloseTrace();
 		Perception::CloseTrace();
 	}
@@ -1356,6 +1375,22 @@ static void WriteNavMap(const char *path)
 					trig.activate[2] ? 1 : 0, trig.activate[3] ? 1 : 0);
 			}
 		}
+	}
+
+	// Every pickup the map placed, with where and what. This is the
+	// annotation of section 12.8 -- what a player learns by playing a level a
+	// few times -- and deliberately not a statement about what is there right
+	// now, which only perception may answer.
+	for(AActor::Iterator iter = AActor::GetIterator();iter.Next();)
+	{
+		AActor *const thing = iter;
+		if(!thing->IsKindOf(NATIVE_CLASS(Inventory)))
+			continue;
+		// Carried things are somebody's, not the map's.
+		if(static_cast<AInventory *>(thing)->owner != NULL)
+			continue;
+		fprintf(out, "item %d %d %s\n", thing->tilex, thing->tiley,
+			thing->GetClass()->GetName().GetChars());
 	}
 
 	// Solid cells that are something other than plain wall: Corridor 7's wall

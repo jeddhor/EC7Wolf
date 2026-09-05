@@ -10,6 +10,7 @@
 #include "g_perception.h"
 #include "g_bot.h"
 #include "g_botnav.h"
+#include "g_items.h"
 #include "actor.h"
 #include "wl_agent.h"
 #include "wl_def.h"
@@ -17,6 +18,7 @@
 #include "wl_state.h"
 #include "gamemap.h"
 #include "id_ca.h"
+#include "a_inventory.h"
 #include "thingdef/thingdef.h"
 #include "wl_game.h"
 #include "g_shared/a_inventory.h"
@@ -327,6 +329,9 @@ void BeginFrame(uint32_t sequence)
 {
 	g_observers = 0;
 
+	// Beliefs get old whether or not anybody is looking.
+	Items::Age(sequence);
+
 	// Take the noises made during the tic just finished, and start a fresh
 	// list for the tic about to run.
 	g_currentCount = g_pendingCount;
@@ -369,6 +374,62 @@ void BeginFrame(uint32_t sequence)
 		obs.self.health = players[slot].health;
 		obs.self.alive = true;
 		++g_observers;
+
+		// Pickups. The map's annotations say where they can be; only looking
+		// says whether one is there.
+		//
+		// Every annotation whose tile this bot can currently see gets an
+		// answer, present or gone. Annotations it cannot see get nothing at
+		// all -- not "gone", which is what a scan of the actor list would
+		// effectively produce for every pickup somebody else had taken.
+		for(unsigned int a = 0;a < Items::Count();++a)
+		{
+			const Items::Annotation &note = Items::At(a);
+			const fixed ix = (fixed)(note.tileX<<TILESHIFT) + (1<<(TILESHIFT-1));
+			const fixed iy = (fixed)(note.tileY<<TILESHIFT) + (1<<(TILESHIFT-1));
+
+			const angle_t itemOff =
+				OffAxis(eye->angle, BotNav::BearingTo(eye->x, eye->y, ix, iy));
+			if(itemOff > FOV_HALF)
+				continue;
+			if(!ClearLine(eye->x, eye->y, ix, iy))
+				continue;
+
+			// In view. Is one actually there?
+			bool present = false;
+			for(AActor::Iterator iter = AActor::GetIterator();iter.Next();)
+			{
+				AActor *const thing = iter;
+				if((unsigned)thing->tilex != note.tileX ||
+					(unsigned)thing->tiley != note.tileY)
+					continue;
+				if(!thing->IsKindOf(NATIVE_CLASS(Inventory)))
+					continue;
+				if(static_cast<AInventory *>(thing)->owner != NULL)
+					continue;
+				if(thing->GetClass()->GetName() != note.cls)
+					continue;
+				present = true;
+				break;
+			}
+
+			const Items::Knowledge *before = Items::KnownTo(slot, a);
+			const Items::Belief was = before ? before->belief : Items::Belief::Unknown;
+			Items::Observe((Session::PlayerSlot)slot, a, present, sequence);
+			if(g_trace != NULL && (was == Items::Belief::Unknown ||
+				(was == Items::Belief::Present) != present))
+			{
+				// The observer's position and how far off its facing the
+				// pickup was, so a gate can re-check the sight line and the
+				// field of view for itself rather than take this on trust.
+				fprintf(g_trace, "item %u %u %d %d %u %u %s %s off %u\n",
+					sequence, slot, eye->x>>10, eye->y>>10,
+					note.tileX, note.tileY,
+					Items::CategoryName(note.category),
+					present ? "present" : "gone",
+					(unsigned)(itemOff/ANGLE_1));
+			}
+		}
 
 		// Laser barriers, and only with the visor on. Without infrared this
 		// loop does not run at all -- not "runs and filters", does not run.

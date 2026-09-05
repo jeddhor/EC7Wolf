@@ -103,11 +103,16 @@ for line in open(nav):
 
 sightings = []
 for line in open(trace):
-    if line.startswith("#"):
+    f = line.split()
+    # A sighting line begins with the tic. Everything else in this file --
+    # sound, hazard, item, damage -- begins with its own keyword, so select by
+    # shape rather than by listing the others: a parser that skips the
+    # keywords it knows about breaks the day a new one is added, which is
+    # exactly what happened when item lines arrived.
+    if not f or not f[0].isdigit():
         continue
-    f = [int(v) for v in line.split()]
     # tic observer ox oy subject sx sy distance bearing offaxis
-    sightings.append(f)
+    sightings.append([int(v) for v in f])
 
 problems = []
 
@@ -274,7 +279,7 @@ for line in open(sys.argv[1]):
         sounds.append(dict(tic=int(f[1]), listener=f[2], kind=f[3],
                            band=int(f[5]), bearing=int(f[7]),
                            source=int(f[9]), rng=int(f[11]), loud=int(f[13])))
-    else:
+    elif f[0].isdigit():
         sights.add((int(f[0]), f[1], f[4]))
 
 problems = []
@@ -371,6 +376,88 @@ if [ -n "$target" ]; then
 	check "and it is the only way, with the visor off" test "${blind_still:-0}" -eq 0
 fi
 
+# Item beliefs. Section 12.8: where a pickup spawns is map knowledge a player
+# builds by playing an arena, and whether it is there right now is not. So a
+# belief may only form about a place the bot could actually see at that moment,
+# and the gate re-derives the sight line and the field of view itself rather
+# than taking the engine's word.
+#
+# MAP60 has eleven pickups, which is why the item run uses it.
+run MAP60 items software
+python3 - "$work/items.see" "$work/items.nav" <<'PY'
+import sys
+
+trace, nav = sys.argv[1], sys.argv[2]
+UNITS = 64.0
+
+solid, spawns = set(), set()
+for line in open(nav):
+    f = line.split()
+    if not f:
+        continue
+    if f[0] == "wall":
+        solid.add((int(f[1]), int(f[2])))
+    elif f[0] == "item":
+        spawns.add((int(f[1]), int(f[2])))
+
+def blocked(ox, oy, sx, sy):
+    a = (int(ox // UNITS), int(oy // UNITS))
+    b = (int(sx // UNITS), int(sy // UNITS))
+    inside = {}
+    steps = 400
+    for i in range(1, steps):
+        t = i / float(steps)
+        x = (ox + (sx - ox) * t) / UNITS
+        y = (oy + (sy - oy) * t) / UNITS
+        cell = (int(x), int(y))
+        if cell == a or cell == b or cell not in solid:
+            continue
+        fx, fy = x - cell[0], y - cell[1]
+        if min(fx, 1.0 - fx, fy, 1.0 - fy) >= 0.15:
+            inside[cell] = inside.get(cell, 0) + 1
+    return [c for c, n in inside.items() if n >= 8]
+
+beliefs, problems = [], []
+for line in open(trace):
+    f = line.split()
+    if not f or f[0] != "item":
+        continue
+    # item tic slot ox oy tx ty category state off N
+    beliefs.append(dict(tic=int(f[1]), slot=f[2], ox=int(f[3]), oy=int(f[4]),
+                        tx=int(f[5]), ty=int(f[6]), cat=f[7], state=f[8],
+                        off=int(f[10])))
+
+if len(beliefs) < 4:
+    problems.append("only %d beliefs formed; this tested nothing" % len(beliefs))
+
+# Every belief is about a place the map actually puts something.
+stray = [b for b in beliefs if (b["tx"], b["ty"]) not in spawns]
+if stray:
+    problems.append("%d beliefs about a tile with no pickup spawn, e.g. %s"
+                    % (len(stray), stray[0]))
+
+# And about a place the bot could see: in view, and with a clear line.
+wide = [b for b in beliefs if b["off"] > 45]
+if wide:
+    problems.append("%d beliefs formed outside the field of view, e.g. %s"
+                    % (len(wide), wide[0]))
+
+through = [b for b in beliefs
+           if blocked(b["ox"], b["oy"], b["tx"] * 64 + 32, b["ty"] * 64 + 32)]
+if through:
+    problems.append("%d beliefs formed through a wall, e.g. %s"
+                    % (len(through), through[0]))
+
+print("  ..   items: %d spawns annotated, %d beliefs, %s outside view, %s through walls"
+      % (len(spawns), len(beliefs), len(wide), len(through)))
+if problems:
+    for p in problems:
+        print("  FAIL items: %s" % p)
+    sys.exit(1)
+print("  ok   items: every belief was about somewhere the bot could actually see")
+PY
+[ $? -eq 0 ] || status=1
+
 # Damage cues, and memory that ages.
 #
 # Corridor 7 shows a screen-wide red flash with no direction in it, so a hit
@@ -391,7 +478,7 @@ for line in open(sys.argv[1]):
     if f[0] == "damage":
         cues.append(dict(tic=int(f[1]), victim=f[2], points=int(f[4]),
                          left=int(f[6]), attacker=int(f[8])))
-    elif f[0] not in ("sound", "hazard"):
+    elif f[0].isdigit():
         sights.add((int(f[0]), f[1], f[4]))
 
 problems = []

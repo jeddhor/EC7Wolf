@@ -106,6 +106,7 @@ initial_sources(
 	g_botnav.cpp
 	g_traversal.cpp
 	g_perception.cpp
+	g_items.cpp
 	g_command.cpp
 	g_session.cpp
 	g_mapinfo.cpp

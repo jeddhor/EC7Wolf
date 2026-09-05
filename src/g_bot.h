@@ -227,6 +227,10 @@ struct State
 	// The slot being searched for, and where. NO_NODE-ish: MAXPLAYERS means
 	// nobody.
 	unsigned int searchingFor = MAXPLAYERS;
+	// When to next reconsider what to fetch, and how many times a fetch has
+	// been chosen.
+	uint32_t     nextItemThink = 0;
+	unsigned int itemGoals = 0;
 
 	unsigned int teleports = 0;
 	unsigned int frozenTics = 0;
@@ -325,6 +329,7 @@ struct Totals
 	unsigned int reactionTicsTotal = 0;
 	unsigned int searchesStarted = 0;
 	unsigned int contactsForgotten = 0;
+	unsigned int itemGoals = 0;
 };
 Totals Tally();
 

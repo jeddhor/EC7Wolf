@@ -35,6 +35,9 @@
 #include "r_capture.h"
 #include "wl_play.h"
 #include "wl_game.h"
+#include "g_items.h"
+#include "g_perception.h"
+#include "g_botnav.h"
 #include "wl_iwad.h"
 #include "wl_text.h"
 #include "a_inventory.h"
@@ -349,6 +352,13 @@ void SetupGameLevel (void)
 	// A new (or just-loaded) level has no motion history: forget any door /
 	// pushwall snapshots so nothing sweeps in from a previous level's state.
 	DynamicWalls::Reset();
+
+	// The same is true of everything a bot knew. The navigation graph is a
+	// map's shape, item annotations are a map's furniture, and beliefs about
+	// what is still lying around belong to a match that has ended.
+	BotNav::Invalidate();
+	Perception::Reset();
+	Items::Annotate();
 }
 
 

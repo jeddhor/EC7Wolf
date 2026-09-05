@@ -94,6 +94,9 @@ field() {  # field TAG KEY
 
 printf 'Transporters, used and not lived in\n'
 
+# Crossings made while simply playing, summed over the arenas.
+roamed=0
+
 for map in $maps; do
 	run "$map" a
 	if [ ! -s "$work/a.nav" ] || [ ! -s "$work/a.bots" ]; then
@@ -130,7 +133,16 @@ for map in $maps; do
 	fi
 
 	check "$map: the arena is one connected piece" test "${regions:-0}" -eq 1
-	check "$map: bots crossed at least one" test "${ports:-0}" -ge 1
+	# Incidental use is counted across the maps rather than demanded of each.
+	#
+	# Two different properties were being conflated here. That every pad works
+	# is proven exhaustively by the sweep below, one pad at a time. That bots
+	# use transporters *without being told to* is a property of routing, not of
+	# any particular arena -- and once bots had item goals to pursue (B5) they
+	# stopped wandering into MAP57's pads at all, because its pickups do not
+	# happen to lie across one. That is bots behaving better, not worse, and a
+	# per-map assertion turned it into a failure.
+	roamed=$((roamed + ${ports:-0}))
 
 	# 35 tics of freeze per crossing, exactly. Fewer means the follower moved
 	# during a freeze the engine was ignoring; more means it sat still for
@@ -166,6 +178,9 @@ for map in $maps; do
 		printf '  ok   %s: no bot went straight back through a pair\n' "$map"
 	fi
 done
+
+printf '  ..   crossings made without being told to, across all arenas: %s\n' "$roamed"
+check "bots use transporters of their own accord somewhere" test "$roamed" -ge 1
 
 # Every pair, one at a time.
 #

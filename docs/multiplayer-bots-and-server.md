@@ -3539,8 +3539,187 @@ already inside it. Hazard cost does not have it today only because it is a
 preference of +200 rather than a prohibition, so a route out always exists at
 some price; if that ever becomes a filter, it will need the same clause.
 
-**Still open in B7:** mines and self-risk, door combat behaviour, per-weapon
-tuning carried over from B6, and personality biases.
+### B7 record, part two — mines, personalities, and an instrument that lied
+
+**A personality changes decisions, never capabilities.** Four numbers --- aim
+envelope, reaction base, the health at which it breaks off, and the range it
+tries to hold --- and nothing else. Section 17.3's line is checked rather than
+respected: every profile spawns with identical health, and the gate that says
+so would fail if a profile ever granted one point of it. Thirteen distinct
+reaction delays across a match, one starting health.
+
+**A proxy is not a measurement, and this one lied for three rounds.** The mine
+gate inferred a self-blast from position: a health drop of 50 or more within
+two tiles of a mine you had laid. Under that rule a bot killed by a plasma bolt
+at range five was recorded as blowing itself up, because it had mined a
+corridor 143 tics earlier and was still near it. Mines are `+SHOOTABLE`, so
+anyone's stray shot detonates one too, and position cannot separate any of
+these.
+
+`A_Explode` has exactly one branch that knows the answer --- it has to, because
+a blast reaching whoever set it off must not be discarded by the friendly-fire
+guard --- so that branch now says so, and names the actor that exploded.
+
+What it then reported was worse than a wrong answer: the gate had been
+reporting *one* failure that was actually two unrelated events, and which one
+it showed depended on which happened to come first in the run. One was a
+genuine mine death. The other, after three rounds of fixes had changed the
+behaviour enough to reorder them, was a bot splashing itself with its own
+plasma bolt --- no mine within thirty tiles. Each fix I made changed which
+event surfaced, so each looked like it had done something.
+
+Every one of those fixes turned out to be a real defect, which is luck rather
+than method. A proxy that cannot name what it saw cannot tell you whether you
+fixed the thing you were looking at, and it took an hour to notice that the
+number staying at 1 did not mean the same 1.
+
+**The mine lands where the bot is looking, not where it is standing.**
+`bt_reload` drops it 40/64 of a tile along the facing, which is usually the
+next cell. The bot recorded its own tile as the mine's position, and
+`WorthMining` judged its own cell for choke-point-ness. Both were wrong by one
+cell in the same direction, and they hid each other: the test and the memory
+agreed, and both disagreed with the world. Correcting the memory immediately
+exposed the second: with the trace finally naming the cell the mine was in
+rather than the cell the bot had been in, MAP60 seed 5 showed one sitting at
+(34,4) with four ways out of it --- approved by a choke-point test that had
+been asked about a different cell entirely.
+
+**Half a tile from a point that is not a cell centre.** `A_C7MineThink` triggers
+on anything within half a tile of the mine's origin, so the danger is a 1x1
+square around a point that sits wherever the drop put it --- straddling up to
+four cells. Blocking the mine's own cell left a bot free to route through the
+neighbour and walk into the edge of the square, which is precisely how one died
+at (17,3).
+
+The owner is not spared, either. The grace in `A_C7MineThink` holds only while
+the mine is arming; once live, its trigger loop excludes the mine and nothing
+else.
+
+**A penalty is the wrong instrument for something that kills you.** Own mines
+were priced at `COST_BLOCKED`, 1500, or fifteen tiles of detour. But a bot mines
+choke points *on purpose*, and a choke point is exactly where the detour is
+longest or does not exist --- so the one place the penalty is applied is the one
+place it is guaranteed to be outbid. The bot paid fifteen tiles' worth of cost
+and walked down its own corridor. Mines are now refused outright, and the
+relaxation lives in the caller's pass ladder.
+
+Part one predicted this in the abstract --- *any hard exclusion zone acquires
+this bug for an agent already inside it; hazard cost avoids it only by being a
+preference, and if that ever becomes a filter it will need the same clause* ---
+and mines are the first thing to become a filter. The clause it needed was the
+one already written for transporters: only `edge.to` is tested, so the cell a
+bot is standing in is exempt by construction and it can always step out of its
+own blast square.
+
+**The retry belongs in the ladder, not in the search.** My first attempt put an
+automatic fallback inside `FindPath`: refuse mines, and if that makes the goal
+unreachable, search again without them. That is a per-candidate fallback, and
+the comment in `ChooseRoamGoal` already records what those do --- the strict
+search fails, the fallback succeeds, and the route goes straight through the
+hazard with the avoidance apparently in place. It was written about
+transporters. It applied unchanged to mines, and I reproduced the bug it
+describes before rereading it.
+
+Own mines also needed their own rung. Pass 0 only considers goals six tiles away
+or more, so a bot whose distant goals are all behind its own mine fails that
+pass for two unrelated reasons at once, and with the restriction lifted on the
+very next pass it never gets to ask whether somewhere *close* is reachable
+without crossing.
+
+**The arming window is a trap, not a grace.** Thirty-six tics is longer than a
+crossing takes, so a bot that mines the cell in front of it walks over the mine
+unharmed and only afterwards discovers that it is now between itself and
+everywhere else. On MAP60 one mined the corridor at (17,3), continued into the
+four-cell pocket beyond on a route planned before the mine existed, and had no
+way out that did not cross it; the goal ladder relaxed on its last pass, as it
+must, and the bot walked back into its own mine and died.
+
+Refusing such drops outright was tried and is too blunt --- it cut mines laid
+from three to one, because the drop is always forward and a route always
+continues forward. The fix is narrower: laying a mine invalidates a route that
+still crosses it. The bot replans from the open side, with the mine already
+known, and never enters the pocket.
+
+Measured across two seeds: mines laid at choke points on both, **zero
+self-blasts and zero own-projectile splashes**, and no reduction in mining.
+
+**A doorway is not a place to hold a fight.** Two reasons that point the same
+way: combat footwork inside a door frame has nowhere lateral to go, so the pawn
+grinds against the jamb and shuffles on the spot --- section 15's
+oscillating-at-a-doorway tell, produced by the strafing that makes a bot hard
+to hit everywhere else --- and a bot standing in an open door holds it open, in
+the one cell where it is framed in the gap with no room to move. So the bot
+clears the cell: no strafe, forward regardless of the range it would rather
+keep. Backing off is the case that matters, because the door is behind it.
+
+The rule is a pure function rather than a branch inside `Produce`, for the same
+reason `ChooseSlotFrom` is: seven of the eight shipped arenas contain no door
+at all, so a contract that can only be exercised when a fight happens to reach
+the one doorway in eight maps is a contract tested by luck.
+
+**What the mine tests cover now.** Section 16.7 asks for owner-clear timing,
+shootable detonation, self-damage, opponent damage, memory, and ammunition.
+Self-damage and ammunition were already there. The blast event supplies
+opponent damage --- mines caught an opponent on both seeds --- and the three
+properties the bot's *model* of a mine rests on went into the definitions gate:
+health 1, `+SHOOTABLE`, and a blast of radius 128 that hurts its own source. A
+DECORATE edit to any of them would leave the bot confidently wrong about a
+weapon it carries, and nothing else in the suite would notice.
+
+**A vacuity guard earned its keep, and five checks had been hiding behind it.**
+MAP51's eleven laser barriers all sit in one 6x2 block, and the gate left bots
+to find them by roaming. They did, once. When personalities changed how bots
+roam they stopped, the run saw zero barriers, and because the whole
+causal-chain section is guarded by *did we see one to aim at*, five further
+checks silently did not run --- bump into a barrier, learn one is there, turn
+the visor up, see them. Only the guard failed, and only because somebody had
+written one.
+
+The bot is now *sent* to the barriers with the goal the gate already had for
+its second run. The same match then produces thousands of sightings, the
+contacts the damage-cue test needs, and the two zoom presses that prove the
+chain. Nothing about the rule changed; what changed is that it is exercised on
+purpose rather than by luck. That is the fourth end-state proxy in this
+project to expire when bots got better at something, and the pattern is the
+same every time: a check that waits for behaviour to wander past it is a check
+with a shelf life.
+
+**Two instruments measuring the same line in different units.** One item belief
+in twenty-one was formed through a wall, said the gate; not so, said
+`ClearLine`. Both were applying the same rule --- a line that only clips a
+corner is looking past the wall, not through it --- and disagreeing about
+arithmetic. The gate counted samples, *eight of four hundred*, so the same
+corner clip was a wall at ten tiles and a graze at two. `ClearLine` sampled
+every eight map units, so a crossing five units long fell between two samples
+and was never seen at all.
+
+Both now speak in map units: a crossing counts at six, and the stride is four,
+which cannot step over six. The lesson is not about sampling rates. Two tests
+of the same property have to be written in the same units, or they will
+eventually disagree about a case neither one is wrong about.
+
+**Two gates were describing a game that no longer existed.** The transporter
+gate asserted the freeze cost *exactly* 35 tics a crossing. That held while
+bots were bad at fighting; once they were good enough to kill a frozen one, a
+crossing came to 34 and four crossings to 136. The property worth checking is
+that no crossing exceeds the freeze, not that every one runs to the end of it.
+The perception gate declared reaction delays of 14 to 20 tics, which was one
+profile's numbers written down as though they were the system's.
+
+**B7 exit.** Mine, visor, plasma, hazard, transporter and door tests pass, and
+no equipment action reaches the world except through the ordinary button:
+mines are the reload press, the visor is `bt_zoom`, and neither spawns an
+actor nor touches an inventory.
+
+The disintegrator's test passes by asserting that no bot picks one up and
+fires it. It stays unsupported for the reason B6 gave --- an enormous energy
+cost and a broad multi-target attack want their own tests first --- and saying
+"the disintegrator test passes" without that sentence attached would be a way
+of not mentioning it.
+
+What B7 otherwise leaves for B8 is calibration rather than capability: the
+three shipped personalities are a sketch of section 17.2's ladder, not the
+ladder.
 
 ### B8 — Humanization and skill calibration
 

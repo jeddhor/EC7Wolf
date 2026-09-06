@@ -95,6 +95,37 @@ enum class Behavior : uint8_t
 
 const char *BehaviorName(Behavior behavior);
 
+// What makes one bot different from another.
+//
+// Section 17.3 draws the line and it is absolute: every profile uses the same
+// pawn class and properties, the same command range, movement, collision,
+// health, armour, damage, spread, ammunition, pickup rules, spawn rules, tick
+// rate and input delay. Difficulty is never outgoing damage multiplied,
+// incoming damage reduced, ammunition granted, speed raised, weapon states
+// shortened, or sight extended through walls.
+//
+// So a personality is nothing but *decision* parameters. Every field here
+// changes what a bot chooses, and none of them changes what it is capable of:
+// a cautious bot and a reckless one shoot the same gun for the same damage at
+// the same range and differ only in when they decide to pull the trigger and
+// when they decide to leave.
+struct Personality
+{
+	// Width of the aim error. Wider misses more; it does not change what a
+	// hit does.
+	int32_t  aimEnvelope = 0;
+	// Reaction time before a sighting reaches the decision layer.
+	unsigned int reactBase = 14;
+	// How hurt is hurt enough to break off.
+	int      retreatNeed = 250;
+	// The distance it tries to hold in a fight.
+	int      preferRange = 8;
+};
+
+// Derived from the profile index, deterministically. Three shipped so far;
+// section 17.2's fuller ladder is B8's work.
+Personality PersonalityFor(uint32_t profile);
+
 struct State
 {
 	Session::PlayerSlot slot = 0;
@@ -156,6 +187,11 @@ struct State
 	uint32_t     doorPulsedAt = 0;
 	unsigned int doorsOpened = 0;
 	unsigned int doorsGivenUp = 0;
+	// Tics spent fighting from inside a door cell, each one a tic the bot was
+	// asked to walk out of it. A number rather than a silence: the behaviour is
+	// invisible in a trace otherwise, and a doorway a bot cannot leave is a
+	// different bug from one it chooses to stand in.
+	unsigned int doorwayFightsLeft = 0;
 
 	// Unstuck. Backing off and turning away is what a person does when they
 	// walk into geometry; abandoning the route without moving leaves the bot
@@ -172,6 +208,11 @@ struct State
 	// Cells this bot could not get through lately, priced up in its own
 	// searches and nobody else's.
 	BotNav::BlockedCells blocked;
+
+	// Cells this bot's own live mines can reach. Kept apart from `blocked`
+	// because the two mean different things to a route: a jammed doorway is
+	// worth a detour, a mine is worth any detour there is.
+	BotNav::BlockedCells mined;
 	unsigned int cellsBlocked = 0;
 
 	// Presses made while dead, and lives actually returned to. Two numbers,
@@ -214,6 +255,25 @@ struct State
 	// the bounds.
 	unsigned int reactionTicsTotal = 0;
 
+	// Mines. Section 16.7.
+	//
+	// The engine's rules, read from the code rather than assumed: dropping one
+	// costs a C7Mines and spawns a C7ProximityMine 40/64 of a tile ahead; it
+	// spends 36 tics arming; it stays inert while its *owner* is within half a
+	// tile and goes live for everybody -- owner included -- once they step
+	// away; anything shootable within half a tile sets it off for 102 to 500
+	// damage at a radius of 128 units, which is two tiles.
+	//
+	// That last pair of facts is the whole of the self-risk model: a bot's own
+	// mine will kill it just as happily as anyone else's, and the blast
+	// reaches two tiles.
+	enum { MAX_OWN_MINES = 8 };
+	uint16_t     mineX[MAX_OWN_MINES];
+	uint16_t     mineY[MAX_OWN_MINES];
+	unsigned int mineCount = 0;
+	uint32_t     nextMineThink = 0;
+	unsigned int minesPlaced = 0;
+
 	// Breaking off. Section 14.4's RetreatOrRecover: badly hurt with a known
 	// way to fix it is a reason to stop shooting and go and fix it.
 	//
@@ -249,6 +309,12 @@ struct State
 	unsigned int targetsAcquired = 0;
 	unsigned int targetSwitches = 0;
 	unsigned int shotsFired = 0;
+	// Hitscan shots only, as the denominator for accuracy. A projectile is
+	// aimed ahead of its target on purpose, so it cannot be scored against
+	// where the target is standing -- counting it in the total while excluding
+	// it from the hits reported one hit in fifty-six for a bot that was
+	// shooting perfectly well.
+	unsigned int hitscanShots = 0;
 	// Tics spent with a target and a clear enough shot to take it.
 	unsigned int ticsOnTarget = 0;
 	Combat::AimError aim;
@@ -378,6 +444,7 @@ struct Totals
 	unsigned int goalSearchFailures = 0;
 	unsigned int doorsOpened = 0;
 	unsigned int doorsGivenUp = 0;
+	unsigned int doorwayFightsLeft = 0;
 	unsigned int unstuckEntered = 0;
 	unsigned int respawnPresses = 0;
 	unsigned int respawnsCompleted = 0;
@@ -393,11 +460,13 @@ struct Totals
 	unsigned int itemGoals = 0;
 	unsigned int targetsAcquired = 0;
 	unsigned int shotsFired = 0;
+	unsigned int hitscanShots = 0;
 	unsigned int ticsOnTarget = 0;
 	unsigned int weaponSwitches = 0;
 	unsigned int visorPulses = 0;
 	unsigned int retreats = 0;
 	unsigned int healUses = 0;
+	unsigned int minesPlaced = 0;
 };
 Totals Tally();
 

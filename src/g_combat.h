@@ -114,10 +114,43 @@ const WeaponInfo *Weapons(unsigned int &count);
 // only be exercised by running a match is a rule tested by luck.
 int ChooseSlotFrom(unsigned int carried, int rangeTiles);
 
+// Combat footwork for a bot standing in a door cell: clear it.
+//
+// A doorway is the one cell where a fighting bot has no room to move, holds
+// the door open for whoever it is fighting, and is framed in the gap. Section
+// 15 lists oscillating at a doorway among the mistakes that read as bugs,
+// and it is exactly what strafing inside a door frame produces -- the pawn has
+// nowhere lateral to go and shuffles against the jamb.
+//
+// Pure, and separate from Produce, because the arenas make the live case rare:
+// seven of the eight shipped maps contain no door at all. A contract that can
+// only be exercised when a fight happens to reach the one doorway in eight
+// maps is a contract tested by luck.
+struct Footwork
+{
+	int forward = 0;
+	int strafe = 0;
+};
+
+Footwork ClearDoorway(bool inDoorway, int forward, int strafe, int baseMove);
+
 // Which slot this bot should be holding against a target this far away, or 0
 // for "what it has is fine". Considers only what the bot is carrying and what
 // it can see -- never the target's health or armour.
 int ChooseSlot(Session::PlayerSlot slot, int rangeTiles);
+
+// Is the weapon in this slot one whose shots have to be led?
+bool IsProjectileSlot(int slot);
+
+// How many tics a projectile from this slot takes to cross `tiles`.
+//
+// Exact rather than estimated. DECORATE `speed N` is stored as N*FRACUNIT/128
+// and T_Projectile advances an actor by that much every tic, so a projectile
+// covers N/128 of a tile per tic and the flight time is tiles*128/N. The
+// plasma bolt's speed of 30 makes that 4.27 tics a tile, which at eight tiles
+// is over half a second -- far too long to ignore against a moving target,
+// which is why section 16.3 asks for the lead in the first place.
+int FlightTics(int slot, int tiles);
 
 int SelfTest();
 

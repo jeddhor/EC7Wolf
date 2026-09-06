@@ -573,8 +573,9 @@ namespace
 			Printf("Capture: bots %u brain=%08x planned=%u arrived=%u "
 				"abandoned=%u refused=%u nogoal=%u doors=%u doorsfailed=%u "
 				"unstuck=%u respawnpresses=%u respawns=%u ports=%u frozen=%u blocked=%u "
-				"seen=%u lost=%u targets=%u shots=%u oncone=%u guns=%u "
-				"visor=%u retreats=%u dispensers=%u\n",
+				"seen=%u lost=%u targets=%u shots=%u hitscan=%u oncone=%u guns=%u "
+				"visor=%u retreats=%u dispensers=%u mines=%u "
+				"doorwayfights=%u\n",
 				Bot::Count(), (unsigned int)Bot::BrainDigest(),
 				tally.routesPlanned, tally.routesCompleted,
 				tally.routesAbandoned, tally.stepsRefused,
@@ -583,9 +584,10 @@ namespace
 				tally.respawnPresses, tally.respawnsCompleted,
 				tally.teleports, tally.frozenTics, tally.cellsBlocked,
 				tally.contactsGained, tally.contactsLost,
-				tally.targetsAcquired, tally.shotsFired, tally.ticsOnTarget,
+				tally.targetsAcquired, tally.shotsFired, tally.hitscanShots,
+				tally.ticsOnTarget,
 				tally.weaponSwitches, tally.visorPulses, tally.retreats,
-				tally.healUses);
+				tally.healUses, tally.minesPlaced, tally.doorwayFightsLeft);
 		}
 		// What each bot ended up carrying. The outcome of B5's item goals, and
 		// the only visible one: weapon-stay means the pickup is still lying

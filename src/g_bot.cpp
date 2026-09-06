@@ -13,6 +13,7 @@
 #include "zstring.h"
 #include "m_random.h"
 #include "wl_game.h"
+#include "wl_draw.h"
 #include "g_botnav.h"
 #include "g_perception.h"
 #include "g_items.h"
@@ -121,6 +122,33 @@ void Reset()
 		g_active[i] = false;
 	}
 	g_brainDigest = 0;
+}
+
+Personality PersonalityFor(uint32_t profile)
+{
+	Personality p;
+	switch(profile % 3)
+	{
+		case 0:		// steady: the baseline the gates were tuned against
+			p.aimEnvelope = (ANGLE_90/9)*2;
+			p.reactBase = 14;
+			p.retreatNeed = 250;
+			p.preferRange = 8;
+			break;
+		case 1:		// cautious: reacts a little slower, leaves earlier, hangs back
+			p.aimEnvelope = (ANGLE_90/9)*2;
+			p.reactBase = 18;
+			p.retreatNeed = 180;
+			p.preferRange = 12;
+			break;
+		default:	// aggressive: closes in and stays longer, and pays for it
+			p.aimEnvelope = (ANGLE_90/9)*5/2;
+			p.reactBase = 12;
+			p.retreatNeed = 400;
+			p.preferRange = 5;
+			break;
+	}
+	return p;
 }
 
 void Configure(Session::PlayerSlot slot, uint32_t profile, uint64_t matchSeed)
@@ -266,6 +294,7 @@ bool ChooseRoamGoal(State &bot, const BotNav::Graph &graph, AActor *pawn,
 	BotNav::SearchOptions options;
 	options.avoidTransporters = sequence < bot.portCooldownUntil;
 	options.blocked = &bot.blocked;
+	options.lethal = &bot.mined;
 	options.now = sequence;
 
 	// A transporter is never a destination.
@@ -562,7 +591,18 @@ bool ChooseRoamGoal(State &bot, const BotNav::Graph &graph, AActor *pawn,
 	// fails, the fallback succeeds, and the route goes straight back through
 	// the pad the bot just came out of. It bounced between two pads every 38
 	// tics with the avoidance apparently in place.
-	const unsigned int passes = options.avoidTransporters ? 3 : 2;
+	// Own mines ride the same ladder, and outlast the distance restriction on
+	// it.
+	//
+	// They need their own rung. Pass 0 only considers goals six tiles away or
+	// more, so a bot whose distant goals are all behind its own mine fails
+	// that pass for two unrelated reasons at once -- and with the mine
+	// restriction lifted on the very next pass, it never gets to ask whether
+	// somewhere *close* is reachable without crossing it. That is how a bot
+	// that had mined a choke point and then walked into the dead end past it
+	// came back through the mine on the first retry.
+	const unsigned int passes = (options.avoidTransporters ? 3 : 2) +
+		(options.lethal != NULL ? 1 : 0);
 	for(unsigned int pass = 0;pass < passes;++pass)
 	{
 		const bool restricted = options.avoidTransporters && pass < 2;
@@ -597,6 +637,7 @@ bool ChooseRoamGoal(State &bot, const BotNav::Graph &graph, AActor *pawn,
 		TArray<BotNav::NodeId> route;
 		BotNav::SearchOptions pass_options = options;
 		pass_options.avoidTransporters = restricted;
+		pass_options.lethal = pass + 1 < passes ? options.lethal : NULL;
 		if(!graph.FindPath(here, candidate, route, stats, 0, &pass_options))
 			continue;
 
@@ -726,7 +767,8 @@ public:
 
 					// Seen, not yet known. The decision layer is told when
 					// the reaction delay expires and not before.
-					const unsigned int delay = REACT_BASE +
+					const unsigned int delay =
+						PersonalityFor(bot->profile).reactBase +
 						bot->rng[(unsigned int)Stream::Timing].Below(REACT_SPREAD);
 					bot->sightedAt[who] = sequence;
 					bot->noticeAt[who] = sequence + delay;
@@ -887,6 +929,7 @@ public:
 		// The visor, before anything else: it costs a button a person also
 		// presses, and it changes what the next sense update can see.
 		MindTheVisor(*bot, pawn, sequence, out);
+		MindTheMines(*bot, pawn, sequence, out);
 
 		// Badly hurt is a reason to stop fighting.
 		//
@@ -895,7 +938,7 @@ public:
 		// fight is winnable, and the same rule read the other way forbids
 		// using it to decide the fight is lost.
 		const int hurt = Items::Need(forSlot, Items::Category::Health);
-		if(hurt >= RETREAT_NEED)
+		if(hurt >= PersonalityFor(bot->profile).retreatNeed)
 		{
 			if(bot->target != MAXPLAYERS)
 			{
@@ -1196,6 +1239,170 @@ private:
 		return held != NULL ? (int)held->amount : -1;
 	}
 
+	// Is this bot standing somewhere a mine would be worth leaving?
+	//
+	// A choke point, defined from the graph rather than from where anybody has
+	// been seen walking: a cell with few ways through it is one most routes
+	// across the arena have to use. That is map knowledge, which a player who
+	// has learned an arena also has -- section 16.7 forbids choosing placement
+	// from hidden enemy paths, and this never looks at where anyone has been.
+	// Judged on the cell the mine will land in, which is not the cell the bot
+	// is standing in: the drop goes 40/64 of a tile along the facing. Asking
+	// about the bot's own cell approved a mine that then landed in the open
+	// room next door -- MAP60 seed 5 put one at (34,4) with four ways out of
+	// it, from a bot standing in the doorway beside it.
+	static bool WorthMining(const BotNav::Graph &graph, int tileX, int tileY)
+	{
+		if(tileX < 0 || tileY < 0)
+			return false;
+		const BotNav::NodeId here =
+			graph.NodeAt((unsigned)tileX, (unsigned)tileY);
+		if(here == BotNav::NO_NODE)
+			return false;
+		// Eight neighbours is open floor; three or fewer is a corridor or a
+		// doorway, which is where a mine is worth the ammunition.
+		return graph.NodeOf(here).edgeCount <= 3;
+	}
+
+	// Leave a mine here, if this is a sensible place and the bot can spare one.
+	static void MindTheMines(State &bot, AActor *pawn, uint32_t sequence,
+		Command::Intent &out)
+	{
+		if(sequence < bot.nextMineThink)
+			return;
+		bot.nextMineThink = sequence + MINE_THINK_INTERVAL;
+
+		const int mines = Carrying(bot.slot, "C7Mines");
+		if(mines <= 0 || bot.mineCount >= State::MAX_OWN_MINES)
+			return;
+		// Not while fighting: dropping one takes a button press that is not a
+		// trigger, and the bot has better uses for the moment.
+		if(bot.target != MAXPLAYERS)
+			return;
+
+		// Not on top of one of its own. The blast reaches two tiles, so two
+		// mines inside that of each other is one wasted and a bigger hole to
+		// walk into later.
+		for(unsigned int i = 0;i < bot.mineCount;++i)
+		{
+			const int dx = abs((int)bot.mineX[i] - pawn->tilex);
+			const int dy = abs((int)bot.mineY[i] - pawn->tiley);
+			if(dx <= MINE_BLAST_TILES && dy <= MINE_BLAST_TILES)
+				return;
+		}
+
+		// Where the mine will actually land, not where the bot is standing.
+		//
+		// The engine drops it 40/64 of a tile along the facing (a_playerpawn),
+		// which is frequently the next cell over. Recording the bot's own tile
+		// put the remembered mine up to a tile away from the real one, so both
+		// the avoidance below and the don't-stack test above were aimed at the
+		// wrong cell.
+		const unsigned fineangle = pawn->angle >> ANGLETOFINESHIFT;
+		const fixed dropAhead = 40 * (FRACUNIT / 64);
+		const fixed mineFX = pawn->x + FixedMul(dropAhead, finecosine[fineangle]);
+		const fixed mineFY = pawn->y - FixedMul(dropAhead, finesine[fineangle]);
+
+		// The square the trigger reaches, in cells. A_C7MineThink fires on
+		// anything within half a tile of the mine's centre, measured between
+		// actor origins -- so the danger is a 1x1 square around a point that
+		// is not a cell centre, and it straddles up to four cells.
+		const fixed triggerReach = FRACUNIT / 2;
+		const int firstX = (mineFX - triggerReach) >> FRACBITS;
+		const int lastX = (mineFX + triggerReach) >> FRACBITS;
+		const int firstY = (mineFY - triggerReach) >> FRACBITS;
+		const int lastY = (mineFY + triggerReach) >> FRACBITS;
+
+		if(!WorthMining(BotNav::Current(), (int)(mineFX >> FRACBITS),
+			(int)(mineFY >> FRACBITS)))
+			return;
+
+		// Laying one in front of itself is fine, and deliberately not
+		// prevented here.
+		//
+		// bt_reload drops the mine 40/64 of a tile along the facing, so a bot
+		// walking forward does lay it onto the cell it is about to cross --
+		// but the mine spends 36 tics arming, which is longer than the
+		// crossing takes, and the routing above will not bring it back over
+		// the live one afterwards. Refusing those drops was tried: it cut
+		// mines laid on MAP60 from three to one, to prevent a death that
+		// turned out to be the bot's own plasma bolt.
+		// The ordinary drop button, pulsed. Nothing here spawns an actor or
+		// touches the mine count: the engine does both.
+		out.press[bt_reload] = true;
+		bot.mineX[bot.mineCount] = (uint16_t)(mineFX >> FRACBITS);
+		bot.mineY[bot.mineCount] = (uint16_t)(mineFY >> FRACBITS);
+		++bot.mineCount;
+		++bot.minesPlaced;
+
+		// And remember not to walk back over it.
+		//
+		// A mine goes live for its owner the moment the owner steps away, and
+		// the trigger is anything within half a tile -- so the cell it sits in
+		// is the thing to avoid, and the two-tile blast is what makes doing so
+		// worth the detour. Reuses the per-bot blocked list the recovery
+		// ladder already prices routes with, at an expiry long enough to
+		// outlast a match: unlike a jammed doorway, a mine does not clear.
+		// Every cell the trigger square touches, not just the one the mine
+		// sits in.
+		//
+		// A_C7MineThink fires on anything within half a tile of the mine's
+		// centre, measured between actor origins -- so the danger is a 1x1
+		// square around a point that is not a cell centre, and that square
+		// straddles up to four cells. Blocking only the mine's own cell let a
+		// bot route through the neighbour and walk into the edge of the
+		// square: MAP60 seed 1 killed a bot at (17,3) on a mine it had laid
+		// near the (17,3)/(17,4) boundary 143 tics earlier.
+		//
+		// The owner is not spared, either. The grace in A_C7MineThink only
+		// holds while the mine is still arming; once it goes live its trigger
+		// loop excludes the mine itself and nothing else.
+		for(int ty = firstY;ty <= lastY;++ty)
+		{
+			for(int tx = firstX;tx <= lastX;++tx)
+			{
+				const BotNav::NodeId cell = BotNav::Current().NodeAt(tx, ty);
+				if(cell != BotNav::NO_NODE)
+					bot.mined.Add(cell, sequence + MINE_MEMORY);
+			}
+		}
+
+		// A route planned before the mine existed does not get to keep its
+		// permission.
+		//
+		// The drop goes 40/64 of a tile along the facing, so a bot laying one
+		// mid-route puts it on the cell it is walking towards. Crossing it is
+		// survivable -- 36 tics of arming is longer than the crossing takes --
+		// and that is exactly what makes it dangerous: the bot walks through
+		// unharmed and only afterwards discovers that the mine is now between
+		// it and everywhere else. On MAP60 one mined the corridor at (17,3),
+		// walked north into the four-cell pocket beyond it, and had no way out
+		// that did not cross the live mine; the goal ladder relaxed on its
+		// last pass, as it must, and the bot walked back into it and died.
+		//
+		// Dropping the route sends it back through the planner with the mine
+		// already in `mined`, which refuses the pocket while the bot is still
+		// on the open side of it.
+		for(unsigned int w = bot.waypoint;w < bot.route.Size();++w)
+		{
+			const BotNav::Node &step = BotNav::Current().NodeOf(bot.route[w]);
+			if((int)step.x >= firstX && (int)step.x <= lastX &&
+				(int)step.y >= firstY && (int)step.y <= lastY)
+			{
+				bot.route.Clear();
+				bot.waypoint = 0;
+				bot.goal = BotNav::NO_NODE;
+				++bot.routesAbandoned;
+				break;
+			}
+		}
+
+		FString detail;
+		detail.Format("at=%d,%d left=%d cells=%u", (int)(mineFX >> FRACBITS),
+			(int)(mineFY >> FRACBITS), mines - 1, bot.mined.count);
+		TraceEvent(bot.slot, "mine", detail.GetChars());
+	}
+
 	// Turn the visor up when there is something only it can show, and down
 	// when there is not.
 	//
@@ -1344,8 +1551,43 @@ private:
 		if(!have)
 			return;
 
+		// Lead a projectile.
+		//
+		// Section 16.3: estimate the lead from the known projectile speed and
+		// the target's *perceived* velocity -- the ring below holds observed
+		// samples and nothing else, so a target the bot cannot see stops
+		// contributing to the estimate rather than being extrapolated from its
+		// hidden real position.
+		//
+		// A plasma bolt takes over half a second to cross eight tiles. Firing
+		// at where somebody was is a miss at any range worth using it.
+		if(Combat::IsProjectileSlot(bot.holdingSlot) && seen != NULL)
+		{
+			fixed oldX = 0, oldY = 0;
+			uint32_t oldWhen = 0;
+			for(unsigned int i = 0;i < State::AIM_HISTORY;++i)
+			{
+				if(bot.seenWhen[i] == 0 || bot.seenWhen[i] >= sequence)
+					continue;
+				if(oldWhen == 0 || bot.seenWhen[i] < oldWhen)
+				{
+					oldWhen = bot.seenWhen[i];
+					oldX = bot.seenX[i];
+					oldY = bot.seenY[i];
+				}
+			}
+			const uint32_t span = oldWhen != 0 ? sequence - oldWhen : 0;
+			if(span >= 4)
+			{
+				const int flight =
+					Combat::FlightTics(bot.holdingSlot, seen->distanceTiles);
+				atX += (fixed)(((int64_t)(seen->x - oldX)*flight)/(int64_t)span);
+				atY += (fixed)(((int64_t)(seen->y - oldY)*flight)/(int64_t)span);
+			}
+		}
+
 		Combat::Step(bot.aim, bot.rng[(unsigned int)Stream::Aim], sequence,
-			AIM_ENVELOPE);
+			PersonalityFor(bot.profile).aimEnvelope);
 
 		const angle_t want =
 			(angle_t)(BotNav::BearingTo(pawn->x, pawn->y, atX, atY) + bot.aim.angle);
@@ -1386,6 +1628,50 @@ private:
 		// tic, for the same reason the aim error drifts rather than jumping --
 		// alternating every tic averages to standing still while looking
 		// frantic.
+		// Do not fight backwards into your own minefield.
+		//
+		// Planned routes price a bot's own mines, but combat footwork is not a
+		// planned route: strafing and backing off are chosen a step at a time,
+		// and the aggressive personality closes to five tiles and stays until
+		// badly hurt, so it fights exactly where it has been laying mines. One
+		// bot blew itself up the first match after personalities landed.
+		//
+		// Section 16.7 asks for blast risk to be priced by the game's actual
+		// radius, which is two tiles.
+		int mineDX = 0, mineDY = 0;
+		bool mineClose = false;
+		for(unsigned int i = 0;i < bot.mineCount;++i)
+		{
+			const int dx = (int)bot.mineX[i] - pawn->tilex;
+			const int dy = (int)bot.mineY[i] - pawn->tiley;
+			if(abs(dx) <= MINE_BLAST_TILES && abs(dy) <= MINE_BLAST_TILES)
+			{
+				mineClose = true;
+				mineDX = dx;
+				mineDY = dy;
+				break;
+			}
+		}
+
+		// A doorway is not a place to hold a fight.
+		//
+		// Two separate reasons, and they point the same way. Section 15
+		// lists oscillating at a doorway among the mistakes that read as
+		// bugs, and combat footwork in a door frame is exactly that:
+		// the strafe has nowhere to go, so the pawn grinds against the jamb
+		// and shuffles on the spot. And a bot standing in an open door holds
+		// it open, in the one cell where it is framed in the gap with no
+		// room to move.
+		//
+		// So the bot clears the cell instead: no lateral movement, and
+		// forward regardless of the range it would rather be holding. It
+		// fights from the far side, which is where the doorway is worth
+		// something to it.
+		const BotNav::NodeId standingOn =
+			BotNav::Current().NodeAt(pawn->tilex, pawn->tiley);
+		const bool inDoorway = standingOn != BotNav::NO_NODE &&
+			BotNav::Current().NodeOf(standingOn).isDoor;
+
 		if(sequence >= bot.strafeUntil)
 		{
 			bot.strafeUntil = sequence + STRAFE_COMMIT +
@@ -1395,17 +1681,46 @@ private:
 		}
 		out.strafe = bot.strafeSide;
 
+		// With a mine of its own within the blast radius, move away from it
+		// rather than around the fight. Crude on purpose: a step in the
+		// opposite direction is enough to leave a two-tile radius, and this is
+		// footwork rather than a plan.
+		if(mineClose)
+		{
+			// The mine's bearing relative to facing decides which way is out.
+			const angle_t toward = BotNav::BearingTo(pawn->x, pawn->y,
+				(fixed)((pawn->tilex + mineDX)<<TILESHIFT) + (1<<(TILESHIFT-1)),
+				(fixed)((pawn->tiley + mineDY)<<TILESHIFT) + (1<<(TILESHIFT-1)));
+			const int32_t rel = BotNav::ShortestTurn(pawn->angle, toward);
+			// Positive rel means the mine is to one side; strafe the other way.
+			out.strafe = rel > 0 ? -BASEMOVE : BASEMOVE;
+			bot.strafeUntil = sequence + STRAFE_COMMIT;
+			bot.strafeSide = out.strafe;
+		}
+
 		// And keep a sensible distance: close if far away, back off if almost
 		// touching. Range is the observed one, so a target that has moved
 		// since is one the bot is wrong about, which is correct.
 		if(seen != NULL)
 		{
-			if(seen->distanceTiles > PREFER_RANGE + 2)
+			const int prefer = PersonalityFor(bot.profile).preferRange;
+			if(seen->distanceTiles > prefer + 2)
 				out.forward = BASEMOVE;
-			else if(seen->distanceTiles < PREFER_RANGE - 2)
-				out.forward = -BASEMOVE;
+			else if(seen->distanceTiles < prefer - 2 && !mineClose)
+				out.forward = -BASEMOVE;		// never back into one
 			else
 				out.forward = 0;
+		}
+
+		// Clearing the doorway outranks every preference above it.
+		{
+			const Combat::Footwork step =
+				Combat::ClearDoorway(inDoorway, out.forward, out.strafe,
+					BASEMOVE);
+			out.forward = step.forward;
+			out.strafe = step.strafe;
+			if(inDoorway)
+				++bot.doorwayFightsLeft;
 		}
 		bot.wasAskedToMove = out.forward != 0 || out.strafe != 0;
 
@@ -1431,6 +1746,20 @@ private:
 			bot.rng[(unsigned int)Stream::Timing].Below(TRIGGER_JITTER);
 
 		// Was that shot actually on target?
+		//
+		// Counted for hitscan only. The ten-degree figure is FindTarget's
+		// auto-aim cone, which is a hitscan mechanism; a plasma bolt is a real
+		// projectile that has to physically arrive. And a correctly led shot
+		// points *ahead* of where the target is, so measuring it against the
+		// target's current position scores good leading as a miss -- the
+		// metric would punish the very behaviour section 16.3 asks for.
+		// Simply not counted: Produce records the tic on the way out, and
+		// doing it here as well would count the command twice and change the
+		// brain digest.
+		if(Combat::IsProjectileSlot(bot.holdingSlot))
+			return;
+		++bot.hitscanShots;
+
 		//
 		// Not the same question as "had the bot finished turning", which is
 		// what `off` answers -- that measures convergence on the aim point,
@@ -1700,6 +2029,12 @@ private:
 		// Charge to keep in reserve, and how often the zoom may be pressed.
 		// The cycle wraps 1-2-3, so a mistimed second press lands on the wrong
 		// mode and the next one has to go all the way round again.
+		// How often a mine is considered, and how far its blast reaches. The
+		// radius is 128 units in the DECORATE, which is two tiles.
+		MINE_THINK_INTERVAL = 105,
+		MINE_BLAST_TILES = 2,
+		// Long enough to outlast a match. A mine does not go away.
+		MINE_MEMORY = 100000,
 		VISOR_CHARGE_FLOOR = 15,
 		VISOR_PULSE_INTERVAL = 14,
 		TRIGGER_INTERVAL = 12,
@@ -1752,7 +2087,11 @@ void SetupSlots(FName (&playerClassNames)[MAXPLAYERS])
 			break;
 		}
 
-		Configure((Session::PlayerSlot)slot, 0, matchSeed);
+		// A different personality per slot, so a match is a mix rather than
+		// three copies of one opponent. Personalities change decisions only --
+		// section 17.3 -- and the class assigned below is the same for all of
+		// them, which is what keeps that true.
+		Configure((Session::PlayerSlot)slot, (uint32_t)slot, matchSeed);
 		Command::SetProducer((Session::PlayerSlot)slot, MakeProducer(slot));
 		// The same character as the player it stands in for, so it is an
 		// ordinary opponent rather than something with different rules.
@@ -1809,6 +2148,7 @@ Totals Tally()
 		total.goalSearchFailures += g_state[i].goalSearchFailures;
 		total.doorsOpened += g_state[i].doorsOpened;
 		total.doorsGivenUp += g_state[i].doorsGivenUp;
+		total.doorwayFightsLeft += g_state[i].doorwayFightsLeft;
 		total.unstuckEntered += g_state[i].unstuckEntered;
 		total.respawnPresses += g_state[i].respawnPresses;
 		total.respawnsCompleted += g_state[i].respawnsCompleted;
@@ -1823,10 +2163,12 @@ Totals Tally()
 		total.itemGoals += g_state[i].itemGoals;
 		total.targetsAcquired += g_state[i].targetsAcquired;
 		total.shotsFired += g_state[i].shotsFired;
+		total.hitscanShots += g_state[i].hitscanShots;
 		total.weaponSwitches += g_state[i].weaponSwitches;
 		total.visorPulses += g_state[i].visorPulses;
 		total.retreats += g_state[i].retreats;
 		total.healUses += g_state[i].healUses;
+		total.minesPlaced += g_state[i].minesPlaced;
 		total.ticsOnTarget += g_state[i].ticsOnTarget;
 		total.reactionTicsTotal += g_state[i].reactionTicsTotal;
 	}

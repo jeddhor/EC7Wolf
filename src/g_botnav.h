@@ -227,6 +227,23 @@ struct SearchOptions
 
 	// Cells to price up, and the sequence to judge their expiry against.
 	const BlockedCells *blocked = NULL;
+
+	// Cells that are not expensive but fatal: a bot's own live mines.
+	//
+	// Pricing was tried first and is the wrong instrument. COST_BLOCKED is
+	// fifteen tiles of detour, and a bot lays mines at choke points on
+	// purpose -- so the one place a detour is longest, or does not exist, is
+	// exactly where the penalty gets outbid. A bot on MAP60 paid fifteen
+	// tiles' worth of cost and walked back down its own corridor.
+	//
+	// Refused outright by the search, never priced. Relaxing this is the
+	// caller's business and belongs in a pass ladder, not in FindPath: a
+	// retry inside the search is a per-candidate fallback, and the comment in
+	// ChooseRoamGoal records what those do -- the strict search fails, the
+	// fallback succeeds, and the route goes straight through the hazard with
+	// the avoidance apparently in place. It cost a bot its life twice here
+	// before the ladder was used instead.
+	const BlockedCells *lethal = NULL;
 	uint32_t now = 0;
 };
 

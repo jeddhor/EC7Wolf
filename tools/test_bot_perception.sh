@@ -231,9 +231,15 @@ for tic, key, after, origin in noticed:
         problems.append("released %d tics after sighting, promised %d"
                         % (tic - seen_at, promised))
         break
-    # 14 base plus a spread of 7, from g_bot.cpp.
-    if not (14 <= after <= 20):
-        problems.append("delay %d is outside the declared 14-20 tics" % after)
+    # The reaction bases across the shipped personalities are 12, 14 and 18
+    # (g_bot.cpp, PersonalityFor), each with a spread of 7 on top. So the
+    # range is 12 to 24 inclusive.
+    #
+    # It was 14 to 20 while every bot ran the same profile, and personalities
+    # broke it -- correctly. A gate that encodes one profile's numbers stops
+    # describing the system the moment there is more than one profile.
+    if not (12 <= after <= 24):
+        problems.append("delay %d is outside the declared 12-24 tics" % after)
         break
 
 # len(sighted) is the number of distinct (bot, subject) pairs, because the dict
@@ -328,6 +334,14 @@ PY
 #
 # MAP51 has them; MAP53, MAP55 and MAP60 have none, so this runs on MAP51 or it
 # tests nothing.
+#
+# A bot is *sent* to them rather than left to find them. All eleven sit in one
+# 6x2 block at (35-40, 30-31), and whether a roaming bot looks into that room
+# inside the run is luck -- luck that ran out the moment personalities changed
+# how bots roam, taking five checks with it, because everything below the
+# vacuity guard is skipped when nothing is seen. With a forced goal the same
+# run produces thousands of sightings and the contacts the damage-cue test
+# further down depends on.
 laser() {  # laser TAG [EXTRA...]
 	tag=$1; shift
 	mkdir -p "$work/$tag-saves"
@@ -336,9 +350,9 @@ laser() {  # laser TAG [EXTRA...]
 	  timeout 250 "$build_dir/ec7wolf" --data CO7 --res 320 200 --nowait \
 		--vid-renderer software \
 		--config "$work/$tag.cfg" --savedir "$work/$tag-saves" \
-		--capture-rngseed 1 \
+		--capture-rngseed 1 --capture-bot-goal 37 31 \
 		--capture-perception "$work/$tag.see" \
-		--capture-maxtics 500 \
+		--capture-maxtics 900 \
 		--tedlevel MAP51 --skill 2 --battle --bots 3 "$@" ) >"$work/$tag.log" 2>&1 || true
 }
 
@@ -347,7 +361,12 @@ laser lit --capture-visor-all 3
 
 blind_seen=$(awk '$1=="hazard" && $6=="seen"' "$work/blind.see" 2>/dev/null | wc -l)
 lit_seen=$(awk '$1=="hazard" && $6=="seen"' "$work/lit.see" 2>/dev/null | wc -l)
-printf '  ..   lasers: %s seen without the visor, %s with it\n' "$blind_seen" "$lit_seen"
+# The first number is not a contrast any more, and saying so is cheaper than
+# leaving a misleading one in the log: with a forced goal the unforced run
+# walks into a barrier, turns its own visor up, and then legitimately sees
+# them. The rule is checked per observation just below.
+printf '  ..   lasers: %s seen unforced, %s with the visor forced on\n' \
+	"$blind_seen" "$lit_seen"
 
 check "the map has barriers, so this tests something" test "${lit_seen:-0}" -ge 20
 
@@ -423,6 +442,7 @@ check "a bot with nothing to look for leaves the visor alone" \
 run MAP60 items software
 python3 - "$work/items.see" "$work/items.nav" <<'PY'
 import sys
+import math
 
 trace, nav = sys.argv[1], sys.argv[2]
 UNITS = 64.0
@@ -437,11 +457,24 @@ for line in open(nav):
     elif f[0] == "item":
         spawns.add((int(f[1]), int(f[2])))
 
+# A crossing measured in map units, not in samples.
+#
+# "Eight of four hundred samples" made the threshold depend on how long the
+# line was: the same corner clip counted as a wall at ten tiles and as a graze
+# at two. It also had no relationship to the engine's own sampling, so the two
+# could disagree about a stretch neither had described. GRAZE_UNITS is now a
+# distance, and ClearLine samples finely enough that it cannot step over one.
+GRAZE_UNITS = 6.0
+
 def blocked(ox, oy, sx, sy):
     a = (int(ox // UNITS), int(oy // UNITS))
     b = (int(sx // UNITS), int(sy // UNITS))
+    length = math.hypot(sx - ox, sy - oy) / UNITS      # in tiles
+    if length <= 0.0:
+        return []
+    steps = max(400, int(length * 128))
+    arc = length / steps                               # tiles per sample
     inside = {}
-    steps = 400
     for i in range(1, steps):
         t = i / float(steps)
         x = (ox + (sx - ox) * t) / UNITS
@@ -452,7 +485,7 @@ def blocked(ox, oy, sx, sy):
         fx, fy = x - cell[0], y - cell[1]
         if min(fx, 1.0 - fx, fy, 1.0 - fy) >= 0.15:
             inside[cell] = inside.get(cell, 0) + 1
-    return [c for c, n in inside.items() if n >= 8]
+    return [c for c, n in inside.items() if n * arc * UNITS >= GRAZE_UNITS]
 
 beliefs, problems = [], []
 for line in open(trace):

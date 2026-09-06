@@ -67,6 +67,22 @@ fi
 check "the brain asks for the trigger and forces nothing else" \
 	test "${forced:-0}" -eq 0
 
+# Section 17.3, checked at the source. A personality may change what a bot
+# decides and never what it is capable of: no outgoing damage multiplied, no
+# incoming damage reduced, no ammunition granted, no speed raised, no weapon
+# state shortened, no sight extended. If any of those words appear in the
+# Personality struct, difficulty has been implemented as a cheat.
+persona=$(sed -n '/^struct Personality$/,/^};/p' "$here/../src/g_bot.h" |
+	sed 's;//.*;;' |
+	grep -cEi '(damage|health|armou?r|speed|ammo|maxhealth|radius|spread)' || true)
+if [ "${persona:-0}" -ne 0 ]; then
+	sed -n '/^struct Personality$/,/^};/p' "$here/../src/g_bot.h" | sed 's;//.*;;' |
+		grep -nEi '(damage|health|armou?r|speed|ammo|maxhealth|radius|spread)' |
+		head -3 | sed 's/^/         /'
+fi
+check "a personality changes decisions, not capabilities" \
+	test "${persona:-0}" -eq 0
+
 command -v Xvfb >/dev/null 2>&1 || { printf 'SKIP: Xvfb is missing\n'; exit 0; }
 [ -x "$build_dir/ec7wolf" ] || { printf 'SKIP: no ec7wolf in %s\n' "$build_dir"; exit 0; }
 [ -f "$data_dir/MAPTEMP.CO7" ] || { printf 'SKIP: no Corridor 7 data in %s\n' "$data_dir"; exit 0; }
@@ -111,6 +127,12 @@ field() { sed -n "s/.*Capture: bots .*$2=\([0-9a-f]*\).*/\1/p" "$work/$1.log" | 
 retreats_total=0
 dispensers_total=0
 healthgoals_total=0
+# Accuracy is a rate, and a rate needs volume. One match leaves ten hitscan
+# shots once bots start preferring the plasma rifle at range, and two hits out
+# of ten is 20% or 40% depending on a single trigger pull. Summed over the
+# seeds and asserted once.
+hitscan_total=0
+oncone_total=0
 
 for seed in 1 5 9; do
 	tag="s$seed"
@@ -126,11 +148,16 @@ for seed in 1 5 9; do
 	oncone=$(field "$tag" oncone)
 	frags=$(awk 'NR>1{f[$2]=$7} END{t=0; for(k in f) t+=f[k]; print t+0}' "$work/$tag.players")
 	deaths=$(awk 'NR>1 && $6<=0 {print $2":"$1}' "$work/$tag.players" | sort -u | wc -l)
+	# Accuracy is hits over *hitscan* shots. A projectile is aimed ahead of its
+	# target deliberately, so scoring it against where the target is standing
+	# punishes correct leading; dividing hitscan hits by every shot fired
+	# reported one in fifty-six for a bot shooting perfectly well.
+	hitscan=$(field "$tag" hitscan)
 	accuracy=0
-	[ "${shots:-0}" -gt 0 ] && accuracy=$(( ${oncone:-0} * 100 / shots ))
+	[ "${hitscan:-0}" -gt 0 ] && accuracy=$(( ${oncone:-0} * 100 / hitscan ))
 
-	printf '  ..   seed %s: %s targets, %s shots, %s%% on target, %s frags, %s death-tics\n' \
-		"$seed" "${targets:-?}" "${shots:-?}" "$accuracy" "$frags" "$deaths"
+	printf '  ..   seed %s: %s targets, %s shots (%s hitscan), %s%% on target, %s frags, %s death-tics\n' \
+		"$seed" "${targets:-?}" "${shots:-?}" "${hitscan:-?}" "$accuracy" "$frags" "$deaths"
 
 	guns=$(field "$tag" guns)
 	retreats=$(field "$tag" retreats)
@@ -150,10 +177,8 @@ for seed in 1 5 9; do
 	# Both sides. Ten degrees of auto-aim means a careful bot cannot miss, so
 	# an accuracy near a hundred is evidence the error model is not reaching
 	# outside the cone -- not evidence of skill.
-	check "seed $seed: it hits often enough to be an opponent (>= 30%)" \
-		test "$accuracy" -ge 30
-	check "seed $seed: and misses often enough to be beatable (<= 90%)" \
-		test "$accuracy" -le 90
+	hitscan_total=$((hitscan_total + ${hitscan:-0}))
+	oncone_total=$((oncone_total + ${oncone:-0}))
 
 	# Fairness: a bot may only shoot at somebody it was told about. Every
 	# target must have been noticed first -- acting on a sighting before the
@@ -182,6 +207,24 @@ PY
 	[ $? -eq 0 ] || status=1
 done
 
+# Both sides of the accuracy band, on the pooled sample.
+#
+# Ten degrees of auto-aim means a careful bot cannot miss, so a figure near a
+# hundred is evidence the error model never reaches outside the cone rather
+# than evidence of skill. A figure near zero is a bot that is not an opponent.
+overall=0
+[ "$hitscan_total" -gt 0 ] && overall=$(( oncone_total * 100 / hitscan_total ))
+printf '  ..   pooled: %s of %s hitscan shots on target (%s%%)\n' \
+	"$oncone_total" "$hitscan_total" "$overall"
+check "enough hitscan shots to judge accuracy at all" test "$hitscan_total" -ge 20
+# Back at 30 where it started. It was briefly lowered to 25 on the strength of
+# a single seed reading 20%, which was a ten-shot sample rather than a bot
+# getting worse: pooled across three seeds the same build shoots 44%. The
+# sample size was the fault, and fixing the measurement is the fix -- lowering
+# the bar would have hidden it.
+check "it hits often enough to be an opponent (>= 30%)" test "$overall" -ge 30
+check "and misses often enough to be beatable (<= 90%)" test "$overall" -le 90
+
 # Section 14.4: badly hurt with a known way to fix it is a reason to stop
 # shooting. Decided on the bot's own health and never on the enemy's, which it
 # is not allowed to know.
@@ -190,6 +233,17 @@ printf '  ..   across seeds: %s retreats, %s health goals, %s dispenser uses\n' 
 check "a badly hurt bot breaks off somewhere" test "$retreats_total" -ge 1
 check "and goes looking for health when it does" test "$healthgoals_total" -ge 1
 check "and dispensers get used" test "$dispensers_total" -ge 1
+
+# Personalities differ in conduct and not in kit. Every bot spawns with the
+# same class, so the same health -- what differs is when it reacts, how close
+# it stands, and how hurt it has to be before it leaves.
+starts=$(awk 'NR>1 && $1<=2 {print $6}' "$work/s1.players" | sort -u | wc -l)
+delays=$(grep -o 'in=[0-9]*' "$work/s1.bots" | sort -u | wc -l)
+printf '  ..   personalities: %s distinct starting health values, %s distinct reaction delays\n' \
+	"$starts" "$delays"
+check "every bot spawns with identical health whatever its personality" \
+	test "${starts:-0}" -eq 1
+check "and they do not all react alike" test "${delays:-0}" -ge 3
 
 d1=$(field s1 brain); d2=$(field s5 brain)
 printf '  ..   brain digests %s and %s\n' "${d1:-?}" "${d2:-?}"

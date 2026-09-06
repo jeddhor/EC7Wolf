@@ -519,6 +519,12 @@ bool Graph::FindPath(NodeId from, NodeId to, TArray<NodeId> &path,
 				continue;
 			if(closed[edge.to])
 				continue;
+			// Never into a cell a live mine of ours reaches. The start cell
+			// is exempt by construction -- only edge.to is tested -- so a bot
+			// standing inside its own blast square can always step out of it.
+			if(options->lethal != NULL &&
+				options->lethal->Blocked(edge.to, options->now))
+				continue;
 			uint32_t through = current.cost + edge.cost;
 			if(options->blocked != NULL &&
 				options->blocked->Blocked(edge.to, options->now))

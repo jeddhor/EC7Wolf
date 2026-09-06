@@ -29,6 +29,12 @@
 #
 # GATE names are matched as substrings, so `run_gates.sh gl_` runs the OpenGL
 # gates and `run_gates.sh laser` runs both laser ones.
+#
+# --fast skips the exhaustive gates (every pad, every arena, every seed) and
+# --slow runs only those. With neither, everything runs. The split exists
+# because the exhaustive ones are most of the wall clock and catch a different
+# class of fault: structural breakage shows up in seconds, coverage regressions
+# need volume.
 
 set -eu
 
@@ -41,6 +47,7 @@ release_dir=""
 editor_package=""
 require_data=0
 list_only=0
+tier=all
 selected=""
 
 while [ "$#" -gt 0 ]; do
@@ -50,6 +57,8 @@ while [ "$#" -gt 0 ]; do
 		-r) release_dir=$2; shift 2 ;;
 		--editor-package) editor_package=$2; shift 2 ;;
 		--require-data) require_data=1; shift ;;
+		--fast) tier=fast; shift ;;
+		--slow) tier=slow; shift ;;
 		--list) list_only=1; shift ;;
 		-h|--help)
 			sed -n '3,40p' "$0" | sed 's/^# \{0,1\}//'
@@ -121,6 +130,7 @@ bot_arenas
 bot_perception
 bot_items
 bot_combat
+bot_mines
 multiplayer_rules
 multiplayer_classes
 multiplayer_presentation
@@ -145,8 +155,32 @@ renderscale'
 # differently and only when that directory looks packaged.
 release_gates='corridor7_release_startup'
 
+# The exhaustive ones.
+#
+# These are not slow because they are badly written; they are slow because they
+# are exhaustive, and that is the point of them: every transporter pad driven
+# individually, every arena on two seeds, perception measured over four
+# thousand sightings. A rare leak needs volume before it shows -- the CheckLine
+# through-wall sighting was one in 699 and only appeared once matches got
+# longer -- so shortening these to save time would quietly stop them working.
+#
+# Split so the structural gates can run on every change and these can run
+# before a commit and on CI's slower schedule.
+slow_gates='bot_transporters bot_arenas bot_perception bot_roam multiplayer_starts'
+
+is_slow() {
+	for slow in $slow_gates; do
+		[ "$1" = "$slow" ] && return 0
+	done
+	return 1
+}
+
 matches() {
 	# $1 = gate name. With no selection everything matches.
+	case "$tier" in
+		fast) is_slow "$1" && return 1 ;;
+		slow) is_slow "$1" || return 1 ;;
+	esac
 	[ -z "$selected" ] && return 0
 	for want in $selected; do
 		case "$1" in *"$want"*) return 0 ;; esac

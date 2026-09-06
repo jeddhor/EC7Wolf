@@ -138,14 +138,23 @@ bool BlocksSight(unsigned int tx, unsigned int ty)
 // of the engine's: CheckLine must pass, and so must this.
 bool ClearLine(fixed ax, fixed ay, fixed bx, fixed by)
 {
-	// Every 8 map units, an eighth of a tile, so nothing thinner than that
-	// can hide between two samples.
+	// Every 4 map units, a sixteenth of a tile.
+	//
+	// Eight was too coarse, and not for the reason the old comment gave. The
+	// question is not how thin an object can hide between two samples but how
+	// short a corner clip can be: a line can cut across the corner of a solid
+	// cell, reach a depth this treats as an obstruction, and be back out again
+	// inside one stride. The perception gate found exactly one such line in
+	// twenty-one item beliefs -- a crossing about five units long, stepped
+	// clean over. The gate calls anything under six units a graze, so the
+	// stride has to be shorter than that or the two are describing different
+	// lines.
 	const int64_t dx = (int64_t)bx - ax;
 	const int64_t dy = (int64_t)by - ay;
 	int64_t span = (dx < 0 ? -dx : dx) + (dy < 0 ? -dy : dy);
-	int steps = (int)(span/(8<<10));
-	if(steps < 8) steps = 8;
-	if(steps > 512) steps = 512;
+	int steps = (int)(span/(4<<10));
+	if(steps < 16) steps = 16;
+	if(steps > 1024) steps = 1024;
 
 	// Ignore the two end cells: the observer and the subject each stand in
 	// one, and neither is an obstruction.
@@ -170,7 +179,14 @@ bool ClearLine(fixed ax, fixed ay, fixed bx, fixed by)
 		const int fx = (int)((x>>10) & 63);
 		const int fy = (int)((y>>10) & 63);
 		const int depth = MIN(MIN(fx, 63 - fx), MIN(fy, 63 - fy));
-		if(depth >= 10)
+		// Nine, not ten, so that this is strictly harsher than the gate that
+		// checks it. The gate calls a sample a wall crossing at 0.15 of a
+		// tile, which is 9.6 units; a threshold of ten left a band between
+		// the two where a line was an obstruction to the test and clear to
+		// the engine, and no amount of sampling would have closed it. Erring
+		// downwards costs a bot a few grazing sightings and can never invent
+		// one.
+		if(depth >= 9)
 			return false;
 	}
 	return true;

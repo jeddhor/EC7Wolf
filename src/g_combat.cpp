@@ -13,6 +13,10 @@
 
 namespace Combat {
 
+// The movement magnitude the self-test uses. Any non-zero value proves the
+// same thing; the engine's own BASEMOVE is not reachable from here.
+enum { BASEMOVE_TEST = 1024 };
+
 void AimError::Reset()
 {
 	angle = 0;
@@ -89,6 +93,47 @@ const WeaponInfo *Weapons(unsigned int &count)
 {
 	count = sizeof(g_weapons)/sizeof(g_weapons[0]);
 	return g_weapons;
+}
+
+namespace {
+// DECORATE speed of each slot's projectile, or 0 for a weapon whose shots
+// arrive instantly. Only the plasma rifle fires one today.
+int ProjectileSpeed(int slot)
+{
+	return slot == 6 ? 30 : 0;		// C7PlasmaBolt, speed 30
+}
+}
+
+bool IsProjectileSlot(int slot)
+{
+	return ProjectileSpeed(slot) > 0;
+}
+
+int FlightTics(int slot, int tiles)
+{
+	const int speed = ProjectileSpeed(slot);
+	if(speed <= 0 || tiles <= 0)
+		return 0;
+	// tiles * 128 / speed, because a projectile covers speed/128 of a tile
+	// per tic. Capped: a lead computed over two seconds of flight is a
+	// prediction, not an aim.
+	const int tics = (tiles*128)/speed;
+	return tics > 70 ? 70 : tics;
+}
+
+Footwork ClearDoorway(bool inDoorway, int forward, int strafe, int baseMove)
+{
+	Footwork out;
+	out.forward = forward;
+	out.strafe = strafe;
+	if(!inDoorway)
+		return out;
+	// Walk out, whatever the range-keeping above would rather do. Backing off
+	// is the dangerous case: it holds the bot in the cell it is trying to
+	// leave, because the door is behind it.
+	out.strafe = 0;
+	out.forward = baseMove;
+	return out;
 }
 
 int ChooseSlotFrom(unsigned int carried, int rangeTiles)
@@ -283,6 +328,18 @@ int SelfTest()
 			"and nothing reaches a target that far away");
 	}
 
+	Printf("\nLeading a projectile\n");
+	{
+		Check(!IsProjectileSlot(3), "the M16 needs no lead");
+		Check(IsProjectileSlot(6), "the plasma rifle does");
+		Check(FlightTics(3, 10) == 0, "a hitscan weapon has no flight time");
+		// speed 30 covers 30/128 of a tile a tic, so a tile takes 4.27 tics.
+		Check(FlightTics(6, 1) == 4, "a plasma bolt crosses one tile in four tics");
+		Check(FlightTics(6, 8) == 34, "and eight tiles in thirty-four");
+		Check(FlightTics(6, 1000) == 70, "a long shot's lead is capped");
+		Check(FlightTics(6, 0) == 0, "and a target underfoot needs none");
+	}
+
 	Printf("\nReproducible\n");
 	{
 		Bot::Random a, b;
@@ -297,6 +354,28 @@ int SelfTest()
 			same = same && ea.angle == eb.angle;
 		}
 		Check(same, "the same seed aims the same way twice");
+	}
+
+	Printf("\nDoorways\n");
+	{
+		// Backing off is the case that matters: the door is behind the bot,
+		// so a retreat keeps it in the cell it needs to leave.
+		const Footwork back = ClearDoorway(true, -BASEMOVE_TEST, BASEMOVE_TEST,
+			BASEMOVE_TEST);
+		Check(back.forward == BASEMOVE_TEST,
+			"a bot in a doorway walks out of it rather than backing off");
+		Check(back.strafe == 0, "and does not strafe against the door frame");
+
+		const Footwork hold = ClearDoorway(true, 0, -BASEMOVE_TEST,
+			BASEMOVE_TEST);
+		Check(hold.forward == BASEMOVE_TEST,
+			"holding position in a doorway is not an option either");
+		Check(hold.strafe == 0, "nor is sidestepping in one");
+
+		const Footwork open = ClearDoorway(false, -BASEMOVE_TEST,
+			BASEMOVE_TEST, BASEMOVE_TEST);
+		Check(open.forward == -BASEMOVE_TEST && open.strafe == BASEMOVE_TEST,
+			"and footwork anywhere else is left alone");
 	}
 
 	Printf("\n%d checks, %d failures\n", g_checks, g_failures);

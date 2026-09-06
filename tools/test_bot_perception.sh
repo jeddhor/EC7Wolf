@@ -64,19 +64,24 @@ check() {
 tics=1400
 maps=${MAPS:-"MAP53 MAP51 MAP60"}
 
-run() {  # run MAP TAG RENDERER
+run() {  # run MAP TAG RENDERER [EXTRA...]
 	mkdir -p "$work/$2-saves"
+	# Named apart from the caller's variables on purpose: `map` is also a
+	# loop variable two dozen lines below, and a helper that quietly reassigns
+	# its caller's loop counter is a bug waiting for someone to move a line.
+	runmap=$1; runtag=$2; runrenderer=$3; shift 3
 	( cd "$data_dir"
 	  DISPLAY=$display SDL_VIDEODRIVER=x11 SDL_AUDIODRIVER=dummy \
 	  timeout 300 "$build_dir/ec7wolf" --data CO7 --res 320 200 --nowait \
-		--vid-renderer "$3" \
-		--config "$work/$2.cfg" --savedir "$work/$2-saves" \
+		--vid-renderer "$runrenderer" \
+		--config "$work/$runtag.cfg" --savedir "$work/$runtag-saves" \
 		--capture-rngseed 1 \
-		--capture-perception "$work/$2.see" \
-		--capture-bots "$work/$2.bots" \
-		--capture-nav "$work/$2.nav" \
+		--capture-perception "$work/$runtag.see" \
+		--capture-bots "$work/$runtag.bots" \
+		--capture-nav "$work/$runtag.nav" \
 		--capture-maxtics "$tics" \
-		--tedlevel "$1" --skill 2 --battle --bots 3 ) >"$work/$2.log" 2>&1 || true
+		--tedlevel "$runmap" --skill 2 --battle --bots 3 "$@" ) \
+		>"$work/$runtag.log" 2>&1 || true
 }
 
 printf 'Bots see what a player standing there would see\n'
@@ -196,12 +201,23 @@ run MAP53 react software
 python3 - "$work/react.bots" <<'PY'
 import sys, re
 
+# Each bot's own declared reaction trait, from the line it writes when it is
+# configured. Checked against per bot rather than against a range for the
+# whole match: a band is the same assertion for every bot on the map, and it
+# passes just as happily if the trait is ignored and everyone reacts at the
+# table's midpoint.
+trait = {}
 sighted, noticed, lost = {}, [], []
 for line in open(sys.argv[1]):
     f = line.split()
     if len(f) < 4 or f[0].startswith("#"):
         continue
     tic, slot, event = int(f[0]), f[1], f[2]
+    if event == "configure":
+        m = re.search(r"react=(\d+)", line)
+        if m:
+            trait[slot] = int(m.group(1))
+        continue
     who = re.search(r"slot=(\d+)", line)
     if not who:
         continue
@@ -231,24 +247,31 @@ for tic, key, after, origin in noticed:
         problems.append("released %d tics after sighting, promised %d"
                         % (tic - seen_at, promised))
         break
-    # The reaction bases across the shipped personalities are 12, 14 and 18
-    # (g_bot.cpp, PersonalityFor), each with a spread of 7 on top. So the
-    # range is 12 to 24 inclusive.
+    # Within a jitter of the reaction time this bot said it had.
     #
-    # It was 14 to 20 while every bot ran the same profile, and personalities
-    # broke it -- correctly. A gate that encodes one profile's numbers stops
-    # describing the system the moment there is more than one profile.
-    if not (12 <= after <= 24):
-        problems.append("delay %d is outside the declared 12-24 tics" % after)
+    # This has been a hardcoded range twice, and expired twice -- first when
+    # personalities arrived, then when skill levels did. Both times the gate
+    # was quoting numbers that had moved. Asking each bot what its own
+    # reaction time is and holding it to that survives the table changing, and
+    # says something the range never did: that the trait is used, not just
+    # printed. REACT_SPREAD is 7 in g_bot.cpp.
+    own = trait.get(key[0])
+    if own is None:
+        problems.append("slot %s reacted without ever declaring a trait" % key[0])
+        break
+    if abs(after - own) > 7:
+        problems.append("slot %s reacted in %d tics, %d off its declared %d"
+                        % (key[0], after, abs(after - own), own))
         break
 
 # len(sighted) is the number of distinct (bot, subject) pairs, because the dict
 # holds only the most recent sighting for each -- not the number of sighting
 # events, which is larger. Said plainly here because "8 sightings, 17 released"
 # reads as impossible otherwise.
-print("  ..   reaction: %d contact pairs, %d releases, delays %s"
+print("  ..   reaction: %d contact pairs, %d releases, delays %s, traits %s"
       % (len(sighted), len(noticed),
-         sorted(set(a for _, _, a, _ in noticed)) if noticed else "none"))
+         sorted(set(a for _, _, a, _ in noticed)) if noticed else "none",
+         sorted(trait.items())))
 if problems:
     for p in problems:
         print("  FAIL reaction: %s" % p)
@@ -575,7 +598,13 @@ PY
 fi
 
 # Searching and forgetting: the last two verbs in the milestone's exit line.
-run MAP53 mem software
+#
+# At Recruit, because forgetting is now a skill trait and the check needs it to
+# actually happen inside the run. Section 17.2's search memory runs from two
+# seconds to fifteen, so a match long enough to see an Elite forget is five
+# times longer than one that shows a Recruit doing it -- and the mechanism
+# being tested is the same one either way.
+run MAP53 mem software --bot-skill Recruit
 python3 - "$work/mem.bots" <<'PY'
 import sys, re
 
@@ -586,6 +615,18 @@ for line in open(sys.argv[1]):
         continue
     who = re.search(r"slot=(\d+)", line)
     events.append((int(f[0]), f[1], f[2], who.group(1) if who else None, line))
+
+# Each bot's own declared search memory, for the same reason the reaction
+# check reads its own reaction time: this was the constant FORGET_TICS, it is
+# now a skill trait with a band from four seconds to fifteen, and a gate
+# quoting the old number fails a bot that is behaving exactly as its level
+# says it should.
+memory = {}
+for tic, bot, ev, who, line in events:
+    if ev == "configure":
+        m = re.search(r"memory=(\d+)", line)
+        if m:
+            memory[bot] = int(m.group(1))
 
 noticed = set()
 searches, forgets = [], []
@@ -606,9 +647,13 @@ for tic, bot, ev, who, line in events:
         searches.append((tic, key))
     elif ev == "forgot":
         after = int(re.search(r"after=(\d+)", line).group(1))
-        # 350 tics, from FORGET_TICS in g_bot.cpp.
-        if after < 350:
-            problems.append("forgot after %d tics, sooner than the 350 declared" % after)
+        own = memory.get(bot)
+        if own is None:
+            problems.append("bot %s forgot without declaring a memory" % bot)
+            break
+        if after < own:
+            problems.append("bot %s forgot after %d tics, sooner than the %d "
+                            "it declared" % (bot, after, own))
             break
         forgets.append((tic, key, after))
 
@@ -617,9 +662,10 @@ if not searches:
 if not forgets:
     problems.append("nothing was forgotten; memory ageing was not tested")
 
-print("  ..   memory: %d searches, %d forgotten, ages %s"
+print("  ..   memory: %d searches, %d forgotten, ages %s, declared %s"
       % (len(searches), len(forgets),
-         sorted(set(a for _, _, a in forgets)) if forgets else "none"))
+         sorted(set(a for _, _, a in forgets)) if forgets else "none",
+         sorted(memory.items())))
 if problems:
     for p in problems:
         print("  FAIL memory: %s" % p)

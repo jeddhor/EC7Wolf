@@ -82,7 +82,7 @@ done
 # gl_selftest is here rather than below because --gltest is handled before the
 # IWAD is opened: it needs no game data, and it is the only thing that proves the
 # shaders actually compile on the runner's driver. A broken shader still links.
-data_free_gates='definitions names ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3 ec7edit_e4 ec7edit_e5 ec7edit_e6 ec7edit_e7 ec7edit_e8 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic multiplayer_session bot_model bot_percept bot_itemmodel bot_aim installer installer_gui installer_kde installer_windows installer_lifecycle ec7edit_e12 ec7edit_package'
+data_free_gates='definitions names ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3 ec7edit_e4 ec7edit_e5 ec7edit_e6 ec7edit_e7 ec7edit_e8 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic multiplayer_session bot_model bot_percept bot_itemmodel bot_aim bot_skillmodel installer installer_gui installer_kde installer_windows installer_lifecycle ec7edit_e12 ec7edit_package'
 
 data_gates='
 corridor7
@@ -131,6 +131,7 @@ bot_perception
 bot_items
 bot_combat
 bot_mines
+bot_skill
 multiplayer_rules
 multiplayer_classes
 multiplayer_presentation
@@ -166,7 +167,7 @@ release_gates='corridor7_release_startup'
 #
 # Split so the structural gates can run on every change and these can run
 # before a commit and on CI's slower schedule.
-slow_gates='bot_transporters bot_arenas bot_perception bot_roam multiplayer_starts'
+slow_gates='bot_transporters bot_arenas bot_perception bot_roam multiplayer_starts bot_skill'
 
 is_slow() {
 	for slow in $slow_gates; do
@@ -469,6 +470,15 @@ for g in $data_free_gates; do
 				skip_gate "$g" "no ec7wolf in $build_dir"
 			else
 				run_gate "$g" "FLIC decoder" "$here/test_corridor7_flic.sh" "$build_dir"
+			fi ;;
+		bot_skillmodel)
+			# Build-only: section 17.2's table, its conversions to command
+			# units, and the fairness clamp are all arithmetic, and none of
+			# them needs a map to be wrong on.
+			if [ ! -x "$build_dir/ec7wolf" ]; then
+				skip_gate "$g" "no ec7wolf in $build_dir"
+			else
+				run_gate "$g" "skill model" "$build_dir/ec7wolf" --skilltest
 			fi ;;
 		bot_aim)
 			# Build-only: the correlated aim error, including the check that a

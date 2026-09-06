@@ -3733,6 +3733,126 @@ configuration.
 perceptible without statistical cheats; Elite remains measurably fallible;
 playtests find no repeatable wallhack, snap aim, or rules bypass.
 
+### B8 record — a ladder, and the table that could not be taken literally
+
+**Skill and personality had to become two types, not two halves of one.**
+Section 17.1 says so and the previous struct did not: `Personality` held aim
+envelope and reaction time next to preferred range and retreat threshold, which
+is exactly how a difficulty setting turns into an accuracy number. They are
+separated now, and the separation is enforced by what each type can express ---
+there is nothing in `Skill` to turn up but a limit or a delay. Damage, health,
+ammunition, pickup rules and command range are not skill traits and do not
+appear in the file, which is section 17.3 made structural rather than promised.
+
+**The command range is not a difficulty setting.** `ControlMovement` applies
+`controlx * (ANGLE_1/20)` once a tic, so a command unit is a twentieth of a
+degree per tic and the canonical +/-100 range is a hard 350 deg/s. Every
+conversion in section 17.2's table is derived from that arithmetic and checked
+against it longhand, and the ceiling binds `Perfect` as well as Recruit,
+because it is a property of the interface a person uses.
+
+**Three of the traits had never been implemented at all.** They were in the
+plan, and reading the plan would have told you they were done.
+
+*Vision refresh* was the important one. The brain read the sensor every tic, so
+a Recruit's seven hertz and an Elite's twenty-eight described nothing: both saw
+the world continuously and differed only in how long they waited before
+admitting it. A refresh rate only means something if the brain stops looking in
+between, so it now reads a snapshot it takes at its own rate --- and between
+looks it aims at where somebody *was*. The sensor still runs every tic and is
+still the only thing that touches the world; what changed is how often the
+brain may ask it.
+
+*Yaw acceleration* did not exist, only a rate ceiling. Without it every level
+reaches full turning speed on the first tic, so the thing a person actually
+notices --- the head snapping round the instant somebody appears --- survives
+every difficulty setting. Section 17.5 forbids the instant 180 and a rate
+ceiling alone does not prevent it.
+
+*Respawn hesitation* did not exist either: bots pressed use on the first tic of
+every death, and were back before a person had focused on the screen.
+
+**Section 17.2's table cannot be taken literally, and says so in its own
+qualifications.** "Aim error expands with range, movement, occlusion, tracking
+age, and target angular velocity. The table is not a constant random cone."
+
+That qualification is load-bearing rather than decorative, because of section
+16.2. The auto-target cone is ten degrees wide and a Veteran's static envelope
+tops out at seven --- so a Veteran firing with a constant cone that narrow
+cannot miss, whatever the number in the table says, and neither can an Elite.
+Implemented literally it produced bots so accurate they killed each other
+before either could get hurt enough to retreat, and the first thing that
+noticed was the *retreat* check in the combat gate, not any accuracy bound.
+
+So the envelope expands with the difficulty of the shot: range, how stale the
+aimed-at position is, and how fast the target is crossing. All three are facts
+about the shot rather than about the shooter, which is what keeps it a
+difficulty of the situation and not a hidden accuracy dial. Staleness is the
+term that separates the levels, because vision refresh and tracking delay are
+both skill traits: a Recruit is aiming at a position ten tics older than an
+Elite's before either of them has made a mistake.
+
+Measured, three seeds a level: **Recruit 38%, Marine 48%, Veteran 70%, Elite
+71%**. The ladder is thirty-three points end to end, the top of it misses
+nearly a third of its shots, and bots get hurt slowly enough to retreat again
+--- which is the check that noticed the problem in the first place.
+
+Veteran and Elite are one point apart on seventy-odd shots each, which is
+inside the noise, and the gate asserts no ordering between adjacent levels for
+exactly that reason: forbidding a crossing that three seeds can produce by
+chance would be measuring the seed rather than the bot. It is also a real
+plateau and worth naming --- above a certain point a tighter envelope buys
+nothing, because the auto-target cone is already wider than the error, and
+what still separates the top two levels is how stale their information is
+rather than how straight they shoot.
+
+**The gate reads the body, not the bot.** Its hard bounds come from the angle
+column of the players file --- what the pawn actually did --- rather than from
+any counter the brain writes. A bot that logged "I turned three degrees" while
+turning thirty would pass a counter and fail this. Respawns are excluded on
+evidence rather than by tic count (health going up, or the body moving further
+in one tic than it could possibly walk), and one degree is allowed because the
+players file records whole degrees, which is a rounding allowance and not a
+tolerance on the rule.
+
+**A fix from B7 broke without anyone touching it.** Bots turning like people is
+not only slower, it changes *when* they arrive places and therefore which goals
+they pick, and the transporter bounce came back on MAP60: a bot crossed, spent
+its thirty-five tic freeze standing on the pad, and went straight back the
+moment it could move.
+
+I made three plausible repairs to the edge filter --- refuse transporter edges,
+never let the first step land on a pad cell, walk off the pad instead of
+turning on it --- and every one produced a byte-identical trace. That is the
+signal, and it took three of them to act on it: the code being changed was not
+on the path. The tell had been visible from the first trace, because a seven
+waypoint route from (48,3) to (58,9) cannot be walked, so the route had to
+contain a crossing and the filter therefore was not running at all.
+
+It was one level up. `ChooseRoamGoal` runs a pass ladder whose last pass drops
+the pad avoidance so that a bot with nowhere else to go still goes somewhere,
+and that was the pass succeeding. Every filter downstream was reading a flag
+the ladder had already turned off.
+
+So the two ideas are now separate. Keeping clear of pads is a *preference* and
+the ladder may trade it away to find a goal. Crossing one forty tics after
+arriving is the bounce itself, and is refused independently of the ladder.
+Zero bounces afterwards, six crossings still made, one goal search failing
+harmlessly --- which is the shape the escape hatch is supposed to have.
+
+The general form is worth keeping. A rule that a caller is allowed to relax
+must be a rule the system can afford to have relaxed, and "avoid transporters"
+was carrying two rules of very different value under one name.
+
+**Deferred, and named rather than quietly skipped:** section 17.6's human
+baselines. The capture mechanism is one thing and the calibration is another,
+and the second cannot be done honestly without humans to capture --- "derive
+broad anonymized distributions" is not something to invent from a bot. What
+exists now is `tools/bot_report.sh`, which prints the distributions section
+17.4 asks for and asserts nothing, so that a trait can be adjusted one family
+at a time with recorded before-and-after metrics. Pointing it at human streams
+instead of bot ones is the remaining work.
+
 ### B9 — Interface, presentation, administration, recording
 
 **Work:** human/bot/total/skill lobby controls and validation; the offline

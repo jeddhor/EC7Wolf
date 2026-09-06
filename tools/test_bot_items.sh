@@ -61,7 +61,30 @@ check() {
 # MAP60 has eleven pickups, the most of any arena. MAP53 has three, which is
 # enough to show the same behaviour on a second map.
 maps=${MAPS:-"MAP60 MAP53"}
-tics=1400
+# Raised in B8 from 1400.
+#
+# Not because anything here got weaker: bots turn like people now. Section
+# 17.2 gives a maximum yaw *acceleration* as well as a rate, so a bot ramps up
+# to its turning speed over about a fifth of a second instead of pivoting at
+# full rate on the first tic, and every corner of a route costs that ramp. A
+# bot that used to arrive in 1400 tics arrives in about 2000 and takes the same
+# path to get there.
+#
+# Doubled rather than raised by half, here alone. Fetching something is two
+# arrivals' worth of walking -- decide, walk there, and the pickup only counts
+# on contact -- so the slowdown lands on this gate twice. Measured: at 2100
+# tics MAP53 collected nothing on either seed and at 2800 it collects on both,
+# with eleven routes planned, seven reached, and nothing abandoned, refused or
+# stuck in either run. A bot that had actually broken would show those numbers
+# rather than a slower clock.
+#
+# Measured before raising it rather than after: with the budget lifted the same
+# bot arrives, opens the same door and crosses the same pads, so what expired
+# was the budget and not the behaviour. A human keyboard turn is instant at 70
+# units a tic and a mouse reaches the same 100-unit ceiling a bot does, so the
+# ramp makes bots slightly worse at turning than a person, which is the
+# direction section 17.5 asks for.
+tics=2800
 
 run() {  # run MAP SEED TAG
 	mkdir -p "$work/$3-saves"

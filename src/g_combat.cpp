@@ -121,6 +121,55 @@ int FlightTics(int slot, int tiles)
 	return tics > 70 ? 70 : tics;
 }
 
+// Scaled by 256, so that a coefficient of 16 reads as "one sixteenth more per
+// tile" rather than as a float nobody can reproduce by hand.
+enum
+{
+	ENV_SCALE = 256,
+	// Beyond four tiles a target is small enough that pointing at it stops
+	// being the easy part. Capped, or a long corridor would make a bot
+	// hopeless rather than merely worse.
+	ENV_RANGE_FROM = 4,
+	ENV_RANGE_PER_TILE = 16,
+	ENV_RANGE_CAP = 256,
+	// Staleness. This is the one that separates the levels, because vision
+	// refresh and tracking delay are both skill traits: a Recruit is aiming
+	// at a position up to ten tics older than an Elite's before either of
+	// them has made a mistake.
+	ENV_AGE_PER_TIC = 24,
+	ENV_AGE_CAP = 384,
+	// A target crossing the view is harder than one walking at you, which is
+	// the difference between a duel and an ambush.
+	ENV_CROSS_PER_TILE = 24,
+	ENV_CROSS_CAP = 256
+};
+
+angle_t EnvelopeFor(angle_t staticEnvelope, int rangeTiles,
+	unsigned int sampleAge, int crossTiles)
+{
+	unsigned int scale = ENV_SCALE;
+
+	if(rangeTiles > ENV_RANGE_FROM)
+	{
+		unsigned int add = (unsigned int)(rangeTiles - ENV_RANGE_FROM)*
+			ENV_RANGE_PER_TILE;
+		scale += add > ENV_RANGE_CAP ? (unsigned int)ENV_RANGE_CAP : add;
+	}
+
+	{
+		unsigned int add = sampleAge*ENV_AGE_PER_TIC;
+		scale += add > ENV_AGE_CAP ? (unsigned int)ENV_AGE_CAP : add;
+	}
+
+	if(crossTiles > 0)
+	{
+		unsigned int add = (unsigned int)crossTiles*ENV_CROSS_PER_TILE;
+		scale += add > ENV_CROSS_CAP ? (unsigned int)ENV_CROSS_CAP : add;
+	}
+
+	return (angle_t)(((uint64_t)staticEnvelope*scale)/ENV_SCALE);
+}
+
 Footwork ClearDoorway(bool inDoorway, int forward, int strafe, int baseMove)
 {
 	Footwork out;

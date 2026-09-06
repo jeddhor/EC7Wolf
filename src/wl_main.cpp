@@ -9,6 +9,7 @@
 #include "wl_def.h"
 #include "g_session.h"
 #include "g_bot.h"
+#include "g_skill.h"
 #include "g_perception.h"
 #include "g_items.h"
 #include "g_combat.h"
@@ -1309,6 +1310,23 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 			if(++i < argc)
 				Bot::SetRequested(atoi(argv[i]));
 		}
+		else IFARG("--bot-skill")
+		{
+			// Registered in this loop for the reason the comment above gives:
+			// an option merely peeked at elsewhere becomes a filename.
+			if(++i < argc)
+			{
+				bool developer = false;
+				for(int d = 1;d < argc;++d)
+					developer = developer ||
+						strcmp(argv[d], "--bot-developer") == 0;
+				if(!Bot::SetRequestedSkill(argv[i], developer))
+					Printf("Unknown or unavailable bot skill '%s'.\n", argv[i]);
+			}
+		}
+		// Section 17.5: the developer profile is opt-in and named, not hidden
+		// behind a magic value of an ordinary option.
+		else IFARG("--bot-developer") {}
 		else IFARG("--host")
 		{
 			if(++i < argc)
@@ -1379,6 +1397,7 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 		else IFARG("--percepttest") {}
 		else IFARG("--itemtest") {}
 		else IFARG("--combattest") {}
+		else IFARG("--skilltest") {}
 		else IFARG("--capture-tape") { ++i; }
 		else IFARG("--capture-forge-slot") { ++i; }
 		else IFARG("--capture-commands") { ++i; }
@@ -1605,6 +1624,8 @@ int WL_Main (int argc, char *argv[])
 				return Items::SelfTest();
 			if(strcmp(argv[si], "--combattest") == 0)
 				return Combat::SelfTest();
+			if(strcmp(argv[si], "--skilltest") == 0)
+				return Bot::SkillSelfTest();
 		}
 
 #ifdef ECWOLF_RENDERER_OPENGL

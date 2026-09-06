@@ -134,6 +134,30 @@ struct Footwork
 
 Footwork ClearDoorway(bool inDoorway, int forward, int strafe, int baseMove);
 
+// The envelope actually applied to one shot.
+//
+// Section 17.2's table is a *static* envelope and says so in its own
+// qualifications: error expands with range, movement, occlusion, tracking age
+// and target angular velocity, and "the table is not a constant random cone".
+//
+// That qualification is load-bearing here rather than decorative, because of
+// section 16.2. The auto-target cone is ten degrees wide, and a Veteran's
+// static envelope tops out at seven -- so a Veteran firing with a constant
+// cone that narrow cannot miss, whatever the table says, and neither can an
+// Elite. Taking the table literally produced bots accurate enough to kill each
+// other before either could get hurt enough to retreat.
+//
+// So what makes a good bot miss is the shot being hard: a distant target, one
+// crossing quickly, one whose position is half a look old. All three are
+// facts about the shot rather than about the shooter, which is what keeps
+// this a difficulty of the situation and not a hidden accuracy dial.
+//
+// `sampleAge` is how many tics old the position being aimed at is -- vision
+// refresh and tracking delay together. `crossTiles` is how far the target has
+// moved sideways across the recent samples, in tiles per second.
+angle_t EnvelopeFor(angle_t staticEnvelope, int rangeTiles,
+	unsigned int sampleAge, int crossTiles);
+
 // Which slot this bot should be holding against a target this far away, or 0
 // for "what it has is fine". Considers only what the bot is carrying and what
 // it can see -- never the target's health or armour.

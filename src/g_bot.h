@@ -35,6 +35,7 @@
 #include "wl_play.h"
 #include "g_botnav.h"
 #include "g_combat.h"
+#include "g_skill.h"
 
 namespace Bot {
 
@@ -56,6 +57,10 @@ enum class Stream : uint8_t
 	Aim,
 	Movement,
 	Timing,
+	// Appended, not inserted: the seed of every stream above depends on its
+	// position, so putting one in the middle would give every existing bot a
+	// different personality for no stated reason.
+	Skill,
 	NUM
 };
 
@@ -111,19 +116,23 @@ const char *BehaviorName(Behavior behavior);
 // when they decide to leave.
 struct Personality
 {
-	// Width of the aim error. Wider misses more; it does not change what a
-	// hit does.
-	int32_t  aimEnvelope = 0;
-	// Reaction time before a sighting reaches the decision layer.
-	unsigned int reactBase = 14;
 	// How hurt is hurt enough to break off.
 	int      retreatNeed = 250;
 	// The distance it tries to hold in a fight.
 	int      preferRange = 8;
+	// How readily it spends a mine, and how far it will detour for an item it
+	// wants. Preferences, not abilities: a cautious bot and a reckless one
+	// carry the same mines and walk at the same speed.
+	int      mineEagerness = 100;
+	int      itemAppetite = 100;
 };
 
-// Derived from the profile index, deterministically. Three shipped so far;
-// section 17.2's fuller ladder is B8's work.
+// Aim envelope and reaction time used to live here and have moved to
+// g_skill.h, which is the whole point of section 17.1: how *well* a bot aims
+// is skill, how *close* it chooses to fight is personality. Keeping both in
+// one struct is how a difficulty setting quietly becomes an accuracy number.
+//
+// Derived from the profile's personality index, deterministically.
 Personality PersonalityFor(uint32_t profile);
 
 struct State
@@ -133,6 +142,52 @@ struct State
 	uint64_t seed = 0;
 
 	Random rng[(unsigned int)Stream::NUM];
+
+	// How good this bot is, drawn once from its level's bands. Motor and
+	// sensory limits only; see g_skill.h for why nothing here can make it
+	// better than a person at something a person is not limited by.
+	Traits traits;
+
+	// What the last look showed.
+	//
+	// The brain does not read the sensor every tic. It reads this, refreshed
+	// every `traits.visionInterval` tics, which is what a vision refresh rate
+	// *is*: between looks a bot acts on where somebody was, not where they
+	// are. Reading the live observation every tic and calling the delay a
+	// reaction time would give a Recruit an Elite's eyes and a slow trigger.
+	struct View
+	{
+		bool     seen[MAXPLAYERS] = { false };
+		fixed    x[MAXPLAYERS] = { 0 };
+		fixed    y[MAXPLAYERS] = { 0 };
+		int32_t  distanceTiles[MAXPLAYERS] = { 0 };
+		uint32_t takenAt = 0;
+		bool     ever = false;
+	};
+	View view;
+
+	// Which look the aim history has already recorded. Sampling the same look
+	// twice would make the tracking window shorter than the trait says: the
+	// ring would fill with copies of one position rather than a trail.
+	uint32_t lastAimSample = 0;
+
+	// The turn rate the pawn is actually carrying, scaled by ACCEL_SCALE.
+	// State, because acceleration is a limit on the *change* -- a bot that
+	// forgot its current rate every tic would have no acceleration limit at
+	// all, only a ceiling it reached instantly.
+	int yawRate = 0;
+
+	// Steering error while following a route, as opposed to aiming error while
+	// shooting. Section 15 lists "a slightly longer valid route" and
+	// "overshooting a wide corner and correcting" among the mistakes that read
+	// as human, and this is where both come from: a worse bot walks less
+	// precisely, so its path through the world is a little longer than the one
+	// it planned.
+	//
+	// The same correlated-error machinery the aim uses, for the same reason
+	// section 16.4 gives: an error redrawn every tic is a vibration, and what a
+	// person does is drift off and correct.
+	Combat::AimError steer;
 
 	Behavior behavior = Behavior::SpawnOrient;
 	uint32_t behaviorSince = 0;
@@ -365,6 +420,13 @@ struct State
 	// cell a transporter lands you on is usually beside its counterpart and
 	// the cheapest way out of the arrival area is often straight back.
 	uint32_t     portCooldownUntil = 0;
+	// Where the last crossing put it. The avoidance is "not until I am clear of
+	// that pad", which needs to know which pad.
+	uint16_t     portArrivedTileX = 0;
+	uint16_t     portArrivedTileY = 0;
+	// While this runs the follower walks instead of turning on the spot,
+	// because standing still on a pad is how a bot gets sent back through it.
+	uint32_t     portClearUntil = 0;
 
 	// Provenance, for the assertions in section 11.6 and for the trace.
 	unsigned int commandsProduced = 0;
@@ -402,6 +464,15 @@ unsigned int Count();
 void SetupSlots(FName (&playerClassNames)[MAXPLAYERS]);
 int Requested();
 void SetRequested(int count);
+
+// The skill every bot in the next match is created at. One setting for the
+// match rather than one per bot: mixing levels is a lobby feature and belongs
+// with the rest of the interface work, and a per-bot override would make the
+// statistical gates below meaningless without one.
+SkillLevel RequestedSkill();
+// Returns false for a name that is not a level, or for one that exists but is
+// not shippable without the developer opt-in.
+bool SetRequestedSkill(const char *name, bool allowDeveloper);
 
 // A producer for one bot slot. Ownership passes to the command layer.
 Command::Producer *MakeProducer(Session::PlayerSlot slot);

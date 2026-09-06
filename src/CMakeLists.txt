@@ -108,6 +108,7 @@ initial_sources(
 	g_perception.cpp
 	g_items.cpp
 	g_combat.cpp
+	g_skill.cpp
 	g_command.cpp
 	g_session.cpp
 	g_mapinfo.cpp

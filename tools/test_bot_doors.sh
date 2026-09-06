@@ -70,7 +70,22 @@ check() {
 	else printf '  FAIL %s\n' "$message"; status=1; fi
 }
 
-tics=1400
+# Raised in B8 from 1400.
+#
+# Not because anything here got weaker: bots turn like people now. Section
+# 17.2 gives a maximum yaw *acceleration* as well as a rate, so a bot ramps up
+# to its turning speed over about a fifth of a second instead of pivoting at
+# full rate on the first tic, and every corner of a route costs that ramp. A
+# bot that used to arrive in 1400 tics arrives in about 2000 and takes the same
+# path to get there.
+#
+# Measured before raising it rather than after: with the budget lifted the same
+# bot arrives, opens the same door and crosses the same pads, so what expired
+# was the budget and not the behaviour. A human keyboard turn is instant at 70
+# units a tic and a mouse reaches the same 100-unit ceiling a bot does, so the
+# ramp makes bots slightly worse at turning than a person, which is the
+# direction section 17.5 asks for.
+tics=2100
 map=MAP51
 # The door, and the cells either side of it. It opens along Y, so these are the
 # two faces that open; approaching on any other is what the graph refuses to

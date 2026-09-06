@@ -99,6 +99,9 @@ namespace {
 State    g_state[MAXPLAYERS];
 bool     g_active[MAXPLAYERS] = { false };
 int      g_requested = -1;
+// Marine by default: the middle of the ladder, so an unconfigured match is an
+// ordinary one rather than the easiest or the hardest.
+SkillLevel g_skill = SkillLevel::Marine;
 uint32_t g_brainDigest = 0;
 FILE    *g_trace = NULL;
 
@@ -127,25 +130,25 @@ void Reset()
 Personality PersonalityFor(uint32_t profile)
 {
 	Personality p;
-	switch(profile % 3)
+	switch(PersonaOf(profile) % 3)
 	{
 		case 0:		// steady: the baseline the gates were tuned against
-			p.aimEnvelope = (ANGLE_90/9)*2;
-			p.reactBase = 14;
 			p.retreatNeed = 250;
 			p.preferRange = 8;
+			p.mineEagerness = 100;
+			p.itemAppetite = 100;
 			break;
-		case 1:		// cautious: reacts a little slower, leaves earlier, hangs back
-			p.aimEnvelope = (ANGLE_90/9)*2;
-			p.reactBase = 18;
+		case 1:		// cautious: leaves earlier, hangs back, mines readily
 			p.retreatNeed = 180;
 			p.preferRange = 12;
+			p.mineEagerness = 140;
+			p.itemAppetite = 120;
 			break;
 		default:	// aggressive: closes in and stays longer, and pays for it
-			p.aimEnvelope = (ANGLE_90/9)*5/2;
-			p.reactBase = 12;
 			p.retreatNeed = 400;
 			p.preferRange = 5;
+			p.mineEagerness = 70;
+			p.itemAppetite = 90;
 			break;
 	}
 	return p;
@@ -164,6 +167,11 @@ void Configure(Session::PlayerSlot slot, uint32_t profile, uint64_t matchSeed)
 	for(unsigned int s = 0;s < (unsigned int)Stream::NUM;++s)
 		bot.rng[s].Seed(matchSeed, slot, profile, (Stream)s);
 
+	// Drawn once, here, from its own stream: a trait redrawn during a match is
+	// not a trait, and drawing from a shared stream would make one bot's
+	// reflexes depend on how many other bots are in the game.
+	bot.traits = Draw(SkillOf(profile), bot.rng[(unsigned int)Stream::Skill]);
+
 	// Staggered from the start, so that the first think of eight bots does not
 	// land on one tic.
 	bot.nextSense = slot;
@@ -176,8 +184,15 @@ void Configure(Session::PlayerSlot slot, uint32_t profile, uint64_t matchSeed)
 	g_active[slot] = true;
 
 	FString detail;
-	detail.Format("profile=%u seed=%llu", profile,
-		(unsigned long long)matchSeed);
+	detail.Format("profile=%u skill=%s persona=%u seed=%llu react=%u vision=%u "
+		"yaw=%u accel=%d aim=%u track=%u think=%u memory=%u strafe=%u "
+		"respawn=%u", profile, SkillName(SkillOf(profile)), PersonaOf(profile),
+		(unsigned long long)matchSeed, bot.traits.reaction,
+		bot.traits.visionInterval, (unsigned)bot.traits.maxYaw,
+		bot.traits.yawAccel, (unsigned)(bot.traits.aimEnvelope/ANGLE_1),
+		bot.traits.trackingDelay, bot.traits.thinkInterval,
+		bot.traits.searchMemory, bot.traits.strafeCommit,
+		bot.traits.respawnDelay);
 	TraceEvent(slot, "configure", detail.GetChars());
 }
 
@@ -233,6 +248,20 @@ const uint32_t ITEM_THINK_INTERVAL = 70;
 // 16%. At that point the nearest dispenser is thirteen tiles away and it dies
 // on the way, which is a retreat in name only.
 const int RETREAT_NEED = 250;
+
+// How far from the arrival pad counts as clear of it. Four tiles is outside
+// the ring of cells a pad's trigger reaches, with one to spare for a bot still
+// turning round.
+//
+// Out here at namespace scope rather than in the producer's enum, because the
+// goal chooser is a free function and cannot see that enum -- the same trap
+// that hid RETREAT_NEED above from the code that needed it.
+const int PORT_CLEAR_TILES = 4;
+
+// And how long a bot keeps walking rather than turning after a crossing. Long
+// enough to carry it out of the pad's trigger at walking pace, short enough
+// that a bot which arrives facing a wall is not committed to it.
+const uint32_t PORT_CLEAR_TICS = 28;
 
 }   // anonymous
 
@@ -292,7 +321,39 @@ bool ChooseRoamGoal(State &bot, const BotNav::Graph &graph, AActor *pawn,
 	// One set of rules for both planners below: whatever this bot may not
 	// route through at this moment.
 	BotNav::SearchOptions options;
-	options.avoidTransporters = sequence < bot.portCooldownUntil;
+	// Keep clear of transporters until this bot has actually got clear of the
+	// one it arrived on --- distance first, with the timer only as a backstop.
+	//
+	// It was the timer alone, and B8 broke it without touching it. The
+	// avoidance exists to stop a bot stepping straight back onto the pad it
+	// just came out of, and 210 tics was long enough to walk out of the ring
+	// while bots pivoted instantly. Give them a human turn acceleration and
+	// the same 210 tics no longer gets them out, so the bounce came back on
+	// MAP60 --- twice in the first three hundred tics of a match.
+	//
+	// A rule measured in tics is a rule about how fast the bot walks, which is
+	// a thing that changes. "Far enough away" does not.
+	const int fromPadX = (int)pawn->tilex - (int)bot.portArrivedTileX;
+	const int fromPadY = (int)pawn->tiley - (int)bot.portArrivedTileY;
+	const bool nearArrivalPad = bot.portCooldownUntil != 0 &&
+		abs(fromPadX) <= PORT_CLEAR_TILES && abs(fromPadY) <= PORT_CLEAR_TILES;
+	options.avoidTransporters =
+		sequence < bot.portCooldownUntil || nearArrivalPad;
+
+	// And separately: no crossing at all while the cooldown runs.
+	//
+	// Kept apart from avoidTransporters because that one is relaxed by the
+	// pass ladder below, and this one must not be. The ladder's last pass
+	// exists so a bot with nowhere else to go still goes somewhere, and it
+	// drops the pad avoidance to do it -- which on MAP60 handed a bot that
+	// had crossed forty tics earlier a seven waypoint route whose first move
+	// was the crossing back. Three separate attempts to fix that in the edge
+	// filter changed nothing, because the filter was reading a flag the
+	// ladder had already turned off.
+	//
+	// Walking near a pad is a preference and can be traded away. Crossing one
+	// forty tics after arriving is the bounce itself.
+	options.refuseCrossings = sequence < bot.portCooldownUntil;
 	options.blocked = &bot.blocked;
 	options.lethal = &bot.mined;
 	options.now = sequence;
@@ -638,6 +699,7 @@ bool ChooseRoamGoal(State &bot, const BotNav::Graph &graph, AActor *pawn,
 		BotNav::SearchOptions pass_options = options;
 		pass_options.avoidTransporters = restricted;
 		pass_options.lethal = pass + 1 < passes ? options.lethal : NULL;
+		pass_options.refuseCrossings = options.refuseCrossings;
 		if(!graph.FindPath(here, candidate, route, stats, 0, &pass_options))
 			continue;
 
@@ -732,7 +794,16 @@ public:
 			// that pressed nothing would still return, just always late and
 			// never by its own doing. Pulsed rather than held for the same
 			// reason a door is.
-			if(!bot->doorUseLastTic)
+			//
+			// And not instantly. Section 17.2 gives a respawn hesitation from
+			// 55 tics down to 6, which is the pause between dying and
+			// deciding to get up again; a bot that presses use on the first
+			// tic of every death is back before a person has focused on the
+			// screen. Measured from entering the state, so it is a hesitation
+			// rather than a queue.
+			const bool hesitating =
+				sequence - bot->behaviorSince < bot->traits.respawnDelay;
+			if(!bot->doorUseLastTic && !hesitating)
 			{
 				out.press[bt_use] = true;
 				if(bot->respawnPresses < 0xFFFFFFFFu)
@@ -744,22 +815,55 @@ public:
 			return true;
 		}
 
-		// Read what the sensor saw this tic. The brain never looks at the
-		// world; it looks at this.
+		// Take a look, at this bot's own rate.
+		//
+		// Section 17.2 gives vision refresh in hertz, from 7 for a Recruit to
+		// 28 for an Elite, and the only way for that to mean anything is for
+		// the brain to stop reading the sensor on the tics in between. What it
+		// reads instead is the snapshot below -- so between looks it acts on
+		// where somebody was, which is where the difference between a slow
+		// pair of eyes and a fast one actually shows.
+		//
+		// The sensor itself still runs every tic and is still the only thing
+		// that touches the world. What changes is how often the brain is
+		// allowed to ask it.
+		const bool looking = sequence >= bot->nextSense || !bot->view.ever;
+		if(looking)
 		{
+			bot->nextSense = sequence + bot->traits.visionInterval;
 			const Perception::Observation *obs = Perception::For(forSlot);
+			bot->view.takenAt = sequence;
+			bot->view.ever = true;
 			for(unsigned int who = 0;who < MAXPLAYERS;++who)
 			{
-				const Perception::PlayerSighting *seen =
+				const Perception::PlayerSighting *sighting =
 					obs != NULL ? obs->Seen((Session::PlayerSlot)who) : NULL;
+				bot->view.seen[who] = sighting != NULL;
+				if(sighting != NULL)
+				{
+					bot->view.x[who] = sighting->x;
+					bot->view.y[who] = sighting->y;
+					bot->view.distanceTiles[who] = sighting->distanceTiles;
+				}
+			}
+		}
+
+		// Read what the last look showed. The brain never looks at the world;
+		// it looks at this.
+		{
+			for(unsigned int who = 0;who < MAXPLAYERS;++who)
+			{
+				const bool sightingNow = bot->view.seen[who];
 				const bool was = bot->visibleNow[who];
-				const bool now = seen != NULL;
+				const bool now = sightingNow;
 
 				if(now)
 				{
-					bot->lastSeenAt[who] = sequence;
-					bot->lastSeenTileX[who] = (uint16_t)(seen->x>>TILESHIFT);
-					bot->lastSeenTileY[who] = (uint16_t)(seen->y>>TILESHIFT);
+					bot->lastSeenAt[who] = bot->view.takenAt;
+					bot->lastSeenTileX[who] =
+						(uint16_t)(bot->view.x[who]>>TILESHIFT);
+					bot->lastSeenTileY[who] =
+						(uint16_t)(bot->view.y[who]>>TILESHIFT);
 				}
 				if(now && !was)
 				{
@@ -767,9 +871,21 @@ public:
 
 					// Seen, not yet known. The decision layer is told when
 					// the reaction delay expires and not before.
-					const unsigned int delay =
-						PersonalityFor(bot->profile).reactBase +
-						bot->rng[(unsigned int)Stream::Timing].Below(REACT_SPREAD);
+					// The trait is this bot's own reaction time; the jitter
+					// is the difference between two of its own reactions.
+					// Section 17.2 wants the first stable per bot and seed,
+					// and section 17.4 wants the second, because a bot whose
+					// every reaction is identical to the tic is a metronome
+					// however well the number was chosen. Kept inside the
+					// band so the level still means what the table says.
+					const Band band =
+						BandsFor(SkillOf(bot->profile)).reaction;
+					int jittered = (int)bot->traits.reaction +
+						(int)bot->rng[(unsigned int)Stream::Timing]
+							.Below(REACT_SPREAD*2 + 1) - REACT_SPREAD;
+					if(jittered < (int)band.low) jittered = (int)band.low;
+					if(jittered > (int)band.high) jittered = (int)band.high;
+					const unsigned int delay = (unsigned int)jittered;
 					bot->sightedAt[who] = sequence;
 					bot->noticeAt[who] = sequence + delay;
 					bot->reactionTicsTotal += delay;
@@ -777,7 +893,7 @@ public:
 					FString detail;
 					detail.Format("slot=%u at=%u,%u range=%d in=%u", who,
 						bot->lastSeenTileX[who], bot->lastSeenTileY[who],
-						seen->distanceTiles, delay);
+						bot->view.distanceTiles[who], delay);
 					TraceEvent(forSlot, "sighted", detail.GetChars());
 				}
 				else if(!now && was)
@@ -833,7 +949,7 @@ public:
 		{
 			if(bot->lastSeenAt[who] == 0 || bot->visibleNow[who])
 				continue;
-			if(sequence - bot->lastSeenAt[who] < FORGET_TICS)
+			if(sequence - bot->lastSeenAt[who] < bot->traits.searchMemory)
 				continue;
 			++bot->contactsForgotten;
 			FString detail;
@@ -877,6 +993,25 @@ public:
 				bot->lastProgressSeq = sequence;
 				bot->wasAskedToMove = false;
 				bot->portCooldownUntil = sequence + PORT_COOLDOWN;
+				bot->portArrivedTileX = (uint16_t)pawn->tilex;
+				bot->portArrivedTileY = (uint16_t)pawn->tiley;
+				// And get off the pad before doing anything else.
+				//
+				// A crossing leaves the body standing on the pad, frozen for
+				// thirty-five tics. The freeze ends, the follower turns
+				// towards its next waypoint -- and the follower will not walk
+				// while it is more than forty-five degrees off, so the bot
+				// turns on the spot, inside the trigger, and is sent straight
+				// back. On MAP60 that happened one tic after the first
+				// movement command, twice in three hundred tics.
+				//
+				// This is what B7's cooldown was for and it is not enough on
+				// its own: the cooldown stops the bot *routing* over a pad,
+				// and this is not a routing decision, it is standing still in
+				// the wrong place. Nothing was wrong with it until B8 gave
+				// turning an acceleration and made "turn first" take long
+				// enough to matter.
+				bot->portClearUntil = sequence + PORT_CLEAR_TICS;
 				if(bot->behavior != Behavior::SpawnOrient)
 				{
 					bot->behavior = Behavior::Roam;
@@ -928,6 +1063,13 @@ public:
 
 		// The visor, before anything else: it costs a button a person also
 		// presses, and it changes what the next sense update can see.
+		// Drift the steering error, once a tic, whatever the bot is doing.
+		// Stepped here rather than inside FaceToward so that its walk does
+		// not depend on how many times a tic something asked it to face
+		// somewhere.
+		Combat::Step(bot->steer, bot->rng[(unsigned int)Stream::Movement],
+			sequence, bot->traits.routeWobble);
+
 		MindTheVisor(*bot, pawn, sequence, out);
 		MindTheMines(*bot, pawn, sequence, out);
 
@@ -988,7 +1130,7 @@ public:
 			{
 				const fixed hx = (fixed)(bot->healTileX<<TILESHIFT) + (1<<(TILESHIFT-1));
 				const fixed hy = (fixed)(bot->healTileY<<TILESHIFT) + (1<<(TILESHIFT-1));
-				const uint32_t off = FaceToward(pawn, hx, hy, out);
+				const uint32_t off = FaceToward(*bot, pawn, hx, hy, out);
 				out.forward = 0;
 				bot->wasAskedToMove = false;
 				if(off <= (uint32_t)ANGLE_45/3 && sequence >= bot->nextHealUse)
@@ -1047,15 +1189,15 @@ private:
 	// means one thing. The sign is worth stating twice: a positive controlx
 	// *decreases* the pawn's angle, so turning toward a larger angle is a
 	// negative command.
-	static uint32_t FaceToward(AActor *pawn, fixed tx, fixed ty,
+	static uint32_t FaceToward(State &bot, AActor *pawn, fixed tx, fixed ty,
 		Command::Intent &out)
 	{
-		const angle_t want = BotNav::BearingTo(pawn->x, pawn->y, tx, ty);
+		const angle_t aimed = BotNav::BearingTo(pawn->x, pawn->y, tx, ty);
+		const angle_t want = (angle_t)(aimed + bot.steer.angle);
 		const int32_t rotate = BotNav::ShortestTurn(pawn->angle, want);
 		const int units = (int)((int64_t)rotate/(int64_t)(ANGLE_1/20));
 		int turn = -units;
-		if(turn > MAX_YAW) turn = MAX_YAW;
-		if(turn < -MAX_YAW) turn = -MAX_YAW;
+		turn = SteerYaw(bot, turn);
 		out.turn = turn;
 
 		return (uint32_t)rotate < 0x80000000u
@@ -1088,7 +1230,8 @@ private:
 		// is already touching.
 		out.forward = -BASEMOVE;
 		out.strafe = bot.unstuckStrafe;
-		out.turn = bot.unstuckStrafe > 0 ? MAX_YAW/2 : -MAX_YAW/2;
+		out.turn = SteerYaw(bot, bot.unstuckStrafe > 0 ?
+			bot.traits.maxYaw/2 : -bot.traits.maxYaw/2);
 		bot.wasAskedToMove = true;
 	}
 
@@ -1178,7 +1321,7 @@ private:
 			return;
 		}
 
-		const uint32_t off = FaceToward(pawn, tx, ty, out);
+		const uint32_t off = FaceToward(bot, pawn, tx, ty, out);
 
 		// Square-on before pressing. Door_Open is dispatched from the pawn's
 		// facing, so using it while pointed along the wall opens whatever is
@@ -1452,16 +1595,13 @@ private:
 		{
 			if(who == bot.slot || !bot.knownNow[who])
 				continue;
-			const Perception::Observation *obs = Perception::For(bot.slot);
-			const Perception::PlayerSighting *seen =
-				obs ? obs->Seen((Session::PlayerSlot)who) : NULL;
-			if(seen == NULL)
+			if(!bot.view.seen[who])
 				continue;
 
 			// Nearer is better, and that is nearly all of it. Everything else
 			// section 16.1 permits needs a threat model that does not exist
 			// until something shoots back.
-			int score = 1000 - seen->distanceTiles*10;
+			int score = 1000 - bot.view.distanceTiles[who]*10;
 			if(score < 1)
 				score = 1;
 
@@ -1506,15 +1646,22 @@ private:
 	static void Engage(State &bot, AActor *pawn, uint32_t sequence,
 		Command::Intent &out)
 	{
-		const Perception::Observation *obs = Perception::For(bot.slot);
-		const Perception::PlayerSighting *seen = obs
-			? obs->Seen((Session::PlayerSlot)bot.target) : NULL;
+		// The last look, not the live sensor. Everything below -- the lead,
+		// the range keeping, the trigger -- is therefore aiming at where the
+		// target was when this bot last opened its eyes.
+		const bool haveTarget = bot.target < MAXPLAYERS &&
+			bot.view.seen[bot.target];
+		const fixed seenAtX = haveTarget ? bot.view.x[bot.target] : 0;
+		const fixed seenAtY = haveTarget ? bot.view.y[bot.target] : 0;
+		const int seenRange = haveTarget ?
+			bot.view.distanceTiles[bot.target] : 0;
 
-		if(seen != NULL)
+		if(haveTarget && bot.view.takenAt != bot.lastAimSample)
 		{
-			bot.seenX[bot.seenHead] = seen->x;
-			bot.seenY[bot.seenHead] = seen->y;
-			bot.seenWhen[bot.seenHead] = sequence;
+			bot.lastAimSample = bot.view.takenAt;
+			bot.seenX[bot.seenHead] = seenAtX;
+			bot.seenY[bot.seenHead] = seenAtY;
+			bot.seenWhen[bot.seenHead] = bot.view.takenAt;
 			bot.seenHead = (bot.seenHead + 1) % State::AIM_HISTORY;
 		}
 
@@ -1530,7 +1677,7 @@ private:
 			if(bot.seenWhen[i] == 0)
 				continue;
 			const uint32_t age = sequence - bot.seenWhen[i];
-			if(age < AIM_DELAY)
+			if(age < bot.traits.trackingDelay)
 				continue;
 			if(!have || age < bestAge)
 			{
@@ -1540,12 +1687,12 @@ private:
 				atY = bot.seenY[i];
 			}
 		}
-		if(!have && seen != NULL)
+		if(!have && haveTarget)
 		{
 			// Nothing old enough yet: just acquired. Use the newest sample and
 			// let the acquisition hesitation below cover it.
-			atX = seen->x;
-			atY = seen->y;
+			atX = seenAtX;
+			atY = seenAtY;
 			have = true;
 		}
 		if(!have)
@@ -1561,7 +1708,7 @@ private:
 		//
 		// A plasma bolt takes over half a second to cross eight tiles. Firing
 		// at where somebody was is a miss at any range worth using it.
-		if(Combat::IsProjectileSlot(bot.holdingSlot) && seen != NULL)
+		if(Combat::IsProjectileSlot(bot.holdingSlot) && haveTarget)
 		{
 			fixed oldX = 0, oldY = 0;
 			uint32_t oldWhen = 0;
@@ -1580,22 +1727,54 @@ private:
 			if(span >= 4)
 			{
 				const int flight =
-					Combat::FlightTics(bot.holdingSlot, seen->distanceTiles);
-				atX += (fixed)(((int64_t)(seen->x - oldX)*flight)/(int64_t)span);
-				atY += (fixed)(((int64_t)(seen->y - oldY)*flight)/(int64_t)span);
+					Combat::FlightTics(bot.holdingSlot, seenRange);
+				atX += (fixed)(((int64_t)(seenAtX - oldX)*flight)/(int64_t)span);
+				atY += (fixed)(((int64_t)(seenAtY - oldY)*flight)/(int64_t)span);
 			}
 		}
 
+		// How hard this shot is, before any error is drawn.
+		//
+		// The age is what the aim is actually pointed at, not the trait: a
+		// bot whose last look was four tics ago and whose tracking delay is
+		// seven is aiming at something eleven tics stale, and both halves are
+		// skill traits.
+		int crossTiles = 0;
+		{
+			fixed oldestX = 0, oldestY = 0;
+			uint32_t oldest = 0;
+			for(unsigned int i = 0;i < State::AIM_HISTORY;++i)
+			{
+				if(bot.seenWhen[i] == 0 || bot.seenWhen[i] > sequence)
+					continue;
+				if(oldest == 0 || bot.seenWhen[i] < oldest)
+				{
+					oldest = bot.seenWhen[i];
+					oldestX = bot.seenX[i];
+					oldestY = bot.seenY[i];
+				}
+			}
+			const uint32_t span = oldest != 0 && sequence > oldest ?
+				sequence - oldest : 0;
+			if(span > 0 && haveTarget)
+			{
+				const int dx = (int)((seenAtX - oldestX)>>TILESHIFT);
+				const int dy = (int)((seenAtY - oldestY)>>TILESHIFT);
+				const int moved = (dx < 0 ? -dx : dx) + (dy < 0 ? -dy : dy);
+				crossTiles = (moved*70)/(int)span;
+			}
+		}
+
+		const angle_t envelope = Combat::EnvelopeFor(bot.traits.aimEnvelope,
+			seenRange, bestAge, crossTiles);
 		Combat::Step(bot.aim, bot.rng[(unsigned int)Stream::Aim], sequence,
-			PersonalityFor(bot.profile).aimEnvelope);
+			envelope);
 
 		const angle_t want =
 			(angle_t)(BotNav::BearingTo(pawn->x, pawn->y, atX, atY) + bot.aim.angle);
 		const int32_t rotate = BotNav::ShortestTurn(pawn->angle, want);
 		int turn = -(int)((int64_t)rotate/(int64_t)(ANGLE_1/20));
-		if(turn > MAX_YAW) turn = MAX_YAW;
-		if(turn < -MAX_YAW) turn = -MAX_YAW;
-		out.turn = turn;
+		out.turn = SteerYaw(bot, turn);
 
 		// Carry the right gun for the range.
 		//
@@ -1605,17 +1784,17 @@ private:
 		// PendingWeapon or ReadyWeapon, and the reason is the same as with the
 		// trigger -- a bot that sets the weapon directly switches instantly,
 		// which no player can.
-		if(seen != NULL && sequence >= bot.nextWeaponThink)
+		if(haveTarget && sequence >= bot.nextWeaponThink)
 		{
-			bot.nextWeaponThink = sequence + WEAPON_THINK_INTERVAL;
-			const int want = Combat::ChooseSlot(bot.slot, seen->distanceTiles);
+			bot.nextWeaponThink = sequence + bot.traits.thinkInterval;
+			const int want = Combat::ChooseSlot(bot.slot, seenRange);
 			if(want > 0 && want != bot.holdingSlot)
 			{
 				out.press[bt_slot1 + want - 1] = true;
 				bot.holdingSlot = want;
 				++bot.weaponSwitches;
 				FString detail;
-				detail.Format("slot=%d range=%d", want, seen->distanceTiles);
+				detail.Format("slot=%d range=%d", want, seenRange);
 				TraceEvent(bot.slot, "weapon", detail.GetChars());
 			}
 		}
@@ -1674,7 +1853,7 @@ private:
 
 		if(sequence >= bot.strafeUntil)
 		{
-			bot.strafeUntil = sequence + STRAFE_COMMIT +
+			bot.strafeUntil = sequence + bot.traits.strafeCommit +
 				bot.rng[(unsigned int)Stream::Movement].Below(STRAFE_JITTER);
 			bot.strafeSide = bot.rng[(unsigned int)Stream::Movement].Below(2)
 				? BASEMOVE : -BASEMOVE;
@@ -1694,19 +1873,19 @@ private:
 			const int32_t rel = BotNav::ShortestTurn(pawn->angle, toward);
 			// Positive rel means the mine is to one side; strafe the other way.
 			out.strafe = rel > 0 ? -BASEMOVE : BASEMOVE;
-			bot.strafeUntil = sequence + STRAFE_COMMIT;
+			bot.strafeUntil = sequence + bot.traits.strafeCommit;
 			bot.strafeSide = out.strafe;
 		}
 
 		// And keep a sensible distance: close if far away, back off if almost
 		// touching. Range is the observed one, so a target that has moved
 		// since is one the bot is wrong about, which is correct.
-		if(seen != NULL)
+		if(haveTarget)
 		{
 			const int prefer = PersonalityFor(bot.profile).preferRange;
-			if(seen->distanceTiles > prefer + 2)
+			if(seenRange > prefer + 2)
 				out.forward = BASEMOVE;
-			else if(seen->distanceTiles < prefer - 2 && !mineClose)
+			else if(seenRange < prefer - 2 && !mineClose)
 				out.forward = -BASEMOVE;		// never back into one
 			else
 				out.forward = 0;
@@ -1767,10 +1946,10 @@ private:
 		// settles neatly onto a badly wrong bearing scores perfectly. The
 		// number that decides a hit is the angle between where the pawn is
 		// facing and where the target really is.
-		if(seen != NULL)
+		if(haveTarget)
 		{
 			const angle_t truth =
-				BotNav::BearingTo(pawn->x, pawn->y, seen->x, seen->y);
+				BotNav::BearingTo(pawn->x, pawn->y, seenAtX, seenAtY);
 			const int32_t miss = BotNav::ShortestTurn(pawn->angle, truth);
 			const uint32_t magnitude = (uint32_t)miss < 0x80000000u
 				? (uint32_t)miss : (uint32_t)(0u - (uint32_t)miss);
@@ -1947,7 +2126,7 @@ private:
 		}
 
 		// Turn toward it, at a rate a hand could manage.
-		const uint32_t off = FaceToward(pawn, tx, ty, out);
+		const uint32_t off = FaceToward(bot, pawn, tx, ty, out);
 
 		if((sequence % 40) == 0)
 		{
@@ -1977,7 +2156,20 @@ private:
 		// So a sharp heading error is turned out before moving. A quarter turn
 		// takes about half a second, which is slower than a person and not by
 		// much, and it converges.
-		if(off > ANGLE_45)
+		//
+		// Walking the corner instead was tried when B8's turn acceleration
+		// made stopping more expensive, and it is much worse: a bot that
+		// moves while ninety degrees off course goes somewhere else and has
+		// to come back. Eighteen waypoints of a seventy-nine waypoint route
+		// in the budget that got sixty-one out of it standing still. The
+		// threshold is not a tuning knob, it is what stops the follower
+		// chasing its own error.
+		// Walking off a transporter pad outranks turning to face the route.
+		// See the crossing handler: standing still on a pad is how a bot gets
+		// sent back through it.
+		if(sequence < bot.portClearUntil)
+			out.forward = BASEMOVE;
+		else if(off > ANGLE_45)
 			out.forward = 0;			// point at it first
 		else if(off > ANGLE_45/3)
 			out.forward = BASEMOVE;
@@ -1989,8 +2181,52 @@ private:
 		bot.wasAskedToMove = out.forward != 0;
 	}
 
+	// One place a turn can come from, so that a yaw limit is a property of the
+	// bot rather than of whichever code path happened to remember to clamp.
+	//
+	// Two limits, not one. The ceiling is how fast it can turn; the
+	// acceleration is how fast it can *start* turning, and it is the one that
+	// stops a bot snapping onto a target. Without it a Recruit and an Elite
+	// both reach full speed on the first tic and differ only in the speed, so
+	// the thing a person actually notices -- the head whipping round the
+	// instant somebody appears -- survives every skill level. Section 17.5
+	// forbids the instant 180, and a rate ceiling alone does not prevent it.
+	//
+	// Carried scaled, because every shipped acceleration is a fraction of a
+	// command unit per tic and rounding it to an integer would make three of
+	// the four levels identical.
+	static int SteerYaw(State &bot, int wanted)
+	{
+		const int ceiling = bot.traits.maxYaw;
+		if(wanted > ceiling) wanted = ceiling;
+		if(wanted < -ceiling) wanted = -ceiling;
+
+		const int have = bot.yawRate;
+		const int step = bot.traits.yawAccel;
+		int rate = wanted*ACCEL_SCALE;
+		if(rate > have + step) rate = have + step;
+		if(rate < have - step) rate = have - step;
+		bot.yawRate = rate;
+
+		int turn = rate/ACCEL_SCALE;
+		if(turn > ceiling) turn = ceiling;
+		if(turn < -ceiling) turn = -ceiling;
+		return turn;
+	}
+
+	// What is left here after B8.
+	//
+	// Eight constants moved out of this block and into g_skill.h, where they
+	// became bands rather than numbers: the turn ceiling, tracking delay, aim
+	// envelope, weapon reconsideration, strafe commitment, preferred range,
+	// reaction time and search memory. They are gone rather than left unused,
+	// because a constant that no longer does anything is a trap -- the obvious
+	// way to change a bot's reaction time would have been to edit REACT_BASE,
+	// and it would have had no effect whatsoever.
+	//
+	// What remains is either not a skill (door timings, mine geometry, the
+	// recovery ladder) or not yet one.
 	enum {
-		MAX_YAW = 60,				// three degrees a tic, 210 a second
 		// Long enough for a door to open and for a body blocking one to move
 		// off it, short enough that a locked door is not a career.
 		DOOR_PATIENCE = 210,
@@ -2008,24 +2244,11 @@ private:
 		// fifth of a second to react to something appearing, so 14 tics, with
 		// a seeded spread on top so that two bots seeing the same thing do not
 		// move on the same tic.
-		// How far behind the aim runs. Twelve tics of tracking delay, so a
-		// target moving across the bot's view is genuinely somewhere else by
-		// the time the shot goes.
-		AIM_DELAY = 12,
-		// The width of the aim error, at the one skill that exists so far.
-		// Twice the auto-aim cone, so it spends real time outside it -- an
-		// envelope inside the cone is a bot that cannot miss.
-		AIM_ENVELOPE = (ANGLE_90/9)*2,
 		// A moment between finding somebody and shooting at them.
 		ACQUIRE_HESITATION = 21,
 		// How often the weapon choice is revisited, and how long a strafe
 		// direction is held.
-		WEAPON_THINK_INTERVAL = 35,
-		STRAFE_COMMIT = 21,
 		STRAFE_JITTER = 28,
-		// The range a bot tries to hold, in tiles. Close enough to hit, far
-		// enough not to be walked over.
-		PREFER_RANGE = 8,
 		// Charge to keep in reserve, and how often the zoom may be pressed.
 		// The cycle wraps 1-2-3, so a mistimed second press lands on the wrong
 		// mode and the next one has to go all the way round again.
@@ -2039,12 +2262,7 @@ private:
 		VISOR_PULSE_INTERVAL = 14,
 		TRIGGER_INTERVAL = 12,
 		TRIGGER_JITTER = 10,
-		REACT_BASE = 14,
 		REACT_SPREAD = 7,
-		// Five seconds without seeing somebody and the contact is gone. Long
-		// enough to be worth walking over to look, short enough that a bot is
-		// not still acting on a sighting from half a minute ago.
-		FORGET_TICS = 350,
 		// A short shove for a first failure, the full back-up for a second.
 		NUDGE_TICS = 10,
 		// How long a failure stays on the ladder. Longer than a recovery takes
@@ -2091,7 +2309,11 @@ void SetupSlots(FName (&playerClassNames)[MAXPLAYERS])
 		// three copies of one opponent. Personalities change decisions only --
 		// section 17.3 -- and the class assigned below is the same for all of
 		// them, which is what keeps that true.
-		Configure((Session::PlayerSlot)slot, (uint32_t)slot, matchSeed);
+		// Skill from the match setting, personality from the slot, so a
+		// match is a mix of temperaments at one standard rather than a mix
+		// of standards.
+		Configure((Session::PlayerSlot)slot,
+			MakeProfile(RequestedSkill(), (unsigned int)slot), matchSeed);
 		Command::SetProducer((Session::PlayerSlot)slot, MakeProducer(slot));
 		// The same character as the player it stands in for, so it is an
 		// ordinary opponent rather than something with different rules.
@@ -2245,6 +2467,28 @@ const char *BehaviorOf(Session::PlayerSlot slot)
 int Requested() { return g_requested; }
 
 void SetRequested(int count) { g_requested = count; }
+
+SkillLevel RequestedSkill() { return g_skill; }
+
+bool SetRequestedSkill(const char *name, bool allowDeveloper)
+{
+	if(name == NULL)
+		return false;
+	for(unsigned int i = 0;i < (unsigned int)SkillLevel::NUM;++i)
+	{
+		const SkillLevel level = (SkillLevel)i;
+		if(stricmp(name, SkillName(level)) != 0)
+			continue;
+		// Section 17.5: Perfect is refused rather than hidden. A name that
+		// silently fell back to Elite would put a developer profile into a
+		// match nobody could tell was running one.
+		if(!IsShippable(level) && !allowDeveloper)
+			return false;
+		g_skill = level;
+		return true;
+	}
+	return false;
+}
 
 // --- self-test ------------------------------------------------------------------
 //

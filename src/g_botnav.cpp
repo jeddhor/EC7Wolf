@@ -514,6 +514,32 @@ bool Graph::FindPath(NodeId from, NodeId to, TArray<NodeId> &path,
 			//
 			// So the first step out is always allowed, and the restriction
 			// applies from the second onwards.
+			// The escape clause lets a bot *walk* out of a pad's exclusion
+			// ring from inside it. It must never license using the
+			// transporter itself, which is not an escape but the very
+			// crossing being avoided.
+			//
+			// It did, and the bounce B7 thought it had fixed came back: a bot
+			// standing on the pad it had just arrived on planned a route
+			// whose first edge was the transporter edge home, took it one tic
+			// after the freeze ended, and the "first step out is always
+			// allowed" rule waved it through. The hole was there all along
+			// and only opened when B8 changed which goals bots pick.
+			if(options->refuseCrossings &&
+				edge.type == EdgeType::Transporter)
+				continue;
+			// A pad cell itself is never a step out, not even the first one.
+			//
+			// The escape clause below exists so a bot standing inside the
+			// exclusion ring can walk out of it. It was letting that first
+			// step land on a *pad*, which is not an escape from a crossing,
+			// it is a crossing -- and on MAP60 the cell a bot arrives in has
+			// another pad beside it, so the first step out was straight back
+			// through. That is the physical bounce, and no amount of refusing
+			// transporter *edges* prevents it, because the bot walks there.
+			if(options->avoidTransporters && nodes[edge.to].isTransporter &&
+				edge.to != to)
+				continue;
 			if(options->avoidTransporters && nodes[edge.to].nearTransporter &&
 				edge.to != to && current.node != from)
 				continue;

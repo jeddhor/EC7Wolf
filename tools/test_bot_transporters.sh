@@ -69,7 +69,22 @@ check() {
 # The cooldown the bot applies after arriving, from g_bot.cpp. Two crossings by
 # one bot closer together than this is the bounce this gate exists to catch.
 cooldown=210
-tics=1200
+# Raised in B8 from 1200.
+#
+# Not because anything here got weaker: bots turn like people now. Section
+# 17.2 gives a maximum yaw *acceleration* as well as a rate, so a bot ramps up
+# to its turning speed over about a fifth of a second instead of pivoting at
+# full rate on the first tic, and every corner of a route costs that ramp. A
+# bot that used to arrive in 1400 tics arrives in about 2000 and takes the same
+# path to get there.
+#
+# Measured before raising it rather than after: with the budget lifted the same
+# bot arrives, opens the same door and crosses the same pads, so what expired
+# was the budget and not the behaviour. A human keyboard turn is instant at 70
+# units a tic and a mouse reaches the same 100-unit ceiling a bot does, so the
+# ramp makes bots slightly worse at turning than a person, which is the
+# direction section 17.5 asks for.
+tics=1800
 maps=${MAPS:-"MAP60 MAP56 MAP57"}
 
 run() {  # run MAP TAG [EXTRA...]
@@ -220,6 +235,17 @@ for map in $maps; do
 	for pad in $pads_list; do
 		px=${pad%,*}; py=${pad#*,}
 		tried=$((tried + 1))
+		# Its own budget, and it was missed the first time the others were
+		# raised: MAP60's pads sit near the spawn and still fell inside 700
+		# tics, so only the two maps whose pads are further away failed, which
+		# looked like a fault in those maps rather than in the number.
+		#
+		# 1600, from measuring the two that held out longest. MAP56's pads at
+		# (2,16) and (9,16) are sixty waypoints from the spawn -- the longest
+		# routes on any of these maps -- and cross at 1600 tics with room to
+		# spare, having crossed nothing at 1100. Sized to the worst pad rather
+		# than to the average, because this loop's whole purpose is that every
+		# pad is driven and not a sample of them.
 		mkdir -p "$work/pad-saves"
 		( cd "$data_dir"
 		  DISPLAY=$display SDL_VIDEODRIVER=x11 SDL_AUDIODRIVER=dummy \
@@ -228,7 +254,7 @@ for map in $maps; do
 			--config "$work/pad.cfg" --savedir "$work/pad-saves" \
 			--capture-rngseed 1 \
 			--capture-bot-goal "$px" "$py" \
-			--capture-maxtics 700 \
+			--capture-maxtics 1600 \
 			--tedlevel "$map" --skill 2 --battle --bots 1 ) >"$work/pad.log" 2>&1 || true
 		crossed=$(sed -n 's/.*Capture: bots .*ports=\([0-9]*\).*/\1/p' "$work/pad.log" | tail -1)
 		[ "${crossed:-0}" -ge 1 ] || missed="$missed ($px,$py)"

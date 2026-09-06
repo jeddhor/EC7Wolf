@@ -225,6 +225,12 @@ struct SearchOptions
 	// when it plans, and a pad is a legitimate place to be going.
 	bool avoidTransporters = false;
 
+	// Refuse transporter edges outright. Unlike avoidTransporters this is
+	// never relaxed by a caller's pass ladder: keeping clear of pads is a
+	// preference, and crossing one moments after arriving is the bounce the
+	// preference exists to prevent.
+	bool refuseCrossings = false;
+
 	// Cells to price up, and the sequence to judge their expiry against.
 	const BlockedCells *blocked = NULL;
 

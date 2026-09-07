@@ -178,11 +178,40 @@ done
 
 check "mines were actually laid" test "$placed_total" -ge 2
 
-# Pooled, because whether an opponent walks into a given mine is luck; whether
-# mines catch anybody across two matches is not. Section 16.7 asks for opponent
-# damage to be covered and this is the only place it shows.
-printf '  ..   opponents caught by mines, both seeds: %s\n' "$caught_total"
-check "a mine is a weapon and not just an expense" test "$caught_total" -ge 1
+# Opponent damage, arranged rather than waited for.
+#
+# This was pooled across the two matches above and that was still luck: it
+# passed with one catch per seed, then a change to where bots stand left both
+# matches with mines laid, nobody walking over them, and a check reporting that
+# mines do not work. Whether a bot crosses a mine another bot happened to leave
+# is the arrangement of one afternoon's wandering.
+#
+# So the mine is placed on a known tile, owned by the idle local player so that
+# every bot is a stranger to it, and the bots are sent to that tile. What is
+# being checked is that the engine wires a mine's trigger and blast to somebody
+# who is not its owner -- section 16.7's "opponent damage" -- and that is a
+# fact about the game rather than about the seed.
+printf '  ..   opponents caught by mines while wandering: %s\n' "$caught_total"
+
+mkdir -p "$work/lure-saves"
+( cd "$data_dir"
+  DISPLAY=$display SDL_VIDEODRIVER=x11 SDL_AUDIODRIVER=dummy \
+  timeout 200 "$build_dir/ec7wolf" --data CO7 --res 320 200 --nowait \
+	--vid-renderer software \
+	--config "$work/lure.cfg" --savedir "$work/lure-saves" \
+	--capture-rngseed 1 --bots 2 \
+	--capture-mine-at 30 12 60 --capture-bot-goal 30 12 \
+	--capture-bots "$work/lure.bots" \
+	--capture-maxtics 1600 \
+	--tedlevel MAP60 --skill 2 --battle ) >"$work/lure.log" 2>&1 || true
+
+placed=$(grep -c 'mine placed at 30,12' "$work/lure.log" || true)
+lured=$(awk '$3=="blast" && $4=="by=C7ProximityMine" && $5=="own=0"' \
+	"$work/lure.bots" | wc -l)
+printf '  ..   a mine left on a tile bots are sent to: placed %s, caught %s\n' \
+	"$placed" "$lured"
+check "the mine was actually placed" test "${placed:-0}" -ge 1
+check "a mine is a weapon and not just an expense" test "${lured:-0}" -ge 1
 
 if [ "$status" -eq 0 ]; then
 	printf 'PASS: bots mine chokepoints without mining themselves.\n'

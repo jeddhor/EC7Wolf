@@ -260,10 +260,26 @@ void T_Projectile (AActor *self)
 			if(check == self)
 				continue;
 
-			// Pass through allies
+			// Pass through allies.
+			//
+			// A player's missile used to pass through every player, which is
+			// the same statement as "don't hit yourself" only while there is
+			// exactly one of them. In a deathmatch it meant no rocket and no
+			// plasma bolt could ever hit anybody: they flew through opponents
+			// and burst on the far wall, so two of the eight weapons did
+			// nothing at all to another player and a bot appeared invulnerable
+			// to them.
+			//
+			// The shooter is still skipped -- a missile spawns on top of them
+			// and would otherwise detonate on the muzzle -- and everyone else
+			// goes through the same rule the hitscan weapons use, so
+			// cooperative and team play keep their friendly-fire behaviour
+			// rather than gaining an exception for the two weapons that travel.
 			if(playermissile)
 			{
-				if(check->player)
+				if(check == self->target)
+					continue;
+				if(check->player && !Net::CanDamage(self->target, check))
 					continue;
 			}
 			else

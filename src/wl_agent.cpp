@@ -366,6 +366,26 @@ static void CheckFragLimit()
 static FRandom pr_damageplayer("PlayerTakeDamge");
 void player_t::TakeDamage (int points, AActor *attacker)
 {
+	// The deathmatch damage dial, applied where player-on-player damage
+	// arrives and nowhere else.
+	//
+	// Monsters keep the numbers they were designed with, so single player and
+	// cooperative play against aliens are untouched; what changes is how hard
+	// players hit each other. Applied to the victim rather than at each
+	// weapon so that every source is covered at once -- bullets, splash,
+	// mines, a rocket -- and so that no weapon can be missed when one is
+	// added.
+	//
+	// Never rounds a real hit down to nothing: a quarter-damage shotgun is
+	// still a shotgun, and a weapon that sometimes does zero is a weapon that
+	// feels broken rather than weak.
+	if(points > 0 && attacker != NULL && attacker->player != NULL &&
+		Net::InitVars.damageScale != 100)
+	{
+		const int scaled = (points*(int)Net::InitVars.damageScale)/100;
+		points = scaled < 1 ? 1 : scaled;
+	}
+
 	if (gamestate.victoryflag)
 		return;
 	points = (points*gamestate.difficulty->DamageFactor)>>FRACBITS;
@@ -453,10 +473,6 @@ void player_t::TakeDamage (int points, AActor *attacker)
 					(unsigned int)(this - players);
 				const unsigned int killer =
 					(unsigned int)(attacker->player - players);
-				const bool watching = Session::LocalViewSlot().has_value();
-				const unsigned int me = watching ?
-					(unsigned int)*Session::LocalViewSlot() : MAXPLAYERS;
-
 				// With the weapon, because "what killed me" is the question a
 				// player actually has, and two of Corridor 7's guns take a
 				// hundred points off at close range -- which reads as a bug
@@ -468,18 +484,22 @@ void player_t::TakeDamage (int points, AActor *attacker)
 						attacker->player->ReadyWeapon->GetClass()->
 							GetName().GetChars());
 
+				// One format for every kill on the board, including your own.
+				//
+				// It said "You fragged Bot 3" for your kills and named the
+				// weapon only for everybody else's, so the one death a player
+				// most wants explained -- the one they just caused, or just
+				// suffered -- was the one that told them least. Whose kill it
+				// is does not change what the message needs to say.
 				FString note;
 				if(attacker == mo)
 					note.Format("%s died", Session::NameOf(victim));
-				else if(victim == me)
-					note.Format("%s's %s fragged you", Session::NameOf(killer),
-						gun ? gun : "attack");
-				else if(killer == me)
-					note.Format("You fragged %s", Session::NameOf(victim));
+				else if(gun != NULL)
+					note.Format("%s killed %s with the %s",
+						Session::NameOf(killer), Session::NameOf(victim), gun);
 				else
-					note.Format("%s fragged %s with the %s",
-						Session::NameOf(killer), Session::NameOf(victim),
-						gun ? gun : "attack");
+					note.Format("%s killed %s", Session::NameOf(killer),
+						Session::NameOf(victim));
 				StatusBar->SetTopMessage(note);
 			}
 

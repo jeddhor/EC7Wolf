@@ -131,8 +131,20 @@ void Reset()
 
 Personality PersonalityFor(uint32_t profile)
 {
+	// Which temperament each bot gets, in the order they are added.
+	//
+	// The index used to be the slot, so a two-bot match handed out slots 1 and
+	// 2 and got the cautious one first -- the temperament that holds twelve
+	// tiles and backs away when you close. A playtest with two bots therefore
+	// met one opponent that kept leaving, which reads as the bots not wanting
+	// to fight rather than as one of three personalities doing its job.
+	//
+	// Steady first, then aggressive, then cautious. A small match gets the
+	// ones that come at you; the full mix still appears once there are three.
+	static const unsigned int order[3] = { 0, 2, 1 };
+	const unsigned int persona = PersonaOf(profile);
 	Personality p;
-	switch(PersonaOf(profile) % 3)
+	switch(order[(persona == 0 ? 0 : persona - 1) % 3])
 	{
 		case 0:		// steady: the baseline the gates were tuned against
 			p.retreatNeed = 250;
@@ -142,7 +154,9 @@ Personality PersonalityFor(uint32_t profile)
 			break;
 		case 1:		// cautious: leaves earlier, hangs back, mines readily
 			p.retreatNeed = 180;
-			p.preferRange = 12;
+			// Ten, not twelve. Twelve is most of an arena away and reads as
+			// disengagement rather than caution.
+			p.preferRange = 10;
 			p.mineEagerness = 140;
 			p.itemAppetite = 120;
 			break;
@@ -262,6 +276,9 @@ const int RETREAT_NEED = 250;
 // About a second: long enough to turn most of the way round at any skill,
 // short enough that a noisy arena does not leave everybody standing still.
 const uint32_t ALERT_TICS = 60;
+// And how long it then ignores further noises, so that a bot within earshot of
+// a fight cannot be held still by it.
+const uint32_t ALERT_REST = 105;
 
 const int PORT_CLEAR_TILES = 4;
 
@@ -878,6 +895,9 @@ public:
 				const Perception::DamageCue &cue = heard->damage[d];
 				if(cue.attackerSlot >= 0)
 					continue;		// seen, and handled by the ordinary path
+				if(sequence < bot->alertRestUntil)
+					continue;
+				bot->alertRestUntil = sequence + ALERT_TICS + ALERT_REST;
 				bot->alertUntil = sequence + ALERT_TICS;
 				bot->alertHasBearing = false;
 				++bot->alertsRaised;
@@ -890,9 +910,21 @@ public:
 					noise.kind != Perception::SoundKind::Pain &&
 					noise.kind != Perception::SoundKind::Death)
 					continue;
-				// A closer noise wins an argument with an older one; anything
-				// already being looked at wins against a fresh bearing only
-				// if the bot has not started turning yet.
+				// One look per noise, and then a rest.
+				//
+				// Every sound used to restart the clock, so a bot in earshot
+				// of a firefight was permanently a second from finishing its
+				// look and never went anywhere. It is not hypothetical: a bot
+				// sent thirty-seven waypoints across MAP51 to stand in front
+				// of the laser barriers was still short of them when the run
+				// ended, having stopped for each shot it heard on the way.
+				//
+				// A look costs sixty tics and buys a hundred and five of
+				// quiet, so a noisy arena can take at most a third of a bot's
+				// time and never all of it.
+				if(sequence < bot->alertRestUntil)
+					continue;
+				bot->alertRestUntil = sequence + ALERT_TICS + ALERT_REST;
 				bot->alertUntil = sequence + ALERT_TICS;
 				bot->alertBearing = noise.bearing;
 				bot->alertHasBearing = true;
@@ -2002,8 +2034,20 @@ private:
 		// touches ammunition, cooldown or psprite state.
 		if(sequence < bot.nextTrigger)
 			return;
-		if(sequence - bot.targetSince < ACQUIRE_HESITATION)
-			return;			// still reacting to having found somebody
+		// A moment to bring the gun round, and only a moment.
+		//
+		// This was a flat twenty-one tics on top of the skill reaction, which
+		// double-counted the same human factor: a Marine already waits 17 to
+		// 32 tics before the sighting even reaches the decision layer, so the
+		// first shot came 38 to 53 tics -- up to three quarters of a second --
+		// after the bot could see you. A person in a firefight is shooting
+		// well before that, and a playtest called the default skill limp.
+		//
+		// A third of the bot's own reaction keeps the ladder (an Elite brings
+		// it round quicker than a Recruit) without adding a second full
+		// reaction time to it.
+		if(sequence - bot.targetSince < bot.traits.reaction/3)
+			return;			// still bringing it to bear
 
 		const uint32_t off = (uint32_t)rotate < 0x80000000u
 			? (uint32_t)rotate : (uint32_t)(0u - (uint32_t)rotate);
@@ -2338,8 +2382,6 @@ private:
 		// fifth of a second to react to something appearing, so 14 tics, with
 		// a seeded spread on top so that two bots seeing the same thing do not
 		// move on the same tic.
-		// A moment between finding somebody and shooting at them.
-		ACQUIRE_HESITATION = 21,
 		// How often the weapon choice is revisited, and how long a strafe
 		// direction is held.
 		STRAFE_JITTER = 28,

@@ -78,7 +78,7 @@
 // version mismatch and is far harder to diagnose than a refusal. Bump this
 // whenever a packet's layout or meaning changes -- including the day the
 // canonical command frame grows a slot number.
-#define NET_PROTOCOL_VERSION 3
+#define NET_PROTOCOL_VERSION 4
 // Present in the first datagram of every connection. A request used to be one
 // lone zero byte, so any stray packet arriving on the port was a new player.
 static const BYTE NetMagic[3] = { 'E', '7', 'N' };
@@ -169,6 +169,11 @@ struct StartPacket
 	// down the wire with the rest of it.
 	BYTE ticDelay;
 	BYTE fragLimit;
+	// Percent of normal weapon damage between players, 100 for the game's own
+	// numbers. On the wire because it has to be: two machines that disagree
+	// about it compute different health from the same commands, which is a
+	// desync rather than a difference of opinion.
+	BYTE damageScale;
 	DWORD rngseed;
 	struct Client
 	{
@@ -417,6 +422,8 @@ int WriteProtocolVectors(const char *path)
 		(unsigned)offsetof(StartPacket, ticDelay));
 	fprintf(out, "start.offset.fragLimit %u\n",
 		(unsigned)offsetof(StartPacket, fragLimit));
+	fprintf(out, "start.offset.damageScale %u\n",
+		(unsigned)offsetof(StartPacket, damageScale));
 	fprintf(out, "start.offset.rngseed %u\n",
 		(unsigned)offsetof(StartPacket, rngseed));
 	fprintf(out, "start.offset.clients %u\n",
@@ -450,6 +457,7 @@ int WriteProtocolVectors(const char *path)
 		golden->gameMode = GM_Battle;
 		golden->ticDelay = 6;
 		golden->fragLimit = 0;
+		golden->damageScale = 100;
 		golden->rngseed = 0x01020304;
 		golden->clients[0].host = 0x0100007F;
 		golden->clients[0].port = 5029;
@@ -477,6 +485,7 @@ NetInit InitVars = {
 	NULL,
 	0,
 	0,
+	100,		// damageScale: the game's own numbers until somebody says otherwise
 };
 
 // One slot's command for one sequence, as buffered and as it travels.
@@ -1327,6 +1336,7 @@ static bool StartHost(InitStatusCallback callback)
 	startData->gameMode = InitVars.gameMode;
 	startData->ticDelay = InitVars.ticDelay;
 	startData->fragLimit = InitVars.fragLimit;
+	startData->damageScale = InitVars.damageScale;
 	startData->rngseed = rngseed;
 	for(unsigned int i = 1;i < InitVars.numPlayers;++i)
 	{
@@ -1522,6 +1532,7 @@ static bool StartJoin(InitStatusCallback callback)
 				// StartPacket.
 				InitVars.ticDelay = data->ticDelay;
 				InitVars.fragLimit = data->fragLimit;
+				InitVars.damageScale = data->damageScale;
 				rngseed = data->rngseed;
 
 				Client[0].address = Packet->address;

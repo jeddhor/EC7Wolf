@@ -75,7 +75,7 @@ class Vectors:
             self.values[key] = int(value)
 
     def start_packet(self, player=1, players=2, mode=1, delay=6, frags=0,
-                     seed=0x01020304, clients=1, version=None):
+                     seed=0x01020304, clients=1, version=None, damage=100):
         """A start packet in the engine's own layout, or a lie about it.
 
         Built by writing fields into a buffer at the offsets the engine
@@ -92,6 +92,11 @@ class Vectors:
         head[off["gameMode"]] = mode & 0xFF
         head[off["ticDelay"]] = delay & 0xFF
         head[off["fragLimit"]] = frags & 0xFF
+        # Present since protocol 4. Written unconditionally rather than
+        # guarded, because the offsets come from the engine: a build without
+        # the field would not report an offset for it, and a KeyError here is
+        # a better answer than a packet that silently differs by one byte.
+        head[off["damageScale"]] = damage & 0xFF
         struct.pack_into("<I", head, off["rngseed"], seed)
         entry = self.values["client"]
         body = bytearray()

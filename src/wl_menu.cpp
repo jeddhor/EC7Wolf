@@ -85,6 +85,7 @@ static MenuItem *mpStartItem = NULL;
 static const int mpDelayTics[] = { 0, 6, 10, 16 };
 static MultipleChoiceMenuItem *mpArenaItem = NULL;
 static MultipleChoiceMenuItem *mpFragsItem = NULL;
+static MultipleChoiceMenuItem *mpDamageItem = NULL;
 static MultipleChoiceMenuItem *mpClassItem = NULL;
 static MultipleChoiceMenuItem *mpUniformItem = NULL;
 static MultipleChoiceMenuItem *mpBotsItem = NULL;
@@ -110,6 +111,15 @@ static const char* const mpMarineColors[] = {
 };
 // Kept in the same order as the fraglimits option list.
 static const int mpFragLimits[] = { 0, 10, 20, 30, 50 };
+
+// Percent of the game's own weapon damage between players.
+//
+// Corridor 7's guns average 128 points inside two tiles against 100 of health,
+// so at "Original" most exchanges go to whoever fires first. Halving it is
+// roughly two hits to kill and a quarter is four, which is the difference
+// between a duel and a coin toss. The weapons themselves are not touched, so
+// single player stays exactly as it shipped.
+static const int mpDamageScales[] = { 100, 75, 50, 25 };
 // Eight arenas, and not the contiguous run the compendium describes: the maps
 // it puts at 58 and 59 are empty boxes, and the eighth real arena is at 60.
 // See the note above the network levels in mapinfo/corridor7.txt.
@@ -489,6 +499,8 @@ MENU_LISTENER(MultiplayerRoleChanged)
 		mpArenaItem->setEnabled(!joining);
 	if(mpFragsItem)
 		mpFragsItem->setEnabled(!joining);
+	if(mpDamageItem)
+		mpDamageItem->setEnabled(!joining);
 	// Bots belong to whoever owns the roster, which is never the joining peer.
 	// Section 18.1: a joining client sees the bot configuration read-only and
 	// never instantiates a brain.
@@ -661,6 +673,8 @@ MENU_LISTENER(StartMultiplayer)
 		}
 		Net::InitVars.fragLimit =
 			(byte)mpFragLimits[mpFragsItem ? mpFragsItem->getCurrentOption() : 0];
+		Net::InitVars.damageScale = (byte)mpDamageScales[
+			mpDamageItem ? mpDamageItem->getCurrentOption() : 0];
 		Bot::SetRequested(MultiplayerBots());
 		static const char* const skirmishSkills[] = { "Recruit", "Marine",
 		                                              "Veteran", "Elite" };
@@ -681,6 +695,8 @@ MENU_LISTENER(StartMultiplayer)
 		}
 		Net::InitVars.fragLimit =
 			(byte)mpFragLimits[mpFragsItem ? mpFragsItem->getCurrentOption() : 0];
+		Net::InitVars.damageScale = (byte)mpDamageScales[
+			mpDamageItem ? mpDamageItem->getCurrentOption() : 0];
 
 		// The roster the host is about to lock, set here rather than left to
 		// a command line: the menu and --bots must produce the same one.
@@ -1076,6 +1092,10 @@ static void BuildMultiplayerMenu()
 
 	mpArenaItem = new MultipleChoiceMenuItem(NULL, arenas, 8, 0);
 	AddLabeled(multiplayerMenu, mpArenaItem, "Arena");
+
+	static const char* damages[] = { "Original", "75%", "50%", "25%" };
+	mpDamageItem = new MultipleChoiceMenuItem(NULL, damages, 4, 0);
+	AddLabeled(multiplayerMenu, mpDamageItem, "Damage");
 
 	mpDelayItem = new MultipleChoiceMenuItem(NULL, connections, 4, 2);
 	AddLabeled(multiplayerMenu, mpDelayItem, "Connection");

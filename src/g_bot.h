@@ -436,6 +436,7 @@ struct State
 	uint32_t     alertUntil = 0;
 	angle_t      alertBearing = 0;
 	bool         alertHasBearing = false;
+	uint32_t     alertRestUntil = 0;
 	unsigned int alertsRaised = 0;
 
 	// Provenance, for the assertions in section 11.6 and for the trace.

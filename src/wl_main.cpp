@@ -1380,6 +1380,19 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 		{
 			Net::InitVars.gameMode = Net::GM_TeamBattle;
 		}
+		else IFARG("--damage-scale")
+		{
+			// Percent of normal player-versus-player damage, 25 to 100.
+			// Registered in this loop with the rest: an option merely peeked
+			// at elsewhere becomes a filename.
+			if(++i < argc)
+			{
+				int pct = atoi(argv[i]);
+				if(pct < 1) pct = 1;
+				if(pct > 100) pct = 100;
+				Net::InitVars.damageScale = (byte)pct;
+			}
+		}
 		else IFARG("--fraglimit")
 		{
 			if(i + 1 < argc)

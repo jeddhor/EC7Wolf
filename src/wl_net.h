@@ -121,6 +121,16 @@ struct NetInit
 	// Kills that end a match, or 0 for a match that only ends when someone
 	// leaves. Counted per team in team play, per player otherwise.
 	byte fragLimit;
+	// Percent of normal damage a player's weapon does to another player, 100
+	// being the game's own numbers.
+	//
+	// Corridor 7's guns are lethal: inside two tiles the M16 rolls an average
+	// of 128 against 100 health, so most exchanges are decided by whoever
+	// shoots first and a room can be cleared by spraying it. That is faithful
+	// and it is not always what a deathmatch wants, so it is a dial rather
+	// than an edit to the weapons -- single player is untouched, and the
+	// number applies to every player in the match alike, bots included.
+	byte damageScale;
 };
 
 extern NetInit InitVars;

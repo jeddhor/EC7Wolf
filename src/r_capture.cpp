@@ -271,6 +271,10 @@ namespace
 	// that nothing was perceived which should not have been.
 	FString  g_perceptionPath;
 	int      g_visorAll       = -1;      // --capture-visor-all: every player's visor mode
+	int      g_mineX          = 0;
+	int      g_mineY          = 0;
+	long     g_mineTic        = -1;
+	bool     g_mineDone       = false;
 	int      g_hurtSlot       = -1;
 	long     g_hurtFrom       = 0;
 	long     g_hurtEvery      = 0;
@@ -844,6 +848,12 @@ void ParseArgs(int argc, char **argv)
 			Bot::SetOverlay(level);
 			g_botOverlayMap = true;
 			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-mine-at") == 0 && i + 3 < argc)
+		{
+			g_mineX = atoi(argv[++i]);
+			g_mineY = atoi(argv[++i]);
+			g_mineTic = atol(argv[++i]);
 		}
 		else if(strcmp(arg, "--capture-hurt-slot") == 0 && i + 3 < argc)
 		{
@@ -1747,6 +1757,38 @@ void PreTic()
 			}
 			if(mode != NULL)
 				mode->amount = (unsigned int)g_visorAll;
+		}
+	}
+
+	// --capture-mine-at X Y TIC: put a live proximity mine on a tile, owned by
+	// the local player.
+	//
+	// For proving that a mine damages somebody who walks into it, which a
+	// match will not reliably show: whether a bot happens to cross a mine
+	// another bot happened to lay is the arrangement of one afternoon's
+	// wandering, and a check waiting for it passed twice and then stopped.
+	//
+	// Spawned directly, which is exactly what the bot rules forbid -- and
+	// this is not bot code. It is the same kind of instrument as
+	// --capture-kill-slot, which calls TakeDamage rather than waiting to be
+	// shot. Owned by slot 0 so that every bot is a stranger to it and any
+	// trigger is an opponent being caught rather than a bot blowing itself up.
+	if(g_mineTic >= 0 && !g_mineDone &&
+		(long)gamestate.TimeCount >= g_mineTic && map != NULL)
+	{
+		const ClassDef *cls = ClassDef::FindClass("C7ProximityMine");
+		if(cls != NULL)
+		{
+			g_mineDone = true;
+			const fixed mx = ((fixed)g_mineX<<FRACBITS) + (FRACUNIT/2);
+			const fixed my = ((fixed)g_mineY<<FRACBITS) + (FRACUNIT/2);
+			AActor *mine = AActor::Spawn(cls, mx, my, 0, SPAWN_AllowReplacement);
+			if(mine != NULL)
+			{
+				mine->target = players[0].mo;
+				Printf("Capture: mine placed at %d,%d on tic %lu\n",
+					g_mineX, g_mineY, (unsigned long)gamestate.TimeCount);
+			}
 		}
 	}
 

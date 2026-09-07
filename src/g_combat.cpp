@@ -76,17 +76,17 @@ void Step(AimError &error, Bot::Random &rng, uint32_t sequence,
 // what will move these numbers.
 static const WeaponInfo g_weapons[] =
 {
-	{ "C7Bayonet",       1, WeaponKind::Melee,       0,  2,  10, true  },
-	{ "C7Shotgun",       2, WeaponKind::Hitscan,     0,  8,  70, true  },
-	{ "C7M16",           3, WeaponKind::Hitscan,     0, 30,  50, true  },
-	{ "C7M343",          4, WeaponKind::Burst,       2, 24,  60, true  },
-	{ "C7DualBlaster",   5, WeaponKind::Hitscan,     0, 20,  55, true  },
-	{ "C7PlasmaRifle",   6, WeaponKind::Projectile,  4, 30,  65, true  },
-	{ "C7AssaultCannon", 7, WeaponKind::MultiTarget, 0, 26,  80, true  },
+	{ "C7Bayonet",       "Bayonet",              1, WeaponKind::Melee,       0,  2, 10, true  },
+	{ "C7Shotgun",       "Ithaca Shotgun",       2, WeaponKind::Hitscan,     0,  8, 70, true  },
+	{ "C7M16",           "M16",                  3, WeaponKind::Hitscan,     0, 30, 50, true  },
+	{ "C7M343",          "M343 Rocket Launcher", 4, WeaponKind::Burst,       2, 24, 60, true  },
+	{ "C7DualBlaster",   "Dual Blaster",         5, WeaponKind::Hitscan,     0, 20, 55, true  },
+	{ "C7PlasmaRifle",   "Plasma Rifle",         6, WeaponKind::Projectile,  4, 30, 65, true  },
+	{ "C7AssaultCannon", "Assault Cannon",       7, WeaponKind::MultiTarget, 0, 26, 80, true  },
 	// Enormous energy cost and a broad multi-target attack. Not an ordinary
 	// gun, and not something to fire because it happened to score highest;
 	// section 16.6 asks for its own tests before a bot reaches for it.
-	{ "C7Disintegrator", 8, WeaponKind::MultiTarget, 0, 30,  90, false },
+	{ "C7Disintegrator", "Disintegrator",        8, WeaponKind::MultiTarget, 0, 30, 90, false },
 };
 
 const WeaponInfo *Weapons(unsigned int &count)
@@ -183,6 +183,16 @@ Footwork ClearDoorway(bool inDoorway, int forward, int strafe, int baseMove)
 	out.strafe = 0;
 	out.forward = baseMove;
 	return out;
+}
+
+const char *WeaponDisplayName(const char *cls)
+{
+	if(cls == NULL)
+		return NULL;
+	for(unsigned int i = 0;i < sizeof(g_weapons)/sizeof(g_weapons[0]);++i)
+		if(strcmp(g_weapons[i].cls, cls) == 0)
+			return g_weapons[i].display;
+	return NULL;
 }
 
 int ChooseSlotFrom(unsigned int carried, int rangeTiles)

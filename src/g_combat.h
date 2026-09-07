@@ -91,6 +91,10 @@ enum class WeaponKind : uint8_t
 struct WeaponInfo
 {
 	const char *cls;
+	// What a kill message calls it. The class name is not it: "C7M343" tells
+	// a player nothing, and the DECORATE display name is the *pickup's*, so
+	// the rocket launcher would announce itself as a crate.
+	const char *display;
 	// The slot button a player presses, as a number: bt_slot1 + slot - 1.
 	int         slot;
 	WeaponKind  kind;
@@ -112,6 +116,9 @@ const WeaponInfo *Weapons(unsigned int &count);
 // Separated from the inventory lookup so it can be tested without a world:
 // section 16.6 asks for a deterministic test per weapon, and a rule that can
 // only be exercised by running a match is a rule tested by luck.
+// The readable name of a weapon class, or NULL if it is not one of ours.
+const char *WeaponDisplayName(const char *cls);
+
 int ChooseSlotFrom(unsigned int carried, int rangeTiles);
 
 // Combat footwork for a bot standing in a door cell: clear it.

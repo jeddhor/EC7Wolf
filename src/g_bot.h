@@ -428,6 +428,16 @@ struct State
 	// because standing still on a pad is how a bot gets sent back through it.
 	uint32_t     portClearUntil = 0;
 
+	// Something happened that the bot cannot see: a noise, or a hit from
+	// behind. It stops and looks. Without this a bot walking away from you
+	// never turns round, because its eyes only cover the ninety degrees in
+	// front of it -- which made it possible to follow one across an arena
+	// shooting it in the back the whole way.
+	uint32_t     alertUntil = 0;
+	angle_t      alertBearing = 0;
+	bool         alertHasBearing = false;
+	unsigned int alertsRaised = 0;
+
 	// Provenance, for the assertions in section 11.6 and for the trace.
 	unsigned int commandsProduced = 0;
 	uint32_t lastSequence = 0;
@@ -473,6 +483,19 @@ SkillLevel RequestedSkill();
 // Returns false for a name that is not a level, or for one that exists but is
 // not shippable without the developer opt-in.
 bool SetRequestedSkill(const char *name, bool allowDeveloper);
+
+// Section 18.5's reporting commands, as command-line diagnostics: this engine
+// has no console to type them into. ReportRoster prints once the roster
+// exists; ReportBotState prints what a bot is thinking at the end of a run.
+// A developer override for the bot match seed, so one match's bots can be
+// reproduced without disturbing the playsim's own randomness. Absent normally:
+// the seed comes from the rngseed every machine already agrees on.
+void SetSeedOverride(uint64_t seed);
+
+void SetListRoster(bool on);
+void SetDebugSlot(int slot);
+void ReportRoster();
+void ReportBotState();
 
 // A producer for one bot slot. Ownership passes to the command layer.
 Command::Producer *MakeProducer(Session::PlayerSlot slot);

@@ -263,6 +263,15 @@ menu_walk_to_bottom() {  # menu_walk_to_bottom WHAT
 	return 1
 }
 
+# Walk down until the cursor wraps round to the first row.
+#
+# The counterpart of menu_walk_to_bottom, and needed for the same reason: a
+# gate that reaches a row by counting steps from wherever the menu opens is
+# counting a fact about one afternoon's menu. The multiplayer setup screen grew
+# a Uniform row between Character and Server address, and the cancel gate's
+# "two presses up to Role" landed on Character instead -- so it changed the
+# character to Eitak warrior, tried to join a game it meant to host, and
+# reported three failures none of which were about the row that moved.
 menu_walk_to_top() {  # menu_walk_to_top WHAT
 	_what=$1
 	_prev=-1

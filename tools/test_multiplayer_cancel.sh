@@ -160,8 +160,11 @@ check "the setup screen is a menu" test "$(menu_cursor_row)" -ge 0
 # which is more assumption than two Ups.
 # Verified, not timed: a dropped Up leaves the cursor a row off and the Left
 # below then changes a different setting, which fails later and somewhere else.
-menu_press_moved Up || { printf '  FAIL the menu did not move up to Role\n'; exit 1; }
-menu_press_moved Up || { printf '  FAIL the menu did not move up to Role\n'; exit 1; }
+# Role is the first row, so walk to the top rather than counting steps to it.
+# Counting broke the moment the screen grew a Uniform row above Server address:
+# two presses landed on Character, the Left presses below changed the character
+# instead of the role, and the gate then tried to join a game it meant to host.
+menu_walk_to_top "Role" || exit 1
 # Verified by its effect, like the two Ups above. A dropped Left leaves the role
 # on "Join", and Start then raises the "enter an address" prompt instead of
 # hosting -- which fails four assertions later, describing the waiting screen

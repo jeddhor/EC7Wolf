@@ -23,6 +23,9 @@
 //   --capture-checksum PATH Write a per-tic + summary checksum log to PATH.
 //   --capture-frame N       Screenshot after rendered frame N (1-based).
 //   --capture-file PATH     Destination PNG for --capture-frame.
+//   --capture-sprite-bank BANK PATH Export resolved sprite textures as JSON
+//                           (palette, remap, offsets, column-major index hex).
+//                           Repeatable; writes on the first rendered frame.
 //   --capture-maxframes N   Finalize the checksum log and quit after N frames.
 //   --capture-open-doors N  Force every door to slide amount N (0..65535) each
 //                           tic, so a mid-slide door can be compared between the

@@ -556,13 +556,16 @@ static void InitGame()
 	// Init texture manager
 	//
 
+	// TEXTURES translations resolve palette indices while they are parsed.
+	// Load the palette first; otherwise GPalette.Remap is still zero-filled
+	// and every requested color range silently becomes an identity mapping.
+	printf("VL_ReadPalette: Setting up the Palette...\n");
+	VL_ReadPalette(gameinfo.GamePalette);
+	atterm(R_DeinitColormaps);
 	TexMan.Init();
 	// The upscale pack is applied as the texture manager loads it; this puts the
 	// textures back if the player has the option switched off.
 	C7Upscale::ApplyPreference();
-	printf("VL_ReadPalette: Setting up the Palette...\n");
-	VL_ReadPalette(gameinfo.GamePalette);
-	atterm(R_DeinitColormaps);
 	GenerateLookupTables();
 
 	//
@@ -1327,6 +1330,27 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 		// Section 17.5: the developer profile is opt-in and named, not hidden
 		// behind a magic value of an ordinary option.
 		else IFARG("--bot-developer") {}
+		else IFARG("--bot-list")
+		{
+			Bot::SetListRoster(true);
+		}
+		else IFARG("--bot-debug")
+		{
+			// <slot|all>. Registered here with the rest, because an option
+			// merely peeked at elsewhere becomes a filename.
+			if(++i < argc)
+				Bot::SetDebugSlot(stricmp(argv[i], "all") == 0 ?
+					-1 : atoi(argv[i]) - 1);
+		}
+		else IFARG("--bot-seed")
+		{
+			// Section 18.5: a developer reproducibility override. The match
+			// seed normally comes from the same rngseed every machine agrees
+			// on; this replaces it for the bots alone, so one bot's behaviour
+			// can be re-run without changing the rest of the simulation.
+			if(++i < argc)
+				Bot::SetSeedOverride((uint64_t)strtoull(argv[i], NULL, 10));
+		}
 		else IFARG("--host")
 		{
 			if(++i < argc)

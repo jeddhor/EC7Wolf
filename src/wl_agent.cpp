@@ -29,6 +29,7 @@
 #include "wl_state.h"
 #include "g_perception.h"
 #include "wl_play.h"
+#include "g_combat.h"
 #include "templates.h"
 
 #include "w_wad.h"
@@ -240,15 +241,35 @@ void ControlMovement (APlayerPawn *ob)
 		Thrust (ob,angle,controly*MOVESCALE*2/3);          // move backwards
 	}
 
-	// Running animation
+	// Running animation, with a moment's hysteresis on the way back.
+	//
+	// The walk cycle is five frames at six tics each -- thirty tics to take a
+	// stride -- and this used to drop back to the standing frame on the first
+	// tic with no thrust. That is fine for a human holding a key down and
+	// wrong for anything that moves in bursts: a bot turning a corner stops,
+	// resets to frame A, walks four tics, stops again, and never reaches
+	// frame B. Seen from across the arena the legs never move and the body
+	// slides, which is exactly what a playtest reported -- floating most of
+	// the time, with the run animation appearing now and then when the bot
+	// happened to get a long clear run.
+	//
+	// B8 made it visible rather than caused it: giving turning an
+	// acceleration limit meant far more short stops. A human tapping forward
+	// looked the same way to everyone else, and always had.
+	//
+	// Ten tics, so a stride survives a corner but a bot that has genuinely
+	// stopped is standing still well before anyone reads it as walking.
 	if (ob->player->thrustspeed)
 	{
+		ob->player->walkhold = 10;
 		if(ob->SeeState && ob->InStateSequence(ob->SpawnState))
 			ob->SetState(ob->SeeState);
 	}
 	else
 	{
-		if(ob->SpawnState && ob->InStateSequence(ob->SeeState))
+		if(ob->player->walkhold > 0)
+			--ob->player->walkhold;
+		else if(ob->SpawnState && ob->InStateSequence(ob->SeeState))
 			ob->SetState(ob->SpawnState);
 	}
 
@@ -417,6 +438,50 @@ void player_t::TakeDamage (int points, AActor *attacker)
 				--frags;
 			else
 				++attacker->player->frags;
+
+			// Say who, on the one screen that can see it.
+			//
+			// Section 18.6 asks for kill and death messages drawn from roster
+			// identity, and there were none at all -- frags simply went up,
+			// so a player who died learned only that they had. Shown to the
+			// local view, because a message is a thing on somebody's screen
+			// and a bot has no screen: this is presentation, not simulation,
+			// and nothing about the match depends on it.
+			if(Session::IsDeathmatch() && StatusBar != NULL)
+			{
+				const unsigned int victim =
+					(unsigned int)(this - players);
+				const unsigned int killer =
+					(unsigned int)(attacker->player - players);
+				const bool watching = Session::LocalViewSlot().has_value();
+				const unsigned int me = watching ?
+					(unsigned int)*Session::LocalViewSlot() : MAXPLAYERS;
+
+				// With the weapon, because "what killed me" is the question a
+				// player actually has, and two of Corridor 7's guns take a
+				// hundred points off at close range -- which reads as a bug
+				// until you know which one it was.
+				const char *gun = NULL;
+				if(attacker != mo && attacker->player != NULL &&
+					attacker->player->ReadyWeapon != NULL)
+					gun = Combat::WeaponDisplayName(
+						attacker->player->ReadyWeapon->GetClass()->
+							GetName().GetChars());
+
+				FString note;
+				if(attacker == mo)
+					note.Format("%s died", Session::NameOf(victim));
+				else if(victim == me)
+					note.Format("%s's %s fragged you", Session::NameOf(killer),
+						gun ? gun : "attack");
+				else if(killer == me)
+					note.Format("You fragged %s", Session::NameOf(victim));
+				else
+					note.Format("%s fragged %s with the %s",
+						Session::NameOf(killer), Session::NameOf(victim),
+						gun ? gun : "attack");
+				StatusBar->SetTopMessage(note);
+			}
 
 			CheckFragLimit();
 		}

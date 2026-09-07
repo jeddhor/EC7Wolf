@@ -34,6 +34,7 @@
 
 
 #include "wl_def.h"
+#include "wl_iwad.h"
 #include "id_in.h"
 #include "id_us.h"
 #include "id_vh.h"
@@ -1680,6 +1681,14 @@ byte PlayerTeam(unsigned int player)
 	// per player and Net::NewGame keeps them all.
 	if(player >= MAXPLAYERS || gamestate.playerClass[player] == NULL)
 		return 0;
+
+	// Marine uniform variants are cosmetic. Class-list indices still identify
+	// the selected skin on the wire, but must not create additional teams.
+	if(IWad::CheckGameFilter("Corridor7"))
+	{
+		const ClassDef *alien = ClassDef::FindClass("C7AlienPlayer");
+		return alien && gamestate.playerClass[player]->IsDescendantOf(alien) ? 1 : 0;
+	}
 
 	const FName className = gamestate.playerClass[player]->GetName();
 	for(unsigned int i = 0;i < gameinfo.PlayerClasses.Size();++i)

@@ -204,6 +204,14 @@ void AdoptAuthoritySlots(unsigned int count, const uint8_t *kinds);
 bool SlotActive(PlayerSlot slot);
 SlotKind KindOf(PlayerSlot slot);
 bool SlotIsBot(PlayerSlot slot);
+
+// The name a scoreboard, kill message or roster listing prints for this slot.
+//
+// Section 18.3: identity lives here and not on player_t, which has no name
+// model at all -- so every presentation path asks the roster rather than
+// inventing something from the player index. Empty for a slot nobody occupies,
+// which callers must handle rather than print.
+const char *NameOf(PlayerSlot slot);
 unsigned int PeerCount();
 
 bool HasLocalPlayer();

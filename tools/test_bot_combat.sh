@@ -228,10 +228,51 @@ check "and misses often enough to be beatable (<= 90%)" test "$overall" -le 90
 # Section 14.4: badly hurt with a known way to fix it is a reason to stop
 # shooting. Decided on the bot's own health and never on the enemy's, which it
 # is not allowed to know.
-printf '  ..   across seeds: %s retreats, %s health goals, %s dispenser uses\n' \
-	"$retreats_total" "$healthgoals_total" "$dispensers_total"
-check "a badly hurt bot breaks off somewhere" test "$retreats_total" -ge 1
-check "and goes looking for health when it does" test "$healthgoals_total" -ge 1
+# Breaking off gets its own match, with a bot wounded on purpose.
+#
+# It must not share the matches above: wounding a bot whenever it has a target
+# makes it break off instead of shooting, and the first version of this put the
+# instrument into every run and took seed 1's shots, kills and deaths to zero
+# with it. An instrument that changes what everything else is measuring is not
+# an instrument.
+#
+# --capture-hurt-slot only fires while the bot has a target, because a bot held
+# below its retreat threshold never picks one -- being hurt is what sends it
+# down the branch that does not target -- so there would be nothing to break
+# off from.
+mkdir -p "$work/hurt-saves"
+( cd "$data_dir"
+  DISPLAY=$display SDL_VIDEODRIVER=x11 SDL_AUDIODRIVER=dummy \
+  timeout 300 "$build_dir/ec7wolf" --data CO7 --res 320 200 --nowait \
+	--vid-renderer software \
+	--config "$work/hurt.cfg" --savedir "$work/hurt-saves" \
+	--capture-rngseed 1 --capture-hurt-slot 1 200 35 \
+	--capture-bots "$work/hurt.bots" \
+	--capture-maxtics "$tics" \
+	--tedlevel "$map" --skill 2 --battle --bots 3 ) >"$work/hurt.log" 2>&1 || true
+
+hurt_retreats=$(sed -n 's/.*Capture: bots .*retreats=\([0-9]*\).*/\1/p' "$work/hurt.log" | tail -1)
+check "a badly hurt bot breaks off somewhere" test "${hurt_retreats:-0}" -ge 1
+
+# And reconsiders what it needs, there and then.
+#
+# This used to demand a route to a health pickup and that is not what the code
+# promises: section 14.4 says badly hurt *with a known way to fix it* is a
+# reason to stop shooting, so whether a health pack follows depends on whether
+# one is within reach. On MAP60 at need 774 a bot can afford about twenty-three
+# waypoints of walking and the nearest health is further, so it breaks off and
+# goes back to roaming -- correctly, and the old check called that a failure.
+#
+# What the code does guarantee is that breaking off forces the item scan
+# immediately rather than waiting for the next seventy-tic tick, because the
+# first two retreats ever measured died waiting for it. That is checkable on
+# any map.
+scans=$(awk '$3=="retreat"{t=$1; slot=$2}
+	$3=="item-scan" && $1==t && $2==slot {n++} END{print n+0}' "$work/hurt.bots")
+printf '  ..   wounded on purpose: %s retreats, %s of them scanned at once\n' \
+	"${hurt_retreats:-0}" "$scans"
+check "and reconsiders what it needs the moment it does" \
+	test "$scans" -ge "${hurt_retreats:-0}"
 check "and dispensers get used" test "$dispensers_total" -ge 1
 
 # Personalities differ in conduct and not in kit. Every bot spawns with the

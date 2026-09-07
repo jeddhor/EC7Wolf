@@ -99,6 +99,8 @@ namespace {
 State    g_state[MAXPLAYERS];
 bool     g_active[MAXPLAYERS] = { false };
 int      g_requested = -1;
+uint64_t g_seedOverride = 0;
+bool     g_haveSeedOverride = false;
 // Marine by default: the middle of the ladder, so an unconfigured match is an
 // ordinary one rather than the easiest or the hardest.
 SkillLevel g_skill = SkillLevel::Marine;
@@ -256,6 +258,11 @@ const int RETREAT_NEED = 250;
 // Out here at namespace scope rather than in the producer's enum, because the
 // goal chooser is a free function and cannot see that enum -- the same trap
 // that hid RETREAT_NEED above from the code that needed it.
+// How long a bot spends looking at whatever just shot at it or made a noise.
+// About a second: long enough to turn most of the way round at any skill,
+// short enough that a noisy arena does not leave everybody standing still.
+const uint32_t ALERT_TICS = 60;
+
 const int PORT_CLEAR_TILES = 4;
 
 // And how long a bot keeps walking rather than turning after a crossing. Long
@@ -848,6 +855,57 @@ public:
 			}
 		}
 
+		// Ears and pain, every tic, whatever the eyes are doing.
+		//
+		// Neither of these was read at all, and between them they are why a
+		// player could follow a bot around an arena unshot: bots see a
+		// ninety-degree cone, so a bot walking away from you never looks at
+		// you, and being shot in the back told it nothing because nothing
+		// asked. Two bots hunting each other had the same problem from both
+		// ends -- they only ever met by walking into each other's view.
+		//
+		// A sound gives a bearing (the centre of a 45-degree sector) and a
+		// band, which is what a person gets. Damage from someone already in
+		// view names them; damage from behind names nobody, so the answer to
+		// it is to look around rather than to spin onto a target the bot has
+		// no right to know about.
+		//
+		// Not gated by the vision refresh: eyes blink, ears do not.
+		if(const Perception::Observation *heard = Perception::For(forSlot))
+		{
+			for(unsigned int d = 0;d < heard->damage.Size();++d)
+			{
+				const Perception::DamageCue &cue = heard->damage[d];
+				if(cue.attackerSlot >= 0)
+					continue;		// seen, and handled by the ordinary path
+				bot->alertUntil = sequence + ALERT_TICS;
+				bot->alertHasBearing = false;
+				++bot->alertsRaised;
+				TraceEvent(forSlot, "alert", "hit from nowhere");
+			}
+			for(unsigned int n = 0;n < heard->sounds.Size();++n)
+			{
+				const Perception::AudibleEvent &noise = heard->sounds[n];
+				if(noise.kind != Perception::SoundKind::Weapon &&
+					noise.kind != Perception::SoundKind::Pain &&
+					noise.kind != Perception::SoundKind::Death)
+					continue;
+				// A closer noise wins an argument with an older one; anything
+				// already being looked at wins against a fresh bearing only
+				// if the bot has not started turning yet.
+				bot->alertUntil = sequence + ALERT_TICS;
+				bot->alertBearing = noise.bearing;
+				bot->alertHasBearing = true;
+				++bot->alertsRaised;
+				if(bot->alertsRaised % 8 == 1)
+				{
+					FString d; d.Format("noise bearing=%u",
+						(unsigned)(noise.bearing/ANGLE_1));
+					TraceEvent(forSlot, "alert", d.GetChars());
+				}
+			}
+		}
+
 		// Read what the last look showed. The brain never looks at the world;
 		// it looks at this.
 		{
@@ -1032,6 +1090,42 @@ public:
 			++bot->frozenTics;
 			bot->wasAskedToMove = false;
 			bot->lastProgressSeq = sequence;
+			Record(*bot, sequence, forSlot);
+			return true;
+		}
+
+		// Look at whatever that was, before deciding anything else.
+		//
+		// Stopping to do it is the point: this engine walks in the direction
+		// the body faces, so a bot that turned while walking would wander off
+		// wherever the noise came from. A person hearing a shot behind them
+		// stops and turns, and so does this.
+		if(bot->target == MAXPLAYERS && sequence < bot->alertUntil &&
+			bot->behavior != Behavior::DeadWaitingToRespawn)
+		{
+			out.forward = 0;
+			out.strafe = 0;
+			bot->wasAskedToMove = false;
+			bot->lastProgressSeq = sequence;
+			if(bot->alertHasBearing)
+			{
+				const int32_t rotate =
+					BotNav::ShortestTurn(pawn->angle, bot->alertBearing);
+				const int units =
+					(int)((int64_t)rotate/(int64_t)(ANGLE_1/20));
+				out.turn = SteerYaw(*bot, -units);
+				// Facing it is the end of it; there is nothing to stare at.
+				if(BotNav::ShortestTurn(pawn->angle, bot->alertBearing) <
+					(int32_t)(ANGLE_1*6) &&
+					BotNav::ShortestTurn(pawn->angle, bot->alertBearing) >
+					-(int32_t)(ANGLE_1*6))
+					bot->alertUntil = sequence;
+			}
+			else
+			{
+				// No bearing: sweep, the way somebody shot from nowhere does.
+				out.turn = SteerYaw(*bot, bot->traits.maxYaw);
+			}
 			Record(*bot, sequence, forSlot);
 			return true;
 		}
@@ -2292,7 +2386,17 @@ void SetupSlots(FName (&playerClassNames)[MAXPLAYERS])
 
 	// The seed every machine already agrees on, so two runs of one match
 	// produce the same bots and a recorded match replays.
-	const uint64_t matchSeed = (uint64_t)rngseed;
+	// The override is a developer tool and says so when it is used: a match
+	// whose bots came from somewhere other than the shared seed is not one to
+	// compare against a recording, and finding that out from a silent flag
+	// would cost an afternoon.
+	uint64_t matchSeed = (uint64_t)rngseed;
+	if(g_haveSeedOverride)
+	{
+		matchSeed = g_seedOverride;
+		Printf("Bot seed overridden to %llu; this match's bots will not match "
+			"a recording made without it.\n", (unsigned long long)matchSeed);
+	}
 
 	for(int i = 0;i < wanted;++i)
 	{
@@ -2300,8 +2404,16 @@ void SetupSlots(FName (&playerClassNames)[MAXPLAYERS])
 			matchSeed ^ (uint64_t)i);
 		if(slot >= Session::MAX_PLAYER_SLOTS)
 		{
-			Printf("Only room for %d bot%s; %d asked for.\n",
-				i, i == 1 ? "" : "s", wanted);
+			// All four numbers, as section 18.7 asks: a message naming only
+			// the bots leaves the reader to work out how many humans were
+			// already in the roster and what the limit is.
+			Printf("%u player%s and %d bots is %d slots; this game supports "
+				"%u. %d bot%s joined.\n",
+				Session::ActiveSlotCount() - (unsigned)i,
+				Session::ActiveSlotCount() - (unsigned)i == 1 ? "" : "s",
+				wanted, (int)(Session::ActiveSlotCount() - (unsigned)i) + wanted,
+				(unsigned)Session::MAX_PLAYER_SLOTS,
+				i, i == 1 ? "" : "s");
 			break;
 		}
 
@@ -2320,6 +2432,9 @@ void SetupSlots(FName (&playerClassNames)[MAXPLAYERS])
 		playerClassNames[slot] = playerClassNames[0];
 		Printf("Bot in slot %u.\n", slot);
 	}
+
+	// Once, after the roster exists rather than while it is being built.
+	ReportRoster();
 }
 
 // --- diagnostics ----------------------------------------------------------------
@@ -2768,6 +2883,88 @@ int SelfTest()
 	else
 		Printf("FAIL: the bot model does not hold.\n");
 	return g_failures == 0 ? 0 : 1;
+}
+
+}
+
+namespace Bot {
+
+// --- administration ----------------------------------------------------------
+//
+// Section 18.5 lists these as console commands -- bot_list, bot_debug,
+// bot_fill, bot_remove. This engine has no console: every CCMD in the tree is
+// inside an `#if 0`, because ECWolf inherited ZDoom's macro and not ZDoom's
+// command layer. Inventing one for four diagnostics would be a large piece of
+// interface work with its own input handling, history and parser, and none of
+// it is what the milestone is for.
+//
+// So the two that report become command-line diagnostics, which is where a
+// headless run and a bug report can both reach them, and the two that change
+// the roster become the lobby's Bots row -- which is the better home anyway,
+// since section 18.5 requires roster changes to happen at match boundaries and
+// the lobby *is* the match boundary.
+
+namespace {
+int  g_listRoster = 0;
+int  g_debugSlot  = -2;		// -2 nobody, -1 all, >=0 one slot
+}
+
+void SetSeedOverride(uint64_t seed)
+{
+	g_seedOverride = seed;
+	g_haveSeedOverride = true;
+}
+
+void SetListRoster(bool on) { g_listRoster = on ? 1 : 0; }
+void SetDebugSlot(int slot) { g_debugSlot = slot; }
+
+void ReportRoster()
+{
+	if(!g_listRoster || Session::ActiveSlotCount() == 0)
+		return;
+	Printf("Roster: %u slot%s\n", Session::ActiveSlotCount(),
+		Session::ActiveSlotCount() == 1 ? "" : "s");
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
+	{
+		const Session::PlayerSlot slot = (Session::PlayerSlot)i;
+		const bool isBot = Session::SlotIsBot(slot);
+		const State *bot = isBot ? StateFor(slot) : NULL;
+		if(isBot && bot != NULL)
+			Printf("  %u  %-10s bot    %-8s profile %u\n", i + 1,
+				Session::NameOf(slot), SkillName(SkillOf(bot->profile)),
+				bot->profile);
+		else
+			Printf("  %u  %-10s %s\n", i + 1, Session::NameOf(slot),
+				isBot ? "bot    (unconfigured)" : "human");
+	}
+}
+
+void ReportBotState()
+{
+	if(g_debugSlot == -2)
+		return;
+	for(unsigned int i = 0;i < MAXPLAYERS;++i)
+	{
+		if(!Active((Session::PlayerSlot)i))
+			continue;
+		if(g_debugSlot >= 0 && (int)i != g_debugSlot)
+			continue;
+		const State *bot = StateFor((Session::PlayerSlot)i);
+		if(bot == NULL)
+			continue;
+		Printf("%s (slot %u): %s, %s\n", Session::NameOf(i), i + 1,
+			SkillName(SkillOf(bot->profile)), BehaviorName(bot->behavior));
+		Printf("  react %u  vision %u  yaw %d  aim %u deg  track %u  memory %u\n",
+			bot->traits.reaction, bot->traits.visionInterval,
+			bot->traits.maxYaw, (unsigned)(bot->traits.aimEnvelope/ANGLE_1),
+			bot->traits.trackingDelay, bot->traits.searchMemory);
+		Printf("  routes %u planned, %u reached, %u abandoned; %u doors, %u stuck\n",
+			bot->routesPlanned, bot->routesCompleted, bot->routesAbandoned,
+			bot->doorsOpened, bot->unstuckEntered);
+		Printf("  %u shots, %u on target, %u targets, %u retreats\n",
+			bot->shotsFired, bot->ticsOnTarget, bot->targetsAcquired,
+			bot->retreats);
+	}
 }
 
 }

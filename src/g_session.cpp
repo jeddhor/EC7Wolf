@@ -66,6 +66,11 @@ void State::SetStandaloneSinglePlayer()
 
 	slots[0].kind = SlotKind::Human;
 	slots[0].ownerPeer = (PeerId)0;
+	// Named here too. Every other path that makes a human slot names it, and
+	// this one -- the standalone default, which is every offline match --
+	// did not, so the scoreboard had a blank where the local player's name
+	// goes the moment presentation started reading the roster.
+	slots[0].name = "Player 1";
 	activeSlots = 1;
 	reservedSlots = 1;
 
@@ -108,7 +113,18 @@ unsigned int AddAuthoritySlot(uint32_t profile, uint64_t seed)
 	s.slots[slot].kind = SlotKind::Bot;
 	s.slots[slot].botProfile = profile;
 	s.slots[slot].controllerSeed = seed;
-	s.slots[slot].name.Format("Slot %u", slot + 1);
+	// Numbered among the bots, not among the slots.
+	//
+	// Section 18.3: a stable display name for the match, project-owned and
+	// generic. "Bot 1" is the first bot whether it landed in slot 2 or slot
+	// 5, which is what somebody reading a scoreboard expects; naming it after
+	// its slot index makes the first bot in a four-human game "Slot 5" and
+	// invites the reader to treat the number as an identity.
+	unsigned int bots = 0;
+	for(unsigned int i = 0;i < slot;++i)
+		if(s.slots[i].kind == SlotKind::Bot)
+			++bots;
+	s.slots[slot].name.Format("Bot %u", bots + 1);
 	s.activeSlots = slot + 1;
 	if(s.reservedSlots < s.activeSlots)
 		s.reservedSlots = s.activeSlots;
@@ -134,7 +150,11 @@ void AdoptAuthoritySlots(unsigned int count, const uint8_t *kinds)
 		s.slots[slot].kind = SlotKind::Bot;
 		s.slots[slot].botProfile = (uint32_t)0;
 		s.slots[slot].controllerSeed = (uint64_t)slot;
-		s.slots[slot].name.Format("Slot %u", slot + 1);
+		unsigned int adopted = 0;
+		for(unsigned int i = 0;i < slot;++i)
+			if(s.slots[i].kind == SlotKind::Bot)
+				++adopted;
+		s.slots[slot].name.Format("Bot %u", adopted + 1);
 	}
 	if(count > s.activeSlots)
 		s.activeSlots = count;
@@ -166,6 +186,14 @@ SlotKind KindOf(PlayerSlot slot)
 }
 
 bool SlotIsBot(PlayerSlot slot) { return KindOf(slot) == SlotKind::Bot; }
+
+const char *NameOf(PlayerSlot slot)
+{
+	const State &s = Live();
+	if(slot >= MAX_PLAYER_SLOTS || slot >= s.activeSlots)
+		return "";
+	return s.slots[slot].name.GetChars();
+}
 
 unsigned int PeerCount() { return Live().peerCount; }
 

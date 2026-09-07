@@ -3865,6 +3865,78 @@ versioned final-command recording, or an explicit documented demo limitation.
 peers see the same locked presentation; names, counts, and errors display safely
 at minimum and maximum bounds.
 
+### B9 record — who is in this game, and which of them are people
+
+**Identity had to come from the roster, because `player_t` has none.** The
+scoreboard printed the character class -- "Marine, Marine, Marine" -- and that
+was a reasonable answer while a match was two humans who knew who they were. It
+is no answer at all when three of the four are machines. Every presentation
+path now asks `Session::NameOf`, and bots are numbered among the bots rather
+than among the slots: the first bot is "Bot 1" whether it landed in slot 2 or
+slot 5, because a reader treats that number as an identity and it should not
+also be an index.
+
+**Kill messages did not exist.** Frags went up and nothing said why, so a
+player who died learned only that they had. They now name the killer and the
+weapon --- "Bot 2's M16 fragged you" --- and the weapon names are written down
+rather than taken from the class: `C7M343` tells a player nothing, and the
+DECORATE display name belongs to the *pickup*, so the rocket launcher would
+have announced itself as a crate.
+
+Naming the weapon came out of a playtest, and it earned its place immediately:
+Corridor 7's guns average a hundred and twenty-eight points inside two tiles
+against a hundred of health, so a player who is one-shotted across a room
+reasonably suspects the bots of cheating. They are not --- `A_C7GunAttack` is
+the same code the player fires --- and the message is what makes that legible.
+
+**The console commands section 18.5 asks for cannot exist.** `bot_list`,
+`bot_debug`, `bot_fill` and `bot_remove` are specified as console commands and
+this engine has no console: every `CCMD` in the tree sits inside an `#if 0`,
+because ECWolf inherited ZDoom's macro and not ZDoom's command layer. They were
+written as CCMDs first and would never have linked.
+
+So the two that report became command-line diagnostics, where a headless run
+and a bug report can both reach them, and the two that change the roster became
+the lobby's Bots row --- which is the better home anyway, since 18.5 requires
+roster changes to happen at match boundaries and the lobby *is* the boundary.
+
+**A scoreboard sized for four players was handed eleven.** It drew the first
+seven and stopped, and the missing four looked like players who had not joined.
+The play view ends where the status bar begins and the font is fifteen lines
+tall, so one column holds seven rows and no amount of tightening changes that
+--- a guessed floor of nine was tried and printed the rows through each other,
+which is how you learn to measure the font instead of estimating it.
+
+Past that point the table splits into two columns, and the marker shrinks with
+it: "[BOT]" is six characters of a proportional font and a split column has
+about ten to spare, so a full roster printed "Bot 10 [BOT" -- a truncation that
+reads as a different player. An asterisk costs one, and a legend under the
+table says what it means, which a cut-off bracket never did.
+
+**Two features landed in one file at once.** The uniform colours and the lobby
+rows were written against the same `wl_menu.cpp` in parallel, and the collision
+surfaced as three failing assertions in a gate about hosting: the setup screen
+grew a Uniform row between Character and Server address, and a gate that
+reached Role by pressing Up twice from the opening position landed on Character
+instead. It changed the character to an Eitak warrior, tried to join a game it
+meant to host, and reported failures about a waiting screen.
+
+`menu_walk_to_bottom` exists because two menus grew a row. Counting steps down
+from the top is the same mistake facing the other way, and it now walks too.
+The rule generalises past menus: a position expressed relative to something
+that can move is a measurement of one afternoon.
+
+**Exit.** The menu and the command line build the same validated roster, an
+over-large request names all four numbers -- humans, bots, total, maximum --
+and the board is legible at both ends of its range. The supported total is
+eleven, which is `MAXPLAYERS` and what the session, command layer and
+scoreboard are built and tested for; the bot system adds no cap of its own.
+
+**Deferred:** versioned final-command recording. Section 18.5 offers it or an
+explicit documented limitation, and this is the limitation: there is no demo
+format for a match with bots in it, and a recording that replayed the commands
+without the roster would produce a different game.
+
 ### B10 — Hardening, soak, documentation, release
 
 **Work:** protocol fuzz and sanitizers at maximum roster; per-change and

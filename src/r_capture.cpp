@@ -44,6 +44,7 @@
 #include "wl_net.h"
 #include "thingdef/thingdef.h"
 #include "a_inventory.h"
+#include "textures/textures.h"
 #ifdef ECWOLF_RENDERER_OPENGL
 #include "render/opengl/r_glworld.h"
 #include "render/opengl/r_glxbrz.h"
@@ -60,6 +61,8 @@ namespace
 	DWORD    g_seed           = 0;
 
 	FString  g_checksumPath;
+	TArray<FString> g_spriteBanks;
+	TArray<FString> g_spriteBankPaths;
 	TArray<FString> g_tapes;
 	int g_forgeSlot = -1;
 	FString  g_commandTracePath;
@@ -268,6 +271,9 @@ namespace
 	// that nothing was perceived which should not have been.
 	FString  g_perceptionPath;
 	int      g_visorAll       = -1;      // --capture-visor-all: every player's visor mode
+	int      g_hurtSlot       = -1;
+	long     g_hurtFrom       = 0;
+	long     g_hurtEvery      = 0;
 	int      g_killSlot       = -1;
 	long     g_killTic        = -1;
 	bool     g_killDone       = false;
@@ -446,6 +452,54 @@ namespace
 		fclose(file);
 		Printf("Capture: wrote xBRZ %dx screenshot '%s' (%dx%d).\n",
 			g_xbrzFactor, outPath.GetChars(), w, h);
+	}
+
+	// Export the actual resolved engine textures for sprite-workflow validation.
+	// Pixel indices are column-major; zero is the engine's transparent index.
+	// This deliberately exports native indices before lighting/visor processing.
+	void WriteSpriteBanks()
+	{
+		for(unsigned int b = 0; b < g_spriteBanks.Size(); ++b)
+		{
+			FILE *file = fopen(g_spriteBankPaths[b].GetChars(), "wb");
+			if(!file)
+				I_FatalError("Cannot export sprite bank to %s", g_spriteBankPaths[b].GetChars());
+			fprintf(file, "{\"palette\":[");
+			for(int i = 0; i < 256; ++i)
+				fprintf(file, "%s[%u,%u,%u]", i ? "," : "",
+					GPalette.BaseColors[i].r, GPalette.BaseColors[i].g, GPalette.BaseColors[i].b);
+			fprintf(file, "],\"remap\":[");
+			for(int i = 0; i < 256; ++i)
+				fprintf(file, "%s%u", i ? "," : "", GPalette.Remap[i]);
+			fprintf(file, "],\"sprites\":{");
+			int count = 0;
+			for(char frame = 'A'; frame <= 'Z'; ++frame)
+				for(int rot = 0; rot <= 8; ++rot)
+				{
+					FString name;
+					name.Format("%s%c%d", g_spriteBanks[b].GetChars(), frame, rot);
+					FTextureID id = TexMan.CheckForTexture(name, FTexture::TEX_Sprite);
+					if(!id.isValid()) continue;
+					FTexture *tex = TexMan[id];
+					const BYTE *pixels = tex->GetPixels();
+					fprintf(file, "%s\"%s\":{\"width\":%u,\"height\":%u,"
+						"\"left\":%d,\"top\":%d,\"pixels\":\"", count++ ? "," : "",
+						name.GetChars(), tex->GetWidth(), tex->GetHeight(),
+						tex->LeftOffset, tex->TopOffset);
+					for(int i = 0; i < tex->GetWidth() * tex->GetHeight(); ++i)
+						fprintf(file, "%02x", pixels[i]);
+					fprintf(file, "\"}");
+				}
+			fprintf(file, "}}\n");
+			const bool failed = ferror(file) != 0;
+			const int closed = fclose(file);
+			if(failed || closed || count == 0)
+				I_FatalError("Sprite bank export failed: %s", g_spriteBanks[b].GetChars());
+			Printf("Capture: exported %d textures from %s to %s.\n", count,
+				g_spriteBanks[b].GetChars(), g_spriteBankPaths[b].GetChars());
+		}
+		g_spriteBanks.Clear();
+		g_spriteBankPaths.Clear();
 	}
 
 	void WriteScreenshot(const char *path)
@@ -648,6 +702,16 @@ void ParseArgs(int argc, char **argv)
 			g_haveSeed = true;
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-sprite-bank") == 0 && i + 2 < argc)
+		{
+			FString bank = argv[++i];
+			bank.ToUpper();
+			if(bank.Len() != 4 || strspn(bank.GetChars(), "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") != 4)
+				I_FatalError("--capture-sprite-bank needs a four-character sprite bank and output path");
+			g_spriteBanks.Push(bank);
+			g_spriteBankPaths.Push(argv[++i]);
+			g_armed = true;
+		}
 		else if(strcmp(arg, "--capture-checksum") == 0 && i + 1 < argc)
 		{
 			g_checksumPath = argv[++i];
@@ -780,6 +844,12 @@ void ParseArgs(int argc, char **argv)
 			Bot::SetOverlay(level);
 			g_botOverlayMap = true;
 			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-hurt-slot") == 0 && i + 3 < argc)
+		{
+			g_hurtSlot = atoi(argv[++i]);
+			g_hurtFrom = atol(argv[++i]);
+			g_hurtEvery = atol(argv[++i]);
 		}
 		else if(strcmp(arg, "--capture-kill-slot") == 0 && i + 2 < argc)
 		{
@@ -1680,6 +1750,42 @@ void PreTic()
 		}
 	}
 
+	// --capture-hurt-slot SLOT FROM EVERY: take a slot down to a sliver,
+	// repeatedly, from an attacker it cannot see.
+	//
+	// For testing what a bot does when it is badly hurt. Waiting for a match
+	// to produce that state is waiting on luck twice over: Corridor 7's guns
+	// average a hundred and twenty-eight points at close range against a
+	// hundred of health, so a bot is usually killed rather than wounded, and
+	// it has to be holding a target at the same moment for breaking off to
+	// mean anything. Three seeds of hoping produced one retreat and then
+	// none, which is a gate measuring the weather.
+	//
+	// Through TakeDamage with no attacker, so the bot learns it is hurt and
+	// not who did it -- the same cue a real shot in the back gives.
+	if(g_hurtSlot >= 0 && g_hurtSlot < MAXPLAYERS &&
+		(long)gamestate.TimeCount >= g_hurtFrom &&
+		players[g_hurtSlot].mo != NULL && players[g_hurtSlot].health > 0 &&
+		g_hurtEvery > 0 &&
+		((long)gamestate.TimeCount - g_hurtFrom) % g_hurtEvery == 0)
+	{
+		// Only while it is actually fighting somebody.
+		//
+		// Wounding it whenever the clock came round produced a bot that was
+		// permanently below its retreat threshold -- and a bot below that
+		// threshold takes the retreat branch, which is the branch that does
+		// not pick targets. So it never had one to break off from, and the
+		// test for breaking off could never fire. The state being tested is
+		// "hurt *while* fighting", so that is the state to create.
+		const Bot::State *bot = Bot::StateFor((Session::PlayerSlot)g_hurtSlot);
+		if(bot != NULL && bot->target < MAXPLAYERS)
+		{
+			const int points = players[g_hurtSlot].health - 12;
+			if(points > 0)
+				players[g_hurtSlot].TakeDamage(points, NULL);
+		}
+	}
+
 	if(g_killSlot >= 0 && g_killSlot < MAXPLAYERS && !g_killDone &&
 		(long)gamestate.TimeCount >= g_killTic && players[g_killSlot].mo != NULL &&
 		players[g_killSlot].health > 0)
@@ -2000,6 +2106,7 @@ void PostFrame()
 	if(!g_armed)
 		return;
 
+	WriteSpriteBanks();
 	++g_frameCount;
 
 	// The editor's Snapshot: first frame drawn at or after the chosen tic.

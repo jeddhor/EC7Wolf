@@ -132,6 +132,7 @@ bot_items
 bot_combat
 bot_mines
 bot_skill
+bot_presentation
 multiplayer_rules
 multiplayer_classes
 multiplayer_presentation

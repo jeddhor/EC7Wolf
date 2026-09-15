@@ -90,6 +90,9 @@ static MultipleChoiceMenuItem *mpClassItem = NULL;
 static MultipleChoiceMenuItem *mpUniformItem = NULL;
 static MultipleChoiceMenuItem *mpBotsItem = NULL;
 static MultipleChoiceMenuItem *mpBotSkillItem = NULL;
+static MultipleChoiceMenuItem *mpBotClassItem = NULL;
+static MultipleChoiceMenuItem *mpBotUniformItem = NULL;
+static MenuItem *mpBotsSwitchItem = NULL;
 static LabelMenuItem *mpTotalItem = NULL;
 
 // The supported total, and the one number the lobby validates against.
@@ -129,6 +132,7 @@ static const char* const mpArenaMaps[] = {
 
 MENU_LISTENER(MultiplayerRoleChanged);
 MENU_LISTENER(MultiplayerCountChanged);
+MENU_LISTENER(MultiplayerBotClassChanged);
 MENU_LISTENER(StartMultiplayer);
 
 Menu mainMenu(MENU_X, MENU_Y, MENU_W, 24);
@@ -143,6 +147,13 @@ Menu playerClasses(NM_X, NM_Y, NM_W, 24);
 Menu episodes(NE_X+4, NE_Y-1, NE_W+7, 83);
 Menu skills(NM_X, NM_Y, NM_W, 24);
 Menu multiplayerMenu(NM_X, NM_Y, NM_W + 60, 100);
+// Everything about the bots, one screen down from the setup screen.
+//
+// The four bot rows lived on the setup screen itself, and with them the host's
+// list grew past one screenful: seventeen rows, scrolling, with Start below
+// the fold. They are one decision -- who am I playing against -- so they get
+// a screen of their own, and the setup screen shows the answer on one row.
+Menu multiplayerBotsMenu(NM_X, NM_Y, NM_W + 60, 100);
 Menu controls(15, 70, 310, 24);
 Menu resolutionMenu(90, 25, 150, 24);
 Menu advancedGraphics(20, 60, 285, 56);
@@ -452,6 +463,17 @@ static int MultiplayerHumans()
 	return 2 + (mpPlayersItem ? mpPlayersItem->getCurrentOption() : 0);
 }
 
+// The bots' character, from the two bot rows, handed to the bot layer.
+static void ApplyBotClassChoice()
+{
+	const int character = mpBotClassItem ? mpBotClassItem->getCurrentOption() : 0;
+	const int uniform = mpBotUniformItem ? mpBotUniformItem->getCurrentOption() : 0;
+	const char *cls = character == 0 ?
+		mpMarineColors[uniform < 0 || uniform > 7 ? 0 : uniform] :
+		mpClassNames[1];
+	Bot::SetRequestedClass(cls);
+}
+
 static int MultiplayerBots()
 {
 	return mpBotsItem ? mpBotsItem->getCurrentOption() : 0;
@@ -504,11 +526,28 @@ MENU_LISTENER(MultiplayerRoleChanged)
 	// Bots belong to whoever owns the roster, which is never the joining peer.
 	// Section 18.1: a joining client sees the bot configuration read-only and
 	// never instantiates a brain.
+	// A joining player cannot open the bots screen: the host owns the roster.
+	if(mpBotsSwitchItem)
+		mpBotsSwitchItem->setEnabled(!joining);
 	if(mpBotsItem)
 		mpBotsItem->setEnabled(!joining);
 	if(mpBotSkillItem)
 		mpBotSkillItem->setEnabled(!joining);
+	if(mpBotClassItem)
+		mpBotClassItem->setEnabled(!joining);
+	if(mpBotUniformItem)
+		mpBotUniformItem->setEnabled(!joining &&
+			(mpBotClassItem == NULL || mpBotClassItem->getCurrentOption() == 0));
 	MultiplayerCountChanged(0);
+	return true;
+}
+
+// The bots' uniform only means something on a marine, as with the player's own.
+MENU_LISTENER(MultiplayerBotClassChanged)
+{
+	const bool joining = (mpRoleItem != NULL && mpRoleItem->getCurrentOption() == 1);
+	if(mpBotUniformItem)
+		mpBotUniformItem->setEnabled(!joining && which == 0);
 	return true;
 }
 
@@ -681,6 +720,7 @@ MENU_LISTENER(StartMultiplayer)
 		const int pick = mpBotSkillItem ? mpBotSkillItem->getCurrentOption() : 1;
 		Bot::SetRequestedSkill(skirmishSkills[pick < 0 || pick > 3 ? 1 : pick],
 			false);
+		ApplyBotClassChoice();
 	}
 	else
 	{
@@ -708,6 +748,7 @@ MENU_LISTENER(StartMultiplayer)
 			mpBotSkillItem->getCurrentOption() : 1;
 		Bot::SetRequestedSkill(skillNames[chosen < 0 || chosen > 3 ? 1 : chosen],
 			false);
+		ApplyBotClassChoice();
 	}
 
 	// A skirmish opens no socket and waits for nobody.
@@ -1034,6 +1075,46 @@ static MenuItem *AddLabeled(Menu &menu, MenuItem *item, const char *label)
 
 // The multiplayer setup screen: who you are, where they are, and how forgiving
 // the connection needs to be.
+// The setup screen's Bots row: opens the bots screen, and says what is on it.
+//
+// A plain switcher shows ">", which would make the host open the screen to find
+// out whether there are any bots at all. The summary is read from the rows
+// themselves every time it is drawn, so it cannot go stale.
+class BotsSummaryMenuItem : public MenuSwitcherMenuItem
+{
+public:
+	BotsSummaryMenuItem(const char *text, Menu &menu)
+		: MenuSwitcherMenuItem(text, menu) {}
+
+	FString getValueText() const
+	{
+		const int bots = mpBotsItem ? mpBotsItem->getCurrentOption() : 0;
+		if(bots == 0)
+			return "None";
+
+		static const char* skillNames[] = { "Recruit", "Marine", "Veteran", "Elite" };
+		static const char* uniformNames[] = { "Blue", "Red", "Green", "Gold",
+			"Purple", "Magenta", "Brown", "Gray" };
+		const int skill = mpBotSkillItem ? mpBotSkillItem->getCurrentOption() : 1;
+		const int character = mpBotClassItem ? mpBotClassItem->getCurrentOption() : 0;
+		const int uniform = mpBotUniformItem ? mpBotUniformItem->getCurrentOption() : 0;
+
+		// What you would see, then how good they are: "2 Red marines
+		// (Veteran)". The first version said "2 Marine, Red", and Marine is
+		// both a skill level and a character, so it read as two marines in red
+		// whatever the skill actually was.
+		FString text;
+		if(character == 0)
+			text.Format("%d %s marine%s", bots,
+				uniformNames[uniform < 0 || uniform > 7 ? 0 : uniform],
+				bots == 1 ? "" : "s");
+		else
+			text.Format("%d Eitak warrior%s", bots, bots == 1 ? "" : "s");
+		text.AppendFormat(" (%s)", skillNames[skill < 0 || skill > 3 ? 1 : skill]);
+		return text;
+	}
+};
+
 static void BuildMultiplayerMenu()
 {
 	// Section 18.2: a skirmish is the same session with one peer, not a
@@ -1105,15 +1186,34 @@ static void BuildMultiplayerMenu()
 	// express except the largest few -- and those are what Start validates.
 	static const char* botcounts[] = { "0", "1", "2", "3", "4", "5", "6",
 	                                   "7", "8" };
+	multiplayerBotsMenu.setHeadText("Bots", true);
+
 	mpBotsItem = new MultipleChoiceMenuItem(MultiplayerCountChanged, botcounts,
 		9, 0);
-	AddLabeled(multiplayerMenu, mpBotsItem, "Bots");
+	AddLabeled(multiplayerBotsMenu, mpBotsItem, "Number of bots");
 
 	// Section 17.2's ladder, in order, named as the table names them. Marine
 	// is the default because it is the middle of it.
 	static const char* skills[] = { "Recruit", "Marine", "Veteran", "Elite" };
 	mpBotSkillItem = new MultipleChoiceMenuItem(NULL, skills, 4, 1);
-	AddLabeled(multiplayerMenu, mpBotSkillItem, "Bot skill");
+	AddLabeled(multiplayerBotsMenu, mpBotSkillItem, "Skill");
+
+	// What the bots look like, one choice for all of them. Bots used to copy
+	// the host's character, so a red marine's opponents were three more red
+	// marines. In team play the character is also the side, so this is how
+	// to put the bots against you rather than beside you.
+	static const char* botCharacters[] = { "Marine", "Eitak warrior" };
+	mpBotClassItem = new MultipleChoiceMenuItem(MultiplayerBotClassChanged,
+		botCharacters, 2, 0);
+	AddLabeled(multiplayerBotsMenu, mpBotClassItem, "Character");
+
+	static const char* botUniforms[] = { "Blue", "Red", "Green", "Gold",
+		"Purple", "Magenta", "Brown", "Gray" };
+	mpBotUniformItem = new MultipleChoiceMenuItem(NULL, botUniforms, 8, 1);
+	AddLabeled(multiplayerBotsMenu, mpBotUniformItem, "Uniform");
+
+	mpBotsSwitchItem = new BotsSummaryMenuItem("Bots", multiplayerBotsMenu);
+	multiplayerMenu.addItem(mpBotsSwitchItem);
 
 	// A label rather than a choice: it is derived, and nothing here is for
 	// the player to set.

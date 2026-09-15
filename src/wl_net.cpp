@@ -78,7 +78,7 @@
 // version mismatch and is far harder to diagnose than a refusal. Bump this
 // whenever a packet's layout or meaning changes -- including the day the
 // canonical command frame grows a slot number.
-#define NET_PROTOCOL_VERSION 4
+#define NET_PROTOCOL_VERSION 5
 // Present in the first datagram of every connection. A request used to be one
 // lone zero byte, so any stray packet arriving on the port was a new player.
 static const BYTE NetMagic[3] = { 'E', '7', 'N' };
@@ -214,6 +214,16 @@ struct NewGamePacket
 	// another trailing array to get wrong.
 	BYTE slotCount;
 	BYTE slotKind[MAXPLAYERS];
+	// And what each of those slots is playing as, as an index into the player
+	// class list. A peer's own class already travels in playerClass above;
+	// this is for the slots with no peer behind them.
+	//
+	// Without it a client filled every bot slot with the host's character,
+	// because that was the only class it had been told -- so once bots could
+	// wear a uniform of their own, the host would see red marines while
+	// everybody else saw copies of the host. Two machines disagreeing about a
+	// character is two machines disagreeing about who is on which team.
+	BYTE slotClass[MAXPLAYERS];
 
 	void ByteSwap()
 	{
@@ -1712,8 +1722,12 @@ byte PlayerTeam(unsigned int player)
 
 int TeamFrags(byte team)
 {
+	// Every slot, not InitVars.numPlayers. That counts the peers who
+	// connected, which are the humans: a bot's frags never reached its team's
+	// total, so a team with bots on it could not win a team game by the
+	// numbers the scoreboard showed.
 	int total = 0;
-	for(unsigned int i = 0;i < InitVars.numPlayers;++i)
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 	{
 		if(PlayerTeam(i) == team)
 			total += players[i].frags;
@@ -1772,8 +1786,13 @@ void NewGame(int &difficulty, FString &map, FName (&playerClassNames)[MAXPLAYERS
 	// but everyone fills it in so that the packet has one meaning.
 	myNewGameRequest.slotCount = (BYTE)Session::ActiveSlotCount();
 	memset(myNewGameRequest.slotKind, 0, sizeof(myNewGameRequest.slotKind));
+	memset(myNewGameRequest.slotClass, 0, sizeof(myNewGameRequest.slotClass));
 	for(unsigned int slot = 0;slot < Session::ActiveSlotCount();++slot)
+	{
 		myNewGameRequest.slotKind[slot] = (BYTE)Session::KindOf(slot);
+		myNewGameRequest.slotClass[slot] =
+			(BYTE)PlayerClass::FromName(playerClassNames[slot]).index;
+	}
 
 	ExchangePacket(newGamePackets);
 	// Peers, not slots: this loop walks the per-peer setup records the
@@ -1803,13 +1822,18 @@ void NewGame(int &difficulty, FString &map, FName (&playerClassNames)[MAXPLAYERS
 		if(count > InitVars.numPlayers)
 		{
 			Session::AdoptAuthoritySlots(count, authority.slotKind);
-			// An authority-owned slot plays the same character as the player
-			// it is standing in for, so it is an ordinary opponent rather than
-			// something with different rules.
+			// An authority-owned slot plays whatever the authority says it
+			// plays. The host's own character is the fallback only for a
+			// class index this machine does not know, which means the two are
+			// running different game packages -- a mismatch the rest of the
+			// handshake is not built to notice, and better drawn as the host's
+			// marine than as nothing.
 			for(unsigned int slot = InitVars.numPlayers;slot < count;++slot)
 			{
-				if(playerClassNames[slot] == NAME_None)
-					playerClassNames[slot] = playerClassNames[Arbiter];
+				PlayerClass sent = { authority.slotClass[slot] };
+				FName name = sent;
+				playerClassNames[slot] = name != NAME_None ?
+					name : playerClassNames[Arbiter];
 			}
 		}
 	}

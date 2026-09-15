@@ -11,6 +11,7 @@
 #include "c7_flic.h"
 #include "wl_def.h"
 #include "g_session.h"
+#include "g_bot.h"
 #include "c7_editorlink.h"
 #include "wl_menu.h"
 #include "render/r_dynamicwalls.h"
@@ -359,6 +360,7 @@ void SetupGameLevel (void)
 	BotNav::Invalidate();
 	Perception::Reset();
 	Items::Annotate();
+	Bot::BeginMap();
 }
 
 
@@ -758,12 +760,17 @@ restartgame:
 	DrawPlayScreen ();
 	died = false;
 	dointermission = true;
+	// Set when a deathmatch round ends, read once the next one has spawned.
+	static unsigned int roundsBegun = 0;
+	static bool roundPending = false;
+
 	do
 	{
 		startgame = false;
 		if (!loadedgame)
 		{
 			SetupGameLevel ();
+
 			if(playstate != ex_warped)
 			{
 				FinishTravel ();
@@ -857,6 +864,34 @@ restartgame:
 		StatusBar->DrawStatusBar();
 
 		dointermission = true;
+
+		// Say what every slot starts the new round with.
+		//
+		// A round that did not reset looked exactly like one that did until
+		// somebody played it: the tally came up, the arena reloaded, and
+		// only the next frag -- which ended the round again at once -- gave
+		// it away. So the fact is printed where a test can read it, at the
+		// one moment it is unambiguous: after the new pawns exist and
+		// before anybody has had a tic to pick anything up -- and after
+		// travel, because a report taken before FinishTravel reads the
+		// temporary pawn a travelling player is about to be swapped out of,
+		// and says it holds nothing. It did exactly that when the old,
+		// travelling behaviour was put back to check this would catch it.
+		if(roundPending)
+		{
+			roundPending = false;
+			++roundsBegun;
+			FString line;
+			line.Format("Round %u begins:", roundsBegun + 1);
+			for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
+			{
+				const player_t &p = players[i];
+				line.AppendFormat(" %u:frags=%d,health=%d,weapons=%u", i,
+					p.frags, p.mo ? p.mo->health : 0,
+					Items::WeaponsHeld((Session::PlayerSlot)i));
+			}
+			Printf("%s\n", line.GetChars());
+		}
 
 		PlayLoop ();
 
@@ -990,19 +1025,47 @@ restartgame:
 					next = teleportMap.MapName;
 				}
 
-				for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
-					StripInventory(players[i].mo);
+				// A deathmatch round is not a floor.
+				//
+				// Finishing a floor carries every player on to the next one --
+				// StartTravel keeps the pawns, and with them the weapons, the
+				// ammunition and the frag counts -- which is right for a
+				// campaign and wrong for a round. Played against a frag limit
+				// it meant the next round began with everybody still holding
+				// what they had and still one kill short of the limit, so the
+				// first frag of the new round ended it again.
+				//
+				// So nobody travels. Every slot re-enters, which is the same
+				// path a warp and a new game take: a fresh pawn at a spawn
+				// point, Reborn() with zeroed frags and score, starting
+				// inventory and full health -- and a player who was dead when
+				// the limit was reached comes back rather than inheriting a
+				// corpse.
+				const bool newRound = Net::Deathmatch();
+				if(!newRound)
+				{
+					for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
+						StripInventory(players[i].mo);
+				}
 
 				if(dointermission)
 					VL_FadeOut(0, 255, RPART(levelInfo->ExitFadeColor), GPART(levelInfo->ExitFadeColor), BPART(levelInfo->ExitFadeColor), levelInfo->ExitFadeDuration);
 
-				StartTravel ();
+				if(!newRound)
+					StartTravel ();
 				// A deathmatch has no floor to tally -- no kill, secret or
 				// treasure ratio means anything in an arena -- but it does
 				// have standings, and the round that just ended is the only
 				// moment everybody is looking at the same screen.
-				if(Net::Deathmatch())
+				if(newRound)
+				{
+					// The standings first, while the frags they show still
+					// exist -- they are zeroed when the new pawns spawn.
 					C7Scoreboard_ShowTally();
+					for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
+						players[i].state = player_t::PST_ENTER;
+					roundPending = true;
+				}
 				else if(dointermission)
 					LevelCompleted ();              // do the intermission
 

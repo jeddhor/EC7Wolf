@@ -100,6 +100,9 @@ menu_wait() {
 menu_press_moved() {  # menu_press_moved KEY
 	_key=$1
 	_from=$(menu_cursor_row)
+	# The frame before the press, for the case below where the cursor cannot
+	# be seen to move because the list moved instead.
+	cp "$work/menu-look.png" "$work/menu-before-press.png" 2>/dev/null || true
 	_attempt=0
 	# What the screen actually said, kept for the failure message. "The menu
 	# stopped responding" is not a diagnosis, and a gate that only says that
@@ -114,6 +117,21 @@ menu_press_moved() {  # menu_press_moved KEY
 		while [ "$_step" -lt "$MENU_SETTLE_STEPS" ]; do
 			_now=$(menu_cursor_row)
 			if [ "$_now" -ge 0 ] && [ "$_now" -ne "$_from" ]; then
+				return 0
+			fi
+			# A list longer than the screen scrolls, and once the selection
+			# reaches the last visible row the highlight stays exactly where it
+			# is while the rows move up underneath it. Judged by the
+			# highlight's pixel row alone, every one of those presses looked
+			# lost: the host's setup screen grew past one screenful when bots
+			# got character and uniform rows, and two gates reported "Down went
+			# nowhere" eighty times with the cursor really walking down the
+			# list. So the same row with a different screen also counts --
+			# the same test menu_press_until already relies on for a value
+			# changing in place.
+			if [ "$_now" -ge 0 ] && [ "$_now" -eq "$_from" ] &&
+				[ -f "$work/menu-before-press.png" ] &&
+				menu_screen_changed "$work/menu-before-press.png" 40; then
 				return 0
 			fi
 			MENU_PRESS_SEEN="$MENU_PRESS_SEEN $_now"
@@ -151,6 +169,41 @@ menu_press_moved() {  # menu_press_moved KEY
 #: multiplayer_cancel failed about one run in twenty with "0 pixels changed":
 #: the key was simply dropped, and every later assertion was then about a
 #: screen nobody had left.
+# Press Return to go to another screen, and make sure it went.
+#
+# The multiplayer gates used `menu_press Return 2.5` for this -- send the key,
+# sleep, hope -- which is the pattern the rest of this file exists to replace.
+# One full-suite run lost the very first Return, on New Mission: the gate then
+# walked the *main* menu to its bottom row, which is Exit Building, pressed
+# Return on that, and spent every remaining key inside an "Exit building?"
+# prompt, finally reporting that the menu "never wrapped round to Role".
+#
+# Retried, but only after waiting a long time for the first press to show,
+# because a second Return that lands after a slow first one is not harmless:
+# on the rank ladder it selects Captain and starts a single-player game. The
+# evidence is a screen that changed a great deal -- a new page, not a
+# highlight moving -- and then a menu recognized on it.
+menu_enter() {  # menu_enter WHAT
+	_what=$1
+	_try=0
+	while [ "$_try" -lt 3 ]; do
+		DISPLAY=$display import -window root "$work/menu-enter-before.png" 2>/dev/null || true
+		menu_send_key Return
+		_step=0
+		while [ "$_step" -lt 25 ]; do
+			if menu_screen_changed "$work/menu-enter-before.png" 2000; then
+				menu_wait >/dev/null 2>&1 || true
+				return 0
+			fi
+			sleep 0.15
+			_step=$((_step + 1))
+		done
+		_try=$((_try + 1))
+	done
+	printf '  FAIL Return never opened %s\n' "$_what"
+	return 1
+}
+
 menu_press_until() {  # menu_press_until KEY CONDITION...
 	_key=$1
 	shift

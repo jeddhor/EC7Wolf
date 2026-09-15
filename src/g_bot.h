@@ -456,6 +456,9 @@ struct State
 // --- lifecycle -----------------------------------------------------------------
 
 void Reset();
+// A new map is starting: forget the old one's routes, mines, contacts and
+// plans, keep each bot's identity, traits and random streams.
+void BeginMap();
 // Attach a brain to a slot the authority owns. The seed is match data every
 // machine has, so two runs of the same match produce the same bot.
 void Configure(Session::PlayerSlot slot, uint32_t profile, uint64_t matchSeed);
@@ -484,6 +487,15 @@ SkillLevel RequestedSkill();
 // Returns false for a name that is not a level, or for one that exists but is
 // not shippable without the developer opt-in.
 bool SetRequestedSkill(const char *name, bool allowDeveloper);
+
+// The character every bot plays as, or NAME_None to copy the host's.
+//
+// One choice for all of them rather than one each: it is a lobby setting, and
+// in team play the character *is* the side, so this also decides which team
+// the bots are on. The name is checked when the roster is built, not when it
+// is set, because the command line is read before any class exists.
+FName RequestedClass();
+void  SetRequestedClass(const char *className);
 
 // Section 18.5's reporting commands, as command-line diagnostics: this engine
 // has no console to type them into. ReportRoster prints once the roster

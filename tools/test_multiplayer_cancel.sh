@@ -145,9 +145,9 @@ sleep 10
 # entirely if the game is still loading when the first one goes out, and then
 # nothing that follows can work.
 menu_open Escape || { printf '  FAIL the game never reached a menu\n'; exit 1; }
-menu_press Return 2.5          # New Mission -> the rank ladder
+menu_enter "the rank ladder" || exit 1   # New Mission
 menu_walk_to_bottom "Multiplayer" || exit 1
-menu_press Return 2.5          # -> the multiplayer setup screen
+menu_enter "the setup screen" || exit 1
 
 check "the setup screen is a menu" test "$(menu_cursor_row)" -ge 0
 

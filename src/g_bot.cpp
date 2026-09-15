@@ -104,6 +104,9 @@ bool     g_haveSeedOverride = false;
 // Marine by default: the middle of the ladder, so an unconfigured match is an
 // ordinary one rather than the easiest or the hardest.
 SkillLevel g_skill = SkillLevel::Marine;
+// Empty copies the host's character, which is what bots did before there was
+// a choice. Held as text until the class list exists; see RequestedClass.
+FString  g_botClassName;
 uint32_t g_brainDigest = 0;
 FILE    *g_trace = NULL;
 
@@ -127,6 +130,78 @@ void Reset()
 		g_active[i] = false;
 	}
 	g_brainDigest = 0;
+}
+
+void BeginMap()
+{
+	// Everything a bot knew about the last map, gone; who it is, kept.
+	//
+	// The navigation graph is rebuilt for every map, and a route is a list of
+	// node ids into the graph it was planned on -- so a route carried across
+	// is a list of indices into something that no longer exists. So is every
+	// remembered mine cell, blocked doorway, last-seen position and target.
+	// A new deathmatch round on the same arena made this concrete: the bots
+	// would have kept avoiding mines that were no longer there.
+	//
+	// Kept: slot, profile, seed, traits and the random streams. The streams
+	// carry on rather than restarting, so round two is not a replay of round
+	// one, and the brain digest stays a record of the whole match.
+	for(unsigned int i = 0;i < MAXPLAYERS;++i)
+	{
+		if(!g_active[i])
+			continue;
+		const State kept = g_state[i];
+		State &bot = g_state[i];
+		bot = State();
+		bot.slot = kept.slot;
+		bot.profile = kept.profile;
+		bot.seed = kept.seed;
+		bot.traits = kept.traits;
+		for(unsigned int st = 0;st < (unsigned int)Stream::NUM;++st)
+			bot.rng[st] = kept.rng[st];
+		// And the match's statistics, which describe the whole match rather
+		// than one round of it. Clearing them with the tactical state made the
+		// end-of-run summary report only the last round -- a match of five
+		// rounds printed "shots=0" for bots that had fired all afternoon.
+		// Mirrors the fields Tally() adds up; a counter added there must be
+		// added here too, or it will silently report the last round only.
+		bot.routesPlanned = kept.routesPlanned;
+		bot.routesCompleted = kept.routesCompleted;
+		bot.routesAbandoned = kept.routesAbandoned;
+		bot.stepsRefused = kept.stepsRefused;
+		bot.goalSearchFailures = kept.goalSearchFailures;
+		bot.doorsOpened = kept.doorsOpened;
+		bot.doorsGivenUp = kept.doorsGivenUp;
+		bot.doorwayFightsLeft = kept.doorwayFightsLeft;
+		bot.unstuckEntered = kept.unstuckEntered;
+		bot.respawnPresses = kept.respawnPresses;
+		bot.respawnsCompleted = kept.respawnsCompleted;
+		bot.teleports = kept.teleports;
+		bot.frozenTics = kept.frozenTics;
+		bot.cellsBlocked = kept.cellsBlocked;
+		bot.contactsGained = kept.contactsGained;
+		bot.contactsLost = kept.contactsLost;
+		bot.contactsNoticed = kept.contactsNoticed;
+		bot.searchesStarted = kept.searchesStarted;
+		bot.contactsForgotten = kept.contactsForgotten;
+		bot.itemGoals = kept.itemGoals;
+		bot.targetsAcquired = kept.targetsAcquired;
+		bot.shotsFired = kept.shotsFired;
+		bot.hitscanShots = kept.hitscanShots;
+		bot.weaponSwitches = kept.weaponSwitches;
+		bot.visorPulses = kept.visorPulses;
+		bot.retreats = kept.retreats;
+		bot.healUses = kept.healUses;
+		bot.minesPlaced = kept.minesPlaced;
+		bot.ticsOnTarget = kept.ticsOnTarget;
+		bot.reactionTicsTotal = kept.reactionTicsTotal;
+		bot.alertsRaised = kept.alertsRaised;
+		bot.nextSense = i;
+		bot.nextThink = i;
+		bot.nextPath = i;
+		bot.behavior = Behavior::SpawnOrient;
+		bot.behaviorSince = 0;
+	}
 }
 
 Personality PersonalityFor(uint32_t profile)
@@ -2469,9 +2544,20 @@ void SetupSlots(FName (&playerClassNames)[MAXPLAYERS])
 		Configure((Session::PlayerSlot)slot,
 			MakeProfile(RequestedSkill(), (unsigned int)slot), matchSeed);
 		Command::SetProducer((Session::PlayerSlot)slot, MakeProducer(slot));
-		// The same character as the player it stands in for, so it is an
-		// ordinary opponent rather than something with different rules.
-		playerClassNames[slot] = playerClassNames[0];
+		// The chosen bot character, or the host's when nobody chose.
+		//
+		// Copying the host's was the only behaviour, so every bot wore
+		// whatever skin the person who set the match up had picked -- a red
+		// marine's opponents were three more red marines. A class is a
+		// cosmetic and a side, never a set of rules: every player class
+		// shares the same health, speed and weapons, which is what keeps this
+		// a choice of appearance rather than of difficulty.
+		//
+		// Set before Net::NewGame, which sends every slot's class to every
+		// machine, so clients draw the same bots the host does without any
+		// further message.
+		const FName chosen = RequestedClass();
+		playerClassNames[slot] = chosen != NAME_None ? chosen : playerClassNames[0];
 		Printf("Bot in slot %u.\n", slot);
 	}
 
@@ -2626,6 +2712,33 @@ int Requested() { return g_requested; }
 void SetRequested(int count) { g_requested = count; }
 
 SkillLevel RequestedSkill() { return g_skill; }
+
+FName RequestedClass()
+{
+	// Resolved here, when the roster is built, rather than when it was asked
+	// for. The command line is read before DECORATE has defined a single
+	// class, so checking a name against the class list at that moment
+	// rejects every name there is -- which is what the first version did,
+	// silently, and bots kept wearing the host's uniform whatever was typed.
+	if(g_botClassName.IsEmpty())
+		return NAME_None;
+	const ClassDef *cls = ClassDef::FindClass(g_botClassName);
+	if(cls == NULL || !cls->IsDescendantOf(NATIVE_CLASS(PlayerPawn)))
+	{
+		// A player class or nothing: anything else would be spawned as a
+		// pawn and fail somewhere far less helpful than here.
+		Printf("'%s' is not a player class; bots will copy the host's.\n",
+			g_botClassName.GetChars());
+		g_botClassName = "";
+		return NAME_None;
+	}
+	return cls->GetName();
+}
+
+void SetRequestedClass(const char *className)
+{
+	g_botClassName = className != NULL ? className : "";
+}
 
 bool SetRequestedSkill(const char *name, bool allowDeveloper)
 {

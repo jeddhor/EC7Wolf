@@ -1330,6 +1330,13 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 		// Section 17.5: the developer profile is opt-in and named, not hidden
 		// behind a magic value of an ordinary option.
 		else IFARG("--bot-developer") {}
+		else IFARG("--bot-class")
+		{
+			// A player class name, e.g. C7PlayerRed or C7AlienPlayer. Checked
+			// when the roster is built: no class exists yet at this point.
+			if(++i < argc)
+				Bot::SetRequestedClass(argv[i]);
+		}
 		else IFARG("--bot-list")
 		{
 			Bot::SetListRoster(true);

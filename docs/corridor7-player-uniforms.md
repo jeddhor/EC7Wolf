@@ -4,8 +4,13 @@ Multiplayer setup now has a **Uniform** row for the Marine: Blue (the original),
 Red, Green, Gold, Purple, Magenta, Brown, and Gray. The Eitak warrior retains
 its original artwork; its Uniform row is disabled. All marine colors have
 identical weapons, health, speed, sounds, animation timing, and team membership.
-Each human can choose a different color. Bots inherit their host's character
-and uniform, as they already inherited the host's character before this change.
+Each human can choose a different color. The host also chooses one character
+and uniform for all bots on the **Bots** screen, opened from the Bots row of
+the setup screen, which also holds the number of bots and their skill; the row
+itself summarizes the choice, e.g. "2 Red marines (Veteran)". On the command
+line use `--bot-class C7PlayerRed`; without it, bots copy the host. Every machine receives each bot slot's class in the new-game packet, so
+clients draw the same bots the host does. In team play the character is also the
+side, so the Bot character row decides which team the bots are on.
 
 These are palette swaps of the installed marine, following the preservation,
 palette, anchor, manifest, and validation rules in the

@@ -141,14 +141,14 @@ DISPLAY=$display xdotool mousemove --window "$window" 20 20 2>/dev/null || true
 # Escape until a menu is actually on screen; a fixed pair is lost entirely if
 # the game is still loading when the first one goes out.
 menu_open Escape || { printf '  FAIL the game never reached a menu\n'; exit 1; }
-menu_press Return 2.5          # New Mission -> the rank ladder
+menu_enter "the rank ladder" || exit 1   # New Mission
 
 DISPLAY=$display import -window root "$work/ranks.png" 2>/dev/null || true
 
 # Captain is preselected and the section label is skipped, so Multiplayer is
 # three steps down -- but get there by looking, not by counting.
 menu_walk_to_bottom "Multiplayer" || exit 1
-menu_press Return 2.5
+menu_enter "the setup screen" || exit 1
 
 DISPLAY=$display import -window root "$work/setup.png" 2>/dev/null || true
 

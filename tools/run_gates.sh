@@ -134,6 +134,7 @@ bot_mines
 bot_skill
 bot_presentation
 multiplayer_rules
+multiplayer_rounds
 multiplayer_classes
 multiplayer_presentation
 multiplayer_hostile

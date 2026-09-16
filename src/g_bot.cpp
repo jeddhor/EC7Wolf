@@ -196,6 +196,8 @@ void BeginMap()
 		bot.ticsOnTarget = kept.ticsOnTarget;
 		bot.reactionTicsTotal = kept.reactionTicsTotal;
 		bot.alertsRaised = kept.alertsRaised;
+		bot.reversals = kept.reversals;
+		bot.dodges = kept.dodges;
 		bot.nextSense = i;
 		bot.nextThink = i;
 		bot.nextPath = i;
@@ -277,13 +279,15 @@ void Configure(Session::PlayerSlot slot, uint32_t profile, uint64_t matchSeed)
 	FString detail;
 	detail.Format("profile=%u skill=%s persona=%u seed=%llu react=%u vision=%u "
 		"yaw=%u accel=%d aim=%u track=%u think=%u memory=%u strafe=%u "
-		"respawn=%u", profile, SkillName(SkillOf(profile)), PersonaOf(profile),
+		"respawn=%u predict=%u foot=%u", profile,
+		SkillName(SkillOf(profile)), PersonaOf(profile),
 		(unsigned long long)matchSeed, bot.traits.reaction,
 		bot.traits.visionInterval, (unsigned)bot.traits.maxYaw,
 		bot.traits.yawAccel, (unsigned)(bot.traits.aimEnvelope/ANGLE_1),
 		bot.traits.trackingDelay, bot.traits.thinkInterval,
 		bot.traits.searchMemory, bot.traits.strafeCommit,
-		bot.traits.respawnDelay);
+		bot.traits.respawnDelay, bot.traits.prediction,
+		bot.traits.footwork);
 	TraceEvent(slot, "configure", detail.GetChars());
 }
 
@@ -968,6 +972,11 @@ public:
 			for(unsigned int d = 0;d < heard->damage.Size();++d)
 			{
 				const Perception::DamageCue &cue = heard->damage[d];
+				// Felt regardless of who threw it. The alert below is only
+				// interested in hits from nobody visible, but the footwork
+				// wants every one of them: being shot at is a reason to move
+				// whether or not you can see the shooter.
+				bot->hurtAt = sequence;
 				if(cue.attackerSlot >= 0)
 					continue;		// seen, and handled by the ordinary path
 				if(sequence < bot->alertRestUntil)
@@ -1207,6 +1216,26 @@ public:
 		// the body faces, so a bot that turned while walking would wander off
 		// wherever the noise came from. A person hearing a shot behind them
 		// stops and turns, and so does this.
+		// Ears are for when the eyes have nothing.
+		//
+		// This branch returns, so for as long as it runs the bot never
+		// reaches ChooseTarget -- it cannot pick a target however plainly
+		// somebody is standing in front of it. In a firefight that is
+		// constant: every weapon report raises an alert, a look costs sixty
+		// tics, and the bot spends them rooted to the spot turning towards a
+		// noise made by the person it is already looking at. Two playtests
+		// described the result the same way, a bot that "ran from me and
+		// never shot at me" and one that "waits way too long before trying to
+		// attack". Neither was a reaction time; it was this.
+		//
+		// So a visible enemy ends the look outright. Nothing is lost: the
+		// noise was telling the bot where to point its eyes, and its eyes are
+		// already on somebody.
+		if(sequence < bot->alertUntil && AnyoneVisible(*bot))
+		{
+			bot->alertUntil = sequence;
+			bot->alertHasBearing = false;
+		}
 		if(bot->target == MAXPLAYERS && sequence < bot->alertUntil &&
 			bot->behavior != Behavior::DeadWaitingToRespawn)
 		{
@@ -1780,6 +1809,23 @@ private:
 		bot.nextVisorPulse = sequence + VISOR_PULSE_INTERVAL;
 	}
 
+	// Is anybody in this bot's last look?
+	//
+	// Asked of the snapshot rather than the live sensor, for the same reason
+	// everything else in the fight is: acting on a sighting the reaction
+	// delay has not released yet is the same as having no reaction time.
+	static bool AnyoneVisible(const State &bot)
+	{
+		for(unsigned int who = 0;who < MAXPLAYERS;++who)
+		{
+			if(who == bot.slot)
+				continue;
+			if(bot.knownNow[who] && bot.view.seen[who])
+				return true;
+		}
+		return false;
+	}
+
 	// Pick somebody to shoot at, and keep picking them.
 	//
 	// Candidates are contacts the brain has been told about, never sightings
@@ -1909,7 +1955,25 @@ private:
 		//
 		// A plasma bolt takes over half a second to cross eight tiles. Firing
 		// at where somebody was is a miss at any range worth using it.
-		if(Combat::IsProjectileSlot(bot.holdingSlot) && haveTarget)
+		// Where the target will be when the shot arrives -- for every weapon,
+		// not only the ones whose shots take time to get there.
+		//
+		// A bullet arrives instantly, so this used to skip hitscan entirely
+		// and aim at the sample it had. But that sample is always old: the
+		// vision refresh and the tracking delay are both skill traits, and at
+		// Elite they still add up to several tics. Against somebody strafing
+		// at close range that is a systematic miss -- the bot fires exactly
+		// where they were, every time, and no amount of accuracy helps. It is
+		// the main reason a playtest found even Elite bots harmless while
+		// their reaction, targeting and trigger were all measured as fast.
+		//
+		// The lead is the staleness it is compensating for, plus the flight
+		// time when there is one, scaled by how well this bot tracks.
+		// Prediction caps at 100 -- undoing the delay, never seeing the
+		// future -- and comes from the samples the bot has actually taken, so
+		// a target it cannot see stops contributing rather than being
+		// extrapolated from its real position.
+		if(haveTarget)
 		{
 			fixed oldX = 0, oldY = 0;
 			uint32_t oldWhen = 0;
@@ -1927,10 +1991,12 @@ private:
 			const uint32_t span = oldWhen != 0 ? sequence - oldWhen : 0;
 			if(span >= 4)
 			{
-				const int flight =
-					Combat::FlightTics(bot.holdingSlot, seenRange);
-				atX += (fixed)(((int64_t)(seenAtX - oldX)*flight)/(int64_t)span);
-				atY += (fixed)(((int64_t)(seenAtY - oldY)*flight)/(int64_t)span);
+				const int flight = Combat::IsProjectileSlot(bot.holdingSlot) ?
+					Combat::FlightTics(bot.holdingSlot, seenRange) : 0;
+				const int lead = (int)(((flight + (int)bestAge)*
+					(int)bot.traits.prediction)/100);
+				atX += (fixed)(((int64_t)(seenAtX - oldX)*lead)/(int64_t)span);
+				atY += (fixed)(((int64_t)(seenAtY - oldY)*lead)/(int64_t)span);
 			}
 		}
 
@@ -2059,6 +2125,78 @@ private:
 			bot.strafeSide = bot.rng[(unsigned int)Stream::Movement].Below(2)
 				? BASEMOVE : -BASEMOVE;
 		}
+
+		// A strafe that is not moving the body is not a strafe.
+		//
+		// The side is chosen at random and then held for the whole commitment
+		// interval, so a bot that picks the side with a wall on it leans on
+		// that wall for up to two seconds. It is asking to move the entire
+		// time -- the trace says it is strafing -- and it has not gone
+		// anywhere. That is most of what a playtest saw as bots standing
+		// around: not a decision to stand still, a decision to walk into
+		// something.
+		//
+		// So measure it. If the body has covered less than an eighth of a
+		// tile since the last check, the way out is the other way, and the
+		// interval restarts from here rather than expiring on a side that has
+		// already been proven useless.
+		//
+		// FOOTWORK_CHECK is deliberately shorter than the shortest commitment
+		// in section 17.2's table, or a bot could never discover the block
+		// before the interval ended on its own.
+		if(sequence >= bot.footCheckAt)
+		{
+			if(bot.footCheckAt != 0)
+			{
+				const fixed dx = pawn->x - bot.footX;
+				const fixed dy = pawn->y - bot.footY;
+				const fixed moved = (dx < 0 ? -dx : dx) + (dy < 0 ? -dy : dy);
+				if(moved < (fixed)(TILEGLOBAL/8) && bot.strafeSide != 0)
+				{
+					bot.strafeSide = -bot.strafeSide;
+					bot.strafeUntil = sequence + bot.traits.strafeCommit;
+					++bot.reversals;
+				}
+			}
+			bot.footX = pawn->x;
+			bot.footY = pawn->y;
+			bot.footCheckAt = sequence + FOOTWORK_CHECK;
+		}
+
+		// Somebody is shooting at you. Move.
+		//
+		// Section 17.6: the skill ladder has to show up in the fight and not
+		// only in the aim. A Recruit carries on doing whatever it was doing;
+		// an Elite breaks the other way the moment it is hit, which is the
+		// juke that makes it hard to lead. The dodge is a change of direction
+		// and nothing else -- it never touches speed, and the command it
+		// produces is one a player's keyboard can produce.
+		//
+		// Rate-limited so a burst of pellets is one dodge rather than eight:
+		// reversing every tic averages to standing still, which is the
+		// problem this is here to fix rather than a second copy of it.
+		//
+		// Both levers are the footwork trait, because one of them alone does
+		// not make a ladder. The probability decides whether any given hit is
+		// answered; the rest decides how often it may be. Measured with only
+		// the probability, a Recruit dodged as often as an Elite -- the rest
+		// was the binding constraint for everybody, so the trait was being
+		// read and was making no difference. A poor fighter now waits the
+		// better part of three seconds between reactions and a good one a
+		// fifth of that.
+		const uint32_t rest = (DODGE_REST*100)/
+			(bot.traits.footwork > 10 ? bot.traits.footwork : 10);
+		if(bot.hurtAt != 0 && sequence - bot.hurtAt < DODGE_WINDOW &&
+			sequence - bot.lastDodgeAt >= rest &&
+			bot.rng[(unsigned int)Stream::Movement].Below(100) <
+				bot.traits.footwork)
+		{
+			bot.strafeSide = -bot.strafeSide;
+			bot.strafeUntil = sequence + bot.traits.strafeCommit;
+			bot.lastDodgeAt = sequence;
+			++bot.dodges;
+		}
+
 		out.strafe = bot.strafeSide;
 
 		// With a mine of its own within the blast radius, move away from it
@@ -2136,7 +2274,6 @@ private:
 		++bot.shotsFired;
 		bot.nextTrigger = sequence + TRIGGER_INTERVAL +
 			bot.rng[(unsigned int)Stream::Timing].Below(TRIGGER_JITTER);
-
 		// Was that shot actually on target?
 		//
 		// Counted for hitscan only. The ten-degree figure is FindTarget's
@@ -2460,6 +2597,14 @@ private:
 		// How often the weapon choice is revisited, and how long a strafe
 		// direction is held.
 		STRAFE_JITTER = 28,
+		// How often combat footwork checks that it is actually going
+		// somewhere, how long a hit counts as being shot at, and the rest
+		// between dodges. The check has to be shorter than the shortest
+		// commitment interval in section 17.2 or a blocked strafe expires on
+		// its own before anything notices it.
+		FOOTWORK_CHECK = 8,
+		DODGE_WINDOW = 10,
+		DODGE_REST = 18,
 		// Charge to keep in reserve, and how often the zoom may be pressed.
 		// The cycle wraps 1-2-3, so a mistimed second press lands on the wrong
 		// mode and the next one has to go all the way round again.
@@ -2632,6 +2777,8 @@ Totals Tally()
 		total.weaponSwitches += g_state[i].weaponSwitches;
 		total.visorPulses += g_state[i].visorPulses;
 		total.retreats += g_state[i].retreats;
+		total.reversals += g_state[i].reversals;
+		total.dodges += g_state[i].dodges;
 		total.healUses += g_state[i].healUses;
 		total.minesPlaced += g_state[i].minesPlaced;
 		total.ticsOnTarget += g_state[i].ticsOnTarget;

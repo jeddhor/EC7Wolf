@@ -84,6 +84,16 @@ static Band Seconds(unsigned int lowTenths, unsigned int highTenths)
 	return b;
 }
 
+// A plain percentage. Spelled out because two traits are proportions rather
+// than durations, and writing them as Tics() reads as a delay they are not.
+static Band Percent(unsigned int low, unsigned int high)
+{
+	Band b;
+	b.low = low;
+	b.high = high;
+	return b;
+}
+
 static Band Yaw(int lowDegPerSec, int highDegPerSec)
 {
 	Band b;
@@ -123,9 +133,11 @@ SkillBands BandsFor(SkillLevel level)
 			s.trackingDelay = Tics(10, 22);
 			s.thinkInterval = IntervalFromHz(4, 6);
 			s.searchMemory  = Seconds(20, 50);
-			s.strafeCommit  = Seconds(5, 15);
+			s.strafeCommit  = Seconds(10, 25);
 			s.respawnDelay  = Tics(18, 55);
 			s.routeWobble   = Envelope(40, 80);
+			s.prediction    = Percent(20, 45);
+			s.footwork      = Percent(10, 30);
 			break;
 		case SkillLevel::Marine:
 			s.reaction      = Tics(17, 32);
@@ -136,9 +148,11 @@ SkillBands BandsFor(SkillLevel level)
 			s.trackingDelay = Tics(7, 16);
 			s.thinkInterval = IntervalFromHz(5, 7);
 			s.searchMemory  = Seconds(40, 80);
-			s.strafeCommit  = Seconds(6, 16);
+			s.strafeCommit  = Seconds(8, 20);
 			s.respawnDelay  = Tics(12, 40);
 			s.routeWobble   = Envelope(25, 55);
+			s.prediction    = Percent(45, 70);
+			s.footwork      = Percent(35, 55);
 			break;
 		case SkillLevel::Veteran:
 			s.reaction      = Tics(12, 24);
@@ -149,9 +163,11 @@ SkillBands BandsFor(SkillLevel level)
 			s.trackingDelay = Tics(4, 11);
 			s.thinkInterval = IntervalFromHz(6, 9);
 			s.searchMemory  = Seconds(60, 120);
-			s.strafeCommit  = Seconds(7, 18);
+			s.strafeCommit  = Seconds(6, 14);
 			s.respawnDelay  = Tics(8, 28);
 			s.routeWobble   = Envelope(12, 35);
+			s.prediction    = Percent(65, 85);
+			s.footwork      = Percent(60, 80);
 			break;
 		case SkillLevel::Elite:
 			s.reaction      = Tics(10, 19);
@@ -162,9 +178,11 @@ SkillBands BandsFor(SkillLevel level)
 			s.trackingDelay = Tics(3, 8);
 			s.thinkInterval = IntervalFromHz(7, 10);
 			s.searchMemory  = Seconds(80, 150);
-			s.strafeCommit  = Seconds(7, 20);
+			s.strafeCommit  = Seconds(4, 10);
 			s.respawnDelay  = Tics(6, 22);
 			s.routeWobble   = Envelope(6, 20);
+			s.prediction    = Percent(85, 100);
+			s.footwork      = Percent(85, 100);
 			break;
 		default:	// Perfect, and it is still bound by the command range
 			s.reaction      = Tics(1, 1);
@@ -175,9 +193,11 @@ SkillBands BandsFor(SkillLevel level)
 			s.trackingDelay = Tics(0, 0);
 			s.thinkInterval = Tics(1, 1);
 			s.searchMemory  = Seconds(150, 150);
-			s.strafeCommit  = Seconds(5, 5);
+			s.strafeCommit  = Seconds(3, 6);
 			s.respawnDelay  = Tics(1, 1);
 			s.routeWobble   = Envelope(0, 0);
+			s.prediction    = Percent(100, 100);
+			s.footwork      = Percent(100, 100);
 			break;
 	}
 	return s;
@@ -205,10 +225,12 @@ Traits Draw(SkillLevel level, Random &rng)
 	t.thinkInterval  = Pick(bands.thinkInterval, rng);
 	t.searchMemory   = Pick(bands.searchMemory, rng);
 	t.strafeCommit   = Pick(bands.strafeCommit, rng);
+	t.footwork       = Pick(bands.footwork, rng);
 	t.respawnDelay   = Pick(bands.respawnDelay, rng);
 	// Appended, so that adding it did not renumber every draw before it and
 	// silently give every existing bot a different set of reflexes.
 	t.routeWobble    = (angle_t)Pick(bands.routeWobble, rng);
+	t.prediction     = Pick(bands.prediction, rng);
 	Clamp(level, t);
 	return t;
 }
@@ -313,8 +335,10 @@ int SkillSelfTest()
 			ends[0].thinkInterval = b.thinkInterval.low;
 			ends[0].searchMemory = b.searchMemory.low;
 			ends[0].strafeCommit = b.strafeCommit.low;
+			ends[0].footwork = b.footwork.low;
 			ends[0].respawnDelay = b.respawnDelay.low;
 			ends[0].routeWobble = (angle_t)b.routeWobble.low;
+			ends[0].prediction = b.prediction.low;
 			ends[1].reaction = b.reaction.high;
 			ends[1].visionInterval = b.visionInterval.high;
 			ends[1].maxYaw = (int)b.maxYaw.high;
@@ -324,8 +348,10 @@ int SkillSelfTest()
 			ends[1].thinkInterval = b.thinkInterval.high;
 			ends[1].searchMemory = b.searchMemory.high;
 			ends[1].strafeCommit = b.strafeCommit.high;
+			ends[1].footwork = b.footwork.high;
 			ends[1].respawnDelay = b.respawnDelay.high;
 			ends[1].routeWobble = (angle_t)b.routeWobble.high;
+			ends[1].prediction = b.prediction.high;
 			for(unsigned int e = 0;e < 2;++e)
 				unclamped = unclamped && Clamp(level, ends[e]);
 
@@ -375,6 +401,20 @@ int SkillSelfTest()
 			m.searchMemory.high < v.searchMemory.high &&
 			v.searchMemory.high < e.searchMemory.high,
 			"and remembers longer");
+		Check(r.prediction.high < m.prediction.high &&
+			m.prediction.high < v.prediction.high &&
+			v.prediction.high < e.prediction.high,
+			"and tracks a moving target better");
+		Check(r.footwork.high < m.footwork.high &&
+			m.footwork.high < v.footwork.high &&
+			v.footwork.high < e.footwork.high,
+			"and fights on its feet rather than drifting");
+		Check(r.strafeCommit.high > m.strafeCommit.high &&
+			m.strafeCommit.high > v.strafeCommit.high &&
+			v.strafeCommit.high > e.strafeCommit.high,
+			"and changes direction more often, not less");
+		Check(e.footwork.high <= 100 && e.prediction.high <= 100,
+			"and never aims further ahead than the samples support");
 		Check(r.routeWobble.high > m.routeWobble.high &&
 			m.routeWobble.high > v.routeWobble.high &&
 			v.routeWobble.high > e.routeWobble.high,

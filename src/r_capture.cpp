@@ -262,6 +262,12 @@ namespace
 	FString  g_giveClass;
 	bool     g_giveDone       = false;
 	bool     g_giveEveryone   = false;   // --capture-give-all: every slot, not just ours
+	int      g_holdButton     = bt_nobutton;
+	long     g_holdFrom       = 0;
+	long     g_holdTics       = 0;
+	unsigned long g_uiMenu    = 0;
+	unsigned long g_uiFloorMap = 0;
+	unsigned long g_uiAutomap = 0;
 	// --capture-kill-slot SLOT TIC: kill one slot's pawn at a tic, through the
 	// ordinary damage path. A bot has no way to die otherwise until B6 gives
 	// anything a reason to shoot it, and "dies, and respawns through input" is
@@ -278,6 +284,9 @@ namespace
 	int      g_hurtSlot       = -1;
 	long     g_hurtFrom       = 0;
 	long     g_hurtEvery      = 0;
+	int      g_grazeSlot      = -1;
+	long     g_grazeFrom      = 0;
+	long     g_grazeEvery     = 0;
 	int      g_killSlot       = -1;
 	long     g_killTic        = -1;
 	bool     g_killDone       = false;
@@ -606,6 +615,8 @@ namespace
 			g_actorFile = NULL;
 		}
 
+		Printf("Capture: ui menu=%lu floormap=%lu automap=%lu\n",
+			g_uiMenu, g_uiFloorMap, g_uiAutomap);
 		Printf("Capture: summary tics=%lu frames=%lu checksum=%08x\n",
 			(unsigned long)g_ticCount,
 			(unsigned long)g_frameCount,
@@ -633,7 +644,7 @@ namespace
 				"unstuck=%u respawnpresses=%u respawns=%u ports=%u frozen=%u blocked=%u "
 				"seen=%u lost=%u targets=%u shots=%u hitscan=%u oncone=%u guns=%u "
 				"visor=%u retreats=%u dispensers=%u mines=%u "
-				"doorwayfights=%u\n",
+				"doorwayfights=%u reversals=%u dodges=%u\n",
 				Bot::Count(), (unsigned int)Bot::BrainDigest(),
 				tally.routesPlanned, tally.routesCompleted,
 				tally.routesAbandoned, tally.stepsRefused,
@@ -645,7 +656,8 @@ namespace
 				tally.targetsAcquired, tally.shotsFired, tally.hitscanShots,
 				tally.ticsOnTarget,
 				tally.weaponSwitches, tally.visorPulses, tally.retreats,
-				tally.healUses, tally.minesPlaced, tally.doorwayFightsLeft);
+				tally.healUses, tally.minesPlaced, tally.doorwayFightsLeft,
+				tally.reversals, tally.dodges);
 		}
 		// What each bot ended up carrying. The outcome of B5's item goals, and
 		// the only visible one: weapon-stay means the pickup is still lying
@@ -855,11 +867,23 @@ void ParseArgs(int argc, char **argv)
 			g_mineY = atoi(argv[++i]);
 			g_mineTic = atol(argv[++i]);
 		}
+		else if(strcmp(arg, "--capture-hold-button") == 0 && i + 3 < argc)
+		{
+			g_holdButton = Command::ButtonByName(argv[++i]);
+			g_holdFrom = atol(argv[++i]);
+			g_holdTics = atol(argv[++i]);
+		}
 		else if(strcmp(arg, "--capture-hurt-slot") == 0 && i + 3 < argc)
 		{
 			g_hurtSlot = atoi(argv[++i]);
 			g_hurtFrom = atol(argv[++i]);
 			g_hurtEvery = atol(argv[++i]);
+		}
+		else if(strcmp(arg, "--capture-graze-slot") == 0 && i + 3 < argc)
+		{
+			g_grazeSlot = atoi(argv[++i]);
+			g_grazeFrom = atol(argv[++i]);
+			g_grazeEvery = atol(argv[++i]);
 		}
 		else if(strcmp(arg, "--capture-kill-slot") == 0 && i + 2 < argc)
 		{
@@ -1655,10 +1679,39 @@ void SetupScriptedSlots(FName (&playerClassNames)[MAXPLAYERS])
 	}
 }
 
+void NoteUiAction(UiAction what)
+{
+	if(what == UiAction::Menu)
+		++g_uiMenu;
+	else if(what == UiAction::FloorMap)
+		++g_uiFloorMap;
+	else
+		++g_uiAutomap;
+
+	// Said as it happens as well as counted at the end, because opening the
+	// menu stops the run: the control panel waits for a keypress that a
+	// headless capture will never send, so the summary this would otherwise
+	// appear in is never printed. Only while a button is being held on
+	// purpose -- this line exists to watch that instrument.
+	if(g_holdButton != bt_nobutton)
+		Printf("Capture: ui action %s at tic %lu\n",
+			what == UiAction::Menu ? "menu" :
+				(what == UiAction::FloorMap ? "floormap" : "automap"),
+			(unsigned long)gamestate.TimeCount);
+}
+
 void InjectControls(TicCmd_t &cmd)
 {
 	if(g_holdScoreboard)
 		cmd.buttonstate[bt_scoreboard] = true;
+
+	// --capture-hold-button NAME FROM TICS: hold one button down, the way a
+	// finger does. Held rather than tapped on purpose: a UI button that is
+	// re-read as a fresh press on every tic of a hold is the bug this exists
+	// to catch.
+	if(g_holdButton != bt_nobutton && (long)gamestate.TimeCount >= g_holdFrom &&
+		(long)gamestate.TimeCount < g_holdFrom + g_holdTics)
+		cmd.buttonstate[g_holdButton] = true;
 
 	if(InWindow(g_forwardWindows))
 	{
@@ -1826,6 +1879,41 @@ void PreTic()
 			if(points > 0)
 				players[g_hurtSlot].TakeDamage(points, NULL);
 		}
+	}
+
+	// --capture-graze-slot SLOT FROM EVERY: wound a slot lightly, over and
+	// over, while it is fighting somebody.
+	//
+	// The difference from --capture-hurt-slot is the size of the bite, and it
+	// is the whole point. That one takes the slot down to a sliver in order to
+	// test breaking off, which means it also trips the retreat threshold and
+	// drops the target. What the footwork wants is the opposite: a bot that is
+	// being shot at and is still in the fight, which is the ordinary state of
+	// a firefight and the one a dodge exists for.
+	//
+	// Waiting for a match to produce it is waiting on luck. Corridor 7's guns
+	// average a hundred and twenty-eight points at close range against a
+	// hundred of health, so a bot that is hit is usually killed outright --
+	// eight bot-versus-bot matches produced exactly one non-fatal hit on a bot
+	// that was holding a target. A human with a machine gun produces them
+	// constantly, which is why a playtest sees behaviour these matches cannot.
+	//
+	// Test-only, like every other option in this file, and it works through
+	// TakeDamage with no attacker so the bot learns it is hurt and not who did
+	// it.
+	if(g_grazeSlot >= 0 && g_grazeSlot < MAXPLAYERS &&
+		(long)gamestate.TimeCount >= g_grazeFrom &&
+		players[g_grazeSlot].mo != NULL && players[g_grazeSlot].health > 0 &&
+		g_grazeEvery > 0 &&
+		((long)gamestate.TimeCount - g_grazeFrom) % g_grazeEvery == 0)
+	{
+		const Bot::State *bot = Bot::StateFor((Session::PlayerSlot)g_grazeSlot);
+		// Only while it is fighting, and never below the point where it would
+		// rather be somewhere else: a graze that causes a retreat is testing
+		// the retreat, not the footwork.
+		if(bot != NULL && bot->target < MAXPLAYERS &&
+			players[g_grazeSlot].health > 60)
+			players[g_grazeSlot].TakeDamage(6, NULL);
 	}
 
 	if(g_killSlot >= 0 && g_killSlot < MAXPLAYERS && !g_killDone &&

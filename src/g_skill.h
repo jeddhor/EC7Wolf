@@ -79,8 +79,19 @@ struct SkillBands
 	Band thinkInterval;		// tics between tactical reconsiderations
 	Band searchMemory;		// tics a lost contact is still worth chasing
 	Band strafeCommit;		// tics a strafe direction is held
+	Band footwork;			// percent: how deliberately it moves in a fight
 	Band respawnDelay;		// tics of hesitation before pressing use
 	Band routeWobble;		// angle_t of steering error while following a route
+	// How much of a target's staleness the bot compensates for, as a percent.
+	//
+	// Every shot is aimed at a position some tics old -- vision refresh plus
+	// tracking delay -- and a target moving across the view is not there any
+	// more. A person tracks: they swing through and lead a little. At 0 the
+	// bot fires exactly where somebody was, which against anyone strafing is
+	// a miss it can never learn from; at 100 it aims where the samples say
+	// they are now. Never beyond that, so this closes a gap rather than
+	// granting foresight.
+	Band prediction;
 };
 
 // Acceleration is a fraction of a command unit per tic at every shipped level
@@ -104,8 +115,10 @@ struct Traits
 	unsigned int thinkInterval = 0;
 	unsigned int searchMemory = 0;
 	unsigned int strafeCommit = 0;
+	unsigned int footwork = 0;
 	unsigned int respawnDelay = 0;
 	angle_t      routeWobble = 0;
+	unsigned int prediction = 0;
 };
 
 // Draw one bot's traits from its level's bands, using its own stream so that

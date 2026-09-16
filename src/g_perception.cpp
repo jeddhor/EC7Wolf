@@ -50,6 +50,18 @@ unsigned int g_pendingCount = 0;
 RawSound     g_current[MAX_SOUNDS];
 unsigned int g_currentCount = 0;
 
+// Damage felt during the tic just finished, waiting to be handed to the brains
+// on the next one.
+//
+// Double-buffered for exactly the reason the sounds above are. A cue is
+// produced in the middle of a tic, when the shot lands; BeginFrame runs at the
+// top of the *next* tic and rebuilds every observation from scratch. Writing
+// the cue straight into the observation therefore filed it in a record that
+// was wiped before any bot looked at it, so this list was written on every hit
+// and read on none -- the "hit from nowhere" alert had never once fired, and
+// nor had anything else that wanted to know it had been shot.
+TArray<DamageCue> g_pendingDamage[MAXPLAYERS];
+
 // What each bot has learned about laser barriers, kept between tics. This is
 // memory rather than perception: it survives the visor being switched off,
 // which is the point of learning something.
@@ -287,7 +299,7 @@ void NoteDamage(const AActor *victim, int points, int healthAfter,
 			}
 		}
 
-		g_observation[i].damage.Push(cue);
+		g_pendingDamage[i].Push(cue);
 		if(g_trace != NULL)
 			fprintf(g_trace, "damage %lu %u points %d left %d from %d\n",
 				(unsigned long)gamestate.TimeCount, i, points, healthAfter,
@@ -322,6 +334,7 @@ void Reset()
 		g_observation[i].sounds.Clear();
 		g_observation[i].hazards.Clear();
 		g_observation[i].damage.Clear();
+		g_pendingDamage[i].Clear();
 		g_hazards[i].Clear();
 	}
 	g_observers = 0;
@@ -375,6 +388,12 @@ void BeginFrame(uint32_t sequence)
 		obs.sounds.Clear();
 		obs.hazards.Clear();
 		obs.damage.Clear();
+		// Whatever landed on this slot during the tic just finished. Handed
+		// over before the Active check below, so the list is emptied for
+		// everybody and a slot that stops being a bot does not keep a hit it
+		// took while it was one.
+		obs.damage = g_pendingDamage[slot];
+		g_pendingDamage[slot].Clear();
 		obs.sequence = sequence;
 
 		if(!Bot::Active(slot))

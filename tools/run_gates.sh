@@ -103,6 +103,8 @@ corridor7_pages
 corridor7_topmessage
 corridor7_upscale
 corridor7_controls
+ui_buttons
+bot_footwork
 ec7edit_e9
 ec7edit_e10
 ec7edit_e11
@@ -169,7 +171,7 @@ release_gates='corridor7_release_startup'
 #
 # Split so the structural gates can run on every change and these can run
 # before a commit and on CI's slower schedule.
-slow_gates='bot_transporters bot_arenas bot_perception bot_roam multiplayer_starts bot_skill'
+slow_gates='bot_transporters bot_arenas bot_perception bot_roam multiplayer_starts bot_skill bot_footwork'
 
 is_slow() {
 	for slow in $slow_gates; do

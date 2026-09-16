@@ -87,6 +87,10 @@ public:
 // bug, and gets counted as one.
 bool IsGameplayButton(int button);
 
+// A button's number from the name a command tape or a capture option uses, or
+// bt_nobutton. The names are the same ones tapes accept.
+int ButtonByName(const char *name);
+
 // --- the canonical frame -----------------------------------------------------
 
 // Begin the frame for one sequence. Every active slot must be given exactly one

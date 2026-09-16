@@ -385,7 +385,7 @@ const ButtonName kButtonNames[] = {
 	{ "scoreboard",   bt_scoreboard },
 };
 
-int ButtonByName(const char *name)
+int ButtonByNameLocal(const char *name)
 {
 	for(unsigned int i = 0;i < sizeof(kButtonNames)/sizeof(kButtonNames[0]);++i)
 	{
@@ -477,7 +477,7 @@ bool ScriptedProducer::Load(const char *path, FString &error)
 		for(char *name = strtok(NULL, " \t\r\n"); name != NULL;
 			name = strtok(NULL, " \t\r\n"))
 		{
-			const int button = ButtonByName(name);
+			const int button = ButtonByNameLocal(name);
 			if(button == bt_nobutton)
 			{
 				error.Format("%s:%u: no button called '%s'",
@@ -525,6 +525,10 @@ Producer *MakeScriptedProducer(const char *tapePath, FString &error)
 }
 
 // --- local UI intent --------------------------------------------------------------
+
+// The same lookup, reachable from outside: the capture layer names buttons the
+// way a command tape does, so there is one spelling of "c7map" in the tree.
+int ButtonByName(const char *name) { return ButtonByNameLocal(name); }
 
 namespace { TicCmd_t g_localUi; bool g_haveLocalUi = false; }
 

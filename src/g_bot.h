@@ -384,6 +384,16 @@ struct State
 	// every tic.
 	uint32_t     strafeUntil = 0;
 	int          strafeSide = 0;
+	// Footwork, section 17.6. A bot that picks a side and holds it grinds
+	// into the nearest wall and stands there for the whole commitment, which
+	// looks exactly like standing still -- so a strafe that is not actually
+	// moving the body gets reversed, and being shot at is a reason to change
+	// direction now rather than when the interval runs out.
+	fixed        footX = 0, footY = 0;
+	uint32_t     footCheckAt = 0;
+	uint32_t     lastDodgeAt = 0;
+	unsigned int dodges = 0;
+	unsigned int reversals = 0;
 
 	// A short history of where the target was seen, so the aimer can use a
 	// sample no newer than its tracking delay. Section 16.3: an aimer reading
@@ -437,6 +447,9 @@ struct State
 	angle_t      alertBearing = 0;
 	bool         alertHasBearing = false;
 	uint32_t     alertRestUntil = 0;
+	// The last tic this bot felt damage, whoever it came from. Read by the
+	// footwork: somebody is shooting at you is the moment to move.
+	uint32_t     hurtAt = 0;
 	unsigned int alertsRaised = 0;
 
 	// Provenance, for the assertions in section 11.6 and for the trace.
@@ -574,6 +587,12 @@ struct Totals
 	unsigned int retreats = 0;
 	unsigned int healUses = 0;
 	unsigned int minesPlaced = 0;
+	// Footwork, section 17.6. A reversal is a strafe that was walking into
+	// something and turned round; a dodge is a change of direction because
+	// somebody was shooting. Both are how the skill ladder shows up in the
+	// fight rather than in the aim, so both are numbers a gate can read.
+	unsigned int reversals = 0;
+	unsigned int dodges = 0;
 };
 Totals Tally();
 

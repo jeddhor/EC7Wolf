@@ -705,7 +705,19 @@ void PollControls (bool absolutes)
 	cmd.controlpanx = 0;
 	cmd.controlpany = 0;
 	cmd.controlstrafe = 0;
-	memcpy (cmd.buttonheld, cmd.buttonstate, sizeof (cmd.buttonstate));
+	// Held is measured against what this keyboard and pad last *asked for*,
+	// not against what survived into control[].
+	//
+	// Command::Apply writes the finalized command back into control[], and
+	// finalization strips the buttons that are not gameplay -- the menu, the
+	// automap, the floor map, the scoreboard, pause. Deriving held from
+	// control[] therefore reported every one of those as "not held last
+	// frame", every frame: holding the floor map button re-toggled the map on
+	// every tic, which on a pad looks like the map flashing on and off, and a
+	// pad's Start button never reached the control panel at all because the
+	// bit had been removed before anything read it.
+	static BYTE lastAsked[NUMBUTTONS];
+	memcpy (cmd.buttonheld, lastAsked, sizeof (cmd.buttonheld));
 	memset (cmd.buttonstate, 0, sizeof (cmd.buttonstate));
 	if (automap)
 	{
@@ -770,6 +782,7 @@ void PollControls (bool absolutes)
 	// What this keyboard asked for, kept before finalization removes the parts
 	// that are nobody else's business. The automap, the scoreboard and pause
 	// are read from here; the simulation never sees them.
+	memcpy (lastAsked, cmd.buttonstate, sizeof (lastAsked));
 	Command::SetLocalUi(cmd);
 
 	if (demorecord)
@@ -831,10 +844,14 @@ void PollControls (bool absolutes)
 
 	// Check automap toggle before we set any buttons as held
 	if (ui.buttonstate[bt_c7map] && !ui.buttonheld[bt_c7map])
+	{
+		Capture::NoteUiAction(Capture::UiAction::FloorMap);
 		C7Map_Toggle();
+	}
 
 	if (ui.buttonstate[bt_automap] && !ui.buttonheld[bt_automap])
 	{
+		Capture::NoteUiAction(Capture::UiAction::Automap);
 		AM_Toggle();
 	}
 	if (automap)
@@ -992,13 +1009,18 @@ void CheckKeys (void)
 	// The key the automap is bound to must not also open the control panel.
 	// Wolf3D put help on F1; Corridor 7 leaves F1 unused (F2 saves, F3 loads),
 	// which is why the full-viewport automap sits there.
+	// bt_esc from the local sample, not from control[]: a pad's Start button
+	// sets it, and finalization removes it from control[] before this runs.
+	const bool escAsked = Command::LocalUi().buttonstate[bt_esc] &&
+		!Command::LocalUi().buttonheld[bt_esc];
 	if ((scan >= sc_F1 && scan <= sc_F9 && !IsAutomapKeyboardScan(scan)) ||
-		scan == sc_Escape || control[ConsolePlayer].buttonstate[bt_esc])
+		scan == sc_Escape || escAsked)
 	{
+		Capture::NoteUiAction(Capture::UiAction::Menu);
 		int lastoffs = StopMusic ();
 		SD_StopDigitized();
 
-		US_ControlPanel (control[ConsolePlayer].buttonstate[bt_esc] ? sc_Escape : scan);
+		US_ControlPanel (escAsked ? sc_Escape : scan);
 
 		IN_ClearKeysDown ();
 

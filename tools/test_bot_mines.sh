@@ -187,10 +187,22 @@ check "mines were actually laid" test "$placed_total" -ge 2
 # is the arrangement of one afternoon's wandering.
 #
 # So the mine is placed on a known tile, owned by the idle local player so that
-# every bot is a stranger to it, and the bots are sent to that tile. What is
+# every bot is a stranger to it, and a bot is sent to that tile. What is
 # being checked is that the engine wires a mine's trigger and blast to somebody
 # who is not its owner -- section 16.7's "opponent damage" -- and that is a
 # fact about the game rather than about the seed.
+#
+# One bot, and the local player killed before it can be seen. Both are here
+# because a forced goal is only forced while nothing more interesting turns up:
+# somebody to shoot at takes precedence over somewhere to go, which is the
+# right order and is why the bot has to be alone to be led anywhere. This run
+# used to have two bots and a live idle player, and it worked only because a
+# bot in earshot of a firefight froze for sixty tics at a time without ever
+# reaching the code that picks a target. Fixing that deafness left both bots
+# fighting each other halfway to the mine and the check reporting that mines
+# do not work -- the scenario had been relying on the bug. Measured: with two
+# bots and a live player the goal is abandoned at tic 417 and the mine is
+# never reached; alone, the bot walks onto it at tic 538.
 printf '  ..   opponents caught by mines while wandering: %s\n' "$caught_total"
 
 mkdir -p "$work/lure-saves"
@@ -199,8 +211,9 @@ mkdir -p "$work/lure-saves"
   timeout 200 "$build_dir/ec7wolf" --data CO7 --res 320 200 --nowait \
 	--vid-renderer software \
 	--config "$work/lure.cfg" --savedir "$work/lure-saves" \
-	--capture-rngseed 1 --bots 2 \
+	--capture-rngseed 1 --bots 1 \
 	--capture-mine-at 30 12 60 --capture-bot-goal 30 12 \
+	--capture-kill-slot 0 40 \
 	--capture-bots "$work/lure.bots" \
 	--capture-maxtics 1600 \
 	--tedlevel MAP60 --skill 2 --battle ) >"$work/lure.log" 2>&1 || true
@@ -208,7 +221,7 @@ mkdir -p "$work/lure-saves"
 placed=$(grep -c 'mine placed at 30,12' "$work/lure.log" || true)
 lured=$(awk '$3=="blast" && $4=="by=C7ProximityMine" && $5=="own=0"' \
 	"$work/lure.bots" | wc -l)
-printf '  ..   a mine left on a tile bots are sent to: placed %s, caught %s\n' \
+printf '  ..   a mine left on a tile a bot is sent to: placed %s, caught %s\n' \
 	"$placed" "$lured"
 check "the mine was actually placed" test "${placed:-0}" -ge 1
 check "a mine is a weapon and not just an expense" test "${lured:-0}" -ge 1

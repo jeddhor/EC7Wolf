@@ -89,6 +89,11 @@ namespace Capture
 	// before it is sent (see --capture-fire).
 	void InjectControls(TicCmd_t &cmd);
 
+// UI actions the local player asked for, counted so a test can tell one press
+// from a press repeated every tic. Nothing here affects the simulation.
+enum class UiAction { Menu, FloorMap, Automap };
+void NoteUiAction(UiAction what);
+
 	// Adds one authority-owned slot per --capture-tape and attaches its
 	// scripted producer. Called once the roster exists and before the player
 	// classes are resolved, because a slot that appears later never spawns.

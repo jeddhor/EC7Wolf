@@ -41,21 +41,23 @@ status=0
 say() { printf '  %-5s %s\n' "$1" "$2"; }
 
 # --- 1. the fixtures ------------------------------------------------------
-if (cd "$editor" && QT_QPA_PLATFORM=offscreen SDL_VIDEODRIVER=x11 python3 -m pytest \
-	tests/unit/test_validation.py tests/unit/test_reachability.py -q \
+if (cd "$editor" && QT_QPA_PLATFORM=offscreen SDL_VIDEODRIVER=x11 python3 -m unittest \
+	tests/unit/test_validation.py tests/unit/test_reachability.py \
 	>/tmp/ec7edit-e7-unit.log 2>&1); then
 	say "ok" "the validator and reachability fixtures pass"
 else
 	say "FAIL" "validator fixtures failed; see /tmp/ec7edit-e7-unit.log"
+	tail -15 /tmp/ec7edit-e7-unit.log | sed 's/^/        /'
 	status=1
 fi
 
-if (cd "$editor" && QT_QPA_PLATFORM=offscreen SDL_VIDEODRIVER=x11 python3 -m pytest \
-	tests/gui/test_editing.py -q -k "ProblemsPanel or ExportPreflight" \
+if (cd "$editor" && QT_QPA_PLATFORM=offscreen SDL_VIDEODRIVER=x11 python3 -m unittest \
+	tests/gui/test_editing.py -k ProblemsPanel -k ExportPreflight \
 	>/tmp/ec7edit-e7-gui.log 2>&1); then
 	say "ok" "the Problems panel filters, marks stale results and applies fixes"
 else
 	say "FAIL" "Problems panel tests failed; see /tmp/ec7edit-e7-gui.log"
+	tail -15 /tmp/ec7edit-e7-gui.log | sed 's/^/        /'
 	status=1
 fi
 

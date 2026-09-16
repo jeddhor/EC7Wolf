@@ -39,20 +39,22 @@ status=0
 say() { printf '  %-5s %s\n' "$1" "$2"; }
 
 # --- the unit and GUI halves ---------------------------------------------
-if (cd "$editor" && QT_QPA_PLATFORM=offscreen SDL_VIDEODRIVER=x11 python3 -m pytest \
+if (cd "$editor" && QT_QPA_PLATFORM=offscreen SDL_VIDEODRIVER=x11 python3 -m unittest \
 	tests/unit/test_project.py tests/unit/test_archive.py tests/unit/test_wad.py \
-	tests/unit/test_paths.py -q >/tmp/ec7edit-e8-unit.log 2>&1); then
+	tests/unit/test_paths.py >/tmp/ec7edit-e8-unit.log 2>&1); then
 	say "ok" "project, archive, WAD and path units pass"
 else
 	say "FAIL" "see /tmp/ec7edit-e8-unit.log"
+	tail -15 /tmp/ec7edit-e8-unit.log | sed 's/^/        /'
 	status=1
 fi
 
-if (cd "$editor" && QT_QPA_PLATFORM=offscreen SDL_VIDEODRIVER=x11 python3 -m pytest \
-	tests/gui/test_shell.py -q >/tmp/ec7edit-e8-gui.log 2>&1); then
+if (cd "$editor" && QT_QPA_PLATFORM=offscreen SDL_VIDEODRIVER=x11 python3 -m unittest \
+	tests/gui/test_shell.py >/tmp/ec7edit-e8-gui.log 2>&1); then
 	say "ok" "save, save-a-copy, external change, autosave and recovery"
 else
 	say "FAIL" "see /tmp/ec7edit-e8-gui.log"
+	tail -15 /tmp/ec7edit-e8-gui.log | sed 's/^/        /'
 	status=1
 fi
 

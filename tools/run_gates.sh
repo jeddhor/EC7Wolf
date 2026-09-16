@@ -140,6 +140,24 @@ matches() {
 	return 1
 }
 
+# A selection that names no gate is a mistake, not an empty run.
+#
+# Selections are substrings, so a typo or a stray argument selects nothing and
+# the suite used to go on to report only "nothing ran" -- true, and no help at
+# all. That is exactly how CI's data-free step spent twelve days running zero
+# gates: a folded YAML line handed this script " --editor-package" as a gate
+# name. Say which word matched nothing, before doing anything else.
+for want in $selected; do
+	found=0
+	for g in $data_free_gates $data_gates $release_gates; do
+		case "$g" in *"$want"*) found=1; break ;; esac
+	done
+	if [ "$found" -eq 0 ]; then
+		printf 'run_gates.sh: "%s" matches no gate name (see --list)\n' "$want" >&2
+		exit 2
+	fi
+done
+
 if [ "$list_only" -eq 1 ]; then
 	for g in $data_free_gates $data_gates $release_gates; do
 		matches "$g" && printf '%s\n' "$g"

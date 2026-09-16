@@ -84,8 +84,15 @@ jobs:
       - name: Data-free gates
         env:
           GATE_LOG_DIR: ${{ github.workspace }}/gate-logs
-        run: tools/run_gates.sh -b build -d /nonexistent \
-          --editor-package builds/ec7edit-release
+        # A literal block, like every other multi-line step here. Written as a
+        # plain scalar with a trailing backslash, YAML folded the two lines
+        # into one, so the shell saw "\ --editor-package" -- an escaped space
+        # -- and passed " --editor-package" through as a gate name to select.
+        # Nothing matched it, and this step ran no gates at all on every push
+        # from the commit that added it.
+        run: |
+          tools/run_gates.sh -b build -d /nonexistent \
+            --editor-package builds/ec7edit-release
 
       - uses: actions/upload-artifact@v7
         with:

@@ -137,6 +137,7 @@ bot_skill
 bot_presentation
 multiplayer_rules
 multiplayer_rounds
+multiplayer_match_rules
 multiplayer_classes
 multiplayer_presentation
 multiplayer_hostile

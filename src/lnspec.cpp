@@ -47,6 +47,7 @@
 #include "wl_game.h"
 #include "wl_loadsave.h"
 #include "wl_play.h"
+#include "wl_net.h"
 #include "wl_state.h"
 #include "wl_iwad.h"
 #include "g_mapinfo.h"
@@ -1392,8 +1393,35 @@ FUNC(Pushwall_MoveNoStop)
 	return DoPushwall(spot, direction, args, true);
 }
 
+// A deathmatch round ends on its frag limit or its time limit, and nowhere
+// else.
+//
+// The arenas are built from campaign floors and seven of the eight still have
+// an elevator switch in them, which ended the round for everybody the moment
+// one player pressed it -- a draw anyone could call at any time, including
+// the player who was losing. Co-operative play keeps its exits: it is the
+// campaign, and the elevator is how a floor is finished.
+//
+// Refused with the same feedback as an elevator whose floor is not secured,
+// so the switch reads as locked rather than broken.
+static bool ExitClosedForDeathmatch(AActor *activator)
+{
+	if(!Net::Deathmatch())
+		return false;
+	if(activator != NULL && activator == players[ConsolePlayer].camera)
+	{
+		if(IWad::CheckGameFilter("Corridor7"))
+			SD_PlaySound("c7/elevator/denied");
+		StatusBar->SetTopMessage("NO EXIT DURING BATTLE");
+	}
+	return true;
+}
+
 FUNC(Exit_Normal)
 {
+	if(ExitClosedForDeathmatch(activator))
+		return 0;
+
 	// Corridor 7's ordinary wall elevator (tile 63) is intentionally inert on
 	// the two vortex floors. Those maps finish by touching object 268 instead.
 	if(IWad::CheckGameFilter("Corridor7") && args[0] == 1 &&
@@ -1469,7 +1497,9 @@ FUNC(Exit_Normal)
 
 FUNC(Exit_Secret)
 {
-	
+	if(ExitClosedForDeathmatch(activator))
+		return 0;
+
 	if(activator->player)
 	{
 		if(control[activator->player->GetPlayerNum()].buttonheld[bt_use])
@@ -1484,6 +1514,9 @@ FUNC(Exit_Secret)
 
 FUNC(Exit_Victory)
 {
+	if(ExitClosedForDeathmatch(activator))
+		return 0;
+
 	if(activator->player)
 	{
 		if(control[activator->player->GetPlayerNum()].buttonheld[bt_use])

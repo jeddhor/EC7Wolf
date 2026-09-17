@@ -41,6 +41,9 @@ MENU_PRESS_RETRIES=${MENU_PRESS_RETRIES:-4}
 #: How far to walk before deciding a menu is not wrapping. Only has to exceed
 #: the longest menu; with self-verifying presses it is not a timing budget.
 MENU_WALK_LIMIT=${MENU_WALK_LIMIT:-30}
+#: Pixels the cursor must rise by to count as having wrapped round; see
+#: menu_walk_to_bottom.
+MENU_WRAP_SLACK=${MENU_WRAP_SLACK:-12}
 
 #: Optional: a command the walks call each step. When it fails the walk stops
 #: and says the GAME died, which is a far more useful thing to be told than
@@ -284,6 +287,17 @@ menu_shot() {  # menu_shot FILE
 
 # Walking down wraps to the first row, which is how the bottom is found without
 # assuming how many rows there are or where the cursor started. Same going up.
+#
+# "Wrapped" means the cursor went up by more than MENU_WRAP_SLACK pixels, not by
+# any amount. menu_cursor.py reports the middle of the highlighted text, and
+# that moves with the glyphs: "Connection  Average" has a descender and "Start"
+# has none, so the two read a pixel apart in the same row. Once a scrolling list
+# was long enough that both sat in its pinned bottom row -- the multiplayer
+# screen, when Time limit and Automatically cycle maps were added -- the step
+# from one to the other measured 670 then 669, the walk took it for the wrap,
+# and every gate that walks to Start or Role stopped one row short. A real wrap
+# moves the cursor the height of the list; a row is 42 pixels at the gates'
+# resolution; so anything under a dozen is the same row.
 menu_walk_to_bottom() {  # menu_walk_to_bottom WHAT
 	_what=$1
 	_prev=-1
@@ -299,7 +313,7 @@ menu_walk_to_bottom() {  # menu_walk_to_bottom WHAT
 			printf '  FAIL no menu on screen while looking for %s\n' "$_what"
 			return 1
 		fi
-		if [ "$_y" -lt "$_prev" ]; then
+		if [ "$_prev" -ge 0 ] && [ "$_y" -lt $((_prev - MENU_WRAP_SLACK)) ]; then
 			menu_press_moved Up || {
 				printf '  FAIL the menu stopped responding at %s\n' "$_what"; return 1; }
 			printf '  ..   cursor on %s (bottom row)\n' "$_what"
@@ -340,7 +354,7 @@ menu_walk_to_top() {  # menu_walk_to_top WHAT
 			printf '  FAIL no menu on screen while looking for %s\n' "$_what"
 			return 1
 		fi
-		if [ "$_y" -lt "$_prev" ]; then
+		if [ "$_prev" -ge 0 ] && [ "$_y" -lt $((_prev - MENU_WRAP_SLACK)) ]; then
 			printf '  ..   cursor on %s (top row)\n' "$_what"
 			return 0
 		fi

@@ -1408,6 +1408,20 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 				Net::InitVars.fragLimit = (byte)(limit < 0 ? 0 : (limit > 255 ? 255 : limit));
 			}
 		}
+		else IFARG("--timelimit")
+		{
+			// Minutes a deathmatch round lasts; 0 for none.
+			if(i + 1 < argc)
+			{
+				const int minutes = atoi(argv[++i]);
+				Net::InitVars.timeLimit = (byte)(minutes < 0 ? 0 : (minutes > 255 ? 255 : minutes));
+			}
+		}
+		else IFARG("--mapcycle")
+		{
+			// Each new deathmatch round on the next arena.
+			Net::InitVars.mapCycle = 1;
+		}
 		else IFARG("--debugnet")
 		{
 			DebugNetwork = true;

@@ -131,9 +131,27 @@ struct NetInit
 	// than an edit to the weapons -- single player is untouched, and the
 	// number applies to every player in the match alike, bots included.
 	byte damageScale;
+	// Minutes a deathmatch round lasts, or 0 for a round only the frag limit
+	// ends. Measured on the level clock, which only advances on simulated
+	// tics, so every machine reaches the limit on the same tic and none of
+	// them has to tell the others.
+	byte timeLimit;
+	// Nonzero: each new deathmatch round is played on the next arena in
+	// number order, wrapping after the last, instead of the same one again.
+	byte mapCycle;
 };
 
 extern NetInit InitVars;
+
+// The deathmatch arenas, in play order. Eight, and not a contiguous run: the
+// compendium's 58 and 59 are empty boxes, and the eighth real arena is 60. See
+// the note above the network levels in mapinfo/corridor7.txt.
+unsigned int ArenaCount();
+const char *ArenaMap(unsigned int index);
+// The arena after `map`, wrapping from the last back to the first, or NULL
+// when `map` is not one of the arenas -- a battle started on some other map
+// by hand has no place in the cycle and keeps the map's own MAPINFO `next`.
+const char *NextArena(const char *map);
 
 // True once a peer has been written off and the match ended for that reason;
 // the string says who, for showing to the player.

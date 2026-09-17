@@ -953,6 +953,47 @@ while the game is full screen.
 
 ---
 
+### Rounds end on their limits, and can move between arenas
+
+**The elevator no longer ends a battle.** Seven of the eight arenas are built
+from campaign floors and still have an elevator switch in them (MAP60 is the
+exception). `Exit_Normal`, `Exit_Secret` and `Exit_Victory` never asked what
+kind of game was running, so any player could end the round for everyone by
+pressing it -- including the player who was losing. In a deathmatch all three
+now refuse, with the elevator's denied sound and "NO EXIT DURING BATTLE", so
+the switch reads as locked rather than broken. Co-operative play keeps its
+exits: it is the campaign, and the elevator is how a floor is finished.
+
+**A time limit** joins the frag limit, and whichever is reached first ends the
+round: None, 5, 10, 15, 20 or 30 minutes in the menu, `--timelimit MINUTES` on
+the command line. It is measured on `gamestate.TimeCount`, the level clock,
+which restarts with each round, advances only on simulated tics and not while
+paused, and reads the same on every machine at the same tic. So, like the frag
+limit, every peer ends the round on its own and nothing is sent about it. It is
+checked after the thinkers, so a frag scored on the final tic still counts.
+While a limit is set, the scoreboard's title shows the time left.
+
+**Automatically cycle maps** (`--mapcycle`) plays each new round on the next
+arena in number order, wrapping from the last back to the first. Every arena's
+MAPINFO `next` names itself, which is right for a match that stays put, so the
+cycle is decided where the round ends rather than in the map data. The order
+is MAP51 to MAP57 and then MAP60: the compendium's 58 and 59 are empty boxes,
+and a cycle that counted by one would load one. With cycling on, the menu's
+Arena is where the match starts. A battle started by hand on a map that is not
+an arena has no place in the cycle and keeps the map's own `next`. The arena
+list now lives in one place, `Net::ArenaMap`, which the menu reads as well.
+
+Both settings travel in the `StartPacket` beside the frag limit, which made it
+protocol 6. A client that missed either would end its round at a different
+tic or load a different arena, and would be simulating another match.
+
+`tools/test_multiplayer_match_rules.sh` forces each case rather than waiting
+for it: an idle player and one bot with no frag limit, so only the time limit
+can end a round; the elevator pressed from a fixed spot, with the same press in
+single player as the control; two rounds from MAP57, which cover both the gap
+at 58-59 and the wrap; and a networked host and client where only the host is
+given the settings and both must record the same match, tic for tic.
+
 ## What is not in this plan
 
 * **IPX, modem, serial.** Out of scope by intent.

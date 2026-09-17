@@ -86,6 +86,8 @@ static const int mpDelayTics[] = { 0, 6, 10, 16 };
 static MultipleChoiceMenuItem *mpArenaItem = NULL;
 static MultipleChoiceMenuItem *mpFragsItem = NULL;
 static MultipleChoiceMenuItem *mpDamageItem = NULL;
+static MultipleChoiceMenuItem *mpTimeItem = NULL;
+static MultipleChoiceMenuItem *mpCycleItem = NULL;
 static MultipleChoiceMenuItem *mpClassItem = NULL;
 static MultipleChoiceMenuItem *mpUniformItem = NULL;
 static MultipleChoiceMenuItem *mpBotsItem = NULL;
@@ -114,6 +116,8 @@ static const char* const mpMarineColors[] = {
 };
 // Kept in the same order as the fraglimits option list.
 static const int mpFragLimits[] = { 0, 10, 20, 30, 50 };
+// Minutes per round. Whichever of the two limits is reached first ends it.
+static const int mpTimeLimits[] = { 0, 5, 10, 15, 20, 30 };
 
 // Percent of the game's own weapon damage between players.
 //
@@ -123,12 +127,6 @@ static const int mpFragLimits[] = { 0, 10, 20, 30, 50 };
 // between a duel and a coin toss. The weapons themselves are not touched, so
 // single player stays exactly as it shipped.
 static const int mpDamageScales[] = { 100, 75, 50, 25 };
-// Eight arenas, and not the contiguous run the compendium describes: the maps
-// it puts at 58 and 59 are empty boxes, and the eighth real arena is at 60.
-// See the note above the network levels in mapinfo/corridor7.txt.
-static const char* const mpArenaMaps[] = {
-	"MAP51", "MAP52", "MAP53", "MAP54", "MAP55", "MAP56", "MAP57", "MAP60"
-};
 
 MENU_LISTENER(MultiplayerRoleChanged);
 MENU_LISTENER(MultiplayerCountChanged);
@@ -523,6 +521,10 @@ MENU_LISTENER(MultiplayerRoleChanged)
 		mpFragsItem->setEnabled(!joining);
 	if(mpDamageItem)
 		mpDamageItem->setEnabled(!joining);
+	if(mpTimeItem)
+		mpTimeItem->setEnabled(!joining);
+	if(mpCycleItem)
+		mpCycleItem->setEnabled(!joining);
 	// Bots belong to whoever owns the roster, which is never the joining peer.
 	// Section 18.1: a joining client sees the bot configuration read-only and
 	// never instantiates a brain.
@@ -714,6 +716,10 @@ MENU_LISTENER(StartMultiplayer)
 			(byte)mpFragLimits[mpFragsItem ? mpFragsItem->getCurrentOption() : 0];
 		Net::InitVars.damageScale = (byte)mpDamageScales[
 			mpDamageItem ? mpDamageItem->getCurrentOption() : 0];
+		Net::InitVars.timeLimit =
+			(byte)mpTimeLimits[mpTimeItem ? mpTimeItem->getCurrentOption() : 0];
+		Net::InitVars.mapCycle =
+			(byte)(mpCycleItem ? mpCycleItem->getCurrentOption() : 0);
 		Bot::SetRequested(MultiplayerBots());
 		static const char* const skirmishSkills[] = { "Recruit", "Marine",
 		                                              "Veteran", "Elite" };
@@ -737,6 +743,10 @@ MENU_LISTENER(StartMultiplayer)
 			(byte)mpFragLimits[mpFragsItem ? mpFragsItem->getCurrentOption() : 0];
 		Net::InitVars.damageScale = (byte)mpDamageScales[
 			mpDamageItem ? mpDamageItem->getCurrentOption() : 0];
+		Net::InitVars.timeLimit =
+			(byte)mpTimeLimits[mpTimeItem ? mpTimeItem->getCurrentOption() : 0];
+		Net::InitVars.mapCycle =
+			(byte)(mpCycleItem ? mpCycleItem->getCurrentOption() : 0);
 
 		// The roster the host is about to lock, set here rather than left to
 		// a command line: the menu and --bots must produce the same one.
@@ -777,7 +787,7 @@ MENU_LISTENER(StartMultiplayer)
 	if(!joining)
 	{
 		const int pick = mpArenaItem ? mpArenaItem->getCurrentOption() : 0;
-		arena = mpArenaMaps[pick];
+		arena = Net::ArenaMap((unsigned int)pick);
 	}
 
 	const int characterIndex = mpClassItem ? mpClassItem->getCurrentOption() : 0;
@@ -1171,8 +1181,20 @@ static void BuildMultiplayerMenu()
 	mpFragsItem = new MultipleChoiceMenuItem(NULL, fraglimits, 5, 2);
 	AddLabeled(multiplayerMenu, mpFragsItem, "Frag limit");
 
+	static const char* timelimits[] = { "None", "5 minutes", "10 minutes",
+		"15 minutes", "20 minutes", "30 minutes" };
+	mpTimeItem = new MultipleChoiceMenuItem(NULL, timelimits, 6, 0);
+	AddLabeled(multiplayerMenu, mpTimeItem, "Time limit");
+
 	mpArenaItem = new MultipleChoiceMenuItem(NULL, arenas, 8, 0);
 	AddLabeled(multiplayerMenu, mpArenaItem, "Arena");
+
+	// With this on, Arena is where the match starts rather than where it
+	// stays: each round after the first moves to the next arena and wraps
+	// round after the last.
+	static const char* cycles[] = { "Off", "On" };
+	mpCycleItem = new MultipleChoiceMenuItem(NULL, cycles, 2, 0);
+	AddLabeled(multiplayerMenu, mpCycleItem, "Automatically cycle maps");
 
 	static const char* damages[] = { "Original", "75%", "50%", "25%" };
 	mpDamageItem = new MultipleChoiceMenuItem(NULL, damages, 4, 0);

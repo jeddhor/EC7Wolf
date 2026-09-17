@@ -78,7 +78,7 @@
 // version mismatch and is far harder to diagnose than a refusal. Bump this
 // whenever a packet's layout or meaning changes -- including the day the
 // canonical command frame grows a slot number.
-#define NET_PROTOCOL_VERSION 5
+#define NET_PROTOCOL_VERSION 6
 // Present in the first datagram of every connection. A request used to be one
 // lone zero byte, so any stray packet arriving on the port was a new player.
 static const BYTE NetMagic[3] = { 'E', '7', 'N' };
@@ -174,6 +174,10 @@ struct StartPacket
 	// about it compute different health from the same commands, which is a
 	// desync rather than a difference of opinion.
 	BYTE damageScale;
+	// Both decide which tic a round ends on and which map comes next, so a
+	// machine that disagreed about either would simulate a different match.
+	BYTE timeLimit;
+	BYTE mapCycle;
 	DWORD rngseed;
 	struct Client
 	{
@@ -434,6 +438,10 @@ int WriteProtocolVectors(const char *path)
 		(unsigned)offsetof(StartPacket, fragLimit));
 	fprintf(out, "start.offset.damageScale %u\n",
 		(unsigned)offsetof(StartPacket, damageScale));
+	fprintf(out, "start.offset.timeLimit %u\n",
+		(unsigned)offsetof(StartPacket, timeLimit));
+	fprintf(out, "start.offset.mapCycle %u\n",
+		(unsigned)offsetof(StartPacket, mapCycle));
 	fprintf(out, "start.offset.rngseed %u\n",
 		(unsigned)offsetof(StartPacket, rngseed));
 	fprintf(out, "start.offset.clients %u\n",
@@ -468,6 +476,8 @@ int WriteProtocolVectors(const char *path)
 		golden->ticDelay = 6;
 		golden->fragLimit = 0;
 		golden->damageScale = 100;
+		golden->timeLimit = 0;
+		golden->mapCycle = 0;
 		golden->rngseed = 0x01020304;
 		golden->clients[0].host = 0x0100007F;
 		golden->clients[0].port = 5029;
@@ -496,7 +506,33 @@ NetInit InitVars = {
 	0,
 	0,
 	100,		// damageScale: the game's own numbers until somebody says otherwise
+	0,			// timeLimit: none
+	0,			// mapCycle: the same arena again
 };
+
+static const char *const ArenaMaps[] = {
+	"MAP51", "MAP52", "MAP53", "MAP54", "MAP55", "MAP56", "MAP57", "MAP60"
+};
+
+unsigned int ArenaCount()
+{
+	return countof(ArenaMaps);
+}
+
+const char *ArenaMap(unsigned int index)
+{
+	return index < countof(ArenaMaps) ? ArenaMaps[index] : ArenaMaps[0];
+}
+
+const char *NextArena(const char *map)
+{
+	for(unsigned int i = 0;i < countof(ArenaMaps);++i)
+	{
+		if(stricmp(map, ArenaMaps[i]) == 0)
+			return ArenaMaps[(i + 1) % countof(ArenaMaps)];
+	}
+	return NULL;
+}
 
 // One slot's command for one sequence, as buffered and as it travels.
 struct SlotCommand
@@ -1347,6 +1383,8 @@ static bool StartHost(InitStatusCallback callback)
 	startData->ticDelay = InitVars.ticDelay;
 	startData->fragLimit = InitVars.fragLimit;
 	startData->damageScale = InitVars.damageScale;
+	startData->timeLimit = InitVars.timeLimit;
+	startData->mapCycle = InitVars.mapCycle;
 	startData->rngseed = rngseed;
 	for(unsigned int i = 1;i < InitVars.numPlayers;++i)
 	{
@@ -1543,6 +1581,8 @@ static bool StartJoin(InitStatusCallback callback)
 				InitVars.ticDelay = data->ticDelay;
 				InitVars.fragLimit = data->fragLimit;
 				InitVars.damageScale = data->damageScale;
+				InitVars.timeLimit = data->timeLimit;
+				InitVars.mapCycle = data->mapCycle;
 				rngseed = data->rngseed;
 
 				Client[0].address = Packet->address;

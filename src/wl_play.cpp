@@ -1582,6 +1582,25 @@ void PlayLoop (void)
 
 				AActor::FinishSpawningActors();
 
+				// A deathmatch round with a time limit ends when the level
+				// clock reaches it. The clock is gamestate.TimeCount: it
+				// restarts with each round, advances only on simulated tics
+				// and not while paused, and is the same number on every
+				// machine at the same tic -- so, like the frag limit, every
+				// peer ends the round on its own and nothing is sent about it.
+				// Checked after the thinkers, so a frag scored on the final
+				// tic still counts.
+				if(Net::Deathmatch() && Net::InitVars.timeLimit != 0 &&
+					playstate == ex_stillplaying &&
+					gamestate.TimeCount >=
+						(int32_t)Net::InitVars.timeLimit*60*TICRATE)
+				{
+					Printf("The time limit was reached (%u minute%s).\n",
+						(unsigned)Net::InitVars.timeLimit,
+						Net::InitVars.timeLimit == 1 ? "" : "s");
+					playstate = ex_completed;
+				}
+
 				// Capture post-tic transforms for interpolation, then fold the
 				// deterministic state into the checksum (reads real, not
 				// interpolated, state).

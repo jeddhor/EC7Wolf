@@ -345,7 +345,22 @@ void C7Scoreboard_DrawOverlay()
 	const Layout layout = LayoutFor(rows, (int)ph);
 	DrawWindow(8, layout.titleY - 8, 304, layout.height, 0);
 
-	DrawTable("SCOREBOARD");
+	// With a time limit, the title says how long is left. It is the one place
+	// a player looks to see how a round stands, and a limit nobody can see
+	// coming ends a round as a surprise. Computed from the same level clock
+	// that ends the round, rounded up, so it never reads 0:00 while the round
+	// is still running.
+	FString title = "SCOREBOARD";
+	if(Net::Deathmatch() && Net::InitVars.timeLimit != 0)
+	{
+		const int32_t limit = (int32_t)Net::InitVars.timeLimit*60*TICRATE;
+		int32_t left = limit - gamestate.TimeCount;
+		if(left < 0)
+			left = 0;
+		const int seconds = (int)((left + TICRATE - 1)/TICRATE);
+		title.AppendFormat("  %d:%02d", seconds/60, seconds%60);
+	}
+	DrawTable(title);
 
 	pa = oldpa;
 }

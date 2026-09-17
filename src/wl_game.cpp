@@ -890,6 +890,7 @@ restartgame:
 					p.frags, p.mo ? p.mo->health : 0,
 					Items::WeaponsHeld((Session::PlayerSlot)i));
 			}
+			line.AppendFormat(" map=%s", gamestate.mapname);
 			Printf("%s\n", line.GetChars());
 		}
 
@@ -971,6 +972,21 @@ restartgame:
 							}
 						default:
 							next = levelInfo->NextMap;
+					}
+
+					// A cycling deathmatch plays the next arena rather than
+					// this one again. Every arena's MAPINFO `next` names
+					// itself, which is right for a match that stays put, so
+					// the cycle is decided here instead of in the map data --
+					// and decided from the start packet's setting and the map
+					// just played, both of which every peer already shares.
+					// A battle started by hand on a map that is not an arena
+					// has no place in the cycle and keeps its own `next`.
+					if(playstate == ex_completed && Net::Deathmatch() &&
+						Net::InitVars.mapCycle)
+					{
+						if(const char *arena = Net::NextArena(gamestate.mapname))
+							next = arena;
 					}
 
 					if(next.IndexOf("EndSequence:") == 0 || next.CompareNoCase("EndTitle") == 0)

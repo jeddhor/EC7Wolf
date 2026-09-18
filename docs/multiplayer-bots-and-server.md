@@ -3949,6 +3949,88 @@ retain seeds and traces on failure; an optimized release package.
 `builds/release`; `tools/test_corridor7_release_startup.sh builds/release`
 passes against the packaged copy; commercial Corridor 7 files remain uncommitted.
 
+### B10 record — what an eleven-slot roster and a bad line turned up
+
+**Status: shipped.** Gates `bot_budget`, `bot_soak`, `bot_netplay`,
+`bot_sanitizer`, and a maximum-roster case added to `multiplayer_hostile`.
+
+**AddressSanitizer found live memory corruption, and it was not in the bots.**
+`SD_PlaySound` did
+
+```c
+int channel = SD_PlayDigitized(sdata, lp, rp, chan);
+channelSoundPos[channel-1].positioned = ispos;
+```
+
+and `SD_PlayDigitized` returns `channel + 1` on success and **0** on failure.
+It fails often and harmlessly -- the commonest reason is its own guard against
+the same sound restarting within `MIN_TICKS_BETWEEN_DIGI_REPEATS` -- so the
+write went to `channelSoundPos[-1]`, one byte in front of the array, in every
+build ever made, silently. Eleven players shooting at once is what made it
+frequent enough to catch, from `A_C7GunAttack`. This is the case for running
+the sanitizers at the maximum roster rather than at two players: the roster is
+what makes a rare path ordinary.
+
+**What the brains cost.** Measured on this machine, per tic, at 70 Hz where the
+whole tic is 14.286 ms:
+
+| roster | mean | p95 | worst | worst once under way |
+| --- | --- | --- | --- | --- |
+| 1 bot | 4-6us | 50us | 2.1-4.4ms | 423us |
+| 2 bots | 7-10us | 50us | 2.7-11.5ms | 420us |
+| 8 bots | 15-16us | 50us | 2.3-6.9ms | 443us |
+| 10 bots | 18-20us | 50us | 2.3-6.3ms | 542us |
+
+Twenty microseconds of a fourteen-millisecond tic at a full roster: the brains
+are not where the time goes. The worst column is entirely start-up, every bot
+planning a first route into a cold graph, and it is bounded separately from the
+steady state for a reason the soak made plain -- the first version of the
+measurement counted from the start of the *match*, so a soak across eight
+arenas reported 13.3 ms as steady state when it was start-up nine times over.
+It counts from the start of each map now.
+
+**Ten minutes, eleven slots, eight arenas, one process:** nine rounds ended on
+the clock, every arena played, resident memory 232,416 KB at the first sample
+and 232,464 KB at the last, and routes still being completed in the final
+quarter. Section 34's rotation soak is this gate with `SOAK_MINUTES` turned up.
+
+**A mixed match survives a bad link.** Two people and four bots over 40 ms of
+delay, 15 ms of jitter, 2% loss and 1% duplication: 7,201 tics recorded on each
+machine, byte-identical. Section 19.1's rule held -- the bots' decisions are
+theirs alone, and their commands travel like anyone else's.
+
+**What the link gate cannot test, and why.** Writing it turned up the M7 defect
+again: `Net::NewGame`'s level-start exchange has no recovery from a lost packet
+and wedges both peers until they time out. It is intermittent -- the same seed
+and settings wedged once and completed the next time -- which is what an
+unnegotiated exit from a synchronous exchange looks like. So the gate runs the
+link clean for its first twelve seconds and lossy for the match, and says so.
+That defect belongs to the handshake, not to the bots, and
+`docs/multiplayer.md` already records it along with the attempted fix that made
+it four times worse. **It is the obvious next piece of work in Phase S.**
+
+**Inherited undefined behaviour, recorded rather than fixed.** UBSan reports
+about 140 findings per run from code this fork did not write: `TObjPtr` offset
+arithmetic in `dobject.h`, null reference binding in `TArray`, misaligned reads
+of packed art and palette data, left shifts of negative values in the
+raycaster, and misaligned zip-directory reads in the `zipdir` build tool. They
+fire at start-up and during loading, before a bot exists. `bot_sanitizer`
+therefore fails on any AddressSanitizer report and on UBSan findings in bot,
+perception, navigation, command or net code, and counts the rest without
+failing. Fixing them is worth doing and is not this milestone.
+
+**A menu that offered a trap.** Bots choose targets from other players and
+nothing else, so in Cooperative they spawn, plan a route or two and then stand
+about -- measured, two bots on MAP01 completed no route at all and occupied six
+distinct positions in six hundred tics. The bot rows are disabled when the mode
+is Cooperative, the summary row reads "Not in co-op", the slot total stops
+counting them, and `StartMultiplayer` requests none regardless of what the row
+says.
+
+**Evidence on failure.** The new gates keep their working directory when they
+fail rather than only when asked, and print the exact command and seed to
+reproduce with.
+
 ---
 
 ## 21. Phase B verification

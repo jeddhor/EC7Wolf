@@ -1315,7 +1315,18 @@ int SD_PlaySound(const char* sound, SoundChannel chan)
 #endif
 
 			int channel = SD_PlayDigitized(sdata, lp, rp, chan);
-			channelSoundPos[channel-1].positioned = ispos;
+			// Zero means it did not play, and zero minus one is not a
+			// channel. SD_PlayDigitized returns channel+1 so that channel 0
+			// is distinguishable from failure, and it fails often and
+			// harmlessly: the commonest reason is its own guard against the
+			// same sound restarting within MIN_TICKS_BETWEEN_DIGI_REPEATS,
+			// which a firefight trips constantly. Writing anyway stored a
+			// byte seven bytes in front of channelSoundPos -- whatever the
+			// linker had put there -- and did it silently in every build.
+			// AddressSanitizer at a full eleven-slot roster is what caught
+			// it, from a Corridor 7 gun attack.
+			if(channel > 0)
+				channelSoundPos[channel-1].positioned = ispos;
 			DigiPriority = sdata.GetPriority();
 			SoundPlaying = sindex;
 			return channel;

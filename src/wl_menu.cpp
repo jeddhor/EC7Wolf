@@ -131,6 +131,7 @@ static const int mpDamageScales[] = { 100, 75, 50, 25 };
 MENU_LISTENER(MultiplayerRoleChanged);
 MENU_LISTENER(MultiplayerCountChanged);
 MENU_LISTENER(MultiplayerBotClassChanged);
+MENU_LISTENER(MultiplayerModeChanged);
 MENU_LISTENER(StartMultiplayer);
 
 Menu mainMenu(MENU_X, MENU_Y, MENU_W, 24);
@@ -472,6 +473,15 @@ static void ApplyBotClassChoice()
 	Bot::SetRequestedClass(cls);
 }
 
+// Whether the chosen game mode is the co-operative campaign rather than a
+// deathmatch. Asked in several places, and worth a name: "option 2" is the
+// kind of thing that survives a menu being reordered and quietly means
+// something else afterwards.
+static bool Cooperative()
+{
+	return mpModeItem != NULL && mpModeItem->getCurrentOption() == 2;
+}
+
 static int MultiplayerBots()
 {
 	return mpBotsItem ? mpBotsItem->getCurrentOption() : 0;
@@ -491,7 +501,11 @@ MENU_LISTENER(MultiplayerCountChanged)
 	}
 	else
 	{
-		const int total = MultiplayerHumans() + MultiplayerBots();
+		// Bots do not play the campaign, so a co-operative game is the
+		// people in it and nothing else. Counting a greyed-out bot row into
+		// the total would have the screen contradict itself.
+		const int total = MultiplayerHumans() +
+			(Cooperative() ? 0 : MultiplayerBots());
 		text.Format("Total slots        %d of %d", total, (int)MP_TOTAL_CAP);
 		if(total > (int)MP_TOTAL_CAP)
 			text += "   TOO MANY";
@@ -529,18 +543,37 @@ MENU_LISTENER(MultiplayerRoleChanged)
 	// Section 18.1: a joining client sees the bot configuration read-only and
 	// never instantiates a brain.
 	// A joining player cannot open the bots screen: the host owns the roster.
+	//
+	// Nor is there anything for them to do in a co-operative game. A bot
+	// picks targets from the other players and nothing else -- it does not
+	// fight the campaign's aliens -- and its goals are an arena's items and
+	// choke points, not a floor with locked doors and a key to find. Asked to
+	// play one anyway it spawns, plans a route or two and then stands about,
+	// which is measurable: two bots on MAP01 completed no route at all and
+	// occupied six distinct positions in six hundred tics. A menu that offers
+	// that combination is a menu with a trap in it, so the rows go grey and
+	// the roster is emptied when the mode changes.
+	const bool botsUseful = !joining && !Cooperative();
 	if(mpBotsSwitchItem)
-		mpBotsSwitchItem->setEnabled(!joining);
+		mpBotsSwitchItem->setEnabled(botsUseful);
 	if(mpBotsItem)
-		mpBotsItem->setEnabled(!joining);
+		mpBotsItem->setEnabled(botsUseful);
 	if(mpBotSkillItem)
-		mpBotSkillItem->setEnabled(!joining);
+		mpBotSkillItem->setEnabled(botsUseful);
 	if(mpBotClassItem)
-		mpBotClassItem->setEnabled(!joining);
+		mpBotClassItem->setEnabled(botsUseful);
 	if(mpBotUniformItem)
-		mpBotUniformItem->setEnabled(!joining &&
+		mpBotUniformItem->setEnabled(botsUseful &&
 			(mpBotClassItem == NULL || mpBotClassItem->getCurrentOption() == 0));
 	MultiplayerCountChanged(0);
+	return true;
+}
+
+// Changing the mode changes who may have bots, so the enable states are
+// recomputed exactly where they are for a change of role.
+MENU_LISTENER(MultiplayerModeChanged)
+{
+	MultiplayerRoleChanged(0);
 	return true;
 }
 
@@ -720,7 +753,7 @@ MENU_LISTENER(StartMultiplayer)
 			(byte)mpTimeLimits[mpTimeItem ? mpTimeItem->getCurrentOption() : 0];
 		Net::InitVars.mapCycle =
 			(byte)(mpCycleItem ? mpCycleItem->getCurrentOption() : 0);
-		Bot::SetRequested(MultiplayerBots());
+		Bot::SetRequested(Cooperative() ? 0 : MultiplayerBots());
 		static const char* const skirmishSkills[] = { "Recruit", "Marine",
 		                                              "Veteran", "Elite" };
 		const int pick = mpBotSkillItem ? mpBotSkillItem->getCurrentOption() : 1;
@@ -751,7 +784,7 @@ MENU_LISTENER(StartMultiplayer)
 		// The roster the host is about to lock, set here rather than left to
 		// a command line: the menu and --bots must produce the same one.
 		// Section 18.1's "identical validated rosters".
-		Bot::SetRequested(MultiplayerBots());
+		Bot::SetRequested(Cooperative() ? 0 : MultiplayerBots());
 		static const char* const skillNames[] = { "Recruit", "Marine",
 		                                          "Veteran", "Elite" };
 		const int chosen = mpBotSkillItem ?
@@ -1098,6 +1131,11 @@ public:
 
 	FString getValueText() const
 	{
+		// A co-operative game has none, whatever the row underneath says: see
+		// MultiplayerRoleChanged. Said here rather than left to the greyed
+		// row below, because this is the line the host actually reads.
+		if(Cooperative())
+			return "Not in co-op";
 		const int bots = mpBotsItem ? mpBotsItem->getCurrentOption() : 0;
 		if(bots == 0)
 			return "None";
@@ -1175,7 +1213,7 @@ static void BuildMultiplayerMenu()
 		7, 0);
 	AddLabeled(multiplayerMenu, mpPlayersItem, "Players");
 
-	mpModeItem = new MultipleChoiceMenuItem(NULL, modes, 3, 0);
+	mpModeItem = new MultipleChoiceMenuItem(MultiplayerModeChanged, modes, 3, 0);
 	AddLabeled(multiplayerMenu, mpModeItem, "Game");
 
 	mpFragsItem = new MultipleChoiceMenuItem(NULL, fraglimits, 5, 2);

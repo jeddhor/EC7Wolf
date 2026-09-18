@@ -56,7 +56,8 @@ vectors="$work/netvectors.txt"
 display=:154
 xvfb_start "$display" "$work/xvfb.log" 640x400x24 || exit 1
 cleanup() {
-	kill_pids "${host_pid:-}" "${client_pid:-}" "${victim_pid:-}"
+	kill_pids "${host_pid:-}" "${client_pid:-}" "${victim_pid:-}" \
+		"${maxhost_pid:-}" "${maxclient_pid:-}"
 	xvfb_stop
 	if [ "${KEEP_WORK:-0}" = "1" ]; then
 		printf 'kept: %s\n' "$work"
@@ -76,6 +77,8 @@ victim_port=5143
 # nobody reads, several checks before the one that then fails.
 version_port=5144
 lonehost_port=5145
+maxhost_port=5146
+maxclient_port=5147
 # Nobody listens here; it is the address the join screen is told to dial, and
 # the address the forged answers are sent from.
 decoy_port=5999
@@ -179,6 +182,58 @@ if [ -s "$work/host.checksum" ] && [ -s "$work/client.checksum" ]; then
 		diff "$work/host.checksum" "$work/client.checksum" | head -4 | sed 's/^/         /'
 		status=1
 	fi
+fi
+
+printf '\nThe same, at a full roster\n'
+# Milestone B10 asks for the fuzz at maximum roster, and the roster is what
+# decides how much of the packet handling is reachable: numPlayers appears in
+# the start packet's trailing client array, in the command bundle's per-slot
+# entries, and in every loop that walks either. Two players exercise the
+# smallest version of all of them. Eleven -- MAXPLAYERS -- is the largest the
+# game can be asked for, and the bundle is then at its longest, which is where
+# a length that is trusted rather than checked does its damage.
+#
+# Nine bots and two people, so the bundle carries eleven slots while the match
+# still has a client to disagree with. The shots themselves are the same list
+# as above -- it already includes packets claiming MAXPLAYERS and 255 players
+# -- because what is being varied here is the target, not the ammunition: the
+# question is whether a host with a full bundle to build and eleven slots to
+# walk handles them as well as one with two.
+play maxhost --host 2 --port "$maxhost_port" --bots 9
+maxhost_pid=$!
+sleep 3
+play maxclient --port "$maxclient_port" --join "127.0.0.1:$maxhost_port"
+maxclient_pid=$!
+sleep 4
+
+check "the eleven-slot host is up" alive "$maxhost_pid"
+check "and its client is up" alive "$maxclient_pid"
+
+python3 "$here/netfuzz.py" 127.0.0.1 "$maxhost_port" --vectors "$vectors" \
+	--rounds 3 --no-requests \
+	>"$work/fuzz-maxhost.log" 2>&1 || true
+python3 "$here/netfuzz.py" 127.0.0.1 "$maxclient_port" --vectors "$vectors" \
+	--rounds 3 --no-requests \
+	>"$work/fuzz-maxclient.log" 2>&1 || true
+sed -n '$p' "$work/fuzz-maxhost.log" | sed 's/^/  ..   at the host: /'
+sed -n '$p' "$work/fuzz-maxclient.log" | sed 's/^/  ..   at the client: /'
+
+wait "$maxhost_pid" "$maxclient_pid" 2>/dev/null || true
+maxhost_pid=; maxclient_pid=
+
+if [ -s "$work/maxhost.checksum" ] && [ -s "$work/maxclient.checksum" ]; then
+	maxhost_tics=$(grep -c '^tic ' "$work/maxhost.checksum" || true)
+	maxclient_tics=$(grep -c '^tic ' "$work/maxclient.checksum" || true)
+	printf '  ..   %s tics on the host, %s on the client\n' \
+		"$maxhost_tics" "$maxclient_tics"
+	check "the full-roster match ran to the end while being shot at" \
+		test "$maxhost_tics" -ge "$tics" -a "$maxclient_tics" -ge "$tics"
+	check "and the two agreed on every tic of it" \
+		cmp -s "$work/maxhost.checksum" "$work/maxclient.checksum"
+else
+	printf '  FAIL the full-roster match simulated nothing\n'
+	sed 's/\x08//g' "$work/maxhost.log" | grep -vE '^\s*$' | tail -5 | sed 's/^/         /'
+	status=1
 fi
 
 printf '\nA client on a join screen, answered by the wrong party\n'

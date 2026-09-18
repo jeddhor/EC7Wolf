@@ -5,6 +5,7 @@
 */
 
 #include <stdio.h>
+#include <SDL.h>
 #include <string.h>
 
 #include "g_bot.h"
@@ -132,8 +133,97 @@ void Reset()
 	g_brainDigest = 0;
 }
 
+// How long the brains took, per tic.
+//
+// Kept beside the brains rather than in the capture layer because this is the
+// only place that knows where one ends and the next begins: the producers for
+// one sequence run back to back, so a change of sequence is the end of a tic's
+// worth of thinking.
+//
+// The histogram is microsecond-bucketed to 20 ms and counts everything past
+// that in the last bucket, which is enough to place a percentile without
+// keeping a sample per tic for an overnight soak.
+namespace {
+
+enum { COST_BUCKETS = 400, COST_BUCKET_MICROS = 50 };
+// Tics of match before the worst-tic figure starts counting. Two seconds: the
+// first routes are planned well inside that, and a match that has not yet run
+// for two seconds has nothing to say about steady-state cost.
+enum { COST_WARMUP_TICS = 140 };
+
+struct CostMeter
+{
+	unsigned int tics = 0;
+	uint64_t totalMicros = 0;
+	unsigned int worstMicros = 0;
+	unsigned int warmWorstMicros = 0;
+	unsigned int brainRuns = 0;
+	// Tics since this map started, which is not the same as tics since the
+	// match started once a match plays more than one map. Every round is a
+	// fresh graph and eleven bots planning a first route into it, so a soak
+	// across eight arenas reported that first-route cost as though it were
+	// steady state: 13.3 ms, which is start-up nine times over rather than a
+	// stall. The warm figure counts from each map instead.
+	unsigned int ticsThisMap = 0;
+	uint32_t histogram[COST_BUCKETS];
+	bool haveSequence = false;
+	uint32_t sequence = 0;
+	uint64_t ticMicros = 0;
+
+	CostMeter() { memset(histogram, 0, sizeof(histogram)); }
+
+	void FinishTic()
+	{
+		if(!haveSequence)
+			return;
+		++tics;
+		totalMicros += ticMicros;
+		if(ticMicros > worstMicros)
+			worstMicros = (unsigned int)ticMicros;
+		++ticsThisMap;
+		if(ticsThisMap > COST_WARMUP_TICS && ticMicros > warmWorstMicros)
+			warmWorstMicros = (unsigned int)ticMicros;
+		unsigned int bucket = (unsigned int)(ticMicros/COST_BUCKET_MICROS);
+		if(bucket >= COST_BUCKETS)
+			bucket = COST_BUCKETS - 1;
+		++histogram[bucket];
+		ticMicros = 0;
+	}
+
+	void MapStarted() { ticsThisMap = 0; }
+
+	void Note(uint32_t forSequence, uint64_t micros)
+	{
+		if(!haveSequence || forSequence != sequence)
+		{
+			FinishTic();
+			haveSequence = true;
+			sequence = forSequence;
+		}
+		ticMicros += micros;
+		++brainRuns;
+	}
+};
+
+CostMeter g_cost;
+
+uint64_t NowMicros()
+{
+	const Uint64 freq = SDL_GetPerformanceFrequency();
+	if(freq == 0)
+		return 0;
+	return (uint64_t)((SDL_GetPerformanceCounter()*(Uint64)1000000)/freq);
+}
+
+}
+
 void BeginMap()
 {
+	// The cost meter's warm-up starts again with the map, for the same reason
+	// the graph does: every bot plans a first route into a graph it has never
+	// seen, and that is start-up cost however many rounds have gone before.
+	g_cost.MapStarted();
+
 	// Everything a bot knew about the last map, gone; who it is, kept.
 	//
 	// The navigation graph is rebuilt for every map, and a route is a list of
@@ -863,6 +953,17 @@ public:
 	explicit BotProducer(Session::PlayerSlot slot) : slot(slot) {}
 
 	bool Produce(Session::PlayerSlot forSlot, uint32_t sequence,
+		Command::Intent &out)
+	{
+		// Timed around the whole brain, including the early exits: a bot that
+		// is dead or frozen still costs whatever deciding that costs.
+		const uint64_t began = NowMicros();
+		const bool produced = Think(forSlot, sequence, out);
+		g_cost.Note(sequence, NowMicros() - began);
+		return produced;
+	}
+
+	bool Think(Session::PlayerSlot forSlot, uint32_t sequence,
 		Command::Intent &out)
 	{
 		State *bot = StateFor(forSlot);
@@ -2743,6 +2844,40 @@ void TraceEvent(Session::PlayerSlot slot, const char *event, const char *detail)
 }
 
 uint32_t BrainDigest() { return g_brainDigest; }
+
+CpuCost Cost()
+{
+	CpuCost out;
+	out.tics = g_cost.tics;
+	out.totalMicros = g_cost.totalMicros;
+	out.worstMicros = g_cost.worstMicros;
+	out.warmWorstMicros = g_cost.warmWorstMicros;
+	out.brainRuns = g_cost.brainRuns;
+
+	// The 95th percentile from the histogram: the bucket the 95th-percentile
+	// tic falls in, reported as that bucket's top so the number is never an
+	// understatement.
+	if(g_cost.tics > 0)
+	{
+		const uint32_t want = (uint32_t)((g_cost.tics*95 + 99)/100);
+		uint32_t seen = 0;
+		for(unsigned int i = 0;i < COST_BUCKETS;++i)
+		{
+			seen += g_cost.histogram[i];
+			if(seen >= want)
+			{
+				out.p95Micros = (i + 1)*COST_BUCKET_MICROS;
+				break;
+			}
+		}
+	}
+	return out;
+}
+
+void ResetCost()
+{
+	g_cost = CostMeter();
+}
 
 Totals Tally()
 {

@@ -659,6 +659,23 @@ namespace
 				tally.healUses, tally.minesPlaced, tally.doorwayFightsLeft,
 				tally.reversals, tally.dodges);
 		}
+		// What the brains cost. Section 34's per-tic budget is 14.286 ms for
+		// everything a tic does; this is the bots' share of it, and it is
+		// printed rather than asserted here because what counts as acceptable
+		// is a property of the machine the gate is measuring.
+		{
+			const Bot::CpuCost cost = Bot::Cost();
+			if(cost.tics > 0)
+			{
+				Printf("Capture: bot cpu tics=%u runs=%u total=%lluus "
+					"mean=%uus p95=%uus worst=%uus warmworst=%uus\n",
+					cost.tics, cost.brainRuns,
+					(unsigned long long)cost.totalMicros,
+					(unsigned int)(cost.totalMicros/cost.tics),
+					cost.p95Micros, cost.worstMicros, cost.warmWorstMicros);
+			}
+		}
+
 		// What each bot ended up carrying. The outcome of B5's item goals, and
 		// the only visible one: weapon-stay means the pickup is still lying
 		// there afterwards, so the world looks the same either way.

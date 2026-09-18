@@ -596,6 +596,36 @@ struct Totals
 };
 Totals Tally();
 
+// What the brains cost, in microseconds of wall clock.
+//
+// Section 34's budget is 14.286 ms for a whole tic at 70 Hz, and the brains are
+// one part of that; a gate needs a number to hold them to. Measured rather than
+// asserted: the plan asks for thresholds taken from real hardware.
+//
+// Timing is a measurement and never an input. Nothing here is read by a
+// decision, written to a command, or folded into a checksum -- a bot that
+// behaved differently on a slow machine would be a desync, not a diagnostic.
+struct CpuCost
+{
+	// Tics on which at least one brain ran.
+	unsigned int tics = 0;
+	// Every brain in that tic added together, summed over all of them.
+	uint64_t totalMicros = 0;
+	// The worst single tic, and the 95th percentile of them.
+	unsigned int worstMicros = 0;
+	unsigned int p95Micros = 0;
+	// The worst tic once the match is under way, ignoring the first two
+	// seconds. Every bot plans its first route from a cold graph on the tic it
+	// starts thinking, which costs milliseconds once and never again; keeping
+	// the two apart is the difference between "expensive to start" and "drops
+	// a frame mid-match", and only the second is a fault.
+	unsigned int warmWorstMicros = 0;
+	// Brains run, which is tics times roster where nobody died.
+	unsigned int brainRuns = 0;
+};
+CpuCost Cost();
+void ResetCost();
+
 // Send every bot to one tile, over and over, instead of roaming.
 //
 // A gate needs this because the interesting cells are rare: there is exactly

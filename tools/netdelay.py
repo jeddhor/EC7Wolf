@@ -30,7 +30,7 @@ import time
 class Relay:
     def __init__(self, listen: int, forward: tuple[str, int], delay_ms: float,
                  jitter_ms: float, loss: float, seed: int,
-                 duplicate: float = 0.0):
+                 duplicate: float = 0.0, impair_after: float = 0.0):
         self.forward = forward
         self.delay = delay_ms / 1000.0
         self.jitter = jitter_ms / 1000.0
@@ -40,6 +40,18 @@ class Relay:
         # twice has to be idempotent, and a receiver that stores both copies
         # fills its ring with the same sequence.
         self.duplicate = duplicate / 100.0
+        # Seconds of clean link before loss and duplication begin. Delay and
+        # jitter apply throughout; it is only the lossy impairments that wait.
+        #
+        # For separating "does the match survive a bad link" from "does the
+        # handshake survive one", which are different questions with different
+        # answers. Net::NewGame's exchange has no recovery from a lost packet
+        # and hangs about half the time at 5% loss -- a known defect, recorded
+        # under M7 in docs/multiplayer.md and not yet fixed -- so a gate
+        # aiming at the match would otherwise spend its time rediscovering
+        # that instead.
+        self.impair_after = impair_after
+        self.started = time.monotonic()
         self.random = random.Random(seed)
 
         self.near = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -49,13 +61,17 @@ class Relay:
 
         self.client_address: tuple[str, int] | None = None
         self.counts = {"to_far": 0, "to_near": 0, "dropped": 0,
-                       "duplicated": 0}
+                       "duplicated": 0, "spared": 0}
         self.lock = threading.Lock()
 
     def _later(self, send) -> None:
         """Deliver after the delay, without holding up anything else."""
         with self.lock:
-            if self.random.random() < self.loss:
+            sparing = self.impair_after > 0.0 and \
+                time.monotonic() - self.started < self.impair_after
+            if sparing:
+                self.counts["spared"] += 1
+            elif self.random.random() < self.loss:
                 self.counts["dropped"] += 1
                 return
             wait = self.delay
@@ -64,7 +80,7 @@ class Relay:
             # A second copy on a timer of its own, so it can land either side
             # of the first. Jitter already reorders; this adds the case where
             # the same sequence arrives twice.
-            again = self.random.random() < self.duplicate
+            again = not sparing and self.random.random() < self.duplicate
             extra = 0.0
             if again:
                 self.counts["duplicated"] += 1
@@ -113,6 +129,12 @@ def main() -> int:
                         help="one-way delay in ms; round trip is twice this")
     parser.add_argument("--jitter", type=float, default=0.0, metavar="MS")
     parser.add_argument("--loss", type=float, default=0.0, metavar="PERCENT")
+    parser.add_argument("--impair-after", type=float, default=0.0,
+                        metavar="SECONDS",
+                        help="deliver everything for this long before dropping "
+                             "or duplicating anything; delay and jitter still "
+                             "apply. Separates a bad match from a bad "
+                             "handshake.")
     parser.add_argument("--duplicate", type=float, default=0.0,
                         metavar="PERCENT", help="send this share twice")
     parser.add_argument("--seed", type=int, default=1,
@@ -122,10 +144,12 @@ def main() -> int:
     host, port = arguments.forward.rsplit(":", 1)
     relay = Relay(arguments.listen, (host, int(port)), arguments.delay,
                   arguments.jitter, arguments.loss, arguments.seed,
-                  arguments.duplicate)
+                  arguments.duplicate, arguments.impair_after)
     print(f"relay :{arguments.listen} -> {host}:{port}  "
           f"delay {arguments.delay}ms one way, jitter {arguments.jitter}ms, "
-          f"loss {arguments.loss}%, duplicate {arguments.duplicate}%",
+          f"loss {arguments.loss}%, duplicate {arguments.duplicate}%"
+          + (f", clean for the first {arguments.impair_after}s"
+             if arguments.impair_after else ""),
           flush=True)
     try:
         relay.run()

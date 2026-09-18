@@ -25,7 +25,8 @@
 #
 # Usage:
 #   run_gates.sh [-b BUILD_DIR] [-d DATA_DIR] [-r RELEASE_DIR]
-#                [--editor-package DIR] [--require-data] [--list] [GATE...]
+#                [--sanitizer DIR] [--editor-package DIR] [--require-data]
+#                [--list] [GATE...]
 #
 # GATE names are matched as substrings, so `run_gates.sh gl_` runs the OpenGL
 # gates and `run_gates.sh laser` runs both laser ones.
@@ -55,6 +56,7 @@ while [ "$#" -gt 0 ]; do
 		-b) build_dir=$2; shift 2 ;;
 		-d) data_dir=$2; shift 2 ;;
 		-r) release_dir=$2; shift 2 ;;
+		--sanitizer) sanitizer_dir=$2; shift 2 ;;
 		--editor-package) editor_package=$2; shift 2 ;;
 		--require-data) require_data=1; shift ;;
 		--fast) tier=fast; shift ;;
@@ -72,6 +74,9 @@ done
 [ -n "$build_dir" ]   || build_dir=$root/../builds/release-build
 [ -n "$data_dir" ]    || data_dir=$root/../builds/release
 [ -n "$release_dir" ] || release_dir=$root/../builds/release
+# Where an AddressSanitizer/UBSan build lives, if one has been made. Only
+# bot_sanitizer uses it, and that gate skips when it is absent.
+[ -n "${sanitizer_dir:-}" ] || sanitizer_dir=$root/../builds/sanitizer
 
 # --- the gate list ---------------------------------------------------------
 #
@@ -105,6 +110,10 @@ corridor7_upscale
 corridor7_controls
 ui_buttons
 bot_footwork
+bot_budget
+bot_netplay
+bot_soak
+bot_sanitizer
 ec7edit_e9
 ec7edit_e10
 ec7edit_e11
@@ -172,7 +181,7 @@ release_gates='corridor7_release_startup'
 #
 # Split so the structural gates can run on every change and these can run
 # before a commit and on CI's slower schedule.
-slow_gates='bot_transporters bot_arenas bot_perception bot_roam multiplayer_starts bot_skill bot_footwork'
+slow_gates='bot_transporters bot_arenas bot_perception bot_roam multiplayer_starts bot_skill bot_footwork bot_budget bot_soak bot_sanitizer'
 
 is_slow() {
 	for slow in $slow_gates; do
@@ -574,6 +583,13 @@ for g in $data_gates; do
 	fi
 	if [ ! -x "$build_dir/ec7wolf" ]; then
 		skip_gate "$g" "no ec7wolf in $build_dir"
+		continue
+	fi
+	# One gate wants a different binary: the sanitizer build, which is a
+	# separate configuration and not what anybody has lying about by default.
+	# It skips itself when there is none, and says so.
+	if [ "$g" = bot_sanitizer ]; then
+		run_gate "$g" "gate" "$script" "$sanitizer_dir" "$data_dir"
 		continue
 	fi
 	run_gate "$g" "gate" "$script" "$build_dir" "$data_dir"

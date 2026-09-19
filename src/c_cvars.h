@@ -104,5 +104,9 @@ extern float	localDesiredFOV;
 //
 extern  bool		alwaysrun;
 extern  bool		mouseenabled, mousemovesforward, joystickenabled;
+// Which control scheme "restore defaults" puts back: see ControlScheme::Style.
+// Written by the installer when the player picks one, so the answer survives
+// into the game rather than being guessed at from the bindings themselves.
+extern  int			controlstyle;
 
 #endif /* __C_CVARS__ */

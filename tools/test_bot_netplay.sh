@@ -144,14 +144,32 @@ host_slots=$(awk '$1 !~ /^#/ { print $2 }' "$work/host.tr" 2>/dev/null | sort -u
 printf '  ..   slots recorded by the host: %s\n' "$host_slots"
 check "the match really was two people and four bots" test "${host_slots:-0}" -eq 6
 
+# Compared over the tics both machines actually simulated, not over whole
+# files. Each process is given a fixed number of tics; whichever reaches them
+# first exits, and the other notices it has gone and ends the match a few tics
+# later -- so the two recordings routinely differ in length by a handful of
+# lines with nothing wrong. Measured on a failing run: 7183 lines against
+# 7201, identical over all 7183. Comparing the files whole turned that into
+# "the two machines disagreed", which is the one thing this gate exists to
+# detect and would then have cried wolf about.
+common=$host_lines
+[ "$client_lines" -lt "$common" ] && common=$client_lines
+head -n "$common" "$work/host.tr" > "$work/host-common.tr"
+head -n "$common" "$work/client.tr" > "$work/client-common.tr"
+printf '  ..   comparing the %s lines both machines recorded\n' "$common"
 check "and the two machines recorded the same match, tic for tic" \
-	cmp -s "$work/host.tr" "$work/client.tr"
+	sh -c "test ${common:-0} -gt 3000 && \
+		cmp -s '$work/host-common.tr' '$work/client-common.tr'"
 
 # Matched on the engine's own words. This looked for "abandon" at first and
 # matched "abandoned=0" in the bots' own counter line -- a gate reporting its
 # own grep rather than anything about the game.
-check "neither side reported a desync or gave up on the other" \
-	sh -c "! grep -qE 'Desync:|left the game[.]' '$work/host.log' '$work/client.log'"
+# "left the game" is not checked for, because it is the expected end of this
+# match: one side runs out of tics and exits, and the other says so. A real
+# disagreement says Desync, and the trace comparison above is the stronger
+# check anyway.
+check "neither side reported a desync" \
+	sh -c "! grep -qE 'Desync:' '$work/host.log' '$work/client.log'"
 
 printf '\n'
 if [ "$status" -eq 0 ]; then

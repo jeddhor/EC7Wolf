@@ -132,6 +132,7 @@ MENU_LISTENER(MultiplayerRoleChanged);
 MENU_LISTENER(MultiplayerCountChanged);
 MENU_LISTENER(MultiplayerBotClassChanged);
 MENU_LISTENER(MultiplayerModeChanged);
+MENU_LISTENER(RestoreControlDefaults);
 MENU_LISTENER(StartMultiplayer);
 
 Menu mainMenu(MENU_X, MENU_Y, MENU_W, 24);
@@ -583,6 +584,35 @@ MENU_LISTENER(MultiplayerBotClassChanged)
 	const bool joining = (mpRoleItem != NULL && mpRoleItem->getCurrentOption() == 1);
 	if(mpBotUniformItem)
 		mpBotUniformItem->setEnabled(!joining && which == 0);
+	return true;
+}
+
+// Put every binding back to the scheme this installation was set up with.
+//
+// Which scheme that is was decided at install time and written into the
+// configuration, because the two are different games to play -- the modern
+// default is WASD and E, and the classic one is what Corridor 7 shipped with,
+// arrow keys and space. Guessing it from the current bindings would be
+// guessing about exactly the thing the player has just been changing.
+//
+// Asked first. This throws away every binding on the screen, including any
+// gamepad ones, and a player who meant to press F11 would otherwise lose the
+// lot with no warning and no undo.
+MENU_LISTENER(RestoreControlDefaults)
+{
+	const bool classic = controlstyle == ControlScheme::Style_Classic;
+	FString question;
+	question.Format("Restore the %s controls?",
+		classic ? "original" : "default");
+
+	if(!C7Menu_Confirm(&controls, question,
+		"ENTER  Restore        ESC  Keep mine"))
+		return false;
+
+	if(!ControlScheme::restoreDefaults(controlScheme, controlstyle))
+		return false;
+
+	ShootSnd();
 	return true;
 }
 
@@ -1671,6 +1701,9 @@ void CreateMenus()
 
 
 	controls.setHeadText(language["STR_CUSTOM"], true);
+	// F12, because a player who has tangled their bindings has no other way
+	// back: every row can be changed and none of them says what it started as.
+	controls.setDefaultsListener(RestoreControlDefaults);
 	controls.setHeadPicture("M_CUSTOM");
 	controls.showControlHeaders(true);
 	for(int i = 0;controlScheme[i].button != bt_nobutton;i++)

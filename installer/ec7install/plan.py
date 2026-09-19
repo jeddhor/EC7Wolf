@@ -294,6 +294,14 @@ class InstallPlan:
             reporter.progress(done / total)
 
             destination = staging.commit(reporter)
+
+            # After the commit, and after carry_over inside it, because the
+            # modern scheme records itself by editing whatever configuration
+            # ends up installed rather than by replacing it. See
+            # controls.record_style.
+            if not self.classic_controls:
+                controls.record_style(destination, classic=False)
+                reporter.detail("controls: the modern scheme (WASD, E to use)")
         except Canceled:
             staging.abandon()
             raise

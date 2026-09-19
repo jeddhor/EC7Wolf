@@ -23,6 +23,13 @@ from pathlib import Path
 
 CONFIG_NAME = "ec7wolf.cfg"
 
+#: The engine remembers which scheme was chosen here, because "restore
+#: defaults" on the controls screen has to know which defaults are meant. The
+#: values are ControlScheme::Style in src/wl_def.h.
+STYLE_SETTING = "ControlStyle"
+STYLE_MODERN = 0
+STYLE_CLASSIC = 1
+
 # What the engine does if nobody says otherwise.
 MODERN = {
     "Keyboard_Forward": (119, "W"),
@@ -76,21 +83,80 @@ def describe(scheme: dict) -> str:
                      for key in order if key in scheme)
 
 
+def record_style(destination: Path, classic: bool) -> Path:
+    """Say which scheme this installation uses, without disturbing anything else.
+
+    For the modern scheme there are no bindings to write -- they are the
+    engine's own -- so all that is needed is the one line the game reads when
+    somebody asks it to restore the defaults. It cannot be written the way the
+    classic bindings are, into the staging tree, because `Staging.carry_over`
+    skips any file that is already there: a file written that way replaces the
+    player's configuration instead of joining it, and a reinstall would throw
+    away every setting they had. Measured by
+    tools/test_installer_lifecycle.sh, which is what caught it.
+
+    So this runs on the finished install, and only when there is no
+    configuration there at all. An existing one is left byte for byte as it
+    was, which is what a reinstall promises and what
+    tools/test_installer_lifecycle.sh checks: the player's file is theirs, and
+    an installer that rewrites it to add a line is an installer that edits
+    their settings behind their back.
+
+    Nothing is lost by leaving it. A configuration that already exists either
+    names a style already -- from the install that created it -- or does not,
+    in which case the engine reads the modern default, which is the answer this
+    would have written. And a player who asks for the original's controls gets
+    controls.write_config instead, which deliberately replaces the file.
+    """
+    path = Path(destination) / CONFIG_NAME
+    if path.exists():
+        return path
+
+    style = STYLE_CLASSIC if classic else STYLE_MODERN
+    line = f"{STYLE_SETTING} = {style};"
+
+    path.write_text("\n".join([
+        "// Written by the EC7Wolf installer: the modern control scheme.",
+        "// The bindings themselves are the engine's own defaults; this only",
+        "// records which scheme Options -> Controls should restore.",
+        "",
+        line,
+    ]) + "\n")
+    return path
+
+
 def write_config(destination: Path, scheme: dict = CLASSIC) -> Path:
-    """Write a configuration holding just these bindings.
+    """Write a configuration holding just these bindings, and which set it is.
 
     Everything else is left out on purpose. The engine creates any setting the
     file does not have, so a short file means "these keys, and your usual
     defaults for the rest" -- and it stays correct when the engine gains a
     setting this installer has never heard of.
+
+    The style is recorded alongside, because the bindings alone cannot answer
+    the question the game later asks. A player who rebinds Forward to J has a
+    configuration that matches neither scheme, and "restore defaults" still has
+    to know which one they started from. Written for the modern scheme too,
+    where there are no bindings to write at all: the whole file is then the one
+    line saying which scheme this installation is.
     """
+    classic = scheme is not MODERN
     path = Path(destination) / CONFIG_NAME
     lines = [
-        "// Written by the EC7Wolf installer: the original's control scheme.",
+        "// Written by the EC7Wolf installer: "
+        + ("the original's control scheme." if classic
+           else "the modern control scheme."),
         "// Everything not listed here uses the engine's own default, and any",
         "// of it can be changed in Options -> Controls.",
         "",
+        f"{STYLE_SETTING} = {STYLE_CLASSIC if classic else STYLE_MODERN};",
     ]
-    lines += [f"{key} = {value};" for key, (value, _name) in sorted(scheme.items())]
+    # The modern scheme is the engine's own, so its bindings are left out
+    # entirely: writing them would pin today's defaults into the file and stop
+    # a later engine from improving them. The one line above is the whole
+    # point of the file in that case.
+    if classic:
+        lines += [f"{key} = {value};"
+                  for key, (value, _name) in sorted(scheme.items())]
     path.write_text("\n".join(lines) + "\n")
     return path

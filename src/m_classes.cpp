@@ -469,6 +469,16 @@ ControlMenuItem::ControlMenuItem(ControlScheme &button) : MenuItem(button.name),
 
 void ControlMenuItem::activate()
 {
+	// The shell asks for any device at once and draws the question in its own
+	// language; the column below belongs to the menu it replaced. See
+	// C7Menu_BindControl.
+	if(C7Menu_BindControl(menu, this, button))
+	{
+		MenuItem::activate();
+		menu->draw();
+		return;
+	}
+
 	if(mouseenabled)
 	{
 		// Check for mouse up
@@ -711,7 +721,7 @@ Menu::Menu(int x, int y, int w, int indent, MENU_LISTENER_PROTOTYPE(entryListene
 	entryListener(entryListener), animating(false), controlHeaders(false),
 	curPos(0), headPicture(NULL), headTextInStripes(false),
 	headPictureIsAlternate(false), backgroundPicture(NULL),
-	backgroundCursorX(0), backgroundCursorY(0), escapeSound("menu/escape"),
+	backgroundCursorX(0), backgroundCursorY(0), escapeSound("menu/escape"), defaultsListener(NULL),
 	height(0), indent(indent), x(x), y(y), w(w),
 	itemOffset(0)
 {
@@ -1159,6 +1169,45 @@ int Menu::handle()
 				VW_UpdateScreen();
 				TicDelay(20);
 				break;
+		}
+
+		// F12 puts the bindings back, on the screen that has any. Answered
+		// here rather than by an item because it belongs to the screen as a
+		// whole, and a player looking for it should not have to find the
+		// right row first.
+		if (Keyboard[sc_F12] && defaultsListener != NULL)
+		{
+			IN_ClearKeysDown();
+			const bool changed = defaultsListener(curPos);
+
+			// Drain whatever is still held before this loop reads again.
+			//
+			// The listener puts a dialog up and that dialog answers the press
+			// that dismissed it -- but the press is still reported for a few
+			// passes afterwards, and this loop treats a second button as
+			// "go back". Measured: confirming the restore closed the controls
+			// list and dropped the player onto the screen above it, with
+			// ci.button1 set and no key down at all. ControlMenuItem::activate
+			// drains the same way for the same reason.
+			//
+			// Bounded, because a controller with a stuck button would
+			// otherwise never let the menu run again.
+			for (int settle = 0; settle < 100; ++settle)
+			{
+				ReadAnyControl(&ci);
+				if (!ci.button0 && !ci.button1 && !ci.button2 && !ci.button3)
+					break;
+				SDL_Delay(5);
+			}
+			IN_ClearKeysDown();
+
+			if (changed)
+			{
+				draw();
+				VW_UpdateScreen();
+			}
+			TicDelay(20);
+			continue;
 		}
 
 		if (ci.button0 || Keyboard[sc_Space] || Keyboard[sc_Enter])

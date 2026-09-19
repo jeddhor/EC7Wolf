@@ -20,6 +20,9 @@
 #include "id_us.h"
 #include "wl_iwad.h"
 #include "m_classes.h"
+#include "wl_menu.h"
+#include "c_cvars.h"
+#include "id_sd.h"
 #include "id_vh.h"
 #include "r_artscale.h"
 #include "v_video.h"
@@ -384,11 +387,258 @@ bool C7Menu_Draw(const Menu *menu)
 	screen->Clear(labelX, fy - Scaled(14), valueX + Scaled(17),
 		fy - Scaled(14) + 1, ColorMatcher.Pick(48, 48, 48), 0);
 	V_TTDrawText(g_regular, Scaled(15), labelX, fy,
-		"ENTER  Select      ESC  Back", kDimR, kDimG, kDimB);
+		menu != NULL && menu->hasDefaultsListener() ?
+			"ENTER  Select      ESC  Back      F12  Restore Defaults" :
+			"ENTER  Select      ESC  Back", kDimR, kDimG, kDimB);
 
 	return true;
 }
 
+
+// A box over the menu, and the panel both it and the binder draw.
+static void DrawPromptBox(int &boxX, int &boxY, int &boxW, int &boxH)
+{
+	const int labelX = (int)(kLabelX * SCREENWIDTH);
+	const int valueX = (int)(kValueX * SCREENWIDTH);
+	boxW = valueX - labelX;
+	boxH = Scaled(104);
+	boxX = labelX;
+	boxY = (SCREENHEIGHT - boxH)/2;
+
+	screen->Clear(boxX, boxY, boxX + boxW, boxY + boxH,
+		ColorMatcher.Pick(16, 14, 10), 0);
+	DrawRule(boxX, boxY, boxW, Scaled(2));
+	DrawRule(boxX, boxY + boxH - Scaled(2), boxW, Scaled(2));
+}
+
+static void DrawPromptText(int boxX, int boxY, int boxW, const char *ask,
+	const char *how)
+{
+	FString head(ask);
+	head.ToUpper();
+	const int askSize = Scaled(20);
+	const int askW = V_TTTextWidth(g_bold, askSize, head);
+	V_TTDrawText(g_bold, askSize, boxX + (boxW - askW)/2, boxY + Scaled(24),
+		head, kAmberR, kAmberG, kAmberB);
+
+	const int howSize = Scaled(15);
+	const int howW = V_TTTextWidth(g_regular, howSize, how);
+	V_TTDrawText(g_regular, howSize, boxX + (boxW - howW)/2, boxY + Scaled(60),
+		how, kDimR, kDimG, kDimB);
+}
+
+bool C7Menu_Confirm(const Menu *menu, const char *question, const char *detail)
+{
+	if(!C7Menu_Active() || !LoadFonts() || screen == NULL)
+		return false;
+
+	IN_ClearKeysDown();
+	LastScan = sc_None;
+
+	bool answered = false, yes = false;
+	while(!answered)
+	{
+		IN_ProcessEvents();
+		ControlInfo ci;
+		ReadAnyControl(&ci);
+
+		const ScanCode scan = LastScan;
+		if(scan == sc_Y || scan == sc_Return || scan == sc_Enter)
+		{
+			yes = answered = true;
+		}
+		else if(scan == sc_N || scan == sc_Escape)
+		{
+			answered = true;
+		}
+		LastScan = sc_None;
+
+		if(answered)
+			break;
+
+		C7Menu_Draw(menu);
+		int boxX, boxY, boxW, boxH;
+		DrawPromptBox(boxX, boxY, boxW, boxH);
+		DrawPromptText(boxX, boxY, boxW, question,
+			detail != NULL ? detail : "ENTER  Yes        ESC  No");
+		VW_UpdateScreen();
+		SDL_Delay(10);
+	}
+
+	IN_ClearKeysDown();
+	LastScan = sc_None;
+	SD_PlaySound(yes ? "menu/activate" : "menu/escape");
+	return yes;
+}
+
+// Binding a control inside this shell.
+//
+// The stock binder asks for one device at a time. Which one is a static column
+// that Left and Right move, and in this shell nothing draws it: the value
+// column shows every binding a control has at once ("w / JS34"), so there is
+// no column on screen to move a highlight along. Pressing Enter therefore
+// always asked for a keyboard key, a gamepad press did nothing at all, and the
+// only way out was the Escape key -- which a player holding a controller does
+// not have to hand. It also drew its "???" prompt in the bitmap font at the
+// old menu's coordinates, in the middle of a screen that looks nothing like
+// that menu.
+//
+// So this asks a different question. Not "what key do you want for this",
+// which needs the device decided in advance, but "press something", and
+// whatever arrives is what gets bound. That is how every modern binder
+// behaves, it needs no hidden state, and it makes a gamepad a first-class way
+// to configure a gamepad.
+//
+// Escape cancels, which means Escape cannot be bound this way; it could not be
+// before either. Backspace clears the control's bindings, which the stock
+// binder had no way to do at all.
+bool C7Menu_BindControl(const Menu *menu, MenuItem *item, ControlScheme &button)
+{
+	if(!C7Menu_Active() || !LoadFonts() || screen == NULL)
+		return false;
+
+	// Wait for the press that opened this to end before listening.
+	//
+	// Enter is a keyboard key and the gamepad button that activated the row is
+	// a gamepad button, and both are still down. Without this the binder
+	// answers the question with the press that asked it, instantly, and the
+	// player sees their Use button become their Forward button.
+	bool settled = false;
+	while(!settled)
+	{
+		IN_ProcessEvents();
+		ControlInfo ci;
+		ReadAnyControl(&ci);
+		settled = LastScan == sc_None && IN_MouseButtons() == 0 &&
+			(!IN_JoyPresent() || (IN_JoyButtons() == 0 && IN_JoyAxes() == 0));
+		if(!settled)
+		{
+			LastScan = sc_None;
+			C7Menu_Draw(menu);
+			VW_UpdateScreen();
+			SDL_Delay(10);
+		}
+	}
+	IN_ClearKeysDown();
+	LastScan = sc_None;
+
+	const FString label = item != NULL ? item->getString() : "";
+	bool done = false, bound = false;
+
+	while(!done)
+	{
+		IN_ProcessEvents();
+		ControlInfo ci;
+		ReadAnyControl(&ci);
+
+		const ScanCode scan = LastScan;
+		if(scan == sc_Escape)
+		{
+			LastScan = sc_None;
+			break;
+		}
+		if(scan == sc_BackSpace)
+		{
+			ControlScheme::setKeyboard(controlScheme, button.button, -1);
+			ControlScheme::setMouse(controlScheme, button.button, -1);
+			ControlScheme::setJoystick(controlScheme, button.button, -1);
+			LastScan = sc_None;
+			bound = done = true;
+			break;
+		}
+		if(scan != sc_None)
+		{
+			ControlScheme::setKeyboard(controlScheme, button.button, scan);
+			LastScan = sc_None;
+			bound = done = true;
+			break;
+		}
+
+		int btn = mouseenabled ? IN_MouseButtons() : 0;
+		if(btn != 0)
+		{
+			for(int i = 0;i < 32;++i)
+			{
+				if(btn & (1<<i))
+				{
+					ControlScheme::setMouse(controlScheme, button.button, i);
+					bound = done = true;
+					break;
+				}
+			}
+		}
+		else if(mouseenabled)
+		{
+			int wheel = 0;
+			if(MouseWheel[di_west])  wheel = ControlScheme::MWheel_Left;
+			if(MouseWheel[di_east])  wheel = ControlScheme::MWheel_Right;
+			if(MouseWheel[di_north]) wheel = ControlScheme::MWheel_Up;
+			if(MouseWheel[di_south]) wheel = ControlScheme::MWheel_Down;
+			if(wheel != 0)
+			{
+				ControlScheme::setMouse(controlScheme, button.button, wheel);
+				bound = done = true;
+			}
+		}
+
+		if(!done && IN_JoyPresent())
+		{
+			// A button if there is one, a stick direction otherwise. The
+			// stock binder's numbering is kept: axes live above the buttons
+			// at 32 and up, two entries per axis for its two directions.
+			btn = IN_JoyButtons();
+			if(btn != 0)
+			{
+				for(int i = 0;i < 32;++i)
+				{
+					if(btn & (1<<i))
+					{
+						ControlScheme::setJoystick(controlScheme, button.button, i);
+						bound = done = true;
+						break;
+					}
+				}
+			}
+			else
+			{
+				btn = IN_JoyAxes();
+				for(int i = 0;btn != 0 && i < 32;++i)
+				{
+					if(btn & (1<<i))
+					{
+						ControlScheme::setJoystick(controlScheme, button.button,
+							i + 32);
+						bound = done = true;
+						break;
+					}
+				}
+			}
+		}
+
+		if(done)
+			break;
+
+		// The menu behind, and the question over it.
+		C7Menu_Draw(menu);
+
+		int boxX, boxY, boxW, boxH;
+		DrawPromptBox(boxX, boxY, boxW, boxH);
+		FString ask;
+		ask.Format("PRESS ANY KEY OR BUTTON FOR %s", label.GetChars());
+		DrawPromptText(boxX, boxY, boxW, ask,
+			"ESC  Cancel        BACKSPACE  Clear");
+		VW_UpdateScreen();
+		SDL_Delay(10);
+	}
+
+	if(bound)
+		ShootSnd();
+
+	// Whatever was pressed to answer must not also act on the menu underneath.
+	IN_ClearKeysDown();
+	LastScan = sc_None;
+	return true;
+}
 
 // Editing a text field inside this shell.
 //

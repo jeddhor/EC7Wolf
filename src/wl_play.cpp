@@ -152,6 +152,56 @@ ControlScheme controlScheme[] =
 	// End of List
 	{ bt_nobutton,			NULL, -1, -1, -1, CS_AxisDigital, 0 }
 };
+
+// The table as it was compiled, kept so that "restore defaults" has something
+// to restore to.
+//
+// It cannot be read back out of the live table, because the live table is what
+// a configuration file overwrites on the way in: by the time anybody asks, the
+// defaults are gone. So a copy is taken before the config is read.
+static ControlScheme shippedScheme[countof(controlScheme)];
+static bool haveShippedScheme = false;
+
+void ControlScheme::rememberShipped()
+{
+	if(haveShippedScheme)
+		return;
+	memcpy(shippedScheme, controlScheme, sizeof(shippedScheme));
+	haveShippedScheme = true;
+}
+
+// What Corridor 7 shipped with, as differences from the modern table.
+//
+// Only three bindings actually move. Turning is already the arrow keys,
+// attack is already Ctrl, strafe is Alt and run is Shift, and A and D are left
+// on sidestep -- the original had no key for that, you held Alt and turned,
+// and taking the modern one away would make the scheme worse rather than more
+// faithful. The installer's controls.py says the same thing about the same
+// three keys; this is the engine's copy of that decision, and the gate at
+// tools/test_controls_binding.sh checks the two still agree.
+struct ClassicBinding { Button button; int keyboard; };
+static const ClassicBinding classicScheme[] =
+{
+	{ bt_moveforward,	sc_UpArrow },
+	{ bt_movebackward,	sc_DownArrow },
+	{ bt_use,			sc_Space }
+};
+
+bool ControlScheme::restoreDefaults(ControlScheme* scheme, int style)
+{
+	if(!haveShippedScheme || scheme == NULL)
+		return false;
+
+	memcpy(scheme, shippedScheme, sizeof(shippedScheme));
+
+	if(style == Style_Classic)
+	{
+		for(unsigned int i = 0;i < countof(classicScheme);++i)
+			setKeyboard(scheme, classicScheme[i].button,
+				classicScheme[i].keyboard);
+	}
+	return true;
+}
 // The entry wl_debug.cpp consults to decide whether a Tab press is a map
 // key rather than the start of a debug chord. That is the Corridor 7 panel
 // now, not bt_automap. When the input system is redone, hopefully we don't

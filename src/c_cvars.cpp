@@ -76,6 +76,7 @@ fixed movebob = FRACUNIT;
 
 bool alwaysrun;
 bool mouseenabled, mousemovesforward, joystickenabled;
+int controlstyle = ControlScheme::Style_Modern;
 float localDesiredFOV = 90.0f;
 
 #if SDL_VERSION_ATLEAST(2,0,0)
@@ -244,6 +245,7 @@ void ReadConfig(void)
 	config.CreateSetting("WindowedScreenHeight", windowedScreenHeight);
 	config.CreateSetting("DesiredFOV", localDesiredFOV);
 	config.CreateSetting("QuitOnEscape", quitonescape);
+	config.CreateSetting("ControlStyle", controlstyle);
 	config.CreateSetting("MoveBob", FRACUNIT);
 	config.CreateSetting("Gamma", 1.0f);
 	config.CreateSetting("AM_Rotate", 0);
@@ -360,6 +362,9 @@ void ReadConfig(void)
 	}
 	localDesiredFOV = clamp<float>(static_cast<float>(config.GetSetting("DesiredFOV")->GetFloat()), 45.0f, 180.0f);
 	quitonescape = config.GetSetting("QuitOnEscape")->GetInteger() != 0;
+	controlstyle = config.GetSetting("ControlStyle")->GetInteger() ==
+		ControlScheme::Style_Classic ?
+		ControlScheme::Style_Classic : ControlScheme::Style_Modern;
 	movebob = config.GetSetting("MoveBob")->GetInteger();
 	screenGamma = static_cast<float>(config.GetSetting("Gamma")->GetFloat());
 	am_rotate = config.GetSetting("AM_Rotate")->GetInteger();
@@ -518,6 +523,7 @@ void WriteConfig(void)
 	config.GetSetting("WindowedScreenHeight")->SetValue(windowedScreenHeight);
 	config.GetSetting("DesiredFOV")->SetValue(localDesiredFOV);
 	config.GetSetting("QuitOnEscape")->SetValue(quitonescape);
+	config.GetSetting("ControlStyle")->SetValue(controlstyle);
 	config.GetSetting("MoveBob")->SetValue(movebob);
 	config.GetSetting("Gamma")->SetValue(screenGamma);
 	config.GetSetting("AM_Rotate")->SetValue(am_rotate);

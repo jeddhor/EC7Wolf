@@ -344,9 +344,26 @@ public:
 		MWheel_Up = 36
 	};
 
+	// Which set of bindings "the defaults" means. Chosen at install time and
+	// remembered, because the two are genuinely different games to play: the
+	// modern scheme is WASD and E, and the classic one is what Corridor 7
+	// shipped with in 1994 -- arrow keys and space.
+	enum Style
+	{
+		Style_Modern = 0,
+		Style_Classic = 1
+	};
+
 	static void	setKeyboard(ControlScheme* scheme, Button button, int value);
 	static void setJoystick(ControlScheme* scheme, Button button, int value);
 	static void setMouse(ControlScheme* scheme, Button button, int value);
+
+	// Take a copy of the table as it was compiled, before a configuration file
+	// has had the chance to change any of it. Called once, early.
+	static void rememberShipped();
+	// Put every binding back to that copy, then apply the style's differences.
+	// Does nothing if the copy was never taken.
+	static bool restoreDefaults(ControlScheme* scheme, int style);
 
 	Button		button;
 	const char*	name;

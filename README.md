@@ -1123,7 +1123,18 @@ with **Space**.
 **To get the original's scheme:** tick *Use the original's controls* on the
 installer's Options page, or run `ec7wolf-install --classic-controls`. Either
 writes a configuration with those bindings before you first start the game.
-Nothing is locked in — every key can be rebound in *Options → Controls*.
+Nothing is locked in — every key can be rebound in *Options → Controls →
+Customize controls*.
+
+**Rebinding.** Select a row and press whatever you want on it: a key, a mouse
+button, the wheel, a gamepad button or a stick direction. Whichever device you
+press is the one that gets bound, so a controller can be configured with the
+controller. Escape cancels and Backspace clears the row.
+
+**F12 puts everything back**, after asking. It restores the scheme this
+installation was set up with — the modern one or the original's, whichever was
+chosen at install time — because the game records which that was rather than
+guessing it from bindings you may since have changed.
 
 Everything else is the same either way:
 

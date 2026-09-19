@@ -44,6 +44,25 @@ bool C7Menu_FadeColumn(const Menu *menu, bool out);
 // because m_classes.h is not visible from here.
 //
 // Returns true if the edit was accepted, false if it was abandoned.
+// Bind a control, in the shell's own language and from whatever device the
+// player presses.
+//
+// The stock binder asks one device at a time, chosen by a hidden column that
+// Left and Right move with nothing on screen to say so, and draws its prompt
+// in the bitmap font at coordinates that belong to a menu this shell replaced.
+// Here the question is "press something", and whatever arrives -- key, mouse
+// button, wheel, gamepad button or stick -- is what gets bound.
+//
+// Returns false if the shell is not active, in which case the caller does it
+// the old way.
+bool C7Menu_BindControl(const Menu *menu, class MenuItem *item,
+	struct ControlScheme &button);
+
+// Ask a yes-or-no question over the menu, in the shell's own language.
+// Returns true for yes. Anything destructive should ask first, and the stock
+// engine's confirmation is a bitmap-font box that belongs to another menu.
+bool C7Menu_Confirm(const Menu *menu, const char *question, const char *detail);
+
 bool C7Menu_LineInput(const Menu *menu, class MenuItem *item, class FString &text,
 	unsigned int maxLength, void (*setValue)(class MenuItem *, const class FString &));
 

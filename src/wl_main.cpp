@@ -1706,6 +1706,9 @@ int WL_Main (int argc, char *argv[])
 
 		Scanner::SetMessageHandler(ScannerMessageHandler);
 
+		// Before the configuration, not after: reading it overwrites the
+		// control table, and the copy is what "restore defaults" restores to.
+		ControlScheme::rememberShipped();
 		printf("ReadConfig: Reading the Configuration.\n");
 		config.LocateConfigFile(argc, argv);
 		ReadConfig();

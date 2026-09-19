@@ -237,6 +237,10 @@ class Menu
 		int					backgroundCursorX;
 		int					backgroundCursorY;
 		FString				escapeSound;
+		// Offered by a screen where "put it all back" is a sensible thing to
+		// ask for -- the control bindings -- and by nothing else. A menu with
+		// no handler does not mention the key and does not answer it.
+		MENU_LISTENER_PROTOTYPE(defaultsListener);
 		int					height;
 		const int			indent;
 		TArray<MenuItem *>	items;
@@ -257,6 +261,10 @@ class Menu
 	public:
 		Menu(int x, int y, int w, int indent, MENU_LISTENER_PROTOTYPE(entryListener)=NULL);
 		virtual ~Menu();
+
+		// F12, on the screens that have something to restore.
+		void	setDefaultsListener(MENU_LISTENER_PROTOTYPE(listener)) { defaultsListener = listener; }
+		bool	hasDefaultsListener() const { return defaultsListener != NULL; }
 
 		void			addItem(MenuItem *item);
 		static bool		areMenusClosed() { return close; }

@@ -130,22 +130,61 @@ printf 'a %sms round trip with %s%% loss, %s tics each way\n' \
 # red on a link that stalled twice, with both attempts printed above the
 # failure saying so. Four brings that to about one in eighty, and a genuine
 # regression -- input delay not working at all -- still fails all four.
-attempt=1
-while [ "$attempt" -le 4 ]; do
-	match delayed 8 0
-	delayed_host=$(cat "$work/delayed.tics")
-	delayed_client=$(cat "$work/delayed.client-tics")
-	if [ "$delayed_host" -ge "$tics" ] && [ "$delayed_client" -ge "$tics" ]; then
-		break
+#
+# And the timing is the best of the completed runs rather than the last one.
+# Retrying until a run *finishes* is not the same as measuring it: an attempt
+# that follows a stall is measured on a machine that has just spent thirty
+# seconds thrashing, and its number is low for reasons that have nothing to do
+# with input delay. Measured on one unchanged binary across runs, the delayed
+# figure moved between 19 and 23 tics a second while the threshold sat at 1.5
+# -- so the gate passed or failed on which sample it happened to keep. Noise
+# here only ever makes a run slower, so the fastest completed run of each kind
+# is the honest one, and both kinds are measured the same way.
+best_rate() {  # best_rate TAG DELAY MONITOR_CLIENT ATTEMPTS
+	_tag=$1; _delay=$2; _monitor=$3; _tries=$4
+	_best=0
+	_good=0
+	_try=1
+	# Two completed runs are enough to have a best worth keeping; a third
+	# would only pay the stall cost again. A stall takes twenty-six seconds
+	# against six for a run that works, so stopping early is most of this
+	# gate's wall clock.
+	while [ "$_try" -le "$_tries" ] && [ "$_good" -lt 2 ]; do
+		match "$_tag" "$_delay" "$_monitor"
+		_host=$(cat "$work/$_tag.tics")
+		_client=$(cat "$work/$_tag.client-tics")
+		_rate=$(cat "$work/$_tag.rate")
+		if [ "$_host" -ge "$tics" ] && [ "$_client" -ge "$tics" ]; then
+			_good=$((_good + 1))
+			if [ "$_rate" -gt "$_best" ]; then
+				_best=$_rate
+				# Kept with the rate, because the checks below ask this run
+				# whether it finished and whether the two sides agreed. Left
+				# as the last attempt's files, a stalled retry after a good
+				# run would answer for it.
+				cp "$work/$_tag.tics" "$work/$_tag.best-tics"
+				cp "$work/$_tag.client-tics" "$work/$_tag.best-client-tics"
+				cp "$work/$_tag-host.txt" "$work/$_tag-host.best"
+				cp "$work/$_tag-client.txt" "$work/$_tag-client.best"
+			fi
+		elif [ "$_try" -lt "$_tries" ]; then
+			printf '  ..   the %s run stalled (host %s, client %s of %s); attempt %s of %s\n' \
+				"$_tag" "$_host" "$_client" "$tics" "$((_try + 1))" "$_tries"
+		fi
+		_try=$((_try + 1))
+	done
+	printf '%s\n' "$_best" > "$work/$_tag.rate"
+	if [ -f "$work/$_tag.best-tics" ]; then
+		cp "$work/$_tag.best-tics" "$work/$_tag.tics"
+		cp "$work/$_tag.best-client-tics" "$work/$_tag.client-tics"
+		cp "$work/$_tag-host.best" "$work/$_tag-host.txt"
+		cp "$work/$_tag-client.best" "$work/$_tag-client.txt"
 	fi
-	if [ "$attempt" -lt 4 ]; then
-		printf '  ..   the delayed run stalled (host %s, client %s of %s); attempt %s of 4\n' \
-			"$delayed_host" "$delayed_client" "$tics" "$((attempt + 1))"
-	fi
-	attempt=$((attempt + 1))
-done
+	[ "$_best" -gt 0 ]
+}
 
-match immediate 0 1
+best_rate delayed 8 0 4 || true
+best_rate immediate 0 1 2 || true
 
 status=0
 

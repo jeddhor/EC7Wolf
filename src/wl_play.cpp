@@ -2,6 +2,8 @@
 
 #include "c_cvars.h"
 #include "wl_def.h"
+#include "g_session.h"
+#include "g_command.h"
 #include "r_capture.h"
 #include "render/r_renderer.h"
 #include "render/r_interpolation.h"
@@ -606,6 +608,25 @@ void PollMouseMove (void)
 	control[ConsolePlayer].controlx += control[ConsolePlayer].controlpanx * 20 / (21 - mousexadjustment);
 	if(mouselook)
 	{
+		// The one place a human still reaches past the command boundary and
+		// writes simulated state directly. Every other input this function
+		// samples ends up in a TicCmd_t, gets sent, and is applied by every
+		// machine; pitch is written straight onto the pawn and TicCmdPacket
+		// carries no pitch field, so in a netgame each machine holds a
+		// different value for the same actor.
+		//
+		// That is not cosmetic. ChecksumThisTic() hashes actor pitch, so
+		// mouselook desynchronizes the determinism harness -- the instrument
+		// the whole netgame is verified with -- and reports it as a
+		// simulation divergence, which is a long way to chase a mouse.
+		//
+		// Mouselook is a debug toggle with no menu entry, so refusing it
+		// online costs a player nothing today. Carrying a bounded pitch field
+		// in the canonical command is the real answer and belongs with the
+		// protocol work: docs/multiplayer-bots-and-server.md, S1 and 24.3.
+		if(Net::IsNetworked())
+			return;
+
 		int mousey = control[ConsolePlayer].controlpany;
 
 		if(players[ConsolePlayer].ReadyWeapon && players[ConsolePlayer].ReadyWeapon->fovscale > 0)
@@ -684,7 +705,19 @@ void PollControls (bool absolutes)
 	cmd.controlpanx = 0;
 	cmd.controlpany = 0;
 	cmd.controlstrafe = 0;
-	memcpy (cmd.buttonheld, cmd.buttonstate, sizeof (cmd.buttonstate));
+	// Held is measured against what this keyboard and pad last *asked for*,
+	// not against what survived into control[].
+	//
+	// Command::Apply writes the finalized command back into control[], and
+	// finalization strips the buttons that are not gameplay -- the menu, the
+	// automap, the floor map, the scoreboard, pause. Deriving held from
+	// control[] therefore reported every one of those as "not held last
+	// frame", every frame: holding the floor map button re-toggled the map on
+	// every tic, which on a pad looks like the map flashing on and off, and a
+	// pad's Start button never reached the control panel at all because the
+	// bit had been removed before anything read it.
+	static BYTE lastAsked[NUMBUTTONS];
+	memcpy (cmd.buttonheld, lastAsked, sizeof (cmd.buttonheld));
 	memset (cmd.buttonstate, 0, sizeof (cmd.buttonstate));
 	if (automap)
 	{
@@ -710,6 +743,7 @@ void PollControls (bool absolutes)
 		if (demoptr == lastdemoptr)
 			playstate = ex_completed;   // demo is done
 
+		Command::SetLocalUi(cmd);
 		return;
 	}
 
@@ -745,6 +779,12 @@ void PollControls (bool absolutes)
 	// they travel like real ones.
 	Capture::InjectControls(cmd);
 
+	// What this keyboard asked for, kept before finalization removes the parts
+	// that are nobody else's business. The automap, the scoreboard and pause
+	// are read from here; the simulation never sees them.
+	memcpy (lastAsked, cmd.buttonstate, sizeof (lastAsked));
+	Command::SetLocalUi(cmd);
+
 	if (demorecord)
 	{
 		//
@@ -767,15 +807,51 @@ void PollControls (bool absolutes)
 		if (demoptr >= lastdemoptr - 8)
 			playstate = ex_completed;
 	}
-	else if(Net::InitVars.mode != Net::MODE_SinglePlayer)
+	else if(Net::IsNetworked())
 		Net::PollControls();
 
-	// Check automap toggle before we set any buttons as held
-	if (cmd.buttonstate[bt_c7map] && !cmd.buttonheld[bt_c7map])
-		C7Map_Toggle();
-
-	if (cmd.buttonstate[bt_automap] && !cmd.buttonheld[bt_automap])
+	// The canonical frame for the tic about to run: one command for every
+	// active slot, all of them finalized before any thinker moves anything, so
+	// that one slot's movement cannot change another slot's command.
+	//
+	// A slot with a producer is asked; a slot without one already has its
+	// command, either sampled from this keyboard or delivered by the network,
+	// and goes through the same finalizer so that clamping, the gameplay
+	// whitelist and held-state derivation happen in exactly one place.
 	{
+		const uint32_t sequence = (uint32_t)gamestate.TimeCount;
+		Command::BeginFrame(sequence);
+		// Offline, a slot with a producer is asked here, at the moment its
+		// command runs. On a network it was asked a delay window ago by
+		// whichever machine owns it, and the answer arrived in the same ring
+		// as everyone else's -- so asking again here would produce a second,
+		// different command, and only this machine would have it.
+		const bool produceLocally = !Net::IsNetworked();
+		for(unsigned int slot = 0;slot < Session::ActiveSlotCount();++slot)
+		{
+			if(produceLocally && Command::HasProducer(slot))
+				Command::ProduceAndInstall(slot, sequence);
+			else
+				Command::InstallSampled(slot, control[slot]);
+		}
+		Command::FinishFrame();
+	}
+
+	// Local UI, from what this keyboard asked for rather than from the
+	// finalized command -- which no longer carries these, and in a netgame
+	// would be a delay window out of date if it did.
+	const TicCmd_t &ui = Command::LocalUi();
+
+	// Check automap toggle before we set any buttons as held
+	if (ui.buttonstate[bt_c7map] && !ui.buttonheld[bt_c7map])
+	{
+		Capture::NoteUiAction(Capture::UiAction::FloorMap);
+		C7Map_Toggle();
+	}
+
+	if (ui.buttonstate[bt_automap] && !ui.buttonheld[bt_automap])
+	{
+		Capture::NoteUiAction(Capture::UiAction::Automap);
 		AM_Toggle();
 	}
 	if (automap)
@@ -783,9 +859,12 @@ void PollControls (bool absolutes)
 		AM_CheckKeys();
 	}
 
-	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+	// Pause is this machine stopping its own world. It used to be read out of
+	// every slot's command, which meant a remote player's pause key stopped
+	// yours -- and once pause stops being a button that travels, there is
+	// nothing in a command to read.
 	{
-		if(control[i].buttonstate[bt_pause] && !control[i].buttonheld[bt_pause])
+		if (ui.buttonstate[bt_pause] && !ui.buttonheld[bt_pause])
 		{
 			Paused ^= 1;
 
@@ -930,13 +1009,18 @@ void CheckKeys (void)
 	// The key the automap is bound to must not also open the control panel.
 	// Wolf3D put help on F1; Corridor 7 leaves F1 unused (F2 saves, F3 loads),
 	// which is why the full-viewport automap sits there.
+	// bt_esc from the local sample, not from control[]: a pad's Start button
+	// sets it, and finalization removes it from control[] before this runs.
+	const bool escAsked = Command::LocalUi().buttonstate[bt_esc] &&
+		!Command::LocalUi().buttonheld[bt_esc];
 	if ((scan >= sc_F1 && scan <= sc_F9 && !IsAutomapKeyboardScan(scan)) ||
-		scan == sc_Escape || control[ConsolePlayer].buttonstate[bt_esc])
+		scan == sc_Escape || escAsked)
 	{
+		Capture::NoteUiAction(Capture::UiAction::Menu);
 		int lastoffs = StopMusic ();
 		SD_StopDigitized();
 
-		US_ControlPanel (control[ConsolePlayer].buttonstate[bt_esc] ? sc_Escape : scan);
+		US_ControlPanel (escAsked ? sc_Escape : scan);
 
 		IN_ClearKeysDown ();
 
@@ -1328,7 +1412,7 @@ static void DrawC7MapOverlay()
 // letting go of anything else.
 static void DrawScoreboardOverlay()
 {
-	if(control[ConsolePlayer].buttonstate[bt_scoreboard])
+	if(Command::LocalUi().buttonstate[bt_scoreboard])
 		C7Scoreboard_DrawOverlay();
 }
 
@@ -1487,13 +1571,35 @@ void PlayLoop (void)
 
 				CheckSpawnPlayer();
 
-				// In single player if the player dies only tick the pawn
-				if(Net::InitVars.mode != Net::MODE_SinglePlayer || players[0].state != player_t::PST_DEAD)
+				// With nobody else in the world, death stops it; with somebody
+				// else in it, the world has to keep running for them. players[0]
+				// is only reached when there is exactly one slot, which is the
+				// local one.
+				if(Session::HasMultiplePlayers() || players[0].state != player_t::PST_DEAD)
 					thinkerList.Tick();
 				else
 					thinkerList.Tick(ThinkerList::PLAYER);
 
 				AActor::FinishSpawningActors();
+
+				// A deathmatch round with a time limit ends when the level
+				// clock reaches it. The clock is gamestate.TimeCount: it
+				// restarts with each round, advances only on simulated tics
+				// and not while paused, and is the same number on every
+				// machine at the same tic -- so, like the frag limit, every
+				// peer ends the round on its own and nothing is sent about it.
+				// Checked after the thinkers, so a frag scored on the final
+				// tic still counts.
+				if(Net::Deathmatch() && Net::InitVars.timeLimit != 0 &&
+					playstate == ex_stillplaying &&
+					gamestate.TimeCount >=
+						(int32_t)Net::InitVars.timeLimit*60*TICRATE)
+				{
+					Printf("The time limit was reached (%u minute%s).\n",
+						(unsigned)Net::InitVars.timeLimit,
+						Net::InitVars.timeLimit == 1 ? "" : "s");
+					playstate = ex_completed;
+				}
 
 				// Capture post-tic transforms for interpolation, then fold the
 				// deterministic state into the checksum (reads real, not

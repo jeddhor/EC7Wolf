@@ -104,9 +104,9 @@ check() {
 # Escape until a menu is actually on screen; a fixed pair is lost entirely if
 # the game is still loading when the first one goes out.
 menu_open Escape || { printf '  FAIL the game never reached a menu\n'; exit 1; }
-menu_press Return 3
+menu_enter "the rank ladder" || exit 1
 menu_walk_to_bottom "Multiplayer" || exit 1
-menu_press Return 3
+menu_enter "the setup screen" || exit 1
 
 check "the setup screen is up" alive
 
@@ -129,7 +129,11 @@ menu_press Escape 2
 
 printf '\nStart, hosting, which never has an address either\n'
 menu_walk_to_top "Role" || exit 1
-menu_press Left 1.5
+# Verified by its effect, as the cancel gate does: a dropped Left leaves the
+# role on Join, and Start then asks for an address instead of hosting.
+DISPLAY=$display import -window root "$work/role-before.png" 2>/dev/null || true
+menu_press_until Left menu_screen_changed "$work/role-before.png" 40 || {
+	printf '  FAIL the role never changed from Join to Host\n'; exit 1; }
 menu_walk_to_bottom "Start" || exit 1
 menu_press Return 4
 sleep 3

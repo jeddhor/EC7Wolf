@@ -150,7 +150,7 @@ else
 fi
 
 printf '\nTeam play: two team-mates face to face\n'
-match mates --teams 3 0 2 0 "" 300 "C7Player C7AlienPlayer C7Player"
+match mates --teams 3 0 2 0 "" 300 "C7PlayerRed C7AlienPlayer C7PlayerGray"
 if [ -s "$work/mates-0.tr" ]; then
 	t0=$(final "$work/mates-0.tr" 0 8)
 	t2=$(final "$work/mates-0.tr" 2 8)
@@ -161,6 +161,9 @@ if [ -s "$work/mates-0.tr" ]; then
 	printf '  ..   players 0 and 2 on teams %s and %s; lowest health %s and %s; frags %s and %s\n' \
 		"$t0" "$t2" "$h0" "$h2" "$f0" "$f2"
 	check "they really are team-mates" test "$t0" = "$t2"
+	check "the two marine uniforms survived the exchange" \
+		test "$(final "$work/mates-0.tr" 0 10)" = C7PlayerRed \
+		-a "$(final "$work/mates-0.tr" 2 10)" = C7PlayerGray
 	check "neither could hurt the other" test "$h0" -eq 100 -a "$h2" -eq 100
 	check "and nothing was scored" test $((f0 + f2)) -eq 0
 	check "both machines agreed throughout" agree mates 3
@@ -169,7 +172,7 @@ else
 fi
 
 printf '\nTeam play: opponents face to face\n'
-match foes --teams 3 0 1 0 "" 300 "C7Player C7AlienPlayer C7Player"
+match foes --teams 3 0 1 0 "" 300 "C7PlayerGreen C7AlienPlayer C7Player"
 if [ -s "$work/foes-0.tr" ]; then
 	t0=$(final "$work/foes-0.tr" 0 8)
 	t1=$(final "$work/foes-0.tr" 1 8)

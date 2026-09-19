@@ -33,12 +33,14 @@
 */
 
 #include "a_inventory.h"
+#include "g_items.h"
 #include "g_conversation.h"
 #include "id_sd.h"
 #include "templates.h"
 #include "thinker.h"
 #include "thingdef/thingdef.h"
 #include "wl_def.h"
+#include "g_session.h"
 #include "wl_agent.h"
 #include "wl_game.h"
 #include "wl_iwad.h"
@@ -229,6 +231,11 @@ void AInventory::Touch(AActor *toucher)
 
 	if(!CallTryPickup(toucher))
 		return;
+
+	// The pickup actually happened. Recorded here rather than inferred from
+	// what somebody is carrying later, because dying returns a player to its
+	// starting inventory and erases the evidence.
+	Items::NotePickup(toucher);
 
 	if(flags & FL_COUNTITEM)
 		++gamestate.treasurecount;
@@ -788,7 +795,7 @@ bool AWeapon::UseForAmmo(AWeapon *owned)
 
 bool AWeapon::ShouldStay()
 {
-	return Net::InitVars.mode != Net::MODE_SinglePlayer && !(itemFlags & IF_DROPPED);
+	return Session::ItemsStayInWorld() && !(itemFlags & IF_DROPPED);
 }
 
 ACTION_FUNCTION(A_ReFire)
@@ -852,7 +859,7 @@ class AWeaponGiver : public AWeapon
 	protected:
 		bool ShouldStay()
 		{
-			return Net::InitVars.mode != Net::MODE_SinglePlayer && !(itemFlags & IF_DROPPED);
+			return Session::ItemsStayInWorld() && !(itemFlags & IF_DROPPED);
 		}
 
 		bool TryPickup(AActor *toucher)

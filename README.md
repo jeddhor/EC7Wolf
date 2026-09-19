@@ -1157,8 +1157,12 @@ rank ladder. The setup screen asks for:
 | **Players** | the host | How many the match waits for before starting |
 | **Game** | the host | Battle, Team battle, or Cooperative |
 | **Frag limit** | the host | Kills that end a match, or None |
-| **Arena** | the host | Which of the eight arenas |
+| **Time limit** | the host | Minutes a round lasts, or None. Whichever limit is reached first ends it |
+| **Arena** | the host | Which of the eight arenas — where the match starts, if maps are cycling |
+| **Automatically cycle maps** | the host | Each new round on the next arena, wrapping after the last |
+| **Damage** | the host | Player-versus-player damage, from the game's own numbers down to a quarter of them |
 | **Connection** | the host | How much input delay to hide the round trip behind |
+| **Bots** | the host | Opens a screen of its own: how many, how good, and what they look like |
 
 Everything except Role, Character and the address is the host's to decide, and
 travels to everyone when the match starts — including the connection setting,
@@ -1246,6 +1250,53 @@ on one side and everyone playing the alien on the other, players on the same
 side cannot damage one another, and their kills are counted together against
 the frag limit. That is the original's rule, not an invention.
 
+### Playing against bots
+
+A deathmatch does not need anybody else. **Set Role to "Skirmish"** and the
+match runs on this machine with no network at all; set it to "Host a game" and
+the bots fill the rest of the arena alongside whoever joins. Either way the
+**Bots** row opens a screen of its own:
+
+| Row | What it does |
+| --- | --- |
+| **Number of bots** | Nought to eight. Eleven players and bots together is the limit, and the setup screen's Total slots row counts them |
+| **Skill** | Recruit, Marine, Veteran or Elite |
+| **Character** | Marine or Eitak warrior, for all of them at once |
+| **Uniform** | Which colour marine, when they are marines |
+
+They appear in the scoreboard as "Bot 1", "Bot 2" and so on, marked `[BOT]`,
+and they play the ordinary game: the same classes, the same starts, the same
+weapons off the floor, the same damage, the same respawns. Nothing about them
+is privileged. A bot sees ninety degrees in front of it, hears what a player
+would hear, and has to walk to a weapon to hold it.
+
+**The skill levels are not a single dial.** Each one sets how fast a bot
+reacts, how often it looks, how fast it can turn, how accurate its aim is, how
+well it leads a moving target, and how much it moves in a fight — all
+separately, and each bot in a match draws its own values from that level's
+range, so two Elites are not the same opponent. No level has instant reactions,
+perfect aim or an unlimited turn rate; the best of them still takes a seventh
+of a second to notice you and still misses. There is a fifth level used for
+testing that has none of those limits, and it is deliberately not offered here.
+
+On top of skill each bot gets a temperament — one hangs back at range, another
+closes and stays close — which is why a Veteran can feel different from the
+Veteran beside it.
+
+**What they will do:** open doors, ride transporters, fetch health and
+ammunition and weapons they do not have, pick a weapon to suit the range, use
+the infrared visor when they have learned about a laser barrier the hard way,
+lay proximity mines at choke points, break off and look for health when badly
+hurt, come back after respawning, look round when they hear a shot, and strafe
+and dodge while shooting at you.
+
+**What they will not do:** play the campaign. Bots choose targets from other
+players and nothing else — they do not fight the game's aliens and have no
+sense of a locked door or a key — so the Bots rows are greyed out when the
+game mode is Cooperative, and the summary says so rather than letting you
+start a match where they stand about. They also belong to whoever hosts: a
+joining player sees the host's bot settings and cannot change them.
+
 ### The arenas
 
 Eight of them. The manual claims ten and the compendium places them at internal
@@ -1258,9 +1309,16 @@ exist.
 
 Hold **`** (backtick) for the scoreboard — Tab is Corridor 7's floor map, so
 the key most shooters use is already taken. The SCORE box on the status bar
-counts frags rather than points in a deathmatch. When a frag limit is reached
-the standings come up on the high-score page's backdrop for ten seconds, then
-the next round starts on the same arena.
+counts frags rather than points in a deathmatch, and with a time limit set the
+scoreboard's title counts down the time left in the round. When either limit is
+reached the standings come up on the high-score page's backdrop for ten
+seconds, then the next round starts — on the same arena, or on the next one if
+maps are cycling. Nobody keeps their weapons or their frags across a round.
+
+The elevator switches in the arenas do nothing during a battle. They are there
+because the arenas were built out of campaign floors, and pressing one used to
+end the round for everybody, which anybody losing could do at any time. Only
+the frag and time limits end a round. Co-operative play keeps its exits.
 
 ### What is not here, and what is still rough
 
@@ -1269,11 +1327,6 @@ type an address, as the original's successors did.
 
 Two rough edges, measured rather than guessed at:
 
-* **Starting a match on a bad line can fail.** The exchange that begins a level
-  has no tolerance for a lost packet once the other player has moved on; at 5%
-  packet loss about half of connections do not complete. If a match will not
-  start, try again — and if it keeps failing, the game now prints which player
-  it is waiting on and whether it is waiting to be heard or to hear.
 * **A player who quits takes about fifteen seconds to notice.** Someone who
   closes the window, loses wifi or has their phone put them to sleep is not
   distinguishable, at first, from someone whose connection hiccuped. After
@@ -1283,9 +1336,22 @@ Two rough edges, measured rather than guessed at:
   same tic or the simulations diverge; ending the match needs no such
   agreement.
 
+* **Bots are only as good as the eight arenas they were built for.** Their
+  navigation is measured on those maps — every door, every transporter pad,
+  every removable wall — and a custom map from the editor may well contain a
+  place they cannot work out. They will not fall through the floor; they will
+  stand somewhere looking foolish.
+
 Neither affects a match already running on a decent connection.
-[`docs/multiplayer.md`](docs/multiplayer.md) has the measurements, and the
-record of one attempted fix that made the first of these four times worse.
+[`docs/multiplayer.md`](docs/multiplayer.md) has the measurements.
+
+Starting a match on a lossy line used to be a third rough edge: the exchange
+that begins a level had no recovery from a dropped packet, and a connection
+that hit one hung for ever. It is fixed — measured over 24 connections at 15%
+packet loss, 19 completed before the fix and 24 after, and at a punishing 30%
+loss 7 of 16 before against 16 of 16 after — and the same document
+records what the fault actually was, along with the correction of an earlier
+measurement of it that was off by a factor of nine.
 
 ### When a game stops and you want to know why
 

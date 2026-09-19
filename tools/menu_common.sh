@@ -41,6 +41,9 @@ MENU_PRESS_RETRIES=${MENU_PRESS_RETRIES:-4}
 #: How far to walk before deciding a menu is not wrapping. Only has to exceed
 #: the longest menu; with self-verifying presses it is not a timing budget.
 MENU_WALK_LIMIT=${MENU_WALK_LIMIT:-30}
+#: Pixels the cursor must rise by to count as having wrapped round; see
+#: menu_walk_to_bottom.
+MENU_WRAP_SLACK=${MENU_WRAP_SLACK:-12}
 
 #: Optional: a command the walks call each step. When it fails the walk stops
 #: and says the GAME died, which is a far more useful thing to be told than
@@ -100,6 +103,9 @@ menu_wait() {
 menu_press_moved() {  # menu_press_moved KEY
 	_key=$1
 	_from=$(menu_cursor_row)
+	# The frame before the press, for the case below where the cursor cannot
+	# be seen to move because the list moved instead.
+	cp "$work/menu-look.png" "$work/menu-before-press.png" 2>/dev/null || true
 	_attempt=0
 	# What the screen actually said, kept for the failure message. "The menu
 	# stopped responding" is not a diagnosis, and a gate that only says that
@@ -114,6 +120,21 @@ menu_press_moved() {  # menu_press_moved KEY
 		while [ "$_step" -lt "$MENU_SETTLE_STEPS" ]; do
 			_now=$(menu_cursor_row)
 			if [ "$_now" -ge 0 ] && [ "$_now" -ne "$_from" ]; then
+				return 0
+			fi
+			# A list longer than the screen scrolls, and once the selection
+			# reaches the last visible row the highlight stays exactly where it
+			# is while the rows move up underneath it. Judged by the
+			# highlight's pixel row alone, every one of those presses looked
+			# lost: the host's setup screen grew past one screenful when bots
+			# got character and uniform rows, and two gates reported "Down went
+			# nowhere" eighty times with the cursor really walking down the
+			# list. So the same row with a different screen also counts --
+			# the same test menu_press_until already relies on for a value
+			# changing in place.
+			if [ "$_now" -ge 0 ] && [ "$_now" -eq "$_from" ] &&
+				[ -f "$work/menu-before-press.png" ] &&
+				menu_screen_changed "$work/menu-before-press.png" 40; then
 				return 0
 			fi
 			MENU_PRESS_SEEN="$MENU_PRESS_SEEN $_now"
@@ -151,6 +172,41 @@ menu_press_moved() {  # menu_press_moved KEY
 #: multiplayer_cancel failed about one run in twenty with "0 pixels changed":
 #: the key was simply dropped, and every later assertion was then about a
 #: screen nobody had left.
+# Press Return to go to another screen, and make sure it went.
+#
+# The multiplayer gates used `menu_press Return 2.5` for this -- send the key,
+# sleep, hope -- which is the pattern the rest of this file exists to replace.
+# One full-suite run lost the very first Return, on New Mission: the gate then
+# walked the *main* menu to its bottom row, which is Exit Building, pressed
+# Return on that, and spent every remaining key inside an "Exit building?"
+# prompt, finally reporting that the menu "never wrapped round to Role".
+#
+# Retried, but only after waiting a long time for the first press to show,
+# because a second Return that lands after a slow first one is not harmless:
+# on the rank ladder it selects Captain and starts a single-player game. The
+# evidence is a screen that changed a great deal -- a new page, not a
+# highlight moving -- and then a menu recognized on it.
+menu_enter() {  # menu_enter WHAT
+	_what=$1
+	_try=0
+	while [ "$_try" -lt 3 ]; do
+		DISPLAY=$display import -window root "$work/menu-enter-before.png" 2>/dev/null || true
+		menu_send_key Return
+		_step=0
+		while [ "$_step" -lt 25 ]; do
+			if menu_screen_changed "$work/menu-enter-before.png" 2000; then
+				menu_wait >/dev/null 2>&1 || true
+				return 0
+			fi
+			sleep 0.15
+			_step=$((_step + 1))
+		done
+		_try=$((_try + 1))
+	done
+	printf '  FAIL Return never opened %s\n' "$_what"
+	return 1
+}
+
 menu_press_until() {  # menu_press_until KEY CONDITION...
 	_key=$1
 	shift
@@ -231,6 +287,17 @@ menu_shot() {  # menu_shot FILE
 
 # Walking down wraps to the first row, which is how the bottom is found without
 # assuming how many rows there are or where the cursor started. Same going up.
+#
+# "Wrapped" means the cursor went up by more than MENU_WRAP_SLACK pixels, not by
+# any amount. menu_cursor.py reports the middle of the highlighted text, and
+# that moves with the glyphs: "Connection  Average" has a descender and "Start"
+# has none, so the two read a pixel apart in the same row. Once a scrolling list
+# was long enough that both sat in its pinned bottom row -- the multiplayer
+# screen, when Time limit and Automatically cycle maps were added -- the step
+# from one to the other measured 670 then 669, the walk took it for the wrap,
+# and every gate that walks to Start or Role stopped one row short. A real wrap
+# moves the cursor the height of the list; a row is 42 pixels at the gates'
+# resolution; so anything under a dozen is the same row.
 menu_walk_to_bottom() {  # menu_walk_to_bottom WHAT
 	_what=$1
 	_prev=-1
@@ -246,7 +313,7 @@ menu_walk_to_bottom() {  # menu_walk_to_bottom WHAT
 			printf '  FAIL no menu on screen while looking for %s\n' "$_what"
 			return 1
 		fi
-		if [ "$_y" -lt "$_prev" ]; then
+		if [ "$_prev" -ge 0 ] && [ "$_y" -lt $((_prev - MENU_WRAP_SLACK)) ]; then
 			menu_press_moved Up || {
 				printf '  FAIL the menu stopped responding at %s\n' "$_what"; return 1; }
 			printf '  ..   cursor on %s (bottom row)\n' "$_what"
@@ -263,6 +330,15 @@ menu_walk_to_bottom() {  # menu_walk_to_bottom WHAT
 	return 1
 }
 
+# Walk down until the cursor wraps round to the first row.
+#
+# The counterpart of menu_walk_to_bottom, and needed for the same reason: a
+# gate that reaches a row by counting steps from wherever the menu opens is
+# counting a fact about one afternoon's menu. The multiplayer setup screen grew
+# a Uniform row between Character and Server address, and the cancel gate's
+# "two presses up to Role" landed on Character instead -- so it changed the
+# character to Eitak warrior, tried to join a game it meant to host, and
+# reported three failures none of which were about the row that moved.
 menu_walk_to_top() {  # menu_walk_to_top WHAT
 	_what=$1
 	_prev=-1
@@ -278,7 +354,7 @@ menu_walk_to_top() {  # menu_walk_to_top WHAT
 			printf '  FAIL no menu on screen while looking for %s\n' "$_what"
 			return 1
 		fi
-		if [ "$_y" -lt "$_prev" ]; then
+		if [ "$_prev" -ge 0 ] && [ "$_y" -lt $((_prev - MENU_WRAP_SLACK)) ]; then
 			printf '  ..   cursor on %s (top row)\n' "$_what"
 			return 0
 		fi

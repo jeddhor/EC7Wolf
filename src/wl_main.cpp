@@ -7,6 +7,12 @@
 #endif
 
 #include "wl_def.h"
+#include "g_session.h"
+#include "g_bot.h"
+#include "g_skill.h"
+#include "g_perception.h"
+#include "g_items.h"
+#include "g_combat.h"
 #include "wl_menu.h"
 #include "id_ca.h"
 #include "id_sd.h"
@@ -154,12 +160,19 @@ void NewGame (int difficulty, FString map, bool displayBriefing, FName playerCla
 	FName playerClassNames[MAXPLAYERS];
 	playerClassNames[ConsolePlayer] = playerClass != NAME_None ? playerClass : gameinfo.PlayerClasses[0];
 
+	// Bots and any --capture-tape slots join the roster *before* the
+	// exchange, because the exchange is what tells the other machines they
+	// exist. Traces first, so that setting a controller up is itself traced.
+	Capture::OpenTraces();
+	Bot::SetupSlots(playerClassNames);
+	Capture::SetupScriptedSlots(playerClassNames);
+
 	Net::NewGame(difficulty, map, playerClassNames);
 
 	gamestate.difficulty = &SkillInfo::GetSkill(difficulty);
 	strncpy(gamestate.mapname, map, 8);
 	gamestate.mapname[8] = 0;
-	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 		gamestate.playerClass[i] = ClassDef::FindClass(playerClassNames[i]);
 
 	levelInfo = &LevelInfo::Find(map);
@@ -171,7 +184,7 @@ void NewGame (int difficulty, FString map, bool displayBriefing, FName playerCla
 	LevelRatios.killratio = LevelRatios.secretsratio = LevelRatios.treasureratio =
 		LevelRatios.numLevels = LevelRatios.time = 0;
 
-	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 		players[i].state = player_t::PST_ENTER;
 
 	Dialog::ClearConversations();
@@ -380,15 +393,22 @@ static void CollectGC()
 static bool DrawNetworkStatus(const Net::InitStatus &status)
 {
 	FString statusStr;
-	if(status.phase == Net::InitStatus::PHASE_Hosting)
-		statusStr.Format("Listening on %s", status.detail.GetChars());
-	else
-		statusStr.Format("Connecting to %s", status.detail.GetChars());
-	statusStr.AppendFormat("   %u:%02u", status.seconds/60, status.seconds%60);
-	for(unsigned int i = 0;i < status.peers.Size();++i)
+	if(!status.failure.IsEmpty())
 	{
-		statusStr.AppendFormat("\n%s: %s",
-			status.peers[i].name.GetChars(), status.peers[i].state.GetChars());
+		statusStr = status.failure;
+	}
+	else
+	{
+		if(status.phase == Net::InitStatus::PHASE_Hosting)
+			statusStr.Format("Listening on %s", status.detail.GetChars());
+		else
+			statusStr.Format("Connecting to %s", status.detail.GetChars());
+		statusStr.AppendFormat("   %u:%02u", status.seconds/60, status.seconds%60);
+		for(unsigned int i = 0;i < status.peers.Size();++i)
+		{
+			statusStr.AppendFormat("\n%s: %s",
+				status.peers[i].name.GetChars(), status.peers[i].state.GetChars());
+		}
 	}
 
 	const bool hasSignon = !gameinfo.SignonLump.IsEmpty();
@@ -536,13 +556,16 @@ static void InitGame()
 	// Init texture manager
 	//
 
+	// TEXTURES translations resolve palette indices while they are parsed.
+	// Load the palette first; otherwise GPalette.Remap is still zero-filled
+	// and every requested color range silently becomes an identity mapping.
+	printf("VL_ReadPalette: Setting up the Palette...\n");
+	VL_ReadPalette(gameinfo.GamePalette);
+	atterm(R_DeinitColormaps);
 	TexMan.Init();
 	// The upscale pack is applied as the texture manager loads it; this puts the
 	// textures back if the player has the option switched off.
 	C7Upscale::ApplyPreference();
-	printf("VL_ReadPalette: Setting up the Palette...\n");
-	VL_ReadPalette(gameinfo.GamePalette);
-	atterm(R_DeinitColormaps);
 	GenerateLookupTables();
 
 	//
@@ -619,7 +642,17 @@ static void InitGame()
 	// starts -- just not as a netgame. Better than a splash screen with no way
 	// off it.
 	if(!Net::Init(DrawNetworkStatus))
+	{
+		// Which is more use than "abandoned" on its own, and this is the one
+		// place that knows the netgame is over before a level exists to say it
+		// on.
+		if(Net::Abandoned())
+		{
+			Printf("%s\n", Net::AbandonedReason());
+			Net::ClearAbandoned();
+		}
 		Printf("Network game abandoned; starting single-player.\n");
+	}
 	NetWatch_Start();
 
 //
@@ -1272,6 +1305,59 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 				Net::InitVars.ticDelay = (byte)delay;
 			}
 		}
+		else IFARG("--bots")
+		{
+			// Registered here rather than peeked at elsewhere: this engine has
+			// several independent argv loops and only the last has a catch-all,
+			// so an option that is merely looked at becomes a filename.
+			if(++i < argc)
+				Bot::SetRequested(atoi(argv[i]));
+		}
+		else IFARG("--bot-skill")
+		{
+			// Registered in this loop for the reason the comment above gives:
+			// an option merely peeked at elsewhere becomes a filename.
+			if(++i < argc)
+			{
+				bool developer = false;
+				for(int d = 1;d < argc;++d)
+					developer = developer ||
+						strcmp(argv[d], "--bot-developer") == 0;
+				if(!Bot::SetRequestedSkill(argv[i], developer))
+					Printf("Unknown or unavailable bot skill '%s'.\n", argv[i]);
+			}
+		}
+		// Section 17.5: the developer profile is opt-in and named, not hidden
+		// behind a magic value of an ordinary option.
+		else IFARG("--bot-developer") {}
+		else IFARG("--bot-class")
+		{
+			// A player class name, e.g. C7PlayerRed or C7AlienPlayer. Checked
+			// when the roster is built: no class exists yet at this point.
+			if(++i < argc)
+				Bot::SetRequestedClass(argv[i]);
+		}
+		else IFARG("--bot-list")
+		{
+			Bot::SetListRoster(true);
+		}
+		else IFARG("--bot-debug")
+		{
+			// <slot|all>. Registered here with the rest, because an option
+			// merely peeked at elsewhere becomes a filename.
+			if(++i < argc)
+				Bot::SetDebugSlot(stricmp(argv[i], "all") == 0 ?
+					-1 : atoi(argv[i]) - 1);
+		}
+		else IFARG("--bot-seed")
+		{
+			// Section 18.5: a developer reproducibility override. The match
+			// seed normally comes from the same rngseed every machine agrees
+			// on; this replaces it for the bots alone, so one bot's behaviour
+			// can be re-run without changing the rest of the simulation.
+			if(++i < argc)
+				Bot::SetSeedOverride((uint64_t)strtoull(argv[i], NULL, 10));
+		}
 		else IFARG("--host")
 		{
 			if(++i < argc)
@@ -1301,6 +1387,19 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 		{
 			Net::InitVars.gameMode = Net::GM_TeamBattle;
 		}
+		else IFARG("--damage-scale")
+		{
+			// Percent of normal player-versus-player damage, 25 to 100.
+			// Registered in this loop with the rest: an option merely peeked
+			// at elsewhere becomes a filename.
+			if(++i < argc)
+			{
+				int pct = atoi(argv[i]);
+				if(pct < 1) pct = 1;
+				if(pct > 100) pct = 100;
+				Net::InitVars.damageScale = (byte)pct;
+			}
+		}
 		else IFARG("--fraglimit")
 		{
 			if(i + 1 < argc)
@@ -1308,6 +1407,20 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 				const int limit = atoi(argv[++i]);
 				Net::InitVars.fragLimit = (byte)(limit < 0 ? 0 : (limit > 255 ? 255 : limit));
 			}
+		}
+		else IFARG("--timelimit")
+		{
+			// Minutes a deathmatch round lasts; 0 for none.
+			if(i + 1 < argc)
+			{
+				const int minutes = atoi(argv[++i]);
+				Net::InitVars.timeLimit = (byte)(minutes < 0 ? 0 : (minutes > 255 ? 255 : minutes));
+			}
+		}
+		else IFARG("--mapcycle")
+		{
+			// Each new deathmatch round on the next arena.
+			Net::InitVars.mapCycle = 1;
 		}
 		else IFARG("--debugnet")
 		{
@@ -1336,6 +1449,16 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 		else IFARG("--vis-diff") {}
 		else IFARG("--gltest") { if(i + 1 < argc && argv[i+1][0] != '-') ++i; }
 		else IFARG("--flictest") { ++i; }
+		else IFARG("--netvectors") { ++i; }
+		else IFARG("--sessiontest") {}
+		else IFARG("--bottest") {}
+		else IFARG("--percepttest") {}
+		else IFARG("--itemtest") {}
+		else IFARG("--combattest") {}
+		else IFARG("--skilltest") {}
+		else IFARG("--capture-tape") { ++i; }
+		else IFARG("--capture-forge-slot") { ++i; }
+		else IFARG("--capture-commands") { ++i; }
 		else IFARG("--editor-capabilities") {}
 		else if(EditorLink::ArgClaimed(i))
 		{
@@ -1532,6 +1655,35 @@ int WL_Main (int argc, char *argv[])
 		{
 			if(strcmp(argv[fi], "--flictest") == 0)
 				return C7Flic_SelfTest(argv[fi + 1]);
+		}
+
+		// The packet layout this build actually speaks. Data-free and
+		// windowless, like --flictest, because the gate that reads it runs
+		// before anything is loaded.
+		for(int ni = 1; ni + 1 < argc; ++ni)
+		{
+			if(strcmp(argv[ni], "--netvectors") == 0)
+				return Net::WriteProtocolVectors(argv[ni + 1]);
+		}
+
+		// The session model, checked against sessions this build cannot yet
+		// play: an authority that owns no player, a slot 0 owned by somebody
+		// who is not the authority. Also data-free -- it touches no player
+		// array, which is most of what it is proving.
+		for(int si = 1; si < argc; ++si)
+		{
+			if(strcmp(argv[si], "--sessiontest") == 0)
+				return Session::SelfTest();
+			if(strcmp(argv[si], "--bottest") == 0)
+				return Bot::SelfTest();
+			if(strcmp(argv[si], "--percepttest") == 0)
+				return Perception::SelfTest();
+			if(strcmp(argv[si], "--itemtest") == 0)
+				return Items::SelfTest();
+			if(strcmp(argv[si], "--combattest") == 0)
+				return Combat::SelfTest();
+			if(strcmp(argv[si], "--skilltest") == 0)
+				return Bot::SkillSelfTest();
 		}
 
 #ifdef ECWOLF_RENDERER_OPENGL

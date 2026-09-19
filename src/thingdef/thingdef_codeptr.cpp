@@ -45,7 +45,9 @@
 #include "thingdef/thingdef.h"
 #include "wl_act.h"
 #include "wl_def.h"
+#include "g_session.h"
 #include "wl_agent.h"
+#include "g_bot.h"
 #include "wl_draw.h"
 #include "wl_game.h"
 #include "wl_net.h"
@@ -218,7 +220,7 @@ ACTION_FUNCTION(A_BossDeath)
 		if(deathcam && playstate == ex_stillplaying)
 		{
 			// Return the camera to the players if we're still going
-			for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+			for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 			{
 				players[i].camera = players[i].mo;
 				players[i].BringUpWeapon();
@@ -357,6 +359,22 @@ ACTION_FUNCTION(A_Explode)
 		if((flags&XF_HURTSOURCE) && target == self->target)
 			attacker = self;
 		DamageActor(target, attacker, static_cast<unsigned int>(output));
+
+		// Say who a blast reached, and whose it was.
+		//
+		// Named, because this branch is reached by anything with
+		// XF_HURTSOURCE: a rocket splashing back off a wall five tiles away
+		// arrives here exactly as a mine does. A gate that cannot tell them
+		// apart blames the mine, and one did, for three rounds.
+		if(target->player)
+		{
+			FString detail;
+			detail.Format("by=%s own=%d",
+				self->GetClass()->GetName().GetChars(),
+				target == self->target ? 1 : 0);
+			Bot::TraceEvent((Session::PlayerSlot)(target->player - players),
+				"blast", detail.GetChars());
+		}
 	}
 	return true;
 }

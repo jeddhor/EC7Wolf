@@ -4,16 +4,22 @@
 #
 # Milestone 7 of docs/multiplayer.md.
 #
-# The game reads structures straight off the wire. CheckPacketType proves a
-# datagram is at least sizeof(T) and carries the right type byte, which is
-# enough for the fixed-size packets and not enough for the start packet: that
-# one ends in a client array whose length is declared by a byte inside it, so
-# "at least sizeof(struct)" was never the size that mattered. Before this
-# milestone one forged datagram could tell a joining client there were 255
-# players, and the loop that copies their addresses would walk Client[11] off
-# the end of itself, writing as it went.
+# The game reads structures straight off the wire. A datagram being at least
+# sizeof(T) with the right type byte is enough for the fixed-size packets and
+# not enough for the start packet: that one ends in a client array whose length
+# is declared by a byte inside it, so "at least sizeof(struct)" was never the
+# size that mattered. One forged datagram could tell a joining client there
+# were 255 players, and the swap that walks their addresses would follow that
+# count forty bytes past the end of the receive buffer, writing as it went.
 #
-# Two things are checked, and the second is the one worth having:
+# Three things are checked, and the last two are the ones worth having:
+#
+#   * The fuzzer and the engine still agree on the wire format, which the
+#     engine states itself through --netvectors. The battery below used to
+#     carry a hand-written copy of the packet layout, and that copy had drifted
+#     twice: its NET_ enum had NewGame and TicCmd the wrong way round, and its
+#     start packet assumed natural alignment when the real struct is packed. It
+#     was firing well-formed nonsense at the wrong message types, and passing.
 #
 #   * Nothing falls over. The host and a joining client are both shot at with
 #     a fixed battery of empty, truncated, oversized, mistyped and lying
@@ -44,12 +50,14 @@ command -v Xvfb >/dev/null 2>&1 || { printf 'SKIP: Xvfb is missing\n'; exit 0; }
 [ -f "$data_dir/MAPTEMP.CO7" ] || { printf 'SKIP: no Corridor 7 data in %s\n' "$data_dir"; exit 0; }
 
 work=$(mktemp -d /tmp/ec7wolf-hostile.XXXXXX)
+vectors="$work/netvectors.txt"
 . "$here/xvfb_common.sh"
 
 display=:154
 xvfb_start "$display" "$work/xvfb.log" 640x400x24 || exit 1
 cleanup() {
-	kill_pids "${host_pid:-}" "${client_pid:-}" "${victim_pid:-}"
+	kill_pids "${host_pid:-}" "${client_pid:-}" "${victim_pid:-}" \
+		"${maxhost_pid:-}" "${maxclient_pid:-}"
 	xvfb_stop
 	if [ "${KEEP_WORK:-0}" = "1" ]; then
 		printf 'kept: %s\n' "$work"
@@ -63,9 +71,18 @@ trap cleanup EXIT INT TERM
 host_port=5141
 client_port=5142
 victim_port=5143
+# Each launch gets a port of its own. Reusing one is a race: the previous
+# process is killed but its socket is not necessarily released by the time the
+# next one tries to bind, and the loser dies during startup with a message
+# nobody reads, several checks before the one that then fails.
+version_port=5144
+lonehost_port=5145
+maxhost_port=5146
+maxclient_port=5147
 # Nobody listens here; it is the address the join screen is told to dial, and
 # the address the forged answers are sent from.
 decoy_port=5999
+version_decoy_port=5998
 tics=120
 
 status=0
@@ -92,7 +109,31 @@ play() {  # play NAME ROLE_ARGS...
 
 alive() { kill -0 "$1" 2>/dev/null; }
 
-printf 'A match in progress, shot at from outside\n'
+printf 'The shape of the packets\n'
+if "$build_dir/ec7wolf" --netvectors "$vectors" >"$work/netvectors.log" 2>&1 &&
+	[ -s "$vectors" ]; then
+	printf '  ok   the engine described its wire format\n'
+else
+	printf '  FAIL the engine would not describe its wire format\n'
+	tail -3 "$work/netvectors.log" 2>/dev/null | sed 's/^/         /'
+	exit 1
+fi
+# The version this build speaks, read from what the engine just said rather
+# than written down here. A gate that hardcodes it passes until somebody bumps
+# the protocol and then fails for a reason that has nothing to do with what it
+# tests -- which is exactly what happened when the command bundle arrived.
+protocol=$(sed -n 's/^protocol \([0-9]*\)$/\1/p' "$vectors")
+[ -n "$protocol" ] || { printf 'FAIL: the vectors name no protocol version\n'; exit 1; }
+printf '  ..   this build speaks network protocol %s\n' "$protocol"
+
+# --rounds 0 fires nothing: this is the fuzzer rebuilding the engine's own
+# golden start packet and refusing to run if the bytes differ.
+check "the fuzzer builds the same bytes the engine emits" \
+	python3 "$here/netfuzz.py" 127.0.0.1 "$decoy_port" --vectors "$vectors" \
+		--rounds 0
+[ "$status" -eq 0 ] || exit 1
+
+printf '\nA match in progress, shot at from outside\n'
 # Fired at a running match rather than at a host still waiting for players.
 # A host that is waiting will accept a connection request from anyone -- that
 # is what hosting means, and a bare 0x00 byte is a well-formed request -- so
@@ -108,9 +149,11 @@ sleep 4
 check "the host is up" alive "$host_pid"
 check "the client is up" alive "$client_pid"
 
-python3 "$here/netfuzz.py" 127.0.0.1 "$host_port" --rounds 3 --no-requests \
+python3 "$here/netfuzz.py" 127.0.0.1 "$host_port" --vectors "$vectors" \
+	--rounds 3 --no-requests \
 	>"$work/fuzz-host.log" 2>&1 || true
-python3 "$here/netfuzz.py" 127.0.0.1 "$client_port" --rounds 3 --no-requests \
+python3 "$here/netfuzz.py" 127.0.0.1 "$client_port" --vectors "$vectors" \
+	--rounds 3 --no-requests \
 	>"$work/fuzz-client.log" 2>&1 || true
 sed -n '$p' "$work/fuzz-host.log" | sed 's/^/  ..   at the host: /'
 sed -n '$p' "$work/fuzz-client.log" | sed 's/^/  ..   at the client: /'
@@ -141,6 +184,58 @@ if [ -s "$work/host.checksum" ] && [ -s "$work/client.checksum" ]; then
 	fi
 fi
 
+printf '\nThe same, at a full roster\n'
+# Milestone B10 asks for the fuzz at maximum roster, and the roster is what
+# decides how much of the packet handling is reachable: numPlayers appears in
+# the start packet's trailing client array, in the command bundle's per-slot
+# entries, and in every loop that walks either. Two players exercise the
+# smallest version of all of them. Eleven -- MAXPLAYERS -- is the largest the
+# game can be asked for, and the bundle is then at its longest, which is where
+# a length that is trusted rather than checked does its damage.
+#
+# Nine bots and two people, so the bundle carries eleven slots while the match
+# still has a client to disagree with. The shots themselves are the same list
+# as above -- it already includes packets claiming MAXPLAYERS and 255 players
+# -- because what is being varied here is the target, not the ammunition: the
+# question is whether a host with a full bundle to build and eleven slots to
+# walk handles them as well as one with two.
+play maxhost --host 2 --port "$maxhost_port" --bots 9
+maxhost_pid=$!
+sleep 3
+play maxclient --port "$maxclient_port" --join "127.0.0.1:$maxhost_port"
+maxclient_pid=$!
+sleep 4
+
+check "the eleven-slot host is up" alive "$maxhost_pid"
+check "and its client is up" alive "$maxclient_pid"
+
+python3 "$here/netfuzz.py" 127.0.0.1 "$maxhost_port" --vectors "$vectors" \
+	--rounds 3 --no-requests \
+	>"$work/fuzz-maxhost.log" 2>&1 || true
+python3 "$here/netfuzz.py" 127.0.0.1 "$maxclient_port" --vectors "$vectors" \
+	--rounds 3 --no-requests \
+	>"$work/fuzz-maxclient.log" 2>&1 || true
+sed -n '$p' "$work/fuzz-maxhost.log" | sed 's/^/  ..   at the host: /'
+sed -n '$p' "$work/fuzz-maxclient.log" | sed 's/^/  ..   at the client: /'
+
+wait "$maxhost_pid" "$maxclient_pid" 2>/dev/null || true
+maxhost_pid=; maxclient_pid=
+
+if [ -s "$work/maxhost.checksum" ] && [ -s "$work/maxclient.checksum" ]; then
+	maxhost_tics=$(grep -c '^tic ' "$work/maxhost.checksum" || true)
+	maxclient_tics=$(grep -c '^tic ' "$work/maxclient.checksum" || true)
+	printf '  ..   %s tics on the host, %s on the client\n' \
+		"$maxhost_tics" "$maxclient_tics"
+	check "the full-roster match ran to the end while being shot at" \
+		test "$maxhost_tics" -ge "$tics" -a "$maxclient_tics" -ge "$tics"
+	check "and the two agreed on every tic of it" \
+		cmp -s "$work/maxhost.checksum" "$work/maxclient.checksum"
+else
+	printf '  FAIL the full-roster match simulated nothing\n'
+	sed 's/\x08//g' "$work/maxhost.log" | grep -vE '^\s*$' | tail -5 | sed 's/^/         /'
+	status=1
+fi
+
 printf '\nA client on a join screen, answered by the wrong party\n'
 # The most exposed the game ever is: an open socket, waiting, willing to
 # believe whatever answers. The forged start packets are sent *from the address
@@ -151,7 +246,8 @@ victim_pid=$!
 sleep 4
 check "it is waiting" alive "$victim_pid"
 
-python3 "$here/netfuzz.py" 127.0.0.1 "$victim_port" --rounds 3 \
+python3 "$here/netfuzz.py" 127.0.0.1 "$victim_port" --vectors "$vectors" \
+	--rounds 3 \
 	--from-port "$decoy_port" >"$work/fuzz-victim.log" 2>&1 || true
 sed -n '$p' "$work/fuzz-victim.log" | sed 's/^/  ..   at the join screen: /'
 sleep 2
@@ -179,6 +275,74 @@ check "and simulated nothing, rather than starting a game of 255" \
 kill_pids "${victim_pid:-}"
 wait "$victim_pid" 2>/dev/null || true
 victim_pid=
+
+# A well-formed packet from a build that speaks a different protocol. Not
+# rubbish, and not a survival question: what is under test is whether the
+# refusal says so, because the alternative to naming it is joining and
+# desynchronizing, which looks like a game bug for the rest of the evening.
+printf '\nA host and a client that do not speak the same protocol\n'
+play version --port "$version_port" --join "127.0.0.1:$version_decoy_port"
+victim_pid=$!
+sleep 4
+check "the client is waiting" alive "$victim_pid"
+
+python3 "$here/netfuzz.py" 127.0.0.1 "$version_port" --vectors "$vectors" \
+	--only start-wrong-version --rounds 2 --from-port "$version_decoy_port" \
+	>"$work/fuzz-version.log" 2>&1 || true
+
+# Waited for rather than slept on: the client holds the message on screen for
+# several seconds and a fixed sleep would either race it or pad every run.
+waited=0
+while [ "$waited" -lt 100 ]; do
+	grep -q "network protocol" "$work/version.log" 2>/dev/null && break
+	sleep 0.1
+	waited=$((waited + 1))
+done
+if grep -q "Host speaks network protocol 1" "$work/version.log" 2>/dev/null &&
+	grep -q "this game speaks $protocol" "$work/version.log" 2>/dev/null; then
+	printf '  ok   it named both protocol versions\n'
+else
+	printf '  FAIL it did not say the versions differed\n'
+	sed 's/\x08//g' "$work/version.log" | grep -vE '^\s*$' | tail -5 |
+		sed 's/^/         /'
+	status=1
+fi
+
+version_tics=$(grep -c '^tic ' "$work/version.checksum" 2>/dev/null || true)
+[ -n "$version_tics" ] || version_tics=0
+check "and refused rather than joining a game it cannot simulate" \
+	test "$version_tics" -eq 0
+
+kill_pids "${victim_pid:-}"
+wait "$victim_pid" 2>/dev/null || true
+victim_pid=
+
+# And the same disagreement seen from the other side.
+printf '\nA host answering a client that speaks another protocol\n'
+play lonehost --host 2 --port "$lonehost_port"
+host_pid=$!
+sleep 3
+check "the host is listening" alive "$host_pid"
+python3 "$here/netfuzz.py" 127.0.0.1 "$lonehost_port" --vectors "$vectors" \
+	--only request-wrong-version --rounds 2 >"$work/fuzz-hostver.log" 2>&1 || true
+waited=0
+while [ "$waited" -lt 100 ]; do
+	grep -q "network protocol" "$work/lonehost.log" 2>/dev/null && break
+	sleep 0.1
+	waited=$((waited + 1))
+done
+if grep -q "network protocol 1, expected $protocol" "$work/lonehost.log" 2>/dev/null; then
+	printf '  ok   the host refused it and said why\n'
+else
+	printf '  FAIL the host did not refuse a request from another protocol\n'
+	sed 's/\x08//g' "$work/lonehost.log" | grep -vE '^\s*$' | tail -5 |
+		sed 's/^/         /'
+	status=1
+fi
+check "and is still listening for a client that can play" alive "$host_pid"
+kill_pids "${host_pid:-}"
+wait "$host_pid" 2>/dev/null || true
+host_pid=
 
 printf '\n'
 if [ "$status" -eq 0 ]; then

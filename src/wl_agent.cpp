@@ -5,6 +5,8 @@
 
 #include "doomerrors.h"
 #include "wl_def.h"
+#include "g_traversal.h"
+#include "g_session.h"
 #include "id_ca.h"
 #include "id_sd.h"
 #include "id_vl.h"
@@ -25,7 +27,9 @@
 #include "wl_loadsave.h"
 #include "wl_net.h"
 #include "wl_state.h"
+#include "g_perception.h"
 #include "wl_play.h"
+#include "g_combat.h"
 #include "templates.h"
 
 #include "w_wad.h"
@@ -237,15 +241,35 @@ void ControlMovement (APlayerPawn *ob)
 		Thrust (ob,angle,controly*MOVESCALE*2/3);          // move backwards
 	}
 
-	// Running animation
+	// Running animation, with a moment's hysteresis on the way back.
+	//
+	// The walk cycle is five frames at six tics each -- thirty tics to take a
+	// stride -- and this used to drop back to the standing frame on the first
+	// tic with no thrust. That is fine for a human holding a key down and
+	// wrong for anything that moves in bursts: a bot turning a corner stops,
+	// resets to frame A, walks four tics, stops again, and never reaches
+	// frame B. Seen from across the arena the legs never move and the body
+	// slides, which is exactly what a playtest reported -- floating most of
+	// the time, with the run animation appearing now and then when the bot
+	// happened to get a long clear run.
+	//
+	// B8 made it visible rather than caused it: giving turning an
+	// acceleration limit meant far more short stops. A human tapping forward
+	// looked the same way to everyone else, and always had.
+	//
+	// Ten tics, so a stride survives a corner but a bot that has genuinely
+	// stopped is standing still well before anyone reads it as walking.
 	if (ob->player->thrustspeed)
 	{
+		ob->player->walkhold = 10;
 		if(ob->SeeState && ob->InStateSequence(ob->SpawnState))
 			ob->SetState(ob->SeeState);
 	}
 	else
 	{
-		if(ob->SpawnState && ob->InStateSequence(ob->SeeState))
+		if(ob->player->walkhold > 0)
+			--ob->player->walkhold;
+		else if(ob->SpawnState && ob->InStateSequence(ob->SeeState))
 			ob->SetState(ob->SpawnState);
 	}
 
@@ -328,7 +352,7 @@ static void CheckFragLimit()
 		return;
 	}
 
-	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 	{
 		if(players[i].frags >= limit)
 		{
@@ -342,6 +366,26 @@ static void CheckFragLimit()
 static FRandom pr_damageplayer("PlayerTakeDamge");
 void player_t::TakeDamage (int points, AActor *attacker)
 {
+	// The deathmatch damage dial, applied where player-on-player damage
+	// arrives and nowhere else.
+	//
+	// Monsters keep the numbers they were designed with, so single player and
+	// cooperative play against aliens are untouched; what changes is how hard
+	// players hit each other. Applied to the victim rather than at each
+	// weapon so that every source is covered at once -- bullets, splash,
+	// mines, a rocket -- and so that no weapon can be missed when one is
+	// added.
+	//
+	// Never rounds a real hit down to nothing: a quarter-damage shotgun is
+	// still a shotgun, and a weapon that sometimes does zero is a weapon that
+	// feels broken rather than weak.
+	if(points > 0 && attacker != NULL && attacker->player != NULL &&
+		Net::InitVars.damageScale != 100)
+	{
+		const int scaled = (points*(int)Net::InitVars.damageScale)/100;
+		points = scaled < 1 ? 1 : scaled;
+	}
+
 	if (gamestate.victoryflag)
 		return;
 	points = (points*gamestate.difficulty->DamageFactor)>>FRACBITS;
@@ -367,10 +411,22 @@ void player_t::TakeDamage (int points, AActor *attacker)
 	}
 	NetDPrintf("%s %d points\n", __FUNCTION__, points);
 
+	// Getting hurt is audible, and dying more so. Emitted from the damage
+	// path rather than from wherever the sample is played, so a server with no
+	// sound still produces the event.
+	if(mo != NULL && points > 0)
+	{
+		Perception::Emit(health - points <= 0 ? Perception::SoundKind::Death
+			: Perception::SoundKind::Pain, mo, health - points <= 0 ? 20 : 12);
+		// What the player is told: how much, and what is left. The game shows
+		// a screen-wide flash with no direction in it, so neither does this.
+		Perception::NoteDamage(mo, points, health - points, attacker);
+	}
+
 	if (!godmode)
 		mo->health = health -= points;
 
-	if (godmode != 2 && GetPlayerNum() == ConsolePlayer)
+	if (godmode != 2 && Session::IsLocalViewSlot(GetPlayerNum()))
 		StartDamageFlash (points);
 
 	// Bonus floors are point runs, not lives. When the player's health expires,
@@ -402,6 +458,50 @@ void player_t::TakeDamage (int points, AActor *attacker)
 				--frags;
 			else
 				++attacker->player->frags;
+
+			// Say who, on the one screen that can see it.
+			//
+			// Section 18.6 asks for kill and death messages drawn from roster
+			// identity, and there were none at all -- frags simply went up,
+			// so a player who died learned only that they had. Shown to the
+			// local view, because a message is a thing on somebody's screen
+			// and a bot has no screen: this is presentation, not simulation,
+			// and nothing about the match depends on it.
+			if(Session::IsDeathmatch() && StatusBar != NULL)
+			{
+				const unsigned int victim =
+					(unsigned int)(this - players);
+				const unsigned int killer =
+					(unsigned int)(attacker->player - players);
+				// With the weapon, because "what killed me" is the question a
+				// player actually has, and two of Corridor 7's guns take a
+				// hundred points off at close range -- which reads as a bug
+				// until you know which one it was.
+				const char *gun = NULL;
+				if(attacker != mo && attacker->player != NULL &&
+					attacker->player->ReadyWeapon != NULL)
+					gun = Combat::WeaponDisplayName(
+						attacker->player->ReadyWeapon->GetClass()->
+							GetName().GetChars());
+
+				// One format for every kill on the board, including your own.
+				//
+				// It said "You fragged Bot 3" for your kills and named the
+				// weapon only for everybody else's, so the one death a player
+				// most wants explained -- the one they just caused, or just
+				// suffered -- was the one that told them least. Whose kill it
+				// is does not change what the message needs to say.
+				FString note;
+				if(attacker == mo)
+					note.Format("%s died", Session::NameOf(victim));
+				else if(gun != NULL)
+					note.Format("%s killed %s with the %s",
+						Session::NameOf(killer), Session::NameOf(victim), gun);
+				else
+					note.Format("%s killed %s", Session::NameOf(killer),
+						Session::NameOf(victim));
+				StatusBar->SetTopMessage(note);
+			}
 
 			CheckFragLimit();
 		}
@@ -490,7 +590,7 @@ static void DamageC7ElectricField(APlayerPawn *pawn, AActor *source)
 		if(pawn->player->health <= 0)
 			pawn->player->TakeDamage(0, NULL);
 	}
-	if(static_cast<unsigned int>(playerNumber) == ConsolePlayer)
+	if(Session::IsLocalViewSlot(playerNumber))
 		StartC7ElectricFlash();
 }
 
@@ -517,6 +617,9 @@ static void DamageC7LaserBarrier(APlayerPawn *pawn)
 	}
 	c7LastLaserDamageTic[playerNumber] = gamestate.TimeCount;
 	PlaySoundLocActor("c7/electric/damage", pawn);
+	// Walking into it is the honest way to find one. The fact goes to whoever
+	// it happened to and to nobody else.
+	Perception::NoteHazardContact(pawn);
 	pawn->player->TakeDamage(10, NULL);
 }
 
@@ -552,6 +655,45 @@ void C7TouchLaserBarriers(APlayerPawn *pawn)
 	}
 }
 
+// The three things only a real move may do. The geometry that decides whether
+// the move happens at all lives in g_traversal.cpp, and is the same code a
+// navigator asks -- which is the point: a graph that predicts movement
+// differently from ClipMove is not a graph, it is a second opinion.
+namespace
+{
+	struct MoveEffects
+	{
+		AActor *ob;
+	};
+
+	void OnWallBlocked(void *context, MapSpot spot)
+	{
+		MoveEffects *fx = (MoveEffects *)context;
+		// Corridor 7's original collision routine applies the electric contact
+		// effect to wall tile IDs 6 and 14. The plane-one marker is not part
+		// of that decision. The barriers stay solid: pressing against one zaps
+		// the player on contact, and again on every repeated contact, but
+		// never lets them through.
+		if(IWad::CheckGameFilter("Corridor7") && fx->ob->player &&
+			(spot->corridor7WallID == 6 || spot->corridor7WallID == 14))
+		{
+			DamageC7ElectricField(static_cast<APlayerPawn *>(fx->ob), fx->ob);
+		}
+	}
+
+	void OnOverlap(void *context, AActor *other)
+	{
+		MoveEffects *fx = (MoveEffects *)context;
+		// The laser barrier statics (map objects 28/84) never block movement:
+		// walking through the hidden beams zaps the player through the
+		// standard rank/armor damage path on a cooldown, exactly as the
+		// released game does.
+		if(fx->ob->player && Corridor7IsLaserBarrierActor(other))
+			DamageC7LaserBarrier(static_cast<APlayerPawn *>(fx->ob));
+		other->Touch(fx->ob);
+	}
+}
+
 static bool TryMove (AActor *ob)
 {
 	if (noclip)
@@ -561,121 +703,18 @@ static bool TryMove (AActor *ob)
 			&& ob->y+ob->radius < (((int32_t)(map->GetHeader().height))<<TILESHIFT) );
 	}
 
-	int xl,yl,xh,yh,x,y;
+	Traversal::Body body;
+	body.radius = ob->radius;
+	body.isPlayer = ob->player != NULL;
+	body.ignore = ob;
 
-	xl = (ob->x-ob->radius) >>TILESHIFT;
-	yl = (ob->y-ob->radius) >>TILESHIFT;
+	MoveEffects fx = { ob };
+	Traversal::Hooks hooks;
+	hooks.onWallBlocked = OnWallBlocked;
+	hooks.onOverlap = OnOverlap;
+	hooks.context = &fx;
 
-	xh = (ob->x+ob->radius) >>TILESHIFT;
-	yh = (ob->y+ob->radius) >>TILESHIFT;
-
-	//
-	// check for solid walls
-	//
-	for (y=yl;y<=yh;y++)
-	{
-		for (x=xl;x<=xh;x++)
-		{
-			const bool checkLines[4] =
-			{
-				(ob->x+ob->radius) > ((x+1)<<TILESHIFT),
-				(ob->y-ob->radius) < (y<<TILESHIFT),
-				(ob->x-ob->radius) < (x<<TILESHIFT),
-				(ob->y+ob->radius) > ((y+1)<<TILESHIFT)
-			};
-			MapSpot spot = map->GetSpot(x, y, 0);
-			if(spot->tile)
-			{
-				// Check pushwall backs
-				if(spot->pushAmount != 0)
-				{
-					switch(spot->pushDirection)
-					{
-						case MapTile::North:
-							if(ob->y-ob->radius <= static_cast<fixed>((y<<TILESHIFT)+((63-spot->pushAmount)<<10)))
-								return false;
-							break;
-						case MapTile::West:
-							if(ob->x-ob->radius <= static_cast<fixed>((x<<TILESHIFT)+((63-spot->pushAmount)<<10)))
-								return false;
-							break;
-						case MapTile::East:
-							if(ob->x+ob->radius >= static_cast<fixed>((x<<TILESHIFT)+(spot->pushAmount<<10)))
-								return false;
-							break;
-						case MapTile::South:
-							if(ob->y+ob->radius >= static_cast<fixed>((y<<TILESHIFT)+(spot->pushAmount<<10)))
-								return false;
-							break;
-					}
-				}
-				else
-				{
-					for(unsigned short i = 0;i < 4;++i)
-					{
-						if(spot->sideSolid[i] && spot->slideAmount[i] != 0xffff && checkLines[i])
-						{
-							// Corridor 7's original collision routine applies the
-							// electric contact effect to wall tile IDs 6 and 14.  The
-							// plane-one marker is not part of that decision.  The
-							// barriers stay solid: pressing against one zaps the
-							// player on contact, and again on every repeated
-							// contact, but never lets them through.
-							if(IWad::CheckGameFilter("Corridor7") && ob->player &&
-								(spot->corridor7WallID == 6 || spot->corridor7WallID == 14))
-							{
-								DamageC7ElectricField(static_cast<APlayerPawn *>(ob), ob);
-							}
-							return false;
-						}
-					}
-				}
-			}
-		}
-	}
-
-	//
-	// check for actors
-	//
-	for(AActor::Iterator iter = AActor::GetIterator().Next();iter;)
-	{
-		// We need to iterate a little awkwardly since the object may disappear
-		// on us rendering the next pointer invalid.
-		AActor *check = iter;
-		iter.Next();
-
-		if(check == ob)
-			continue;
-
-		// Allow players to clip through each other for now.
-		if(check->player && ob->player)
-			continue;
-
-		fixed r = check->radius + ob->radius;
-		if(check->flags & FL_SOLID)
-		{
-			if(abs(ob->x - check->x) > r ||
-				abs(ob->y - check->y) > r)
-				continue;
-			return false;
-		}
-		else
-		{
-			if(abs(ob->x - check->x) <= r &&
-				abs(ob->y - check->y) <= r)
-			{
-				// The laser barrier statics (map objects 28/84) never
-				// block movement: walking through the hidden beams zaps
-				// the player through the standard rank/armor damage path
-				// on a cooldown, exactly as the released game does.
-				if(ob->player && Corridor7IsLaserBarrierActor(check))
-					DamageC7LaserBarrier(static_cast<APlayerPawn *>(ob));
-				check->Touch(ob);
-			}
-		}
-	}
-
-	return true;
+	return Traversal::CheckPositionAt(body, ob->x, ob->y, &hooks);
 }
 
 static void ExecuteWalkTriggers(AActor *ob, MapSpot spot, MapTrigger::Side dir)
@@ -1055,7 +1094,7 @@ void player_t::DeathFade()
 	if(ScreenFader)
 		return; // Already setup
 
-	if(GetPlayerNum() == ConsolePlayer)
+	if(Session::IsLocalViewSlot(GetPlayerNum()))
 		FinishPaletteShifts();
 
 	switch(gameinfo.DeathTransition)
@@ -1354,7 +1393,7 @@ FArchive &operator<< (FArchive &arc, player_t *&player)
 
 void CheckSpawnPlayer(bool setup)
 {
-	for(unsigned int p = 0;p < Net::InitVars.numPlayers;++p)
+	for(unsigned int p = 0;p < Session::ActiveSlotCount();++p)
 	{
 		if(setup || players[p].state == player_t::PST_ENTER || players[p].state == player_t::PST_REBORN)
 		{
@@ -1449,7 +1488,12 @@ ACTION_FUNCTION(A_CustomPunch)
 		range = 64;
 
 	if(!(player->ReadyWeapon->weaponFlags & WF_NOALERT))
+	{
 		madenoise = true;
+		// The same fact, with a source, a place and a kind on it. madenoise is
+		// one global boolean: no who, no where, no what, and no history.
+		Perception::Emit(Perception::SoundKind::Weapon, self, 24);
+	}
 
 	// actually fire
 	int dist = 0x7fffffff;
@@ -1543,7 +1587,12 @@ ACTION_FUNCTION(A_GunAttack)
 		self->SetState(self->MeleeState);
 
 	if(!(player->ReadyWeapon->weaponFlags & WF_NOALERT))
+	{
 		madenoise = true;
+		// The same fact, with a source, a place and a kind on it. madenoise is
+		// one global boolean: no who, no where, no what, and no history.
+		Perception::Emit(Perception::SoundKind::Weapon, self, 24);
+	}
 
 	AActor *closest = player->FindTarget();
 	if(!closest)
@@ -1611,7 +1660,12 @@ ACTION_FUNCTION(A_C7GunAttack)
 	if(self->MeleeState)
 		self->SetState(self->MeleeState);
 	if(!(player->ReadyWeapon->weaponFlags & WF_NOALERT))
+	{
 		madenoise = true;
+		// The same fact, with a source, a place and a kind on it. madenoise is
+		// one global boolean: no who, no where, no what, and no history.
+		Perception::Emit(Perception::SoundKind::Weapon, self, 24);
+	}
 
 	// The disintegrator damages every visible target in its broad firing band.
 	// The DOS single-player path passes a fixed 1000-point hit to each target.
@@ -1770,7 +1824,12 @@ ACTION_FUNCTION(A_FireCustomMissile)
 	}
 
 	if(!(player->ReadyWeapon->weaponFlags & WF_NOALERT))
+	{
 		madenoise = true;
+		// The same fact, with a source, a place and a kind on it. madenoise is
+		// one global boolean: no who, no where, no what, and no history.
+		Perception::Emit(Perception::SoundKind::Weapon, self, 24);
+	}
 
 	if(self->MeleeState)
 		self->SetState(self->MeleeState);

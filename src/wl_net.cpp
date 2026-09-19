@@ -34,6 +34,7 @@
 
 
 #include "wl_def.h"
+#include "wl_iwad.h"
 #include "id_in.h"
 #include "id_us.h"
 #include "id_vh.h"
@@ -45,6 +46,9 @@
 #include "wl_menu.h"
 #include "wl_play.h"
 #include "wl_net.h"
+#include "g_session.h"
+#include "g_command.h"
+#include "r_capture.h"
 #include "net_watchdog.h"
 #include "m_swap.h"
 #include "m_random.h"
@@ -63,7 +67,21 @@
 #define MAXEXTRATICS 64
 
 // TODO: Handle transfer of arbiter status as client quit
+// The legacy protocol's authority: peer zero, which is also slot zero,
+// because one address is one player. Uses below are peer indices into
+// Client[] -- ask Session::IsAuthority() for the role.
 #define Arbiter 0
+
+// Every build speaks exactly one of these. There was no version field at all
+// before: two builds that disagreed about a packet layout joined each other
+// happily and then desynchronized, which looks like a game bug rather than a
+// version mismatch and is far harder to diagnose than a refusal. Bump this
+// whenever a packet's layout or meaning changes -- including the day the
+// canonical command frame grows a slot number.
+#define NET_PROTOCOL_VERSION 6
+// Present in the first datagram of every connection. A request used to be one
+// lone zero byte, so any stray packet arriving on the port was a new player.
+static const BYTE NetMagic[3] = { 'E', '7', 'N' };
 
 namespace Net {
 
@@ -78,6 +96,9 @@ enum
 	NET_InAck,
 	NET_DebugCmd,
 	NET_EndGame,
+	// Supersedes NET_TicCmd, which carried one command and inferred its slot
+	// from the sender's address.
+	NET_TicCmdBundle,
 };
 
 #pragma pack(1)
@@ -115,8 +136,19 @@ struct RequestPacket
 	enum { Type = NET_RequestConnection };
 
 	BYTE type;
+	BYTE magic[3];
+	uint16_t protocolVersion;
 
-	void ByteSwap() {}
+	void ByteSwap()
+	{
+		protocolVersion = LittleShort(protocolVersion);
+	}
+
+	bool MagicOk() const
+	{
+		return magic[0] == NetMagic[0] && magic[1] == NetMagic[1] &&
+			magic[2] == NetMagic[2];
+	}
 };
 
 struct StartPacket
@@ -124,6 +156,9 @@ struct StartPacket
 	enum { Type = NET_ConnectionStart };
 
 	BYTE type;
+	// Echoed so the joining machine can refuse a host it cannot speak to,
+	// rather than reading its player number out of a layout it has guessed.
+	uint16_t protocolVersion;
 	BYTE playerNumber;
 	BYTE numPlayers;
 	BYTE gameMode;
@@ -134,6 +169,15 @@ struct StartPacket
 	// down the wire with the rest of it.
 	BYTE ticDelay;
 	BYTE fragLimit;
+	// Percent of normal weapon damage between players, 100 for the game's own
+	// numbers. On the wire because it has to be: two machines that disagree
+	// about it compute different health from the same commands, which is a
+	// desync rather than a difference of opinion.
+	BYTE damageScale;
+	// Both decide which tic a round ends on and which map comes next, so a
+	// machine that disagreed about either would simulate a different match.
+	BYTE timeLimit;
+	BYTE mapCycle;
 	DWORD rngseed;
 	struct Client
 	{
@@ -143,8 +187,16 @@ struct StartPacket
 
 	void ByteSwap()
 	{
+		protocolVersion = LittleShort(protocolVersion);
 		rngseed = LittleLong(rngseed);
-		for(BYTE i = 0;i < numPlayers;++i)
+		// N - 1, not N. The host is not in its own trailing array, so an
+		// N-player packet carries N-1 entries -- and this loop was walking N
+		// of them. On the sending side that is six bytes past a malloc; on the
+		// receiving side it is an attacker-chosen count, because nothing had
+		// validated numPlayers yet when this ran. See ValidateDeclaredSize.
+		//
+		// The i+1 form rather than numPlayers-1 so that a zero never wraps.
+		for(unsigned int i = 0;i + 1 < numPlayers;++i)
 		{
 			clients[i].host = LittleLong(clients[i].host);
 			clients[i].port = LittleShort(clients[i].port);
@@ -161,6 +213,21 @@ struct NewGamePacket
 	PlayerClass playerClass;
 	BYTE difficulty;
 	char map[9];
+	// The authority's roster, which is the only place a slot with no peer can
+	// come from. Fixed size rather than counted: eleven bytes is cheaper than
+	// another trailing array to get wrong.
+	BYTE slotCount;
+	BYTE slotKind[MAXPLAYERS];
+	// And what each of those slots is playing as, as an index into the player
+	// class list. A peer's own class already travels in playerClass above;
+	// this is for the slots with no peer behind them.
+	//
+	// Without it a client filled every bot slot with the host's character,
+	// because that was the only class it had been told -- so once bots could
+	// wear a uniform of their own, the host would see red marines while
+	// everybody else saw copies of the host. Two machines disagreeing about a
+	// character is two machines disagreeing about who is on which team.
+	BYTE slotClass[MAXPLAYERS];
 
 	void ByteSwap()
 	{
@@ -201,6 +268,49 @@ struct TicCmdPacket
 		controlx = LittleLong(controlx);
 		controly = LittleLong(controly);
 		controlstrafe = LittleLong(controlstrafe);
+	}
+};
+
+// One sender's commands for every slot it owns.
+//
+// The old TicCmdPacket carried one command and said nothing about whose it
+// was: the slot was the sender's address. That is exact while every slot has a
+// socket and useless the moment one does not -- a bot has no address, and an
+// authority with several bots has several commands to send and one address to
+// send them from.
+//
+// So a sender says which slots it is speaking for, and the receiver checks it
+// is entitled to. buttonheld is deliberately absent: held state is derived at
+// installation from the previous command applied to that slot, so sending it
+// would be sending something the receiver is going to overwrite, and giving a
+// hostile sender a field to lie in for no reason.
+struct TicCmdBundlePacket
+{
+	enum { Type = NET_TicCmdBundle };
+
+	BYTE type;
+	BYTE slotCount;
+	int32_t TimeCount;
+	struct Slot
+	{
+		BYTE slot;
+		int32_t controlx;
+		int32_t controly;
+		int32_t controlstrafe;
+		BYTE buttonstate[NUMBUTTONS];
+	} slots[];
+
+	// Only ever called after ValidateDeclaredSize has proved slotCount fits in
+	// the datagram. See the comment there, and S1.
+	void ByteSwap()
+	{
+		TimeCount = LittleLong(TimeCount);
+		for(unsigned int i = 0;i < slotCount;++i)
+		{
+			slots[i].controlx = LittleLong(slots[i].controlx);
+			slots[i].controly = LittleLong(slots[i].controly);
+			slots[i].controlstrafe = LittleLong(slots[i].controlstrafe);
+		}
 	}
 };
 
@@ -275,6 +385,118 @@ struct EndGamePacket
 };
 #pragma pack()
 
+// A hand-written copy of a packed struct in another language drifts, silently,
+// and a hostile-packet gate that fires the wrong shape proves nothing while
+// looking green. tools/netfuzz.py had drifted twice over: its copy of the NET_
+// enum had NewGame and TicCmd the wrong way round and InAck, DebugCmd and
+// EndGame all misnumbered, and its start packet was laid out for a struct with
+// natural alignment when this one is #pragma pack(1). It had been firing
+// well-formed nonsense at the wrong message types.
+//
+// So the encoder says what it emits, and the gate reads it.
+int WriteProtocolVectors(const char *path)
+{
+	FILE *out = (path == NULL || strcmp(path, "-") == 0) ? stdout
+		: fopen(path, "w");
+	if(out == NULL)
+	{
+		fprintf(stderr, "netvectors: cannot write %s\n", path);
+		return 1;
+	}
+
+	fprintf(out, "protocol %u\n", (unsigned)NET_PROTOCOL_VERSION);
+	fprintf(out, "magic %02x%02x%02x\n", NetMagic[0], NetMagic[1], NetMagic[2]);
+	fprintf(out, "maxplayers %u\n", (unsigned)MAXPLAYERS);
+	fprintf(out, "maxextratics %u\n", (unsigned)MAXEXTRATICS);
+
+#define VEC_TYPE(name, T) \
+	fprintf(out, "type %s %d %u\n", name, (int)T::Type, (unsigned)sizeof(T))
+	VEC_TYPE("RequestConnection", RequestPacket);
+	VEC_TYPE("ConnectionStart", StartPacket);
+	VEC_TYPE("Ack", AckPacket);
+	VEC_TYPE("TicCmdBundle", TicCmdBundlePacket);
+	VEC_TYPE("NewGame", NewGamePacket);
+	VEC_TYPE("BlockPlaysim", BlockPlaysimPacket);
+	VEC_TYPE("InAck", InAckPacket);
+	VEC_TYPE("DebugCmd", DebugCmdPacket);
+	VEC_TYPE("EndGame", EndGamePacket);
+#undef VEC_TYPE
+
+	// The one packet whose size is not sizeof(): offsets, entry size, and the
+	// rule the trailing count follows.
+	fprintf(out, "start.offset.protocolVersion %u\n",
+		(unsigned)offsetof(StartPacket, protocolVersion));
+	fprintf(out, "start.offset.playerNumber %u\n",
+		(unsigned)offsetof(StartPacket, playerNumber));
+	fprintf(out, "start.offset.numPlayers %u\n",
+		(unsigned)offsetof(StartPacket, numPlayers));
+	fprintf(out, "start.offset.gameMode %u\n",
+		(unsigned)offsetof(StartPacket, gameMode));
+	fprintf(out, "start.offset.ticDelay %u\n",
+		(unsigned)offsetof(StartPacket, ticDelay));
+	fprintf(out, "start.offset.fragLimit %u\n",
+		(unsigned)offsetof(StartPacket, fragLimit));
+	fprintf(out, "start.offset.damageScale %u\n",
+		(unsigned)offsetof(StartPacket, damageScale));
+	fprintf(out, "start.offset.timeLimit %u\n",
+		(unsigned)offsetof(StartPacket, timeLimit));
+	fprintf(out, "start.offset.mapCycle %u\n",
+		(unsigned)offsetof(StartPacket, mapCycle));
+	fprintf(out, "start.offset.rngseed %u\n",
+		(unsigned)offsetof(StartPacket, rngseed));
+	fprintf(out, "start.offset.clients %u\n",
+		(unsigned)offsetof(StartPacket, clients));
+	fprintf(out, "start.size.client %u\n",
+		(unsigned)sizeof(StartPacket::Client));
+	fprintf(out, "start.clients.are numPlayers-1\n");
+	fprintf(out, "start.maxgamemode %u\n", (unsigned)GM_TeamBattle);
+
+	// The other packet that ends in a counted array.
+	fprintf(out, "bundle.offset.slotCount %u\n",
+		(unsigned)offsetof(TicCmdBundlePacket, slotCount));
+	fprintf(out, "bundle.offset.TimeCount %u\n",
+		(unsigned)offsetof(TicCmdBundlePacket, TimeCount));
+	fprintf(out, "bundle.offset.slots %u\n",
+		(unsigned)offsetof(TicCmdBundlePacket, slots));
+	fprintf(out, "bundle.size.slot %u\n",
+		(unsigned)sizeof(TicCmdBundlePacket::Slot));
+	fprintf(out, "bundle.buttons %u\n", (unsigned)NUMBUTTONS);
+
+	// One golden datagram, built by the same code the host sends: two players,
+	// one trailing client. If the gate cannot reproduce these bytes it is
+	// building the wrong packet.
+	{
+		const size_t size = sizeof(StartPacket) + sizeof(StartPacket::Client);
+		StartPacket *golden = (StartPacket *)calloc(1, size);
+		golden->type = StartPacket::Type;
+		golden->protocolVersion = NET_PROTOCOL_VERSION;
+		golden->playerNumber = 1;
+		golden->numPlayers = 2;
+		golden->gameMode = GM_Battle;
+		golden->ticDelay = 6;
+		golden->fragLimit = 0;
+		golden->damageScale = 100;
+		golden->timeLimit = 0;
+		golden->mapCycle = 0;
+		golden->rngseed = 0x01020304;
+		golden->clients[0].host = 0x0100007F;
+		golden->clients[0].port = 5029;
+		golden->ByteSwap();
+
+		fprintf(out, "start.golden ");
+		for(size_t i = 0;i < size;++i)
+			fprintf(out, "%02x", ((const unsigned char *)golden)[i]);
+		fprintf(out, "\n");
+		free(golden);
+	}
+
+	if(out != stdout)
+		fclose(out);
+	else
+		fflush(out);
+	return 0;
+}
+
 NetInit InitVars = {
 	MODE_SinglePlayer,
 	GM_Cooperative,
@@ -283,13 +505,55 @@ NetInit InitVars = {
 	NULL,
 	0,
 	0,
+	100,		// damageScale: the game's own numbers until somebody says otherwise
+	0,			// timeLimit: none
+	0,			// mapCycle: the same arena again
 };
+
+static const char *const ArenaMaps[] = {
+	"MAP51", "MAP52", "MAP53", "MAP54", "MAP55", "MAP56", "MAP57", "MAP60"
+};
+
+unsigned int ArenaCount()
+{
+	return countof(ArenaMaps);
+}
+
+const char *ArenaMap(unsigned int index)
+{
+	return index < countof(ArenaMaps) ? ArenaMaps[index] : ArenaMaps[0];
+}
+
+const char *NextArena(const char *map)
+{
+	for(unsigned int i = 0;i < countof(ArenaMaps);++i)
+	{
+		if(stricmp(map, ArenaMaps[i]) == 0)
+			return ArenaMaps[(i + 1) % countof(ArenaMaps)];
+	}
+	return NULL;
+}
+
+// One slot's command for one sequence, as buffered and as it travels.
+struct SlotCommand
+{
+	int32_t TimeCount;	// zero means the entry is empty
+	BYTE    slot;
+	int32_t controlx;
+	int32_t controly;
+	int32_t controlstrafe;
+	BYTE    buttonstate[NUMBUTTONS];
+};
+
+// Buffered by slot rather than by peer. The two used to be the same array
+// because the two used to be the same thing; a slot with no peer is precisely
+// what this milestone exists to carry.
+static SlotCommand    SlotRing[MAXPLAYERS][MAXEXTRATICS];
+static unsigned short SlotRingPos[MAXPLAYERS];
 
 struct NetClient
 {
 	IPaddress address;
-	TicCmdPacket extratics[MAXEXTRATICS];
-	unsigned short extrapos;
 };
 
 static NetClient Client[MAXPLAYERS];
@@ -435,25 +699,170 @@ static void Abandon(const bool have[MAXPLAYERS])
 
 static void DoEndGame()
 {
+	// Reachable before any level exists. A client that has synced with a host
+	// is still pumping packets through the sign-on wait, and players[i].mo is
+	// null until CheckSpawnPlayer has run -- so an end-game arriving in that
+	// window dereferenced null and took the process with it.
+	//
+	// Found by fixing tools/netfuzz.py rather than by reading this function:
+	// the battery's "well-formed start packet with trailing rubbish" case had
+	// been built with the wrong struct layout for as long as it existed, so no
+	// client under test had ever actually synced, so nothing had ever reached
+	// this line without a level. A gate firing the wrong bytes does not fail;
+	// it passes, which is worse.
 	playstate = ex_died;
 	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
 	{
 		players[i].lives = 0;
 		players[i].killerobj = NULL;
-		players[i].mo->Die();
+		if(players[i].mo != NULL)
+			players[i].mo->Die();
 	}
 }
 
-// Check if we have a potentially valid packet of a certain type
+// Does this datagram even claim to be a T? Type byte and fixed size only.
+// Nothing here may consult a length or a count that came off the wire.
+template<typename T>
+static bool IsPacketType(const UDPpacket *packet)
+{
+	return packet->len >= (signed)sizeof(T) && ((T*)packet->data)->type == T::Type;
+}
+
+// Everything a packet declares about its own size has to be true before a
+// single byte of it is swapped, because ByteSwap is where the trailing arrays
+// get walked. This used to run afterwards, which is no protection at all: by
+// the time the check said "255 players is absurd", the swap had already
+// followed that 255 off the end of the buffer, reading and writing as it went.
+//
+// The fixed-size packets are fully described by sizeof(T), which IsPacketType
+// has already established, so the template below is the whole story for them.
+template<typename T>
+static bool ValidateDeclaredSize(const T *, int)
+{
+	return true;
+}
+
+// Every field of a start packet is a number a stranger chose.
+//
+// This one ends in a client array whose length is declared by a byte inside
+// the packet, so the size that matters is not the size of the struct. What the
+// unchecked version allowed, from one forged UDP datagram: numPlayers up to
+// 255, whose swap loop ran forty bytes past the end of the 1500-byte receive
+// buffer, reading and writing every step of the way; playerNumber up to 255
+// becoming an index into players[]; a gameMode outside the enum; and a tic
+// delay large enough to swamp the extratics ring. A client sitting on a
+// "waiting for sync" screen is the most exposed the game ever is: it is
+// holding an open socket, it has told nobody where it is, and it will believe
+// the first thing that answers.
+//
+// A foreign protocol version is refused here rather than parsed, because
+// nothing below the version field can be trusted to mean what it says. Only
+// the type byte and the version itself sit at an offset both versions agree
+// on, which is the entire reason the version is the second field.
+static bool ValidateDeclaredSize(const StartPacket *data, int len)
+{
+	if(len < 0)
+		return false;
+	if(LittleShort(data->protocolVersion) != NET_PROTOCOL_VERSION)
+		return false;
+	if(data->numPlayers < 1 || data->numPlayers > MAXPLAYERS)
+		return false;
+	if(data->playerNumber >= data->numPlayers)
+		return false;
+	if(data->gameMode > GM_TeamBattle)
+		return false;
+	// The delayed path stamps commands this far ahead and holds them in a ring
+	// of MAXEXTRATICS; half of that leaves room for the tics still in flight.
+	if(data->ticDelay > MAXEXTRATICS/2)
+		return false;
+
+	// The array the packet says it has, rather than the one the struct
+	// declares: sizeof(StartPacket) counts none of it, and the host does not
+	// list itself, so N players means N-1 entries.
+	const size_t needed =
+		sizeof(StartPacket) + sizeof(StartPacket::Client)*(data->numPlayers - 1);
+	if((size_t)len < needed)
+		return false;
+
+	return true;
+}
+
+// The other packet whose size is not sizeof(). Same rule as the start packet
+// and for the same reason: ByteSwap walks the trailing array using a count
+// that came off the wire, so the count has to be true before it runs.
+//
+// The per-entry checks are here rather than at the call site because a bundle
+// that names a slot outside the roster, or an axis outside the range the game
+// was balanced for, or a button that is nobody's business but the sender's own
+// screen, is malformed rather than merely unwelcome -- and the cheapest place
+// to refuse it is before anything has been decoded from it.
+static bool ValidateDeclaredSize(const TicCmdBundlePacket *data, int len)
+{
+	if(len < 0)
+		return false;
+	if(data->slotCount < 1 || data->slotCount > Session::MAX_PLAYER_SLOTS)
+		return false;
+
+	const size_t needed = sizeof(TicCmdBundlePacket) +
+		sizeof(TicCmdBundlePacket::Slot)*data->slotCount;
+	if((size_t)len < needed)
+		return false;
+
+	for(unsigned int i = 0;i < data->slotCount;++i)
+	{
+		const TicCmdBundlePacket::Slot &entry = data->slots[i];
+		if(entry.slot >= Session::MAX_PLAYER_SLOTS)
+			return false;
+		// No slot twice: one command per slot per sequence, and a duplicate is
+		// a sender trying to win a race with itself.
+		for(unsigned int j = i + 1;j < data->slotCount;++j)
+		{
+			if(data->slots[j].slot == entry.slot)
+				return false;
+		}
+		for(unsigned int b = 0;b < NUMBUTTONS;++b)
+		{
+			if(entry.buttonstate[b] && !Command::IsGameplayButton((int)b))
+				return false;
+		}
+	}
+	return true;
+}
+
+// A connection request that does not carry this build's magic and version is
+// not a player, it is a port scanner or a stale binary. Both are refused, and
+// only the second is worth a message.
+static bool ValidateDeclaredSize(const RequestPacket *data, int)
+{
+	return data->MagicOk() &&
+		LittleShort(data->protocolVersion) == NET_PROTOCOL_VERSION;
+}
+
+// The two fields every version of a start packet has at the same offset, read
+// without trusting anything else, so a mismatch can be named instead of
+// mis-parsed.
+static bool PeekStartVersion(const UDPpacket *packet, unsigned int &version)
+{
+	if(packet->len < (signed)(sizeof(BYTE) + sizeof(uint16_t)))
+		return false;
+	if(packet->data[0] != StartPacket::Type)
+		return false;
+	uint16_t raw;
+	memcpy(&raw, packet->data + 1, sizeof(raw));
+	version = LittleShort(raw);
+	return true;
+}
+
+// Check if we have a valid packet of a certain type, and decode it in place.
 template<typename T>
 static bool CheckPacketType(const UDPpacket *packet)
 {
-	if(packet->len >= (signed)sizeof(T) && ((T*)packet->data)->type == T::Type)
-	{
-		((T*)packet->data)->ByteSwap();
-		return true;
-	}
-	return false;
+	if(!IsPacketType<T>(packet))
+		return false;
+	if(!ValidateDeclaredSize((const T*)packet->data, packet->len))
+		return false;
+	((T*)packet->data)->ByteSwap();
+	return true;
 }
 
 // Sends an ACK packet to a given address
@@ -476,46 +885,95 @@ bool BufferPacket(int client, const T &packet)
 	return false;
 }
 
-template<>
-bool BufferPacket<TicCmdPacket>(int client, const TicCmdPacket &packet)
-{
-	if(packet.TimeCount > gamestate.TimeCount)
-	{
-		Client[client].extratics[Client[client].extrapos] = packet;
-		Client[client].extrapos = (Client[client].extrapos+1)%MAXEXTRATICS;
-	}
-	return true;
-}
-
+// ExchangePacket still carries the start-of-game setup exchange, which has
+// nothing buffered ahead of it.
 template<typename T>
 int UnbufferPacket(T (&packets)[MAXPLAYERS], bool (&received)[MAXPLAYERS])
 {
 	return 0;
 }
 
-template<>
-int UnbufferPacket<TicCmdPacket>(TicCmdPacket (&packets)[MAXPLAYERS], bool (&received)[MAXPLAYERS])
-{
-	int unbufferedCount = 0;
-	for(unsigned int i = 0;i < MAXEXTRATICS;++i)
-	{
-		for(unsigned int c = 0;c < InitVars.numPlayers;++c)
-		{
-			if(c == ConsolePlayer)
-				continue;
+// The TicCmdPacket specializations that used to live here buffered and
+// unbuffered commands for the synchronous zero-delay exchange. Both the
+// exchange and the packet are gone: commands travel in bundles now, through
+// the one ring, whatever the delay.
 
-			if(Client[c].extratics[i].TimeCount != 0 && Client[c].extratics[i].TimeCount == gamestate.TimeCount)
-			{
-				packets[c] = Client[c].extratics[i];
-				Client[c].extratics[i].TimeCount = 0;
-				if(received[c])
-					continue;
-				received[c] = true;
-				++unbufferedCount;
-			}
+// One place that decides who is allowed to say something, rather than five
+// places that each forgot. Every packet handled below can change the state of
+// a match in progress -- block the playsim, run a debug command, end the game
+// -- and not one of them established that the sender was in the match.
+//
+// A stranger who guessed the port could end anyone's game with five bytes.
+//
+// Peer-level is as far as version 1 goes: any player may end the match,
+// because the quit menu has always worked that way, and narrowing that to the
+// arbiter is a lifecycle change that belongs with the rest of the authority
+// work rather than smuggled into a security fix.
+static bool FromKnownPeer(int *client)
+{
+	const int found = FindClient(Packet->address);
+	if(found < 0)
+	{
+		// Not acked, and not one line per datagram: an unknown sender is
+		// either a scanner or a flood, and answering either one confirms
+		// there is a game here and doubles its traffic for it.
+		static uint32_t lastReport = 0;
+		static unsigned int ignored = 0;
+		++ignored;
+		if(lastReport == 0 || SDL_GetTicks() - lastReport >= 1000)
+		{
+			lastReport = SDL_GetTicks();
+			Printf("Ignored %u packet%s from outside the game.\n",
+				ignored, ignored == 1 ? "" : "s");
+			ignored = 0;
 		}
+		return false;
 	}
-	return unbufferedCount;
+	if(client != NULL)
+		*client = found;
+	return true;
+}
+
+// Is there a world for a packet to act on? Everything below that touches the
+// playsim needs one, and until S1 nothing asked. A client that has synced with
+// a host is already pumping packets during the sign-on wait, several seconds
+// before any level exists -- and in that window PlayFrame() and DoEndGame()
+// both walk straight into a null pawn.
+static bool InAGame()
+{
+	return ingame;
+}
+
+// The last setup packet this machine sent, kept exactly as it went out.
+//
+// A peer that has finished the exchange has left the loop that would answer
+// anybody still in it. Keeping its own packet means it can still say both of
+// the things a stuck peer might be missing: "yes, I have yours" and "here is
+// mine again".
+static BYTE     LastSetupBytes[64];
+static int      LastSetupSize = 0;
+static bool     HaveLastSetup = false;
+
+static void RememberSetupPacket(const void *bytes, size_t size)
+{
+	if(size > sizeof(LastSetupBytes))
+	{
+		HaveLastSetup = false;
+		return;
+	}
+	memcpy(LastSetupBytes, bytes, size);
+	LastSetupSize = (int)size;
+	HaveLastSetup = true;
+}
+
+static void AnswerStuckPeer(IPaddress address, int32_t theirTime)
+{
+	SendAck<NewGamePacket>(address, theirTime);
+	if(!HaveLastSetup)
+		return;
+	UDPpacket out = { -1, LastSetupBytes, LastSetupSize, LastSetupSize, 0,
+		address };
+	SDLNet_UDP_Send(Socket, -1, &out);
 }
 
 static void HandleCommandPackets()
@@ -523,6 +981,9 @@ static void HandleCommandPackets()
 	if(CheckPacketType<BlockPlaysimPacket>(Packet))
 	{
 		const BlockPlaysimPacket *data = reinterpret_cast<BlockPlaysimPacket *>(Packet->data);
+
+		if(!FromKnownPeer(NULL) || !InAGame())
+			return;
 
 		SendAck<BlockPlaysimPacket>(Packet->address, data->TimeCount);
 		if(data->TimeCount < gamestate.TimeCount-1) // Too old?
@@ -535,16 +996,13 @@ static void HandleCommandPackets()
 	{
 		const DebugCmdPacket *data = reinterpret_cast<DebugCmdPacket *>(Packet->data);
 
+		int client = -1;
+		if(!FromKnownPeer(&client) || !InAGame())
+			return;
+
 		SendAck<DebugCmdPacket>(Packet->address, data->TimeCount);
 		if(data->TimeCount != gamestate.TimeCount)
 			Printf("Desync: Debug key command for tic %d arrived on %d\n", data->TimeCount, gamestate.TimeCount);
-
-		int client = FindClient(Packet->address);
-		if(client < 0)
-		{
-			Printf("Packet recieved from unknown source\n");
-			return;
-		}
 
 		DebugCmd cmd;
 		cmd.Type = static_cast<EDebugCmd>(data->CommandType);
@@ -560,12 +1018,20 @@ static void HandleCommandPackets()
 	{
 		const EndGamePacket *data = reinterpret_cast<EndGamePacket *>(Packet->data);
 
+		// There is nothing to end before a level exists, and DoEndGame's own
+		// guard is defense in depth rather than the answer.
+		if(!FromKnownPeer(NULL) || !InAGame())
+			return;
+
 		SendAck<EndGamePacket>(Packet->address, data->TimeCount);
 		DoEndGame();
 	}
 	else if(CheckPacketType<InAckPacket>(Packet))
 	{
 		const InAckPacket *data = reinterpret_cast<InAckPacket *>(Packet->data);
+
+		if(!FromKnownPeer(NULL))
+			return;
 
 		SendAck<InAckPacket>(Packet->address, data->TimeCount);
 		if(data->Number != AwaitingAck)
@@ -576,10 +1042,33 @@ static void HandleCommandPackets()
 
 		DidAck = data->Number;
 	}
+	else if(CheckPacketType<NewGamePacket>(Packet))
+	{
+		// Somebody is still in the level-start exchange that this machine has
+		// already left, which happens when one of our datagrams to them was
+		// lost. Two different things can be missing and we cannot tell which,
+		// so send both: the ack that says we have theirs, and our own packet
+		// in case that is what never arrived. Both are idempotent.
+		//
+		// This is the half of the fix that cannot live in the exchange
+		// itself: by the time it matters, this machine is loading a level or
+		// running tics, and the loop that used to answer is gone.
+		const NewGamePacket *data =
+			reinterpret_cast<NewGamePacket *>(Packet->data);
+		if(!FromKnownPeer(NULL))
+			return;
+		AnswerStuckPeer(Packet->address, data->TimeCount);
+	}
 	else if(CheckPacketType<StartPacket>(Packet))
 	{
-		// Host lost our start ack, so send another one
-		SendAck<StartPacket>(Client[0].address, 0xFFFFFFFF);
+		// Host lost our start ack, so send another one -- but only to the
+		// host, and only if the host is who asked. Answering anyone else
+		// sends an ack to an address a stranger chose.
+		int client = -1;
+		if(!FromKnownPeer(&client) || client != Arbiter)
+			return;
+
+		SendAck<StartPacket>(Client[Arbiter].address, 0xFFFFFFFF);
 	}
 }
 
@@ -599,6 +1088,13 @@ static void ExchangePacket(T (&packets)[MAXPLAYERS])
 	packets[ConsolePlayer].type = T::Type;
 	packets[ConsolePlayer].TimeCount = gamestate.TimeCount;
 	packets[ConsolePlayer].ByteSwap();
+
+	// Keep a copy of the setup packet, in wire order, for answering anyone
+	// still stuck in this exchange after we have left it. Only the setup
+	// exchange: a tic command is worthless a moment later, and the tic loop
+	// has its own recovery.
+	if((int)T::Type == NET_NewGame)
+		RememberSetupPacket(&packets[ConsolePlayer], sizeof(T));
 
 	// We need to keep an eye out for packets, but we also need to periodically
 	// resend our packet in case it got lost.
@@ -639,7 +1135,27 @@ static void ExchangePacket(T (&packets)[MAXPLAYERS])
 		{
 			for(unsigned int i = 0;i < InitVars.numPlayers;++i)
 			{
-				if(acked[i])
+				// The setup exchange resends to anyone who has not acked ours
+				// *or* whose packet we have not got. The second half was
+				// missing, and without it a peer can wait in perfect silence:
+				// if everybody has acked our packet and the only thing we
+				// lack is theirs, the old rule sent nothing at all, to
+				// anyone, while waiting for a packet nobody was going to send
+				// again. A resend is also a request, because a receiver
+				// answers a duplicate with its own packet.
+				//
+				// Only the setup exchange. The same template carries every
+				// tic's commands, and answering duplicates there costs more
+				// than it buys: measured over a 80ms link at 2% loss, a match
+				// with input delay ran at 23 tics a second before this change
+				// and 19 with it applied to every tic, because each duplicate
+				// drew an extra datagram into a link that was already the
+				// bottleneck. Restricted to setup it is back to 23. The tic
+				// loop has its own recovery -- the delay window -- and this
+				// deadlock was never its problem.
+				if(i == (unsigned)ConsolePlayer)
+					continue;
+				if(acked[i] && ((int)T::Type != NET_NewGame || received[i]))
 					continue;
 
 				outPacket.address = Client[i].address;
@@ -669,7 +1185,7 @@ static void ExchangePacket(T (&packets)[MAXPLAYERS])
 				int client = FindClient(Packet->address);
 				if(client < 0)
 				{
-					Printf("Packet recieved from unknown source\n");
+					Printf("Packet received from unknown source\n");
 					continue;
 				}
 
@@ -685,7 +1201,19 @@ static void ExchangePacket(T (&packets)[MAXPLAYERS])
 				SendAck<T>(Packet->address, data.TimeCount);
 
 				if(received[client])
+				{
+					// They are asking again, so something of ours did not
+					// arrive. The ack above covers one possibility; our own
+					// packet covers the other, and it costs one datagram to a
+					// peer we are already talking to. Setup only, for the
+					// reason given at the resend rule above.
+					if((int)T::Type == NET_NewGame)
+					{
+						outPacket.address = Packet->address;
+						SDLNet_UDP_Send(Socket, -1, &outPacket);
+					}
 					continue;
+				}
 				received[client] = true;
 				packets[client] = data;
 				++numReceived;
@@ -699,7 +1227,7 @@ static void ExchangePacket(T (&packets)[MAXPLAYERS])
 				int client = FindClient(Packet->address);
 				if(client < 0)
 				{
-					Printf("Packet recieved from unknown source\n");
+					Printf("Packet received from unknown source\n");
 					continue;
 				}
 				if(acked[client])
@@ -785,7 +1313,7 @@ static void SendReliablePacket(T &packet)
 				int client = FindClient(Packet->address);
 				if(client < 0)
 				{
-					Printf("Packet recieved from unknown source\n");
+					Printf("Packet received from unknown source\n");
 					continue;
 				}
 				if(acked[client])
@@ -821,43 +1349,6 @@ static void FillPeers(InitStatus &status, const bool acked[MAXPLAYERS])
 			peer.state = IPaddressToString(Client[i].address);
 		status.peers.Push(peer);
 	}
-}
-
-// Every field of a start packet is a number a stranger chose.
-//
-// CheckPacketType only proves the packet is at least sizeof(T) and carries the
-// right type byte. That is enough for the fixed-size packets and not enough for
-// this one, which ends in a client array whose length is declared by a byte
-// inside the packet -- so the size that matters is not the size of the struct.
-//
-// What the unchecked version allowed, from one forged UDP datagram: numPlayers
-// up to 255 walking Client[MAXPLAYERS] off the end of itself and writing as it
-// went, playerNumber up to 255 becoming an index into players[], a gameMode
-// outside the enum, and a tic delay large enough to swamp the extratics ring.
-// A client sitting on a "waiting for sync" screen is the most exposed the game
-// ever is: it is holding an open socket, it has told nobody where it is, and
-// it will believe the first thing that answers.
-static bool ValidStartPacket(const StartPacket *data, int len)
-{
-	if(data->numPlayers < 1 || data->numPlayers > MAXPLAYERS)
-		return false;
-	if(data->playerNumber >= data->numPlayers)
-		return false;
-	if(data->gameMode > GM_TeamBattle)
-		return false;
-	// The delayed path stamps commands this far ahead and holds them in a ring
-	// of MAXEXTRATICS; half of that leaves room for the tics still in flight.
-	if(data->ticDelay > MAXEXTRATICS/2)
-		return false;
-
-	// The array the packet says it has, rather than the one the struct
-	// declares: sizeof(StartPacket) counts none of it.
-	const size_t needed =
-		sizeof(StartPacket) + sizeof(StartPacket::Client)*(data->numPlayers - 1);
-	if(len < 0 || (size_t)len < needed)
-		return false;
-
-	return true;
 }
 
 static bool StartHost(InitStatusCallback callback)
@@ -909,7 +1400,39 @@ static bool StartHost(InitStatusCallback callback)
 		if(SDLNet_UDP_Recv(Socket, Packet))
 		{
 			const RequestPacket *data = reinterpret_cast<RequestPacket*>(Packet->data);
-			if(CheckPacketType<RequestPacket>(Packet))
+			// A request this build cannot speak to. Said once a second at
+			// most, because the sender will keep trying every 400ms and the
+			// person who needs to read this is looking at the host's console.
+			if(Packet->len >= 1 && Packet->data[0] == RequestPacket::Type &&
+				!IsPacketType<RequestPacket>(Packet))
+			{
+				static uint32_t lastOld = 0;
+				if(lastOld == 0 || SDL_GetTicks() - lastOld >= 1000)
+				{
+					lastOld = SDL_GetTicks();
+					Printf("\b\b\bRefused %s: it speaks an older network"
+						" protocol than %u.\n   ",
+						IPaddressToString(Packet->address).GetChars(),
+						(unsigned)NET_PROTOCOL_VERSION);
+					fflush(stdout);
+				}
+			}
+			else if(IsPacketType<RequestPacket>(Packet) &&
+				!CheckPacketType<RequestPacket>(Packet))
+			{
+				static uint32_t lastBad = 0;
+				if(lastBad == 0 || SDL_GetTicks() - lastBad >= 1000)
+				{
+					lastBad = SDL_GetTicks();
+					Printf("\b\b\bRefused %s: wrong magic or network"
+						" protocol %u, expected %u.\n   ",
+						IPaddressToString(Packet->address).GetChars(),
+						(unsigned)LittleShort(data->protocolVersion),
+						(unsigned)NET_PROTOCOL_VERSION);
+					fflush(stdout);
+				}
+			}
+			else if(CheckPacketType<RequestPacket>(Packet))
 			{
 				Printf("\b\b\b");
 
@@ -942,10 +1465,14 @@ static bool StartHost(InitStatusCallback callback)
 	StartPacket *startData = (StartPacket *)malloc(startSize);
 	UDPpacket startPacket = { -1, (Uint8*)startData, startSize, startSize, 0 };
 	startData->type = StartPacket::Type;
+	startData->protocolVersion = NET_PROTOCOL_VERSION;
 	startData->numPlayers = InitVars.numPlayers;
 	startData->gameMode = InitVars.gameMode;
 	startData->ticDelay = InitVars.ticDelay;
 	startData->fragLimit = InitVars.fragLimit;
+	startData->damageScale = InitVars.damageScale;
+	startData->timeLimit = InitVars.timeLimit;
+	startData->mapCycle = InitVars.mapCycle;
 	startData->rngseed = rngseed;
 	for(unsigned int i = 1;i < InitVars.numPlayers;++i)
 	{
@@ -1030,8 +1557,13 @@ static bool StartJoin(InitStatusCallback callback)
 	Printf("Attempting to connect to %u.%u.%u.%u:%u :\n   ", address.host&0xFF, (address.host&0xFF00)>>8, (address.host&0xFF0000)>>16, (address.host&0xFF000000)>>24, BigShort(address.port));
 
 	// Send a connection request to host
-	Uint8 requestData[] = {NET_RequestConnection};
-	UDPpacket packet = { -1, requestData, 1, 1, 0, address };
+	RequestPacket requestData;
+	requestData.type = RequestPacket::Type;
+	memcpy(requestData.magic, NetMagic, sizeof(requestData.magic));
+	requestData.protocolVersion = NET_PROTOCOL_VERSION;
+	requestData.ByteSwap();
+	UDPpacket packet = { -1, (Uint8*)&requestData, sizeof(requestData),
+		sizeof(requestData), 0, address };
 
 	InitStatus status;
 	status.phase = InitStatus::PHASE_Joining;
@@ -1074,30 +1606,61 @@ static bool StartJoin(InitStatusCallback callback)
 			if(Packet->address.host != address.host ||
 				Packet->address.port != address.port)
 				continue;
-			if(CheckPacketType<StartPacket>(Packet))
+			if(IsPacketType<StartPacket>(Packet) &&
+				!CheckPacketType<StartPacket>(Packet))
 			{
-				if(!ValidStartPacket(data, Packet->len))
+				// A host that speaks another protocol is a different problem
+				// from a forged packet, and the difference is the whole
+				// reason anyone can act on the message: one means upgrade,
+				// the other means somebody is firing packets at you.
+				unsigned int theirs = 0;
+				if(PeekStartVersion(Packet, theirs) &&
+					theirs != NET_PROTOCOL_VERSION)
 				{
-					// Counted and reported at most once a second: somebody
-					// firing these is firing a great many, and a line each
-					// would bury everything else in the log. Flushed, because
-					// this is the one thing here worth reading promptly, and
-					// stdout to a file does not flush itself in time to be
-					// read by anyone wondering what is going on.
-					static uint32_t lastReport = 0;
-					static unsigned int rejected = 0;
-					++rejected;
-					if(lastReport == 0 || SDL_GetTicks() - lastReport >= 1000)
+					AbortReason.Format(
+						"Host speaks network protocol %u,\nthis game speaks %u."
+						"\nBoth machines need the same version.",
+						theirs, (unsigned)NET_PROTOCOL_VERSION);
+					Printf("%s\n", AbortReason.GetChars());
+					fflush(stdout);
+
+					// Held on screen rather than printed and abandoned: the
+					// next thing that happens is a silent fall back to single
+					// player, and "why am I not in a netgame" is exactly the
+					// question this answers.
+					status.failure = AbortReason;
+					const uint32_t shown = SDL_GetTicks();
+					while(SDL_GetTicks() - shown < 5000)
 					{
-						lastReport = SDL_GetTicks();
-						Printf("Rejected %u malformed start packet%s.\n",
-							rejected, rejected == 1 ? "" : "s");
-						fflush(stdout);
-						rejected = 0;
+						if(!callback(status))
+							break;
+						SDL_Delay(16);
+						IN_ProcessEvents();
 					}
-					continue;
+					return false;
 				}
 
+				// Counted and reported at most once a second: somebody
+				// firing these is firing a great many, and a line each
+				// would bury everything else in the log. Flushed, because
+				// this is the one thing here worth reading promptly, and
+				// stdout to a file does not flush itself in time to be
+				// read by anyone wondering what is going on.
+				static uint32_t lastReport = 0;
+				static unsigned int rejected = 0;
+				++rejected;
+				if(lastReport == 0 || SDL_GetTicks() - lastReport >= 1000)
+				{
+					lastReport = SDL_GetTicks();
+					Printf("Rejected %u malformed start packet%s.\n",
+						rejected, rejected == 1 ? "" : "s");
+					fflush(stdout);
+					rejected = 0;
+				}
+				continue;
+			}
+			if(CheckPacketType<StartPacket>(Packet))
+			{
 				ConsolePlayer = data->playerNumber;
 				InitVars.numPlayers = data->numPlayers;
 				InitVars.gameMode = static_cast<GameMode>(data->gameMode);
@@ -1105,6 +1668,9 @@ static bool StartJoin(InitStatusCallback callback)
 				// StartPacket.
 				InitVars.ticDelay = data->ticDelay;
 				InitVars.fragLimit = data->fragLimit;
+				InitVars.damageScale = data->damageScale;
+				InitVars.timeLimit = data->timeLimit;
+				InitVars.mapCycle = data->mapCycle;
 				rngseed = data->rngseed;
 
 				Client[0].address = Packet->address;
@@ -1123,8 +1689,8 @@ static bool StartJoin(InitStatusCallback callback)
 		}
 	}
 
-	Printf("\b\b\bRecieved sync from host! Sending ack...\n");
-	status.detail = "Synchronised";
+	Printf("\b\b\bReceived sync from host! Sending ack...\n");
+	status.detail = "Synchronized";
 	callback(status);
 
 	// Send ACK and forget, if we're waiting for ticcmd and we get a start, we'll send another ack then.
@@ -1154,7 +1720,10 @@ static void Shutdown()
 bool Init(InitStatusCallback callback)
 {
 	if(InitVars.mode == MODE_SinglePlayer)
+	{
+		Session::AdoptLegacyNetState();
 		return true;
+	}
 
 	if(SDLNet_Init() < 0)
 	{
@@ -1184,12 +1753,21 @@ bool Init(InitStatusCallback callback)
 		InitVars.mode = MODE_SinglePlayer;
 		ConsolePlayer = 0;
 	}
+
+	// One place where what these variables mean gets written down, whichever
+	// way the connection went. Both callers of Init -- the command line and
+	// the multiplayer menu -- come through here, so neither can forget.
+	Session::AdoptLegacyNetState();
 	return connected;
 }
 
 bool IsArbiter()
 {
-	return ConsolePlayer == Arbiter;
+	// Was ConsolePlayer == 0, which conflated three separate things: being the
+	// authority, occupying slot zero, and being this machine. A listen host is
+	// all three today and a dedicated authority will be only the first, so the
+	// question has to be asked of the session rather than of an array index.
+	return Session::IsAuthority();
 }
 
 bool IsBlocked()
@@ -1253,6 +1831,14 @@ byte PlayerTeam(unsigned int player)
 	if(player >= MAXPLAYERS || gamestate.playerClass[player] == NULL)
 		return 0;
 
+	// Marine uniform variants are cosmetic. Class-list indices still identify
+	// the selected skin on the wire, but must not create additional teams.
+	if(IWad::CheckGameFilter("Corridor7"))
+	{
+		const ClassDef *alien = ClassDef::FindClass("C7AlienPlayer");
+		return alien && gamestate.playerClass[player]->IsDescendantOf(alien) ? 1 : 0;
+	}
+
 	const FName className = gamestate.playerClass[player]->GetName();
 	for(unsigned int i = 0;i < gameinfo.PlayerClasses.Size();++i)
 	{
@@ -1264,8 +1850,12 @@ byte PlayerTeam(unsigned int player)
 
 int TeamFrags(byte team)
 {
+	// Every slot, not InitVars.numPlayers. That counts the peers who
+	// connected, which are the humans: a bot's frags never reached its team's
+	// total, so a team with bots on it could not win a team game by the
+	// numbers the scoreboard showed.
 	int total = 0;
-	for(unsigned int i = 0;i < InitVars.numPlayers;++i)
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 	{
 		if(PlayerTeam(i) == team)
 			total += players[i].frags;
@@ -1320,18 +1910,65 @@ void NewGame(int &difficulty, FString &map, FName (&playerClassNames)[MAXPLAYERS
 	strncpy(myNewGameRequest.map, map, 8);
 	myNewGameRequest.map[8] = 0;
 
-	ExchangePacket(newGamePackets);
-	for(unsigned int client = 0;client < InitVars.numPlayers;++client)
+	// The roster this machine believes in. Only the arbiter's copy is read,
+	// but everyone fills it in so that the packet has one meaning.
+	myNewGameRequest.slotCount = (BYTE)Session::ActiveSlotCount();
+	memset(myNewGameRequest.slotKind, 0, sizeof(myNewGameRequest.slotKind));
+	memset(myNewGameRequest.slotClass, 0, sizeof(myNewGameRequest.slotClass));
+	for(unsigned int slot = 0;slot < Session::ActiveSlotCount();++slot)
 	{
-		playerClassNames[client] = newGamePackets[client].playerClass;
+		myNewGameRequest.slotKind[slot] = (BYTE)Session::KindOf(slot);
+		myNewGameRequest.slotClass[slot] =
+			(BYTE)PlayerClass::FromName(playerClassNames[slot]).index;
+	}
 
-		if(client == Arbiter)
+	ExchangePacket(newGamePackets);
+	// Peers, not slots: this loop walks the per-peer setup records the
+	// exchange just filled in, and the legacy protocol's one-address-one-slot
+	// rule is the only reason the two indices are interchangeable here.
+	for(unsigned int peer = 0;peer < InitVars.numPlayers;++peer)
+	{
+		playerClassNames[peer] = newGamePackets[peer].playerClass;
+
+		if(peer == Arbiter)
 		{
-			difficulty = newGamePackets[client].difficulty;
-			newGamePackets[client].map[8] = 0;
-			map = newGamePackets[client].map;
+			difficulty = newGamePackets[peer].difficulty;
+			newGamePackets[peer].map[8] = 0;
+			map = newGamePackets[peer].map;
 		}
 	}
+
+	// The arbiter's roster, adopted by everyone. A slot with no peer exists
+	// because the authority says it does; before this it existed only on the
+	// machine that owned it, which is an immediate disagreement about how many
+	// commands a tic needs and how many pawns a level has.
+	{
+		const NewGamePacket &authority = newGamePackets[Arbiter];
+		unsigned int count = authority.slotCount;
+		if(count > MAXPLAYERS)
+			count = MAXPLAYERS;
+		if(count > InitVars.numPlayers)
+		{
+			Session::AdoptAuthoritySlots(count, authority.slotKind);
+			// An authority-owned slot plays whatever the authority says it
+			// plays. The host's own character is the fallback only for a
+			// class index this machine does not know, which means the two are
+			// running different game packages -- a mismatch the rest of the
+			// handshake is not built to notice, and better drawn as the host's
+			// marine than as nothing.
+			for(unsigned int slot = InitVars.numPlayers;slot < count;++slot)
+			{
+				PlayerClass sent = { authority.slotClass[slot] };
+				FName name = sent;
+				playerClassNames[slot] = name != NAME_None ?
+					name : playerClassNames[Arbiter];
+			}
+		}
+	}
+
+	// The roster is settled from here until the match ends: version 1 adds,
+	// removes and reassigns no slot while a match runs.
+	Session::AdoptLegacyRoster(playerClassNames);
 }
 
 // Input delay: the whole of what makes this playable over the internet.
@@ -1366,60 +2003,161 @@ static uint32_t TicSeq = 0;
 // longer send it again -- and the packet a peer lost is exactly one we have
 // already used ourselves. Both sides then wait for each other for ever, which
 // is what 2% packet loss did.
-static TicCmdPacket SentHistory[MAXEXTRATICS];
-
-static void StoreTicCmd(int client, const TicCmdPacket &packet)
+// What this machine last sent, per sequence, so a bundle lost on the way can be
+// sent again without asking a producer to make it a second time.
+struct SentBundle
 {
-	// Drop a duplicate rather than filling the ring with copies: a resend
-	// arrives as the same sequence we already hold.
-	for(unsigned int i = 0;i < MAXEXTRATICS;++i)
-	{
-		if(Client[client].extratics[i].TimeCount == packet.TimeCount)
-			return;
-	}
-	Client[client].extratics[Client[client].extrapos] = packet;
-	Client[client].extrapos = (Client[client].extrapos+1)%MAXEXTRATICS;
+	int32_t      TimeCount;
+	unsigned int count;
+	SlotCommand  entries[MAXPLAYERS];
+};
+static SentBundle SentBundles[MAXEXTRATICS];
+
+// Does this machine author this slot's commands?
+//
+// A human slot belongs to the machine sitting at it. A slot with no peer --
+// today a command tape, in Phase B a bot -- belongs to the authority, because
+// somebody has to author it and only one machine may, or the two would author
+// different things and the worlds would part company.
+static bool LocallyOwnsSlot(unsigned int slot)
+{
+	if(slot >= Session::ActiveSlotCount())
+		return false;
+	if(Session::KindOf(slot) == Session::SlotKind::Bot)
+		return IsArbiter();
+	return slot == (unsigned)ConsolePlayer;
 }
 
-static bool GatherTicCmds(TicCmdPacket (&packets)[MAXPLAYERS], bool (&have)[MAXPLAYERS])
+// And may this sender speak for it? The mirror of the question above, asked of
+// somebody else's datagram. The legacy handshake still gives peer N the human
+// slot N, which is why the human case is a comparison rather than a lookup;
+// when the roster stops being built from an address list that becomes a map.
+static bool SenderOwnsSlot(int senderPeer, unsigned int slot)
+{
+	if(senderPeer < 0 || slot >= Session::ActiveSlotCount())
+		return false;
+	if(Session::KindOf(slot) == Session::SlotKind::Bot)
+		return senderPeer == Arbiter;
+	return (unsigned)senderPeer == slot;
+}
+
+static void StoreSlotCmd(const SlotCommand &cmd)
+{
+	if(cmd.slot >= MAXPLAYERS)
+		return;
+	// Drop a duplicate rather than filling the ring with copies: a resend
+	// arrives as the same sequence already held.
+	for(unsigned int i = 0;i < MAXEXTRATICS;++i)
+	{
+		if(SlotRing[cmd.slot][i].TimeCount == cmd.TimeCount)
+			return;
+	}
+	SlotRing[cmd.slot][SlotRingPos[cmd.slot]] = cmd;
+	SlotRingPos[cmd.slot] = (SlotRingPos[cmd.slot] + 1) % MAXEXTRATICS;
+}
+
+static bool GatherSlotCmds(SlotCommand (&out)[MAXPLAYERS], bool (&have)[MAXPLAYERS])
 {
 	unsigned int found = 0;
-	for(unsigned int c = 0;c < InitVars.numPlayers;++c)
+	const unsigned int wanted = Session::ActiveSlotCount();
+	for(unsigned int slot = 0;slot < wanted;++slot)
 	{
-		if(have[c])
+		if(have[slot])
 		{
 			++found;
 			continue;
 		}
 		for(unsigned int i = 0;i < MAXEXTRATICS;++i)
 		{
-			TicCmdPacket &buffered = Client[c].extratics[i];
+			SlotCommand &buffered = SlotRing[slot][i];
 			if(buffered.TimeCount == TicSeq + 1)
 			{
-				packets[c] = buffered;
+				out[slot] = buffered;
 				buffered.TimeCount = 0;
-				have[c] = true;
+				have[slot] = true;
 				++found;
 				break;
 			}
 		}
 	}
-	return found == InitVars.numPlayers;
+	return found == wanted;
 }
 
-static void SendTicCmd(TicCmdPacket &packet)
+// Encode and send one bundle to every peer but this one.
+static void SendBundle(const SentBundle &bundle)
 {
-	TicCmdPacket wire = packet;
-	wire.type = TicCmdPacket::Type;
-	wire.ByteSwap();
+	if(bundle.count == 0)
+		return;
 
-	UDPpacket outPacket = { -1, (Uint8*)&wire, sizeof(wire), sizeof(wire), 0 };
+	const size_t size = sizeof(TicCmdBundlePacket) +
+		sizeof(TicCmdBundlePacket::Slot)*bundle.count;
+	// Stack rather than heap: eleven slots is under half a kilobyte, and this
+	// runs seventy times a second.
+	unsigned char storage[sizeof(TicCmdBundlePacket) +
+		sizeof(TicCmdBundlePacket::Slot)*MAXPLAYERS];
+	TicCmdBundlePacket *wire = (TicCmdBundlePacket *)storage;
+
+	wire->type = TicCmdBundlePacket::Type;
+	wire->slotCount = (BYTE)bundle.count;
+	wire->TimeCount = bundle.TimeCount;
+	for(unsigned int i = 0;i < bundle.count;++i)
+	{
+		wire->slots[i].slot = bundle.entries[i].slot;
+		wire->slots[i].controlx = bundle.entries[i].controlx;
+		wire->slots[i].controly = bundle.entries[i].controly;
+		wire->slots[i].controlstrafe = bundle.entries[i].controlstrafe;
+		memcpy(wire->slots[i].buttonstate, bundle.entries[i].buttonstate,
+			sizeof(wire->slots[i].buttonstate));
+	}
+	wire->ByteSwap();
+
+	UDPpacket outPacket = { -1, storage, (int)size, (int)size, 0 };
 	for(unsigned int i = 0;i < InitVars.numPlayers;++i)
 	{
-		if(i == ConsolePlayer)
+		if(i == (unsigned)ConsolePlayer)
 			continue;
 		outPacket.address = Client[i].address;
 		SDLNet_UDP_Send(Socket, -1, &outPacket);
+	}
+}
+
+// Take a validated bundle apart into the per-slot ring, refusing any slot the
+// sender is not entitled to speak for.
+static void AcceptBundle(int senderPeer, const TicCmdBundlePacket &data)
+{
+	for(unsigned int i = 0;i < data.slotCount;++i)
+	{
+		const TicCmdBundlePacket::Slot &entry = data.slots[i];
+		if(!SenderOwnsSlot(senderPeer, entry.slot))
+		{
+			// Counted and reported at most once a second. A peer claiming a
+			// slot it does not own is either a bug on the other machine or
+			// somebody trying to drive another player, and both want saying
+			// once rather than seventy times a second.
+			static uint32_t lastReport = 0;
+			static unsigned int refused = 0;
+			++refused;
+			if(lastReport == 0 || SDL_GetTicks() - lastReport >= 1000)
+			{
+				lastReport = SDL_GetTicks();
+				Printf("Refused %u command%s for a slot the sender does not own.\n",
+					refused, refused == 1 ? "" : "s");
+				fflush(stdout);
+				refused = 0;
+			}
+			continue;
+		}
+		if(data.TimeCount <= TicSeq)
+			continue;	// already run, or already gathered
+
+		SlotCommand cmd;
+		cmd.TimeCount = data.TimeCount;
+		cmd.slot = entry.slot;
+		cmd.controlx = entry.controlx;
+		cmd.controly = entry.controly;
+		cmd.controlstrafe = entry.controlstrafe;
+		memcpy(cmd.buttonstate, entry.buttonstate, sizeof(cmd.buttonstate));
+		StoreSlotCmd(cmd);
 	}
 }
 
@@ -1430,52 +2168,104 @@ static void SendTicCmd(TicCmdPacket &packet)
 static void ResetTicDelay()
 {
 	TicSeq = 0;
-	memset(SentHistory, 0, sizeof(SentHistory));
+	memset(SentBundles, 0, sizeof(SentBundles));
 	for(unsigned int c = 0;c < MAXPLAYERS;++c)
 	{
 		for(unsigned int i = 0;i < MAXEXTRATICS;++i)
-			Client[c].extratics[i].TimeCount = 0;
-		Client[c].extrapos = 0;
+			SlotRing[c][i].TimeCount = 0;
+		SlotRingPos[c] = 0;
 	}
 }
 
-static void ExchangeDelayedTicCmds(TicCmdPacket (&packets)[MAXPLAYERS])
+// Assemble every active slot's command for the tic about to run.
+//
+// The shape is unchanged from when this only had to collect one command per
+// peer: stamp this machine's own commands for a tic a delay window ahead, send
+// them, and block until every slot's command for the *current* tic has
+// arrived. What changed is that "this machine's own commands" is now plural --
+// the authority speaks for every slot with no socket of its own -- and that
+// the buffer is keyed by slot rather than by address.
+static void ExchangeCommands(SlotCommand (&out)[MAXPLAYERS])
 {
 	bool have[MAXPLAYERS] = { false };
 
-	// Ours, stamped for a tic in the future and put in our own buffer exactly
-	// as a remote player's would be.
-	// Sequences are stored one-based so that zero can mean "empty slot", which
-	// is how the ring marks a command as consumed.
-	TicCmdPacket &mine = packets[ConsolePlayer];
-	mine.type = TicCmdPacket::Type;
-	mine.TimeCount = TicSeq + InitVars.ticDelay + 1;
-	StoreTicCmd(ConsolePlayer, mine);
-	SentHistory[mine.TimeCount % MAXEXTRATICS] = mine;
-	SendTicCmd(mine);
+	// Sequences are one-based so that zero can mean "empty", which is how the
+	// ring marks an entry consumed.
+	const int32_t target = TicSeq + InitVars.ticDelay + 1;
+
+	SentBundle &mine = SentBundles[target % MAXEXTRATICS];
+	mine.TimeCount = target;
+	mine.count = 0;
+	for(unsigned int slot = 0;slot < Session::ActiveSlotCount();++slot)
+	{
+		if(!LocallyOwnsSlot(slot))
+			continue;
+
+		TicCmd_t authored;
+		if(Session::KindOf(slot) == Session::SlotKind::Bot)
+		{
+			// Authored here, a delay window before it runs, and applied later
+			// out of the same ring every other machine reads it from -- so
+			// this machine is not a tic ahead of the others on its own bots.
+			Command::ProduceForWire(slot, (uint32_t)target, authored);
+		}
+		else
+		{
+			// The sampled command, with the local UI buttons taken off it.
+			// They are stripped at installation anyway, but a bundle carrying
+			// one is refused by the receiver -- so sending it unsanitized
+			// stops the match rather than merely wasting a bit.
+			authored = control[slot];
+			Command::SanitizeForWire(authored);
+		}
+
+		SlotCommand &entry = mine.entries[mine.count++];
+		entry.TimeCount = target;
+		entry.slot = (BYTE)slot;
+		entry.controlx = authored.controlx;
+		entry.controly = authored.controly;
+		entry.controlstrafe = authored.controlstrafe;
+		memcpy(entry.buttonstate, authored.buttonstate,
+			sizeof(entry.buttonstate));
+		StoreSlotCmd(entry);
+	}
+	// Test scaffolding: claim a slot this machine has no business speaking
+	// for, so that the other end's ownership check can be watched refusing it.
+	// There is no way to do this from outside the game -- an unknown sender is
+	// rejected long before ownership is consulted -- so a genuine peer has to
+	// misbehave on purpose.
+	{
+		const int forged = Capture::ForgedSlot();
+		if(forged >= 0 && (unsigned)forged < Session::ActiveSlotCount() &&
+			!LocallyOwnsSlot((unsigned)forged) && mine.count < MAXPLAYERS)
+		{
+			SlotCommand &entry = mine.entries[mine.count++];
+			memset(&entry, 0, sizeof(entry));
+			entry.TimeCount = target;
+			entry.slot = (BYTE)forged;
+			entry.controly = 100;	// unmistakable if it were ever applied
+		}
+	}
+
+	SendBundle(mine);
 
 	// Before the window has filled there is nothing to wait for: nobody has a
 	// command for this tic and nobody ever will. Everyone stands still for the
 	// first few hundredths of a second, identically on every machine.
 	if(TicSeq < InitVars.ticDelay)
 	{
-		for(unsigned int c = 0;c < InitVars.numPlayers;++c)
-			memset(&packets[c], 0, sizeof(packets[c]));
+		for(unsigned int slot = 0;slot < MAXPLAYERS;++slot)
+			memset(&out[slot], 0, sizeof(out[slot]));
 		++TicSeq;
 		return;
 	}
 
-	// Everything that has arrived since last tic. In the ordinary case this
-	// already holds every command for the tic about to run.
 	unsigned int resend = 0;
 	bool waiting = false;
 	// A tic that cannot be assembled used to stop the game in silence. It has
 	// two quite different causes and the player deserves to be told which:
 	// packets are being lost on a link bad enough to outrun the resends, or a
-	// player has gone and is never going to send anything again. Nothing here
-	// acts on it -- dropping a player is a decision every machine would have to
-	// take in the same tic or they diverge -- but a game that has stopped
-	// should at least say what it has stopped on.
+	// player has gone and is never going to send anything again.
 	unsigned int stuckFor = 0;
 	for(;;)
 	{
@@ -1488,126 +2278,94 @@ static void ExchangeDelayedTicCmds(TicCmdPacket (&packets)[MAXPLAYERS])
 		if(++stuckFor % 3000 == 0)
 		{
 			FString missing;
-			for(unsigned int i = 0;i < InitVars.numPlayers;++i)
+			for(unsigned int slot = 0;slot < Session::ActiveSlotCount();++slot)
 			{
-				if(i != (unsigned)ConsolePlayer && !have[i])
-					missing.AppendFormat(" %u", i + 1);
+				if(!have[slot])
+					missing.AppendFormat(" %u", slot + 1);
 			}
-			Printf("Waiting %us for tic %u from player%s\n",
+			Printf("Waiting %us for tic %u from slot%s\n",
 				stuckFor/1000, (unsigned)(TicSeq + 1), missing.GetChars());
 		}
 
 		while(SDLNet_UDP_Recv(Socket, Packet))
 		{
 			NoteHeardFrom(Packet->address);
-			if(CheckPacketType<TicCmdPacket>(Packet))
+			if(CheckPacketType<TicCmdBundlePacket>(Packet))
 			{
-				int client = FindClient(Packet->address);
+				const int client = FindClient(Packet->address);
 				if(client < 0)
 					continue;
-
-				TicCmdPacket &data = *reinterpret_cast<TicCmdPacket *>(Packet->data);
-				if(data.TimeCount > TicSeq)
-					StoreTicCmd(client, data);
+				AcceptBundle(client,
+					*reinterpret_cast<TicCmdBundlePacket *>(Packet->data));
 			}
 			else if(!CheckPacketType<AckPacket>(Packet))
 				HandleCommandPackets();
 		}
 
-		if(GatherTicCmds(packets, have))
+		if(GatherSlotCmds(out, have))
 			break;
 
-		// Something is missing, so a packet was lost. Resend our whole window:
-		// the commands still in our own buffer are exactly the ones a peer may
-		// not have, and sending them again costs a few hundred bytes.
+		// Something is missing, so a bundle was lost. Resend the whole window:
+		// what is still in this machine's own history is exactly what a peer
+		// may not have, and sending it again costs a few hundred bytes.
 		if(resend == 0)
 		{
-			// Everything we have sent that a peer could still be waiting
-			// for, whether or not we have consumed it ourselves.
 			for(unsigned int i = 0;i < MAXEXTRATICS;++i)
 			{
-				TicCmdPacket &past = SentHistory[i];
-				if(past.TimeCount != 0 &&
-					past.TimeCount + MAXEXTRATICS > TicSeq)
-					SendTicCmd(past);
+				const SentBundle &past = SentBundles[i];
+				if(past.TimeCount != 0 && past.TimeCount + MAXEXTRATICS > TicSeq)
+					SendBundle(past);
 			}
 			resend = 100;
 		}
 		--resend;
 
-		IN_ProcessEvents();
 		if(!waiting)
 			waiting = true;
 		else
 		{
+			LastScan = 0;
+			IN_ProcessEvents();
 			if(ingame)
 				CheckKeys();
 			SDL_Delay(1);
 		}
 
 		if(playstate != ex_stillplaying)
-			break;
+			return;
 	}
 
 	++TicSeq;
 }
 
+
 void PollControls()
 {
-	TicCmdPacket ticcmdPackets[MAXPLAYERS];
-	bool controls[MAXPLAYERS] = { false };
+	// The local human's sampled command is already in control[ConsolePlayer];
+	// ExchangeCommands takes it from there, along with a freshly authored
+	// command for every slot this machine owns and no socket does.
+	SlotCommand gathered[MAXPLAYERS];
+	memset(gathered, 0, sizeof(gathered));
 
-	// We need to send a ticcmd to each player in the game.
-	TicCmdPacket &ticcmdData = ticcmdPackets[ConsolePlayer];
-	ticcmdData.controlx = control[ConsolePlayer].controlx;
-	ticcmdData.controly = control[ConsolePlayer].controly;
-	ticcmdData.controlstrafe = control[ConsolePlayer].controlstrafe;
-	assert(sizeof(control[ConsolePlayer].buttonstate) == sizeof(ticcmdData.buttonstate));
-	memcpy(ticcmdData.buttonstate, control[ConsolePlayer].buttonstate, sizeof(control[ConsolePlayer].buttonstate));
-
-	// buttonheld is "the same button, last tic", and it is what stops a held
-	// button counting as a fresh press over and over. It cannot be read from
-	// control[] here: with input delay, ::PollControls below overwrites the
-	// local player's buttonstate with a command from ticDelay tics ago, and
-	// wl_play's PollControls then derives buttonheld from *that*. So for the
-	// whole width of the delay window, every tic of a genuine hold looked like
-	// a new press -- one tap of the visor cycled it eleven times, which is the
-	// palette lurching through night vision and infrared and back.
-	//
-	// The edge has to be measured against the raw input of the previous tic,
-	// which is exactly what was sent last time, so keep that instead.
-	static byte lastSentButtons[NUMBUTTONS] = { 0 };
-	memcpy(ticcmdData.buttonheld, lastSentButtons, sizeof(ticcmdData.buttonheld));
-	memcpy(lastSentButtons, ticcmdData.buttonstate, sizeof(lastSentButtons));
-
-	if(InitVars.ticDelay == 0)
-	{
-		// Unchanged: exchange the tic about to run and wait for everyone.
-		ExchangePacket(ticcmdPackets);
-		// Undo the byte swapping of our own packet that ExchangePacket does
-		ticcmdData.ByteSwap();
-	}
-	else
-		ExchangeDelayedTicCmds(ticcmdPackets);
+	ExchangeCommands(gathered);
 
 	if(playstate != ex_stillplaying)
 		return;
 
-	for(unsigned int client = 0;client < InitVars.numPlayers;++client)
+	// Every active slot, including this machine's own, comes out of the ring.
+	// Taking the local slot straight from the sample instead would run it a
+	// delay window earlier here than everywhere else, which is a desync by
+	// construction.
+	for(unsigned int slot = 0;slot < Session::ActiveSlotCount();++slot)
 	{
-		// With input delay our own command comes out of the buffer like
-		// everyone else's, a window after it was pressed. Skipping ourselves
-		// here would run the local player's input immediately and every other
-		// machine's a window later, which is a desync by construction.
-		if(client == ConsolePlayer && InitVars.ticDelay == 0)
-			continue;
-
-		TicCmdPacket &data = ticcmdPackets[client];
-		control[client].controlx = data.controlx;
-		control[client].controly = data.controly;
-		control[client].controlstrafe = data.controlstrafe;
-		memcpy(control[client].buttonstate, data.buttonstate, sizeof(control[client].buttonstate));
-		memcpy(control[client].buttonheld, data.buttonheld, sizeof(control[client].buttonheld));
+		control[slot].controlx = gathered[slot].controlx;
+		control[slot].controly = gathered[slot].controly;
+		control[slot].controlstrafe = gathered[slot].controlstrafe;
+		memcpy(control[slot].buttonstate, gathered[slot].buttonstate,
+			sizeof(control[slot].buttonstate));
+		// Held state is not carried on the wire and not copied here: it is
+		// derived at installation from the previous command applied to this
+		// slot, in one place, for every producer and every packet.
 	}
 
 	if(PlaysimBlocked == gamestate.TimeCount)

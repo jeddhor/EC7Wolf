@@ -27,6 +27,7 @@
 //                      NeedsMusic - load music?
 //
 #include "wl_def.h"
+#include "g_session.h"
 #ifdef _WIN32
 #include <direct.h>
 #define getcwd _getcwd
@@ -1314,7 +1315,18 @@ int SD_PlaySound(const char* sound, SoundChannel chan)
 #endif
 
 			int channel = SD_PlayDigitized(sdata, lp, rp, chan);
-			channelSoundPos[channel-1].positioned = ispos;
+			// Zero means it did not play, and zero minus one is not a
+			// channel. SD_PlayDigitized returns channel+1 so that channel 0
+			// is distinguishable from failure, and it fails often and
+			// harmlessly: the commonest reason is its own guard against the
+			// same sound restarting within MIN_TICKS_BETWEEN_DIGI_REPEATS,
+			// which a firefight trips constantly. Writing anyway stored a
+			// byte seven bytes in front of channelSoundPos -- whatever the
+			// linker had put there -- and did it silently in every build.
+			// AddressSanitizer at a full eleven-slot roster is what caught
+			// it, from a Corridor 7 gun attack.
+			if(channel > 0)
+				channelSoundPos[channel-1].positioned = ispos;
 			DigiPriority = sdata.GetPriority();
 			SoundPlaying = sindex;
 			return channel;
@@ -1333,8 +1345,10 @@ int SD_PlaySound(const char* sound, SoundChannel chan)
 
 	// Volume fall off for Adlib/PC Speaker sounds is added for multiplayer.
 	// We may wish to enable it for single player at a later time but it's
-	// absolutely needed in multiplayer.
-	ispos &= (Net::InitVars.mode != Net::MODE_SinglePlayer);
+	// absolutely needed in multiplayer -- because it is how you locate somebody
+	// else, which is a question about who is in the world rather than about the
+	// transport that put them there.
+	ispos &= Session::HasMultiplePlayers();
 	if(!ispos)
 		lp = rp = 0;
 

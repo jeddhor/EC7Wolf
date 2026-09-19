@@ -8,6 +8,9 @@
 #include "m_classes.h"
 #include "m_random.h"
 #include "wl_def.h"
+#include "g_session.h"
+#include "g_bot.h"
+#include "g_skill.h"
 #include "wl_menu.h"
 #include "wl_iwad.h"
 #include "c7_cdaudio.h"
@@ -82,21 +85,53 @@ static MenuItem *mpStartItem = NULL;
 static const int mpDelayTics[] = { 0, 6, 10, 16 };
 static MultipleChoiceMenuItem *mpArenaItem = NULL;
 static MultipleChoiceMenuItem *mpFragsItem = NULL;
+static MultipleChoiceMenuItem *mpDamageItem = NULL;
+static MultipleChoiceMenuItem *mpTimeItem = NULL;
+static MultipleChoiceMenuItem *mpCycleItem = NULL;
 static MultipleChoiceMenuItem *mpClassItem = NULL;
+static MultipleChoiceMenuItem *mpUniformItem = NULL;
+static MultipleChoiceMenuItem *mpBotsItem = NULL;
+static MultipleChoiceMenuItem *mpBotSkillItem = NULL;
+static MultipleChoiceMenuItem *mpBotClassItem = NULL;
+static MultipleChoiceMenuItem *mpBotUniformItem = NULL;
+static MenuItem *mpBotsSwitchItem = NULL;
+static LabelMenuItem *mpTotalItem = NULL;
+
+// The supported total, and the one number the lobby validates against.
+//
+// Section 18.7 asks for this to be decided and documented rather than
+// inherited: MAXPLAYERS is 11 and that is what the session, the command
+// layer and the scoreboard are built and tested for, so 11 it is, and the
+// bot system adds no cap of its own. The menu's human range stays smaller
+// because that is what the netcode has been exercised at; bots make up the
+// difference without a socket each.
+enum { MP_TOTAL_CAP = Session::MAX_PLAYER_SLOTS };
 // Kept in the same order as the characters option list, and in the order
 // MAPINFO lists the player classes -- which is also the order that decides
 // which side you are on in team play.
 static const char* const mpClassNames[] = { "C7Player", "C7AlienPlayer" };
+static const char* const mpMarineColors[] = {
+	"C7Player", "C7PlayerRed", "C7PlayerGreen", "C7PlayerGold",
+	"C7PlayerPurple", "C7PlayerMagenta", "C7PlayerBrown", "C7PlayerGray"
+};
 // Kept in the same order as the fraglimits option list.
 static const int mpFragLimits[] = { 0, 10, 20, 30, 50 };
-// Eight arenas, and not the contiguous run the compendium describes: the maps
-// it puts at 58 and 59 are empty boxes, and the eighth real arena is at 60.
-// See the note above the network levels in mapinfo/corridor7.txt.
-static const char* const mpArenaMaps[] = {
-	"MAP51", "MAP52", "MAP53", "MAP54", "MAP55", "MAP56", "MAP57", "MAP60"
-};
+// Minutes per round. Whichever of the two limits is reached first ends it.
+static const int mpTimeLimits[] = { 0, 5, 10, 15, 20, 30 };
+
+// Percent of the game's own weapon damage between players.
+//
+// Corridor 7's guns average 128 points inside two tiles against 100 of health,
+// so at "Original" most exchanges go to whoever fires first. Halving it is
+// roughly two hits to kill and a quarter is four, which is the difference
+// between a duel and a coin toss. The weapons themselves are not touched, so
+// single player stays exactly as it shipped.
+static const int mpDamageScales[] = { 100, 75, 50, 25 };
 
 MENU_LISTENER(MultiplayerRoleChanged);
+MENU_LISTENER(MultiplayerCountChanged);
+MENU_LISTENER(MultiplayerBotClassChanged);
+MENU_LISTENER(MultiplayerModeChanged);
 MENU_LISTENER(StartMultiplayer);
 
 Menu mainMenu(MENU_X, MENU_Y, MENU_W, 24);
@@ -111,6 +146,13 @@ Menu playerClasses(NM_X, NM_Y, NM_W, 24);
 Menu episodes(NE_X+4, NE_Y-1, NE_W+7, 83);
 Menu skills(NM_X, NM_Y, NM_W, 24);
 Menu multiplayerMenu(NM_X, NM_Y, NM_W + 60, 100);
+// Everything about the bots, one screen down from the setup screen.
+//
+// The four bot rows lived on the setup screen itself, and with them the host's
+// list grew past one screenful: seventeen rows, scrolling, with Start below
+// the fold. They are one decision -- who am I playing against -- so they get
+// a screen of their own, and the setup screen shows the answer on one row.
+Menu multiplayerBotsMenu(NM_X, NM_Y, NM_W + 60, 100);
 Menu controls(15, 70, 310, 24);
 Menu resolutionMenu(90, 25, 150, 24);
 Menu advancedGraphics(20, 60, 285, 56);
@@ -131,7 +173,7 @@ MENU_LISTENER(ViewScoresOrEndGame)
 	}
 	else
 	{
-		if (gameinfo.TrackHighScores == true && Net::InitVars.mode == Net::MODE_SinglePlayer)
+		if (gameinfo.TrackHighScores == true && Session::TracksHighScores())
 		{
 			MenuFadeOut();
 
@@ -155,7 +197,7 @@ MENU_LISTENER(ViewScoresOrEndGame)
 // always shows the table and ABORT CURRENT MISSION always ends the game.
 MENU_LISTENER(C7ViewHighScores)
 {
-	if (gameinfo.TrackHighScores == true && Net::InitVars.mode == Net::MODE_SinglePlayer)
+	if (gameinfo.TrackHighScores == true && Session::TracksHighScores())
 	{
 		MenuFadeOut();
 
@@ -405,19 +447,149 @@ MENU_LISTENER(JoinNetGame)
 // Only a client needs somewhere to connect to; only a host decides how many
 // are playing. Showing both to both is how a setup screen ends up asking a
 // question that has no answer.
+// Humans plus bots, shown to the player and validated on Start.
+//
+// Derived rather than entered: section 18.1 asks for a total the lobby checks
+// against the cap, and a third number somebody can set independently is a
+// third number that can disagree with the other two.
+static int MultiplayerHumans()
+{
+	const int role = mpRoleItem ? mpRoleItem->getCurrentOption() : 0;
+	if(role == 1)
+		return 1;		// joining: the host's roster decides
+	if(role == 2)
+		return 1;		// skirmish: you, and nobody else with a socket
+	return 2 + (mpPlayersItem ? mpPlayersItem->getCurrentOption() : 0);
+}
+
+// The bots' character, from the two bot rows, handed to the bot layer.
+static void ApplyBotClassChoice()
+{
+	const int character = mpBotClassItem ? mpBotClassItem->getCurrentOption() : 0;
+	const int uniform = mpBotUniformItem ? mpBotUniformItem->getCurrentOption() : 0;
+	const char *cls = character == 0 ?
+		mpMarineColors[uniform < 0 || uniform > 7 ? 0 : uniform] :
+		mpClassNames[1];
+	Bot::SetRequestedClass(cls);
+}
+
+// Whether the chosen game mode is the co-operative campaign rather than a
+// deathmatch. Asked in several places, and worth a name: "option 2" is the
+// kind of thing that survives a menu being reordered and quietly means
+// something else afterwards.
+static bool Cooperative()
+{
+	return mpModeItem != NULL && mpModeItem->getCurrentOption() == 2;
+}
+
+static int MultiplayerBots()
+{
+	return mpBotsItem ? mpBotsItem->getCurrentOption() : 0;
+}
+
+MENU_LISTENER(MultiplayerCountChanged)
+{
+	if(mpTotalItem == NULL)
+		return true;
+
+	const bool joining = (mpRoleItem != NULL && mpRoleItem->getCurrentOption() == 1);
+	static FString text;
+	if(joining)
+	{
+		// A joining player is told what they are joining, not what they chose.
+		text = "Total slots        set by the host";
+	}
+	else
+	{
+		// Bots do not play the campaign, so a co-operative game is the
+		// people in it and nothing else. Counting a greyed-out bot row into
+		// the total would have the screen contradict itself.
+		const int total = MultiplayerHumans() +
+			(Cooperative() ? 0 : MultiplayerBots());
+		text.Format("Total slots        %d of %d", total, (int)MP_TOTAL_CAP);
+		if(total > (int)MP_TOTAL_CAP)
+			text += "   TOO MANY";
+	}
+	mpTotalItem->setText(text);
+	return true;
+}
+
 MENU_LISTENER(MultiplayerRoleChanged)
 {
 	const bool joining = (mpRoleItem != NULL && mpRoleItem->getCurrentOption() == 1);
+	const bool skirmish = (mpRoleItem != NULL && mpRoleItem->getCurrentOption() == 2);
 	if(mpAddressItem)
 		mpAddressItem->setEnabled(joining);
+	if(mpPortItem)
+		mpPortItem->setEnabled(!skirmish);
+	if(mpDelayItem)
+		mpDelayItem->setEnabled(!skirmish);
+	// One human, and no row to argue with about it.
 	if(mpPlayersItem)
-		mpPlayersItem->setEnabled(!joining);
+		mpPlayersItem->setEnabled(!joining && !skirmish);
 	if(mpModeItem)
 		mpModeItem->setEnabled(!joining);
 	if(mpArenaItem)
 		mpArenaItem->setEnabled(!joining);
 	if(mpFragsItem)
 		mpFragsItem->setEnabled(!joining);
+	if(mpDamageItem)
+		mpDamageItem->setEnabled(!joining);
+	if(mpTimeItem)
+		mpTimeItem->setEnabled(!joining);
+	if(mpCycleItem)
+		mpCycleItem->setEnabled(!joining);
+	// Bots belong to whoever owns the roster, which is never the joining peer.
+	// Section 18.1: a joining client sees the bot configuration read-only and
+	// never instantiates a brain.
+	// A joining player cannot open the bots screen: the host owns the roster.
+	//
+	// Nor is there anything for them to do in a co-operative game. A bot
+	// picks targets from the other players and nothing else -- it does not
+	// fight the campaign's aliens -- and its goals are an arena's items and
+	// choke points, not a floor with locked doors and a key to find. Asked to
+	// play one anyway it spawns, plans a route or two and then stands about,
+	// which is measurable: two bots on MAP01 completed no route at all and
+	// occupied six distinct positions in six hundred tics. A menu that offers
+	// that combination is a menu with a trap in it, so the rows go grey and
+	// the roster is emptied when the mode changes.
+	const bool botsUseful = !joining && !Cooperative();
+	if(mpBotsSwitchItem)
+		mpBotsSwitchItem->setEnabled(botsUseful);
+	if(mpBotsItem)
+		mpBotsItem->setEnabled(botsUseful);
+	if(mpBotSkillItem)
+		mpBotSkillItem->setEnabled(botsUseful);
+	if(mpBotClassItem)
+		mpBotClassItem->setEnabled(botsUseful);
+	if(mpBotUniformItem)
+		mpBotUniformItem->setEnabled(botsUseful &&
+			(mpBotClassItem == NULL || mpBotClassItem->getCurrentOption() == 0));
+	MultiplayerCountChanged(0);
+	return true;
+}
+
+// Changing the mode changes who may have bots, so the enable states are
+// recomputed exactly where they are for a change of role.
+MENU_LISTENER(MultiplayerModeChanged)
+{
+	MultiplayerRoleChanged(0);
+	return true;
+}
+
+// The bots' uniform only means something on a marine, as with the player's own.
+MENU_LISTENER(MultiplayerBotClassChanged)
+{
+	const bool joining = (mpRoleItem != NULL && mpRoleItem->getCurrentOption() == 1);
+	if(mpBotUniformItem)
+		mpBotUniformItem->setEnabled(!joining && which == 0);
+	return true;
+}
+
+MENU_LISTENER(MultiplayerCharacterChanged)
+{
+	if(mpUniformItem)
+		mpUniformItem->setEnabled(which == 0);
 	return true;
 }
 
@@ -489,6 +661,7 @@ static bool MultiplayerStatus(const Net::InitStatus &status)
 MENU_LISTENER(StartMultiplayer)
 {
 	const bool joining = (mpRoleItem != NULL && mpRoleItem->getCurrentOption() == 1);
+	const bool skirmish = (mpRoleItem != NULL && mpRoleItem->getCurrentOption() == 2);
 
 	// Only a player joining has an address to read, and a host's is empty by
 	// definition -- so this used to run over an empty string on the way to
@@ -499,6 +672,38 @@ MENU_LISTENER(StartMultiplayer)
 	{
 		Confirm("Enter the address of the machine hosting the game.");
 		return false;
+	}
+
+	// Validated before anything is created, and the message says all four
+	// numbers section 18.7 asks for: humans, bots, total, and the maximum.
+	// An error that says only "too many players" leaves the reader to work
+	// out which row to change.
+	if(!joining)
+	{
+		const int humans = MultiplayerHumans();
+		const int bots = MultiplayerBots();
+		// A skirmish with no bots is one player alone in an arena. Said
+		// plainly, because "at least two slots" is true and unhelpful when
+		// the only row that can fix it is the one below the cursor.
+		if(skirmish && bots < 1)
+		{
+			Confirm("A skirmish needs at least one bot to play against.");
+			return false;
+		}
+		if(humans + bots > (int)MP_TOTAL_CAP)
+		{
+			FString problem;
+			problem.Format("%d players and %d bots is %d slots; this game "
+				"supports %d.", humans, bots, humans + bots,
+				(int)MP_TOTAL_CAP);
+			Confirm(problem);
+			return false;
+		}
+		if(humans + bots < 2)
+		{
+			Confirm("A match needs at least two slots.");
+			return false;
+		}
 	}
 
 	int port = mpPortItem ? atoi(mpPortItem->getValue()) : NET_DEFAULT_PORT;
@@ -527,6 +732,35 @@ MENU_LISTENER(StartMultiplayer)
 		// a machine, or sitting behind one router.
 		Net::InitVars.port = 0;
 	}
+	else if(skirmish)
+	{
+		// One peer, no socket, deathmatch rules. numPlayers is the humans,
+		// which is this one: the bots are roster slots the authority owns and
+		// have no peer to count.
+		Net::InitVars.mode = Net::MODE_SinglePlayer;
+		Net::InitVars.numPlayers = 1;
+		switch(mpModeItem ? mpModeItem->getCurrentOption() : 0)
+		{
+			default: Net::InitVars.gameMode = Net::GM_Battle; break;
+			case 1:  Net::InitVars.gameMode = Net::GM_TeamBattle; break;
+			case 2:  Net::InitVars.gameMode = Net::GM_Cooperative; break;
+		}
+		Net::InitVars.fragLimit =
+			(byte)mpFragLimits[mpFragsItem ? mpFragsItem->getCurrentOption() : 0];
+		Net::InitVars.damageScale = (byte)mpDamageScales[
+			mpDamageItem ? mpDamageItem->getCurrentOption() : 0];
+		Net::InitVars.timeLimit =
+			(byte)mpTimeLimits[mpTimeItem ? mpTimeItem->getCurrentOption() : 0];
+		Net::InitVars.mapCycle =
+			(byte)(mpCycleItem ? mpCycleItem->getCurrentOption() : 0);
+		Bot::SetRequested(Cooperative() ? 0 : MultiplayerBots());
+		static const char* const skirmishSkills[] = { "Recruit", "Marine",
+		                                              "Veteran", "Elite" };
+		const int pick = mpBotSkillItem ? mpBotSkillItem->getCurrentOption() : 1;
+		Bot::SetRequestedSkill(skirmishSkills[pick < 0 || pick > 3 ? 1 : pick],
+			false);
+		ApplyBotClassChoice();
+	}
 	else
 	{
 		Net::InitVars.port = (uint16_t)port;
@@ -540,17 +774,44 @@ MENU_LISTENER(StartMultiplayer)
 		}
 		Net::InitVars.fragLimit =
 			(byte)mpFragLimits[mpFragsItem ? mpFragsItem->getCurrentOption() : 0];
+		Net::InitVars.damageScale = (byte)mpDamageScales[
+			mpDamageItem ? mpDamageItem->getCurrentOption() : 0];
+		Net::InitVars.timeLimit =
+			(byte)mpTimeLimits[mpTimeItem ? mpTimeItem->getCurrentOption() : 0];
+		Net::InitVars.mapCycle =
+			(byte)(mpCycleItem ? mpCycleItem->getCurrentOption() : 0);
+
+		// The roster the host is about to lock, set here rather than left to
+		// a command line: the menu and --bots must produce the same one.
+		// Section 18.1's "identical validated rosters".
+		Bot::SetRequested(Cooperative() ? 0 : MultiplayerBots());
+		static const char* const skillNames[] = { "Recruit", "Marine",
+		                                          "Veteran", "Elite" };
+		const int chosen = mpBotSkillItem ?
+			mpBotSkillItem->getCurrentOption() : 1;
+		Bot::SetRequestedSkill(skillNames[chosen < 0 || chosen > 3 ? 1 : chosen],
+			false);
+		ApplyBotClassChoice();
 	}
 
-	// Connecting blocks until everyone is present, drawing through the same
-	// callback the startup path uses -- unless the player gives up, in which
-	// case they land back on the setup screen with what they typed still in
-	// it, rather than in a game nobody joined.
-	if(!Net::Init(MultiplayerStatus))
-		return false;
+	// A skirmish opens no socket and waits for nobody.
+	//
+	// Section 18.2: the same session with one peer. Everything above this
+	// point ran -- the same validation, the same rules, the same roster --
+	// and everything below it is the same too. The only thing skipped is the
+	// wait for players who are not coming.
+	if(!skirmish)
+	{
+		// Connecting blocks until everyone is present, drawing through the
+		// same callback the startup path uses -- unless the player gives up,
+		// in which case they land back on the setup screen with what they
+		// typed still in it, rather than in a game nobody joined.
+		if(!Net::Init(MultiplayerStatus))
+			return false;
 
-	// From here on a stall is a netgame stall, and worth being able to see.
-	NetWatch_Start();
+		// From here on a stall is a netgame stall, and worth being able to see.
+		NetWatch_Start();
+	}
 
 	// One map for everybody, and it is the host's. Net::NewGame exchanges the
 	// name and keeps the arbiter's, so a client deliberately names nothing
@@ -559,11 +820,13 @@ MENU_LISTENER(StartMultiplayer)
 	if(!joining)
 	{
 		const int pick = mpArenaItem ? mpArenaItem->getCurrentOption() : 0;
-		arena = mpArenaMaps[pick];
+		arena = Net::ArenaMap((unsigned int)pick);
 	}
 
-	const FName character =
-		mpClassNames[mpClassItem ? mpClassItem->getCurrentOption() : 0];
+	const int characterIndex = mpClassItem ? mpClassItem->getCurrentOption() : 0;
+	const FName character = characterIndex == 0 ?
+		mpMarineColors[mpUniformItem ? mpUniformItem->getCurrentOption() : 0] :
+		mpClassNames[characterIndex];
 
 	Menu::closeMenus();
 	// No briefing: an arena has no story to open with, and the text screen
@@ -732,7 +995,7 @@ MENU_LISTENER(SetRenderScale)
 MENU_LISTENER(SetFOV)
 {
 	localDesiredFOV = kFOVValues[which];
-	for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 		players[i].SetFOV(localDesiredFOV);
 	return true;
 }
@@ -855,9 +1118,60 @@ static MenuItem *AddLabeled(Menu &menu, MenuItem *item, const char *label)
 
 // The multiplayer setup screen: who you are, where they are, and how forgiving
 // the connection needs to be.
+// The setup screen's Bots row: opens the bots screen, and says what is on it.
+//
+// A plain switcher shows ">", which would make the host open the screen to find
+// out whether there are any bots at all. The summary is read from the rows
+// themselves every time it is drawn, so it cannot go stale.
+class BotsSummaryMenuItem : public MenuSwitcherMenuItem
+{
+public:
+	BotsSummaryMenuItem(const char *text, Menu &menu)
+		: MenuSwitcherMenuItem(text, menu) {}
+
+	FString getValueText() const
+	{
+		// A co-operative game has none, whatever the row underneath says: see
+		// MultiplayerRoleChanged. Said here rather than left to the greyed
+		// row below, because this is the line the host actually reads.
+		if(Cooperative())
+			return "Not in co-op";
+		const int bots = mpBotsItem ? mpBotsItem->getCurrentOption() : 0;
+		if(bots == 0)
+			return "None";
+
+		static const char* skillNames[] = { "Recruit", "Marine", "Veteran", "Elite" };
+		static const char* uniformNames[] = { "Blue", "Red", "Green", "Gold",
+			"Purple", "Magenta", "Brown", "Gray" };
+		const int skill = mpBotSkillItem ? mpBotSkillItem->getCurrentOption() : 1;
+		const int character = mpBotClassItem ? mpBotClassItem->getCurrentOption() : 0;
+		const int uniform = mpBotUniformItem ? mpBotUniformItem->getCurrentOption() : 0;
+
+		// What you would see, then how good they are: "2 Red marines
+		// (Veteran)". The first version said "2 Marine, Red", and Marine is
+		// both a skill level and a character, so it read as two marines in red
+		// whatever the skill actually was.
+		FString text;
+		if(character == 0)
+			text.Format("%d %s marine%s", bots,
+				uniformNames[uniform < 0 || uniform > 7 ? 0 : uniform],
+				bots == 1 ? "" : "s");
+		else
+			text.Format("%d Eitak warrior%s", bots, bots == 1 ? "" : "s");
+		text.AppendFormat(" (%s)", skillNames[skill < 0 || skill > 3 ? 1 : skill]);
+		return text;
+	}
+};
+
 static void BuildMultiplayerMenu()
 {
-	static const char* roles[] = { "Host a game", "Join a game" };
+	// Section 18.2: a skirmish is the same session with one peer, not a
+	// separate single-player path. It is a role rather than a menu of its own
+	// so that the arena, rules, character and bot rows below are the same
+	// rows, validated the same way -- duplicating them is how the two paths
+	// start disagreeing about what a valid roster is.
+	static const char* roles[] = { "Host a game", "Join a game",
+	                               "Skirmish (offline)" };
 	static const char* players[] = { "2", "3", "4", "5", "6", "7", "8" };
 	static const char* modes[] = { "Battle", "Team battle", "Cooperative" };
 	// Named for what a player can judge rather than for tics, which mean
@@ -875,14 +1189,19 @@ static void BuildMultiplayerMenu()
 	static const char* fraglimits[] = { "None", "10", "20", "30", "50" };
 	static const char* characters[] = { "Marine", "Eitak warrior" };
 
-	mpRoleItem = new MultipleChoiceMenuItem(MultiplayerRoleChanged, roles, 2, 1);
+	mpRoleItem = new MultipleChoiceMenuItem(MultiplayerRoleChanged, roles, 3, 1);
 	AddLabeled(multiplayerMenu, mpRoleItem, "Role");
 
 	// Never disabled alongside the host-only rows: your character is yours
 	// whether you are hosting or joining, and in team play it is also which
 	// side you are on.
-	mpClassItem = new MultipleChoiceMenuItem(NULL, characters, 2, 0);
+	mpClassItem = new MultipleChoiceMenuItem(MultiplayerCharacterChanged, characters, 2, 0);
 	AddLabeled(multiplayerMenu, mpClassItem, "Character");
+
+	static const char* uniforms[] = { "Blue", "Red", "Green", "Gold",
+		"Purple", "Magenta", "Brown", "Gray" };
+	mpUniformItem = new MultipleChoiceMenuItem(NULL, uniforms, 8, 0);
+	AddLabeled(multiplayerMenu, mpUniformItem, "Uniform");
 
 	mpAddressItem = new TextInputMenuItem("", 39, NULL, NULL, true);
 	AddLabeled(multiplayerMenu, mpAddressItem, "Server address");
@@ -890,30 +1209,84 @@ static void BuildMultiplayerMenu()
 	mpPortItem = new TextInputMenuItem("5029", 5, NULL, NULL, true);
 	AddLabeled(multiplayerMenu, mpPortItem, "Port");
 
-	mpPlayersItem = new MultipleChoiceMenuItem(NULL, players, 7, 0);
+	mpPlayersItem = new MultipleChoiceMenuItem(MultiplayerCountChanged, players,
+		7, 0);
 	AddLabeled(multiplayerMenu, mpPlayersItem, "Players");
 
-	mpModeItem = new MultipleChoiceMenuItem(NULL, modes, 3, 0);
+	mpModeItem = new MultipleChoiceMenuItem(MultiplayerModeChanged, modes, 3, 0);
 	AddLabeled(multiplayerMenu, mpModeItem, "Game");
 
 	mpFragsItem = new MultipleChoiceMenuItem(NULL, fraglimits, 5, 2);
 	AddLabeled(multiplayerMenu, mpFragsItem, "Frag limit");
 
+	static const char* timelimits[] = { "None", "5 minutes", "10 minutes",
+		"15 minutes", "20 minutes", "30 minutes" };
+	mpTimeItem = new MultipleChoiceMenuItem(NULL, timelimits, 6, 0);
+	AddLabeled(multiplayerMenu, mpTimeItem, "Time limit");
+
 	mpArenaItem = new MultipleChoiceMenuItem(NULL, arenas, 8, 0);
 	AddLabeled(multiplayerMenu, mpArenaItem, "Arena");
+
+	// With this on, Arena is where the match starts rather than where it
+	// stays: each round after the first moves to the next arena and wraps
+	// round after the last.
+	static const char* cycles[] = { "Off", "On" };
+	mpCycleItem = new MultipleChoiceMenuItem(NULL, cycles, 2, 0);
+	AddLabeled(multiplayerMenu, mpCycleItem, "Automatically cycle maps");
+
+	static const char* damages[] = { "Original", "75%", "50%", "25%" };
+	mpDamageItem = new MultipleChoiceMenuItem(NULL, damages, 4, 0);
+	AddLabeled(multiplayerMenu, mpDamageItem, "Damage");
 
 	mpDelayItem = new MultipleChoiceMenuItem(NULL, connections, 4, 2);
 	AddLabeled(multiplayerMenu, mpDelayItem, "Connection");
 
-	multiplayerMenu.addItem(new LabelMenuItem(""));
+	// Bots. Zero through eight, which with the two-to-eight human range keeps
+	// the derived total inside the cap for every combination the menu can
+	// express except the largest few -- and those are what Start validates.
+	static const char* botcounts[] = { "0", "1", "2", "3", "4", "5", "6",
+	                                   "7", "8" };
+	multiplayerBotsMenu.setHeadText("Bots", true);
+
+	mpBotsItem = new MultipleChoiceMenuItem(MultiplayerCountChanged, botcounts,
+		9, 0);
+	AddLabeled(multiplayerBotsMenu, mpBotsItem, "Number of bots");
+
+	// Section 17.2's ladder, in order, named as the table names them. Marine
+	// is the default because it is the middle of it.
+	static const char* skills[] = { "Recruit", "Marine", "Veteran", "Elite" };
+	mpBotSkillItem = new MultipleChoiceMenuItem(NULL, skills, 4, 1);
+	AddLabeled(multiplayerBotsMenu, mpBotSkillItem, "Skill");
+
+	// What the bots look like, one choice for all of them. Bots used to copy
+	// the host's character, so a red marine's opponents were three more red
+	// marines. In team play the character is also the side, so this is how
+	// to put the bots against you rather than beside you.
+	static const char* botCharacters[] = { "Marine", "Eitak warrior" };
+	mpBotClassItem = new MultipleChoiceMenuItem(MultiplayerBotClassChanged,
+		botCharacters, 2, 0);
+	AddLabeled(multiplayerBotsMenu, mpBotClassItem, "Character");
+
+	static const char* botUniforms[] = { "Blue", "Red", "Green", "Gold",
+		"Purple", "Magenta", "Brown", "Gray" };
+	mpBotUniformItem = new MultipleChoiceMenuItem(NULL, botUniforms, 8, 1);
+	AddLabeled(multiplayerBotsMenu, mpBotUniformItem, "Uniform");
+
+	mpBotsSwitchItem = new BotsSummaryMenuItem("Bots", multiplayerBotsMenu);
+	multiplayerMenu.addItem(mpBotsSwitchItem);
+
+	// A label rather than a choice: it is derived, and nothing here is for
+	// the player to set.
+	mpTotalItem = new LabelMenuItem("");
+	multiplayerMenu.addItem(mpTotalItem);
 
 	mpStartItem = new MenuItem("Start", StartMultiplayer);
 	multiplayerMenu.addItem(mpStartItem);
 
 	// Open on the server address: joining is the default role, and the address
 	// is the one row a joining player must fill in. Counted rather than named,
-	// so it moves when the rows above it do -- Role, Character, then this.
-	multiplayerMenu.setCurrentPosition(2);
+	// so it moves when the rows above it do -- Role, Character, Uniform, then this.
+	multiplayerMenu.setCurrentPosition(3);
 	MultiplayerRoleChanged(0);
 }
 
@@ -1365,7 +1738,7 @@ void US_ControlPanel (ScanCode scancode)
 		}
 	}
 
-	if (Net::InitVars.mode != Net::MODE_SinglePlayer)
+	if (!Session::AllowsSaving())
 	{
 		// At this time we don't support saves in multiplayer
 		switch(scancode)
@@ -1445,8 +1818,9 @@ void US_ControlPanel (ScanCode scancode)
 
 		if(ingame)
 		{
-			mainMenu[C7MENU_NEW]->setEnabled(Net::InitVars.mode == Net::MODE_SinglePlayer); // Require explicit end game for net games
-			mainMenu[C7MENU_STORE]->setEnabled(Net::InitVars.mode == Net::MODE_SinglePlayer && players[ConsolePlayer].state != player_t::PST_DEAD);
+			// Require an explicit end game rather than stranding other players.
+			mainMenu[C7MENU_NEW]->setEnabled(Session::CanLeaveSessionUnilaterally());
+			mainMenu[C7MENU_STORE]->setEnabled(Session::AllowsSaving() && players[ConsolePlayer].state != player_t::PST_DEAD);
 			mainMenu[C7MENU_RESUME]->setEnabled(true);
 			mainMenu[C7MENU_ABORT]->setEnabled(Net::IsArbiter());
 		}
@@ -1458,23 +1832,23 @@ void US_ControlPanel (ScanCode scancode)
 			mainMenu[C7MENU_ABORT]->setEnabled(false);
 		}
 		mainMenu[C7MENU_OPTIONS]->setEnabled(true);
-		mainMenu[C7MENU_HIGHSCORES]->setEnabled(gameinfo.TrackHighScores == true && Net::InitVars.mode == Net::MODE_SinglePlayer);
+		mainMenu[C7MENU_HIGHSCORES]->setEnabled(gameinfo.TrackHighScores == true && Session::TracksHighScores());
 		mainMenu[C7MENU_EXIT]->setEnabled(true);
 	}
 	else if(ingame)
 	{
-		mainMenu[0]->setEnabled(Net::InitVars.mode == Net::MODE_SinglePlayer); // Require explicit end game for net games
+		mainMenu[0]->setEnabled(Session::CanLeaveSessionUnilaterally()); // explicit end game rather than stranding others
 		mainMenu[mainMenu.countItems()-3]->setText(language["STR_EG"]);
 		mainMenu[mainMenu.countItems()-3]->setEnabled(Net::IsArbiter());
 		mainMenu[mainMenu.countItems()-2]->setText(language["STR_BG"]);
 		mainMenu[mainMenu.countItems()-2]->setEnabled(true);
 		mainMenu[mainMenu.countItems()-2]->setHighlighted(true);
-		mainMenu[3]->setEnabled(Net::InitVars.mode == Net::MODE_SinglePlayer && players[ConsolePlayer].state != player_t::PST_DEAD);
+		mainMenu[3]->setEnabled(Session::AllowsSaving() && players[ConsolePlayer].state != player_t::PST_DEAD);
 	}
 	else
 	{
 		mainMenu[0]->setEnabled(true);
-		if (gameinfo.TrackHighScores == true && Net::InitVars.mode == Net::MODE_SinglePlayer)
+		if (gameinfo.TrackHighScores == true && Session::TracksHighScores())
 		{
 			mainMenu[mainMenu.countItems()-3]->setText(language["STR_VS"]);
 			mainMenu[mainMenu.countItems()-3]->setEnabled(true);
@@ -1485,7 +1859,7 @@ void US_ControlPanel (ScanCode scancode)
 			mainMenu[mainMenu.countItems()-3]->setEnabled(false);
 		}
 		mainMenu[mainMenu.countItems()-2]->setText(language["STR_BD"]);
-		mainMenu[mainMenu.countItems()-2]->setEnabled(Net::InitVars.mode == Net::MODE_SinglePlayer);
+		mainMenu[mainMenu.countItems()-2]->setEnabled(Session::CanLeaveSessionUnilaterally());
 		mainMenu[mainMenu.countItems()-2]->setHighlighted(false);
 		mainMenu[3]->setEnabled(false);
 	}

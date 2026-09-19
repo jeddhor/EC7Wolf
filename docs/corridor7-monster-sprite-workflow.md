@@ -611,6 +611,10 @@ continue only if they pass.
 
 ## Repository references
 
+- [Player uniform colors](corridor7-player-uniforms.md) — the palette-swap
+  adaptation of this workflow: reuse all stock marine frames through native
+  texture definitions, validate exact pixel preservation, and export private
+  PNGs and previews without generating new poses.
 - [`corridor7.md`](corridor7.md) — palette cycling, visor behavior, and the
   overall Corridor 7 implementation record.
 - [`corridor7-technical-strategy-compendium.pdf`](corridor7-technical-strategy-compendium.pdf)

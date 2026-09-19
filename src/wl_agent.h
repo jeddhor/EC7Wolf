@@ -138,6 +138,10 @@ extern class player_t
 		float		FOV, DesiredFOV;
 
 		int32_t		thrustspeed;
+		// Tics of walk animation still owed after the last thrust. Keeps a
+		// stride running across the short stops that turning produces; see
+		// ControlMovement.
+		int32_t		walkhold;
 
 		FWeaponSlots	weapons;
 		AWeapon			*ReadyWeapon;

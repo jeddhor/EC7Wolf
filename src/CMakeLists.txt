@@ -102,6 +102,15 @@ initial_sources(
 	filesys_steam.cpp
 	g_conversation.cpp
 	g_intermission.cpp
+	g_bot.cpp
+	g_botnav.cpp
+	g_traversal.cpp
+	g_perception.cpp
+	g_items.cpp
+	g_combat.cpp
+	g_skill.cpp
+	g_command.cpp
+	g_session.cpp
 	g_mapinfo.cpp
 	gamemap.cpp
 	gamemap_planes.cpp

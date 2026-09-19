@@ -33,6 +33,7 @@
 */
 
 #include "wl_def.h"
+#include "g_session.h"
 #include "c7_flic.h"
 #include "id_ca.h"
 #include "id_in.h"
@@ -153,7 +154,7 @@ static bool ShowImage(IntermissionAction *image, bool drawonly)
 				FinishTravel();
 				AActor::FinishSpawningActors();
 				// Drop weapon
-				for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+				for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 					players[i].SetPSprite(NULL, player_t::ps_weapon);
 				PreloadGraphics(true);
 				gamestate.victoryflag = true;

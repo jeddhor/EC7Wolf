@@ -25,10 +25,17 @@
 #
 # Usage:
 #   run_gates.sh [-b BUILD_DIR] [-d DATA_DIR] [-r RELEASE_DIR]
-#                [--editor-package DIR] [--require-data] [--list] [GATE...]
+#                [--sanitizer DIR] [--editor-package DIR] [--require-data]
+#                [--list] [GATE...]
 #
 # GATE names are matched as substrings, so `run_gates.sh gl_` runs the OpenGL
 # gates and `run_gates.sh laser` runs both laser ones.
+#
+# --fast skips the exhaustive gates (every pad, every arena, every seed) and
+# --slow runs only those. With neither, everything runs. The split exists
+# because the exhaustive ones are most of the wall clock and catch a different
+# class of fault: structural breakage shows up in seconds, coverage regressions
+# need volume.
 
 set -eu
 
@@ -41,6 +48,7 @@ release_dir=""
 editor_package=""
 require_data=0
 list_only=0
+tier=all
 selected=""
 
 while [ "$#" -gt 0 ]; do
@@ -48,8 +56,11 @@ while [ "$#" -gt 0 ]; do
 		-b) build_dir=$2; shift 2 ;;
 		-d) data_dir=$2; shift 2 ;;
 		-r) release_dir=$2; shift 2 ;;
+		--sanitizer) sanitizer_dir=$2; shift 2 ;;
 		--editor-package) editor_package=$2; shift 2 ;;
 		--require-data) require_data=1; shift ;;
+		--fast) tier=fast; shift ;;
+		--slow) tier=slow; shift ;;
 		--list) list_only=1; shift ;;
 		-h|--help)
 			sed -n '3,40p' "$0" | sed 's/^# \{0,1\}//'
@@ -63,6 +74,9 @@ done
 [ -n "$build_dir" ]   || build_dir=$root/../builds/release-build
 [ -n "$data_dir" ]    || data_dir=$root/../builds/release
 [ -n "$release_dir" ] || release_dir=$root/../builds/release
+# Where an AddressSanitizer/UBSan build lives, if one has been made. Only
+# bot_sanitizer uses it, and that gate skips when it is absent.
+[ -n "${sanitizer_dir:-}" ] || sanitizer_dir=$root/../builds/sanitizer
 
 # --- the gate list ---------------------------------------------------------
 #
@@ -73,7 +87,7 @@ done
 # gl_selftest is here rather than below because --gltest is handled before the
 # IWAD is opened: it needs no game data, and it is the only thing that proves the
 # shaders actually compile on the runner's driver. A broken shader still links.
-data_free_gates='definitions names ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3 ec7edit_e4 ec7edit_e5 ec7edit_e6 ec7edit_e7 ec7edit_e8 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic installer installer_gui installer_kde installer_windows installer_lifecycle ec7edit_e12 ec7edit_package'
+data_free_gates='definitions names ec7edit_e0 ec7edit_e1 ec7edit_e2 ec7edit_e3 ec7edit_e4 ec7edit_e5 ec7edit_e6 ec7edit_e7 ec7edit_e8 android_native android_apk android_device android_controls android_import gl_selftest corridor7_flic multiplayer_session bot_model bot_percept bot_itemmodel bot_aim bot_skillmodel installer installer_gui installer_kde installer_windows installer_lifecycle ec7edit_e12 ec7edit_package'
 
 data_gates='
 corridor7
@@ -94,6 +108,12 @@ corridor7_pages
 corridor7_topmessage
 corridor7_upscale
 corridor7_controls
+ui_buttons
+bot_footwork
+bot_budget
+bot_netplay
+bot_soak
+bot_sanitizer
 ec7edit_e9
 ec7edit_e10
 ec7edit_e11
@@ -103,11 +123,31 @@ ec7edit_override
 ec7edit_assets
 ec7edit_slice
 multiplayer_loopback
+multiplayer_offline
+multiplayer_commands
+multiplayer_authority
 multiplayer_latency
 multiplayer_menu
 multiplayer_arenas
 multiplayer_starts
+bot_traversal
+bot_navigation
+bot_roam
+bot_doors
+bot_lifecycle
+bot_overlay
+bot_transporters
+bot_arenas
+bot_perception
+bot_items
+bot_combat
+bot_mines
+bot_skill
+bot_presentation
 multiplayer_rules
+multiplayer_rounds
+multiplayer_match_rules
+multiplayer_handshake
 multiplayer_classes
 multiplayer_presentation
 multiplayer_hostile
@@ -131,8 +171,32 @@ renderscale'
 # differently and only when that directory looks packaged.
 release_gates='corridor7_release_startup'
 
+# The exhaustive ones.
+#
+# These are not slow because they are badly written; they are slow because they
+# are exhaustive, and that is the point of them: every transporter pad driven
+# individually, every arena on two seeds, perception measured over four
+# thousand sightings. A rare leak needs volume before it shows -- the CheckLine
+# through-wall sighting was one in 699 and only appeared once matches got
+# longer -- so shortening these to save time would quietly stop them working.
+#
+# Split so the structural gates can run on every change and these can run
+# before a commit and on CI's slower schedule.
+slow_gates='bot_transporters bot_arenas bot_perception bot_roam multiplayer_starts bot_skill bot_footwork bot_budget bot_soak bot_sanitizer multiplayer_handshake'
+
+is_slow() {
+	for slow in $slow_gates; do
+		[ "$1" = "$slow" ] && return 0
+	done
+	return 1
+}
+
 matches() {
 	# $1 = gate name. With no selection everything matches.
+	case "$tier" in
+		fast) is_slow "$1" && return 1 ;;
+		slow) is_slow "$1" || return 1 ;;
+	esac
 	[ -z "$selected" ] && return 0
 	for want in $selected; do
 		case "$1" in *"$want"*) return 0 ;; esac
@@ -440,6 +504,56 @@ for g in $data_free_gates; do
 			else
 				run_gate "$g" "FLIC decoder" "$here/test_corridor7_flic.sh" "$build_dir"
 			fi ;;
+		bot_skillmodel)
+			# Build-only: section 17.2's table, its conversions to command
+			# units, and the fairness clamp are all arithmetic, and none of
+			# them needs a map to be wrong on.
+			if [ ! -x "$build_dir/ec7wolf" ]; then
+				skip_gate "$g" "no ec7wolf in $build_dir"
+			else
+				run_gate "$g" "skill model" "$build_dir/ec7wolf" --skilltest
+			fi ;;
+		bot_aim)
+			# Build-only: the correlated aim error, including the check that a
+			# narrow envelope never leaves the ten-degree auto-aim cone.
+			if [ ! -x "$build_dir/ec7wolf" ]; then
+				skip_gate "$g" "no ec7wolf in $build_dir"
+			else
+				run_gate "$g" "aim model" "$build_dir/ec7wolf" --combattest
+			fi ;;
+		bot_itemmodel)
+			# Build-only: the need model and belief ageing are checked before
+			# any map exists.
+			if [ ! -x "$build_dir/ec7wolf" ]; then
+				skip_gate "$g" "no ec7wolf in $build_dir"
+			else
+				run_gate "$g" "item model" "$build_dir/ec7wolf" --itemtest
+			fi ;;
+		bot_percept)
+			# Build-only: the sensor's geometry is checked before any map or
+			# window exists.
+			if [ ! -x "$build_dir/ec7wolf" ]; then
+				skip_gate "$g" "no ec7wolf in $build_dir"
+			else
+				run_gate "$g" "perception model" "$build_dir/ec7wolf" --percepttest
+			fi ;;
+		bot_model)
+			# Build-only: brains are constructed against a session that has no
+			# player, which needs no game data and no window.
+			if [ ! -x "$build_dir/ec7wolf" ]; then
+				skip_gate "$g" "no ec7wolf in $build_dir"
+			else
+				run_gate "$g" "bot model" "$build_dir/ec7wolf" --bottest
+			fi ;;
+		multiplayer_session)
+			# Also build-only: the session model is checked before any game
+			# data is opened, and touches no player array by design.
+			if [ ! -x "$build_dir/ec7wolf" ]; then
+				skip_gate "$g" "no ec7wolf in $build_dir"
+			else
+				run_gate "$g" "session model" \
+					"$here/test_multiplayer_session.sh" "$build_dir"
+			fi ;;
 		gl_selftest)
 			if ! command -v xvfb-run >/dev/null 2>&1; then
 				skip_gate "$g" "xvfb-run is missing"
@@ -470,6 +584,13 @@ for g in $data_gates; do
 	fi
 	if [ ! -x "$build_dir/ec7wolf" ]; then
 		skip_gate "$g" "no ec7wolf in $build_dir"
+		continue
+	fi
+	# One gate wants a different binary: the sanitizer build, which is a
+	# separate configuration and not what anybody has lying about by default.
+	# It skips itself when there is none, and says so.
+	if [ "$g" = bot_sanitizer ]; then
+		run_gate "$g" "gate" "$script" "$sanitizer_dir" "$data_dir"
 		continue
 	fi
 	run_gate "$g" "gate" "$script" "$build_dir" "$data_dir"

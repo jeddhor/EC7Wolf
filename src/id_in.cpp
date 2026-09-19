@@ -543,7 +543,8 @@ void IN_WaitAndProcessEvents()
 {
 	SDL_Event event;
 
-	if(Net::InitVars.mode == Net::MODE_SinglePlayer)
+	// Nothing to pump, so it is safe to block until something happens.
+	if(!Net::IsNetworked())
 	{
 		if(!SDL_WaitEvent(&event)) return;
 	}

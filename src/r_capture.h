@@ -2,6 +2,7 @@
 #define __R_CAPTURE_H__
 
 #include "zdoomsupport.h"
+#include "name.h"
 
 // ===========================================================================
 //
@@ -22,6 +23,9 @@
 //   --capture-checksum PATH Write a per-tic + summary checksum log to PATH.
 //   --capture-frame N       Screenshot after rendered frame N (1-based).
 //   --capture-file PATH     Destination PNG for --capture-frame.
+//   --capture-sprite-bank BANK PATH Export resolved sprite textures as JSON
+//                           (palette, remap, offsets, column-major index hex).
+//                           Repeatable; writes on the first rendered frame.
 //   --capture-maxframes N   Finalize the checksum log and quit after N frames.
 //   --capture-open-doors N  Force every door to slide amount N (0..65535) each
 //                           tic, so a mid-slide door can be compared between the
@@ -84,6 +88,30 @@ namespace Capture
 	// Fold capture-time button presses into the local player's command,
 	// before it is sent (see --capture-fire).
 	void InjectControls(TicCmd_t &cmd);
+
+// UI actions the local player asked for, counted so a test can tell one press
+// from a press repeated every tic. Nothing here affects the simulation.
+enum class UiAction { Menu, FloorMap, Automap };
+void NoteUiAction(UiAction what);
+
+	// Adds one authority-owned slot per --capture-tape and attaches its
+	// scripted producer. Called once the roster exists and before the player
+	// classes are resolved, because a slot that appears later never spawns.
+	// Test scaffolding: the tape proves a slot with neither a keyboard nor a
+	// socket gets a command, and nothing in the shipped game uses it.
+	// Opened before any roster is built, because the first thing worth
+	// tracing is a controller being configured and that happens during setup.
+	void OpenTraces();
+
+	void SetupScriptedSlots(FName (&playerClassNames)[MAXPLAYERS]);
+
+	// --capture-forge-slot: put a command for a slot this machine does not own
+	// into its outgoing bundle, so the receiver's ownership check can be shown
+	// to refuse it. Returns -1 normally. The ownership rule cannot be tested
+	// from outside the game -- an unknown sender is rejected before ownership
+	// is ever consulted -- so the only way to exercise it is to have a genuine
+	// peer misbehave.
+	int ForgedSlot();
 
 	// Force a full-screen palette blend (--capture-blend R G B A) just before the
 	// scene is rendered, after the gameplay palette shifts have run so it is not

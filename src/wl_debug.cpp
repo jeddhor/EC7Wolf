@@ -10,6 +10,7 @@
 #include "wl_def.h"
 #include "wl_menu.h"
 #include "am_map.h"
+#include "g_bot.h"
 #include "id_ca.h"
 #include "id_sd.h"
 #include "id_vl.h"
@@ -346,11 +347,13 @@ static int DebugKeys (void)
 	else if (Keyboard[sc_M]) // M = Mouse look
 	{
 		mouselook ^= 1;
-		US_CenterWindow (17,3);
-		if (mouselook)
-			US_PrintCentered ("Mouse look ON");
-		else
+		US_CenterWindow (24,3);
+		if (!mouselook)
 			US_PrintCentered ("Mouse look OFF");
+		else if (Net::IsNetworked())
+			US_PrintCentered ("No mouse look online");
+		else
+			US_PrintCentered ("Mouse look ON");
 		VW_UpdateScreen();
 		IN_Ack (ACK_Block);
 		return 1;
@@ -377,6 +380,20 @@ static int DebugKeys (void)
 			US_PrintCentered ("Automap revealed");
 		else
 			US_PrintCentered ("Automap hidden");
+		VW_UpdateScreen();
+		IN_Ack (ACK_Block);
+		return 1;
+	}
+	else if (Keyboard[sc_J])        // J = the routes bots are walking
+	{
+		Bot::SetOverlay((Bot::Overlay() + 1) % Bot::OVERLAY_LEVELS);
+		US_CenterWindow (18,3);
+		if (Bot::Overlay() == 2)
+			US_PrintCentered ("Bot routes and graph");
+		else if (Bot::Overlay())
+			US_PrintCentered ("Bot routes shown");
+		else
+			US_PrintCentered ("Bot routes hidden");
 		VW_UpdateScreen();
 		IN_Ack (ACK_Block);
 		return 1;

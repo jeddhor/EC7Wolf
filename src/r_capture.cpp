@@ -15,6 +15,15 @@
 
 #include "r_capture.h"
 #include "wl_def.h"
+#include "g_session.h"
+#include "g_command.h"
+#include "g_bot.h"
+#include "g_perception.h"
+#include "g_items.h"
+#include "lnspec.h"
+#include "am_map.h"
+#include "g_traversal.h"
+#include "g_botnav.h"
 #include "wl_play.h"
 #include "actor.h"
 #include "wl_agent.h"
@@ -35,6 +44,7 @@
 #include "wl_net.h"
 #include "thingdef/thingdef.h"
 #include "a_inventory.h"
+#include "textures/textures.h"
 #ifdef ECWOLF_RENDERER_OPENGL
 #include "render/opengl/r_glworld.h"
 #include "render/opengl/r_glxbrz.h"
@@ -51,6 +61,14 @@ namespace
 	DWORD    g_seed           = 0;
 
 	FString  g_checksumPath;
+	TArray<FString> g_spriteBanks;
+	TArray<FString> g_spriteBankPaths;
+	TArray<FString> g_tapes;
+	int g_forgeSlot = -1;
+	FString  g_commandTracePath;
+	FString  g_botTracePath;
+	FString  g_traversalPath;
+	FString  g_navPath;
 	FILE    *g_checksumFile   = NULL;
 
 	int      g_captureFrame   = -1;      // 1-based rendered frame to shoot
@@ -243,6 +261,35 @@ namespace
 	// Invulnerability Sphere's strobe cannot be photographed any other way.
 	FString  g_giveClass;
 	bool     g_giveDone       = false;
+	bool     g_giveEveryone   = false;   // --capture-give-all: every slot, not just ours
+	int      g_holdButton     = bt_nobutton;
+	long     g_holdFrom       = 0;
+	long     g_holdTics       = 0;
+	unsigned long g_uiMenu    = 0;
+	unsigned long g_uiFloorMap = 0;
+	unsigned long g_uiAutomap = 0;
+	// --capture-kill-slot SLOT TIC: kill one slot's pawn at a tic, through the
+	// ordinary damage path. A bot has no way to die otherwise until B6 gives
+	// anything a reason to shoot it, and "dies, and respawns through input" is
+	// a B2 exit criterion that cannot be checked without one.
+	bool     g_botOverlayMap  = false;   // --capture-bot-overlay opens the automap
+	// --capture-perception PATH: one line per sighting, so a gate can check
+	// that nothing was perceived which should not have been.
+	FString  g_perceptionPath;
+	int      g_visorAll       = -1;      // --capture-visor-all: every player's visor mode
+	int      g_mineX          = 0;
+	int      g_mineY          = 0;
+	long     g_mineTic        = -1;
+	bool     g_mineDone       = false;
+	int      g_hurtSlot       = -1;
+	long     g_hurtFrom       = 0;
+	long     g_hurtEvery      = 0;
+	int      g_grazeSlot      = -1;
+	long     g_grazeFrom      = 0;
+	long     g_grazeEvery     = 0;
+	int      g_killSlot       = -1;
+	long     g_killTic        = -1;
+	bool     g_killDone       = false;
 
 	bool     g_c7Map          = false;   // --capture-c7map: raise the C7 inset panel
 	bool     g_c7FloorPlan    = false;   // --capture-floorplan: as if the plan were picked up
@@ -318,7 +365,7 @@ namespace
 		if(g_playerFile == NULL)
 			return;
 
-		for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+		for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 		{
 			if(players[i].mo == NULL)
 				continue;
@@ -418,6 +465,54 @@ namespace
 		fclose(file);
 		Printf("Capture: wrote xBRZ %dx screenshot '%s' (%dx%d).\n",
 			g_xbrzFactor, outPath.GetChars(), w, h);
+	}
+
+	// Export the actual resolved engine textures for sprite-workflow validation.
+	// Pixel indices are column-major; zero is the engine's transparent index.
+	// This deliberately exports native indices before lighting/visor processing.
+	void WriteSpriteBanks()
+	{
+		for(unsigned int b = 0; b < g_spriteBanks.Size(); ++b)
+		{
+			FILE *file = fopen(g_spriteBankPaths[b].GetChars(), "wb");
+			if(!file)
+				I_FatalError("Cannot export sprite bank to %s", g_spriteBankPaths[b].GetChars());
+			fprintf(file, "{\"palette\":[");
+			for(int i = 0; i < 256; ++i)
+				fprintf(file, "%s[%u,%u,%u]", i ? "," : "",
+					GPalette.BaseColors[i].r, GPalette.BaseColors[i].g, GPalette.BaseColors[i].b);
+			fprintf(file, "],\"remap\":[");
+			for(int i = 0; i < 256; ++i)
+				fprintf(file, "%s%u", i ? "," : "", GPalette.Remap[i]);
+			fprintf(file, "],\"sprites\":{");
+			int count = 0;
+			for(char frame = 'A'; frame <= 'Z'; ++frame)
+				for(int rot = 0; rot <= 8; ++rot)
+				{
+					FString name;
+					name.Format("%s%c%d", g_spriteBanks[b].GetChars(), frame, rot);
+					FTextureID id = TexMan.CheckForTexture(name, FTexture::TEX_Sprite);
+					if(!id.isValid()) continue;
+					FTexture *tex = TexMan[id];
+					const BYTE *pixels = tex->GetPixels();
+					fprintf(file, "%s\"%s\":{\"width\":%u,\"height\":%u,"
+						"\"left\":%d,\"top\":%d,\"pixels\":\"", count++ ? "," : "",
+						name.GetChars(), tex->GetWidth(), tex->GetHeight(),
+						tex->LeftOffset, tex->TopOffset);
+					for(int i = 0; i < tex->GetWidth() * tex->GetHeight(); ++i)
+						fprintf(file, "%02x", pixels[i]);
+					fprintf(file, "\"}");
+				}
+			fprintf(file, "}}\n");
+			const bool failed = ferror(file) != 0;
+			const int closed = fclose(file);
+			if(failed || closed || count == 0)
+				I_FatalError("Sprite bank export failed: %s", g_spriteBanks[b].GetChars());
+			Printf("Capture: exported %d textures from %s to %s.\n", count,
+				g_spriteBanks[b].GetChars(), g_spriteBankPaths[b].GetChars());
+		}
+		g_spriteBanks.Clear();
+		g_spriteBankPaths.Clear();
 	}
 
 	void WriteScreenshot(const char *path)
@@ -520,10 +615,89 @@ namespace
 			g_actorFile = NULL;
 		}
 
+		Printf("Capture: ui menu=%lu floormap=%lu automap=%lu\n",
+			g_uiMenu, g_uiFloorMap, g_uiAutomap);
 		Printf("Capture: summary tics=%lu frames=%lu checksum=%08x\n",
 			(unsigned long)g_ticCount,
 			(unsigned long)g_frameCount,
 			(unsigned int)g_worldChecksum);
+
+		// The command digest is separate from the world checksum on purpose:
+		// "the machines disagree about what was pressed" and "the machines
+		// disagree about what happened" are different failures, and a single
+		// number cannot tell you which one you have.
+		Command::CloseTrace();
+		const Command::Violations &bad = Command::GetViolations();
+		Printf("Capture: commands digest=%08x clamped=%u stripped=%u missing=%u\n",
+			(unsigned int)Command::Digest(),
+			bad.clampedAxes, bad.strippedButtons, bad.missingCommands);
+
+		// Authority-only, and never compared with a client: clients do not run
+		// these brains. It answers "did this machine's bots do the same thing
+		// they did last run", which is a different question from whether two
+		// machines agree.
+		if(Bot::Count() > 0)
+		{
+			const Bot::Totals tally = Bot::Tally();
+			Printf("Capture: bots %u brain=%08x planned=%u arrived=%u "
+				"abandoned=%u refused=%u nogoal=%u doors=%u doorsfailed=%u "
+				"unstuck=%u respawnpresses=%u respawns=%u ports=%u frozen=%u blocked=%u "
+				"seen=%u lost=%u targets=%u shots=%u hitscan=%u oncone=%u guns=%u "
+				"visor=%u retreats=%u dispensers=%u mines=%u "
+				"doorwayfights=%u reversals=%u dodges=%u\n",
+				Bot::Count(), (unsigned int)Bot::BrainDigest(),
+				tally.routesPlanned, tally.routesCompleted,
+				tally.routesAbandoned, tally.stepsRefused,
+				tally.goalSearchFailures, tally.doorsOpened,
+				tally.doorsGivenUp, tally.unstuckEntered,
+				tally.respawnPresses, tally.respawnsCompleted,
+				tally.teleports, tally.frozenTics, tally.cellsBlocked,
+				tally.contactsGained, tally.contactsLost,
+				tally.targetsAcquired, tally.shotsFired, tally.hitscanShots,
+				tally.ticsOnTarget,
+				tally.weaponSwitches, tally.visorPulses, tally.retreats,
+				tally.healUses, tally.minesPlaced, tally.doorwayFightsLeft,
+				tally.reversals, tally.dodges);
+		}
+		// What the brains cost. Section 34's per-tic budget is 14.286 ms for
+		// everything a tic does; this is the bots' share of it, and it is
+		// printed rather than asserted here because what counts as acceptable
+		// is a property of the machine the gate is measuring.
+		{
+			const Bot::CpuCost cost = Bot::Cost();
+			if(cost.tics > 0)
+			{
+				Printf("Capture: bot cpu tics=%u runs=%u total=%lluus "
+					"mean=%uus p95=%uus worst=%uus warmworst=%uus\n",
+					cost.tics, cost.brainRuns,
+					(unsigned long long)cost.totalMicros,
+					(unsigned int)(cost.totalMicros/cost.tics),
+					cost.p95Micros, cost.worstMicros, cost.warmWorstMicros);
+			}
+		}
+
+		// What each bot ended up carrying. The outcome of B5's item goals, and
+		// the only visible one: weapon-stay means the pickup is still lying
+		// there afterwards, so the world looks the same either way.
+		{
+			FString held;
+			for(unsigned int i = 0;i < MAXPLAYERS;++i)
+			{
+				if(!Bot::Active(i))
+					continue;
+				FString one;
+				// Held now, and picked up ever. The second is the one that
+				// survives a bot being killed.
+				one.Format("%s%u:%u/%u", held.IsEmpty() ? "" : ",", i,
+					Items::WeaponsHeld(i), Items::PickupsBy(i));
+				held += one;
+			}
+			if(!held.IsEmpty())
+				Printf("Capture: bot weapons %s (held/collected)\n", held.GetChars());
+		}
+
+		Bot::CloseTrace();
+		Perception::CloseTrace();
 	}
 
 	// Set for every argv index this harness consumed -- see ClaimArg in the
@@ -559,6 +733,16 @@ void ParseArgs(int argc, char **argv)
 		{
 			g_seed = (DWORD)strtoul(argv[++i], NULL, 0);
 			g_haveSeed = true;
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-sprite-bank") == 0 && i + 2 < argc)
+		{
+			FString bank = argv[++i];
+			bank.ToUpper();
+			if(bank.Len() != 4 || strspn(bank.GetChars(), "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") != 4)
+				I_FatalError("--capture-sprite-bank needs a four-character sprite bank and output path");
+			g_spriteBanks.Push(bank);
+			g_spriteBankPaths.Push(argv[++i]);
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-checksum") == 0 && i + 1 < argc)
@@ -643,6 +827,113 @@ void ParseArgs(int argc, char **argv)
 			g_duelB = atoi(argv[++i]);
 			if(i + 1 < argc && argv[i+1][0] >= '0' && argv[i+1][0] <= '9')
 				g_duelC = atoi(argv[++i]);
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-forge-slot") == 0 && i + 1 < argc)
+		{
+			g_forgeSlot = atoi(argv[++i]);
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-tape") == 0 && i + 1 < argc)
+		{
+			g_tapes.Push(argv[++i]);
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-commands") == 0 && i + 1 < argc)
+		{
+			g_commandTracePath = argv[++i];
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-automap") == 0)
+		{
+			g_botOverlayMap = true;
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-visor-all") == 0 && i + 1 < argc)
+		{
+			// Every player's own visor, not the console player's. The existing
+			// --capture-visormode drives the view; a bot's perception reads
+			// its own inventory, so testing an infrared-gated sense needs the
+			// bot to actually be wearing one.
+			g_visorAll = atoi(argv[++i]);
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-perception") == 0 && i + 1 < argc)
+		{
+			g_perceptionPath = argv[++i];
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-bot-overlay") == 0)
+		{
+			// The routes are drawn on the automap, so opening it is part of
+			// asking to see them: a capture that turned the overlay on and
+			// left the automap shut would render an identical frame and look
+			// like the overlay was broken.
+			// An optional level follows, the way --capture-duel takes an
+			// optional third number: 1 is routes, 2 adds the graph.
+			int level = 1;
+			if(i + 1 < argc && argv[i+1][0] >= '0' && argv[i+1][0] <= '9')
+				level = atoi(argv[++i]);
+			Bot::SetOverlay(level);
+			g_botOverlayMap = true;
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-mine-at") == 0 && i + 3 < argc)
+		{
+			g_mineX = atoi(argv[++i]);
+			g_mineY = atoi(argv[++i]);
+			g_mineTic = atol(argv[++i]);
+		}
+		else if(strcmp(arg, "--capture-hold-button") == 0 && i + 3 < argc)
+		{
+			g_holdButton = Command::ButtonByName(argv[++i]);
+			g_holdFrom = atol(argv[++i]);
+			g_holdTics = atol(argv[++i]);
+		}
+		else if(strcmp(arg, "--capture-hurt-slot") == 0 && i + 3 < argc)
+		{
+			g_hurtSlot = atoi(argv[++i]);
+			g_hurtFrom = atol(argv[++i]);
+			g_hurtEvery = atol(argv[++i]);
+		}
+		else if(strcmp(arg, "--capture-graze-slot") == 0 && i + 3 < argc)
+		{
+			g_grazeSlot = atoi(argv[++i]);
+			g_grazeFrom = atol(argv[++i]);
+			g_grazeEvery = atol(argv[++i]);
+		}
+		else if(strcmp(arg, "--capture-kill-slot") == 0 && i + 2 < argc)
+		{
+			g_killSlot = atoi(argv[++i]);
+			g_killTic = atol(argv[++i]);
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-give-all") == 0 && i + 1 < argc)
+		{
+			g_giveClass = argv[++i];
+			g_giveEveryone = true;
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-bot-goal") == 0 && i + 2 < argc)
+		{
+			const int gx = atoi(argv[++i]);
+			const int gy = atoi(argv[++i]);
+			Bot::SetForcedGoal(gx, gy);
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-bots") == 0 && i + 1 < argc)
+		{
+			g_botTracePath = argv[++i];
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-traversal") == 0 && i + 1 < argc)
+		{
+			g_traversalPath = argv[++i];
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-nav") == 0 && i + 1 < argc)
+		{
+			g_navPath = argv[++i];
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-tally") == 0 && i + 1 < argc)
@@ -1098,10 +1389,346 @@ namespace Capture
 // applied to the pawn directly: the point of the gate this exists for is that
 // two machines agree about a fight, and a shot that never traveled over the
 // wire would prove nothing about that.
+int ForgedSlot() { return g_forgeSlot; }
+
+// What the traversal query believes about every cell of the map, written once
+// so a gate can hold it against where a pawn actually goes.
+//
+// The point is not the file. The point is that a navigator's opinion of the
+// world has to be checkable against the world, and the way that goes wrong is
+// for the two to be produced by different code that agrees today.
+static void WriteTraversalMap(const char *path)
+{
+	if(map == NULL)
+		return;
+	FILE *out = fopen(path, "w");
+	if(out == NULL)
+	{
+		Printf("Capture: FAILED to open traversal map '%s'\n", path);
+		return;
+	}
+
+	const unsigned int width = map->GetHeader().width;
+	const unsigned int height = map->GetHeader().height;
+
+	// The pawn's own radius when there is a pawn, the class default before
+	// there is one. Preferring the pawn matters because the class default is
+	// what a class was written with and the pawn is what the match is actually
+	// running.
+	Traversal::Body body = Traversal::PlayerBody(gamestate.playerClass[0]);
+	if(players[0].mo != NULL)
+		body.radius = players[0].mo->radius;
+
+	// In map units, not tiles: a tile is 1<<TILESHIFT and a body is a fraction
+	// of one, so shifting by TILESHIFT reports every player as a point. Sixty
+	// four units to the tile, so ten bits.
+	fprintf(out, "# traversal map %ux%u radius %d units (%d raw)\n",
+		width, height, (int)(body.radius>>10), (int)body.radius);
+	fprintf(out, "# x y occupy east north west south\n");
+	for(unsigned int y = 0;y < height;++y)
+	{
+		for(unsigned int x = 0;x < width;++x)
+		{
+			const bool occupy = Traversal::CanOccupyTile(body, x, y);
+			const bool east  = x + 1 < width &&
+				Traversal::CanStepBetweenTiles(body, x, y, x + 1, y);
+			const bool north = y > 0 &&
+				Traversal::CanStepBetweenTiles(body, x, y, x, y - 1);
+			const bool west  = x > 0 &&
+				Traversal::CanStepBetweenTiles(body, x, y, x - 1, y);
+			const bool south = y + 1 < height &&
+				Traversal::CanStepBetweenTiles(body, x, y, x, y + 1);
+			fprintf(out, "%u %u %d %d %d %d %d\n", x, y, occupy ? 1 : 0,
+				east ? 1 : 0, north ? 1 : 0, west ? 1 : 0, south ? 1 : 0);
+		}
+	}
+	fclose(out);
+	Printf("Capture: wrote traversal map -> %s\n", path);
+}
+
+// The graph, and a fixed set of routes through it.
+//
+// The routes are chosen from the graph itself rather than from anything about
+// this run, so two runs ask the same questions: evenly spaced node ids, which
+// is a deterministic sample of the arena rather than a sample of wherever the
+// player happened to be.
+static void WriteNavMap(const char *path)
+{
+	if(map == NULL)
+		return;
+
+	Traversal::Body body = Traversal::PlayerBody(gamestate.playerClass[0]);
+	if(players[0].mo != NULL)
+		body.radius = players[0].mo->radius;
+
+	BotNav::Graph &graph = BotNav::Current();
+	if(!graph.Build(body))
+	{
+		Printf("Capture: the navigation graph could not be built.\n");
+		return;
+	}
+
+	FILE *out = fopen(path, "w");
+	if(out == NULL)
+	{
+		Printf("Capture: FAILED to open nav dump '%s'\n", path);
+		return;
+	}
+
+	unsigned int largestRegion = 0;
+	const unsigned int regions = graph.Regions(&largestRegion);
+	fprintf(out, "# nav nodes %u edges %u digest %08x radius %d regions %u largest %u\n",
+		graph.NodeCount(), graph.EdgeCount(),
+		(unsigned int)graph.Digest(), (int)(body.radius>>10),
+		regions, largestRegion);
+
+	// Every trigger in the map, so that "the graph has no doors in it" and
+	// "the map has no doors in it" are separable questions. They were not,
+	// and guessing which one was true would have been guessing.
+	for(unsigned int ty = 0;ty < map->GetHeader().height;++ty)
+	{
+		for(unsigned int tx = 0;tx < map->GetHeader().width;++tx)
+		{
+			MapSpot spot = map->GetSpot(tx, ty, 0);
+			if(spot == NULL)
+				continue;
+			for(unsigned int i = 0;i < spot->triggers.Size();++i)
+			{
+				const MapTrigger &trig = spot->triggers[i];
+				fprintf(out, "trigger %u %u action %u args %d %d %d %d %d"
+					" use %d cross %d monster %d tile %d activate %d%d%d%d\n",
+					tx, ty, trig.action,
+					trig.arg[0], trig.arg[1], trig.arg[2], trig.arg[3], trig.arg[4],
+					trig.playerUse ? 1 : 0, trig.playerCross ? 1 : 0,
+					trig.monsterUse ? 1 : 0, spot->tile != NULL ? 1 : 0,
+					trig.activate[0] ? 1 : 0, trig.activate[1] ? 1 : 0,
+					trig.activate[2] ? 1 : 0, trig.activate[3] ? 1 : 0);
+			}
+		}
+	}
+
+	// Every pickup the map placed, with where and what. This is the
+	// annotation of section 12.8 -- what a player learns by playing a level a
+	// few times -- and deliberately not a statement about what is there right
+	// now, which only perception may answer.
+	for(AActor::Iterator iter = AActor::GetIterator();iter.Next();)
+	{
+		AActor *const thing = iter;
+		if(!thing->IsKindOf(NATIVE_CLASS(Inventory)))
+			continue;
+		// Carried things are somebody's, not the map's.
+		if(static_cast<AInventory *>(thing)->owner != NULL)
+			continue;
+		fprintf(out, "item %d %d %s\n", thing->tilex, thing->tiley,
+			thing->GetClass()->GetName().GetChars());
+	}
+
+	// Wall dispensers, dumped alongside the pickups so a gate reading this
+	// file sees the same set of resource locations the bot annotates. They are
+	// C7_Dispenser triggers rather than actors -- args[0] of 1 for health, 2
+	// for ammunition -- which is why the loop above misses them.
+	for(unsigned int ty = 0;ty < map->GetHeader().height;++ty)
+	{
+		for(unsigned int tx = 0;tx < map->GetHeader().width;++tx)
+		{
+			MapSpot spot = map->GetSpot(tx, ty, 0);
+			if(spot == NULL || spot->tile == NULL)
+				continue;
+			for(unsigned int t = 0;t < spot->triggers.Size();++t)
+			{
+				const MapTrigger &trig = spot->triggers[t];
+				if(trig.action != Specials::C7_Dispenser || !trig.playerUse)
+					continue;
+				fprintf(out, "item %u %u %s\n", tx, ty,
+					trig.arg[0] == 1 ? "dispenser-health" : "dispenser-ammo");
+				break;
+			}
+		}
+	}
+
+	// Solid cells that are something other than plain wall: Corridor 7's wall
+	// markers and its masked-wall types. Section 12.5's boundaries -- force
+	// fields, masked walls, removable walls -- are all cells that look solid
+	// to the traversal query and may not stay that way, and telling them apart
+	// from ordinary geometry is the first thing anything reasoning about them
+	// has to do.
+	for(unsigned int ty = 0;ty < map->GetHeader().height;++ty)
+	{
+		for(unsigned int tx = 0;tx < map->GetHeader().width;++tx)
+		{
+			MapSpot spot = map->GetSpot(tx, ty, 0);
+			if(spot == NULL || spot->tile == NULL)
+				continue;
+			// Every solid cell, not only the ones with a marker on them. A
+			// gate that wants to check a line of sight for itself needs to
+			// know where the walls are, and "has an interesting wall ID" is
+			// not the same set as "is solid".
+
+			fprintf(out, "wall %u %u marker %u masked %u id %u sight %d\n",
+				tx, ty, (unsigned)spot->corridor7WallMarker,
+				(unsigned)spot->maskedWallType, (unsigned)spot->corridor7WallID,
+				spot->corridor7SightTransparent ? 1 : 0);
+		}
+	}
+
+	// Every transporter, and where the engine says it goes. Separate from the
+	// edges so that "the map has a transporter here" and "the graph built an
+	// edge for it" stay separable questions -- the same reason the triggers
+	// above are dumped.
+	for(unsigned int ty = 0;ty < map->GetHeader().height;++ty)
+	{
+		for(unsigned int tx = 0;tx < map->GetHeader().width;++tx)
+		{
+			const Traversal::TransporterInfo port = Traversal::TransporterAt(tx, ty);
+			if(!port.exists)
+				continue;
+			fprintf(out, "transporter %u %u freeze %d dests %u",
+				tx, ty, port.freezes ? 1 : 0, port.destX.Size());
+			for(unsigned int d = 0;d < port.destX.Size();++d)
+				fprintf(out, " %u,%u", port.destX[d], port.destY[d]);
+			fprintf(out, "\n");
+		}
+	}
+
+	// Every edge, so a gate can check symmetry and that each one is a step the
+	// traversal query agrees with.
+	for(unsigned int e = 0;e < graph.EdgeCount();++e)
+	{
+		const BotNav::Edge &edge = graph.EdgeOf(e);
+		const BotNav::Node &a = graph.NodeOf(edge.from);
+		const BotNav::Node &b = graph.NodeOf(edge.to);
+		fprintf(out, "edge %u %u %u %u %u %u\n",
+			a.x, a.y, b.x, b.y, edge.cost, (unsigned)edge.type);
+	}
+
+	// Sixteen routes, spread across the graph by id.
+	const unsigned int samples = 16;
+	if(graph.NodeCount() >= 2)
+	{
+		for(unsigned int i = 0;i < samples;++i)
+		{
+			const BotNav::NodeId from =
+				(BotNav::NodeId)((uint64_t)graph.NodeCount()*i/samples);
+			const BotNav::NodeId to =
+				(BotNav::NodeId)((uint64_t)graph.NodeCount()*(samples - i)/(samples + 1));
+			if(from == to)
+				continue;
+
+			TArray<BotNav::NodeId> route;
+			BotNav::SearchStats stats;
+			const bool found = graph.FindPath(from, to, route, stats);
+
+			const BotNav::Node &a = graph.NodeOf(from);
+			const BotNav::Node &b = graph.NodeOf(to);
+			fprintf(out, "path %u %u %u %u %s %u %u",
+				a.x, a.y, b.x, b.y, found ? "found" : "none",
+				route.Size(), stats.expansions);
+			for(unsigned int n = 0;n < route.Size();++n)
+			{
+				const BotNav::Node &step = graph.NodeOf(route[n]);
+				fprintf(out, " %u,%u", step.x, step.y);
+			}
+			fprintf(out, "\n");
+
+			// And the same route smoothed, so a gate can check the shortcut
+			// is a shortcut and still walkable.
+			if(found && route.Size() > 2)
+			{
+				TArray<BotNav::NodeId> smoothed = route;
+				graph.Smooth(body, smoothed);
+				fprintf(out, "smooth %u %u %u %u %u %u",
+					a.x, a.y, b.x, b.y, route.Size(), smoothed.Size());
+				for(unsigned int n = 0;n < smoothed.Size();++n)
+				{
+					const BotNav::Node &step = graph.NodeOf(smoothed[n]);
+					fprintf(out, " %u,%u", step.x, step.y);
+				}
+				fprintf(out, "\n");
+			}
+		}
+	}
+
+	fclose(out);
+	Printf("Capture: wrote navigation graph -> %s (%u nodes, %u edges, "
+		"digest %08x)\n", path, graph.NodeCount(), graph.EdgeCount(),
+		(unsigned int)graph.Digest());
+}
+
+void OpenTraces()
+{
+	if(!g_commandTracePath.IsEmpty())
+		Command::OpenTrace(g_commandTracePath.GetChars());
+	if(!g_botTracePath.IsEmpty())
+		Bot::OpenTrace(g_botTracePath.GetChars());
+	if(!g_perceptionPath.IsEmpty())
+		Perception::OpenTrace(g_perceptionPath.GetChars());
+}
+
+void SetupScriptedSlots(FName (&playerClassNames)[MAXPLAYERS])
+{
+	for(unsigned int i = 0;i < g_tapes.Size();++i)
+	{
+		FString error;
+		Command::Producer *producer =
+			Command::MakeScriptedProducer(g_tapes[i].GetChars(), error);
+		if(producer == NULL)
+		{
+			// Fatal rather than skipped: a gate that quietly ran with one
+			// fewer player than it asked for would still pass, and would be
+			// testing something nobody chose.
+			I_FatalError("%s", error.GetChars());
+		}
+
+		const unsigned int slot = Session::AddAuthoritySlot(0, 0x5eed0000u + i);
+		if(slot >= Session::MAX_PLAYER_SLOTS)
+		{
+			delete producer;
+			I_FatalError("No room for command tape '%s': %u slots already",
+				g_tapes[i].GetChars(), Session::ActiveSlotCount());
+		}
+
+		Command::SetProducer(slot, producer);
+		// The same character as the player, so the tape is an ordinary
+		// opponent rather than something with different rules.
+		playerClassNames[slot] = playerClassNames[0];
+		Printf("Capture: slot %u is driven by command tape '%s'.\n",
+			slot, g_tapes[i].GetChars());
+	}
+}
+
+void NoteUiAction(UiAction what)
+{
+	if(what == UiAction::Menu)
+		++g_uiMenu;
+	else if(what == UiAction::FloorMap)
+		++g_uiFloorMap;
+	else
+		++g_uiAutomap;
+
+	// Said as it happens as well as counted at the end, because opening the
+	// menu stops the run: the control panel waits for a keypress that a
+	// headless capture will never send, so the summary this would otherwise
+	// appear in is never printed. Only while a button is being held on
+	// purpose -- this line exists to watch that instrument.
+	if(g_holdButton != bt_nobutton)
+		Printf("Capture: ui action %s at tic %lu\n",
+			what == UiAction::Menu ? "menu" :
+				(what == UiAction::FloorMap ? "floormap" : "automap"),
+			(unsigned long)gamestate.TimeCount);
+}
+
 void InjectControls(TicCmd_t &cmd)
 {
 	if(g_holdScoreboard)
 		cmd.buttonstate[bt_scoreboard] = true;
+
+	// --capture-hold-button NAME FROM TICS: hold one button down, the way a
+	// finger does. Held rather than tapped on purpose: a UI button that is
+	// re-read as a fresh press on every tic of a hold is the bug this exists
+	// to catch.
+	if(g_holdButton != bt_nobutton && (long)gamestate.TimeCount >= g_holdFrom &&
+		(long)gamestate.TimeCount < g_holdFrom + g_holdTics)
+		cmd.buttonstate[g_holdButton] = true;
 
 	if(InWindow(g_forwardWindows))
 	{
@@ -1130,17 +1757,193 @@ void PreTic()
 	if(!g_armed || map == NULL)
 		return;
 
+	// Once, on the first tic the map exists: the answer is about the map's
+	// static geometry, and writing it every tic would say the same thing four
+	// thousand times.
+	if(!g_traversalPath.IsEmpty())
+	{
+		WriteTraversalMap(g_traversalPath.GetChars());
+		g_traversalPath = "";
+	}
+	if(!g_navPath.IsEmpty())
+	{
+		WriteNavMap(g_navPath.GetChars());
+		g_navPath = "";
+	}
+
 	if(!g_giveClass.IsEmpty() && !g_giveDone && players[ConsolePlayer].mo)
 	{
 		g_giveDone = true;
 		const ClassDef *cls = ClassDef::FindClass(g_giveClass);
 		if(cls == NULL)
 			Printf("Capture: no such class '%s' to give.\n", g_giveClass.GetChars());
+		else if(g_giveEveryone)
+		{
+			// Every slot, not only the one with a keyboard. A bot cannot be
+			// handed anything through the console, and a locked door needs
+			// the card in the hand of whoever is standing in front of it.
+			unsigned int given = 0;
+			for(unsigned int i = 0;i < MAXPLAYERS;++i)
+			{
+				if(players[i].mo == NULL)
+					continue;
+				players[i].mo->GiveInventory(cls, 0, true);
+				++given;
+			}
+			Printf("Capture: gave %u player(s) %s.\n", given,
+				g_giveClass.GetChars());
+		}
 		else
 		{
 			players[ConsolePlayer].mo->GiveInventory(cls, 0, true);
 			Printf("Capture: gave the player %s.\n", g_giveClass.GetChars());
 		}
+	}
+
+	if(g_botOverlayMap && automap == AMA_Off)
+	{
+		// Overlay mode, not the full-screen automap. The full one pauses the
+		// game -- AM_ShouldPauseGame is true by default -- so a capture that
+		// opened it recorded four hundred frames of a world that had run for
+		// exactly one tic, with the bots standing where they spawned and no
+		// route to draw. Watching bots move requires them to be moving.
+		am_overlay = 1;			// AMO_On
+		AM_UpdateFlags();
+		automap = AMA_Overlay;
+	}
+
+	if(g_visorAll >= 0)
+	{
+		const ClassDef *cls = ClassDef::FindClass("C7VisorMode");
+		for(unsigned int i = 0;i < MAXPLAYERS && cls != NULL;++i)
+		{
+			if(players[i].mo == NULL)
+				continue;
+			AInventory *mode = players[i].mo->FindInventory(cls);
+			if(mode == NULL)
+			{
+				players[i].mo->GiveInventory(cls, 0, true);
+				mode = players[i].mo->FindInventory(cls);
+			}
+			if(mode != NULL)
+				mode->amount = (unsigned int)g_visorAll;
+		}
+	}
+
+	// --capture-mine-at X Y TIC: put a live proximity mine on a tile, owned by
+	// the local player.
+	//
+	// For proving that a mine damages somebody who walks into it, which a
+	// match will not reliably show: whether a bot happens to cross a mine
+	// another bot happened to lay is the arrangement of one afternoon's
+	// wandering, and a check waiting for it passed twice and then stopped.
+	//
+	// Spawned directly, which is exactly what the bot rules forbid -- and
+	// this is not bot code. It is the same kind of instrument as
+	// --capture-kill-slot, which calls TakeDamage rather than waiting to be
+	// shot. Owned by slot 0 so that every bot is a stranger to it and any
+	// trigger is an opponent being caught rather than a bot blowing itself up.
+	if(g_mineTic >= 0 && !g_mineDone &&
+		(long)gamestate.TimeCount >= g_mineTic && map != NULL)
+	{
+		const ClassDef *cls = ClassDef::FindClass("C7ProximityMine");
+		if(cls != NULL)
+		{
+			g_mineDone = true;
+			const fixed mx = ((fixed)g_mineX<<FRACBITS) + (FRACUNIT/2);
+			const fixed my = ((fixed)g_mineY<<FRACBITS) + (FRACUNIT/2);
+			AActor *mine = AActor::Spawn(cls, mx, my, 0, SPAWN_AllowReplacement);
+			if(mine != NULL)
+			{
+				mine->target = players[0].mo;
+				Printf("Capture: mine placed at %d,%d on tic %lu\n",
+					g_mineX, g_mineY, (unsigned long)gamestate.TimeCount);
+			}
+		}
+	}
+
+	// --capture-hurt-slot SLOT FROM EVERY: take a slot down to a sliver,
+	// repeatedly, from an attacker it cannot see.
+	//
+	// For testing what a bot does when it is badly hurt. Waiting for a match
+	// to produce that state is waiting on luck twice over: Corridor 7's guns
+	// average a hundred and twenty-eight points at close range against a
+	// hundred of health, so a bot is usually killed rather than wounded, and
+	// it has to be holding a target at the same moment for breaking off to
+	// mean anything. Three seeds of hoping produced one retreat and then
+	// none, which is a gate measuring the weather.
+	//
+	// Through TakeDamage with no attacker, so the bot learns it is hurt and
+	// not who did it -- the same cue a real shot in the back gives.
+	if(g_hurtSlot >= 0 && g_hurtSlot < MAXPLAYERS &&
+		(long)gamestate.TimeCount >= g_hurtFrom &&
+		players[g_hurtSlot].mo != NULL && players[g_hurtSlot].health > 0 &&
+		g_hurtEvery > 0 &&
+		((long)gamestate.TimeCount - g_hurtFrom) % g_hurtEvery == 0)
+	{
+		// Only while it is actually fighting somebody.
+		//
+		// Wounding it whenever the clock came round produced a bot that was
+		// permanently below its retreat threshold -- and a bot below that
+		// threshold takes the retreat branch, which is the branch that does
+		// not pick targets. So it never had one to break off from, and the
+		// test for breaking off could never fire. The state being tested is
+		// "hurt *while* fighting", so that is the state to create.
+		const Bot::State *bot = Bot::StateFor((Session::PlayerSlot)g_hurtSlot);
+		if(bot != NULL && bot->target < MAXPLAYERS)
+		{
+			const int points = players[g_hurtSlot].health - 12;
+			if(points > 0)
+				players[g_hurtSlot].TakeDamage(points, NULL);
+		}
+	}
+
+	// --capture-graze-slot SLOT FROM EVERY: wound a slot lightly, over and
+	// over, while it is fighting somebody.
+	//
+	// The difference from --capture-hurt-slot is the size of the bite, and it
+	// is the whole point. That one takes the slot down to a sliver in order to
+	// test breaking off, which means it also trips the retreat threshold and
+	// drops the target. What the footwork wants is the opposite: a bot that is
+	// being shot at and is still in the fight, which is the ordinary state of
+	// a firefight and the one a dodge exists for.
+	//
+	// Waiting for a match to produce it is waiting on luck. Corridor 7's guns
+	// average a hundred and twenty-eight points at close range against a
+	// hundred of health, so a bot that is hit is usually killed outright --
+	// eight bot-versus-bot matches produced exactly one non-fatal hit on a bot
+	// that was holding a target. A human with a machine gun produces them
+	// constantly, which is why a playtest sees behaviour these matches cannot.
+	//
+	// Test-only, like every other option in this file, and it works through
+	// TakeDamage with no attacker so the bot learns it is hurt and not who did
+	// it.
+	if(g_grazeSlot >= 0 && g_grazeSlot < MAXPLAYERS &&
+		(long)gamestate.TimeCount >= g_grazeFrom &&
+		players[g_grazeSlot].mo != NULL && players[g_grazeSlot].health > 0 &&
+		g_grazeEvery > 0 &&
+		((long)gamestate.TimeCount - g_grazeFrom) % g_grazeEvery == 0)
+	{
+		const Bot::State *bot = Bot::StateFor((Session::PlayerSlot)g_grazeSlot);
+		// Only while it is fighting, and never below the point where it would
+		// rather be somewhere else: a graze that causes a retreat is testing
+		// the retreat, not the footwork.
+		if(bot != NULL && bot->target < MAXPLAYERS &&
+			players[g_grazeSlot].health > 60)
+			players[g_grazeSlot].TakeDamage(6, NULL);
+	}
+
+	if(g_killSlot >= 0 && g_killSlot < MAXPLAYERS && !g_killDone &&
+		(long)gamestate.TimeCount >= g_killTic && players[g_killSlot].mo != NULL &&
+		players[g_killSlot].health > 0)
+	{
+		g_killDone = true;
+		// Through TakeDamage, not by assigning health: death has to run the
+		// same lifecycle a real one does, or what gets tested is a bot
+		// reacting to a state the game never actually produces.
+		Printf("Capture: killing slot %d at tic %lu\n", g_killSlot,
+			(unsigned long)gamestate.TimeCount);
+		players[g_killSlot].TakeDamage(10000, NULL);
 	}
 
 	if(g_exitLevelTic >= 0 && !g_exitLevelDone &&
@@ -1189,7 +1992,7 @@ void PreTic()
 	{
 		if(!g_duelFound)
 			FindDuelSpots();
-		for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+		for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 		{
 			if(players[i].mo == NULL || g_duelX[i] == 0)
 				continue;
@@ -1211,7 +2014,7 @@ void PreTic()
 
 	if(g_topUpAmmo)
 	{
-		for(unsigned int i = 0;i < Net::InitVars.numPlayers;++i)
+		for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 		{
 			if(players[i].mo == NULL)
 				continue;
@@ -1450,6 +2253,7 @@ void PostFrame()
 	if(!g_armed)
 		return;
 
+	WriteSpriteBanks();
 	++g_frameCount;
 
 	// The editor's Snapshot: first frame drawn at or after the chosen tic.

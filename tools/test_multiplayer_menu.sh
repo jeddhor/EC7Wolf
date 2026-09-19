@@ -72,6 +72,7 @@ check() {
 	timeout 150 "$build_dir/ec7wolf" --data CO7 --res 320 200 --nowait \
 		--config "$work/host.cfg" --savedir "$work/host-s" \
 		--capture-rngseed 1 --capture-checksum "$work/host.checksum" \
+		--capture-players "$work/host.players" \
 		--capture-maxtics 90 --net-delay 10 \
 		--tedlevel MAP51 --skill 2 --host 2 --port "$port" \
 		>"$work/host.log" 2>&1
@@ -85,6 +86,7 @@ host_pid=$!
 	timeout 150 "$build_dir/ec7wolf" --data CO7 --res 1280 800 --nowait \
 		--config "$work/client.cfg" --savedir "$work/client-s" \
 		--capture-rngseed 1 --capture-checksum "$work/client.checksum" \
+		--capture-players "$work/client.players" \
 		--capture-maxtics 90 \
 		>"$work/client.log" 2>&1
 ) &
@@ -139,18 +141,24 @@ DISPLAY=$display xdotool mousemove --window "$window" 20 20 2>/dev/null || true
 # Escape until a menu is actually on screen; a fixed pair is lost entirely if
 # the game is still loading when the first one goes out.
 menu_open Escape || { printf '  FAIL the game never reached a menu\n'; exit 1; }
-menu_press Return 2.5          # New Mission -> the rank ladder
+menu_enter "the rank ladder" || exit 1   # New Mission
 
 DISPLAY=$display import -window root "$work/ranks.png" 2>/dev/null || true
 
 # Captain is preselected and the section label is skipped, so Multiplayer is
 # three steps down -- but get there by looking, not by counting.
 menu_walk_to_bottom "Multiplayer" || exit 1
-menu_press Return 2.5
+menu_enter "the setup screen" || exit 1
 
 DISPLAY=$display import -window root "$work/setup.png" 2>/dev/null || true
 
 # The screen opens on the address, ready to type.
+# Select a red uniform first, then return to the address. This exercises the
+# actual menu-to-network path for a cosmetic class rather than a CLI override.
+menu_press Up 1
+menu_press Right 1
+DISPLAY=$display import -window root "$work/uniform-red.png" 2>/dev/null || true
+menu_press Down 1
 menu_press Return 1.5
 DISPLAY=$display xdotool type --delay 60 "127.0.0.1"
 sleep 1.5
@@ -172,6 +180,11 @@ wait "$host_pid" "$client_pid" 2>/dev/null || true
 # Did the menu actually put the client into the host's game?
 check "the client entered a game from the menu" test -s "$work/client.checksum"
 check "the host got its second player" test -s "$work/host.checksum"
+for side in host client; do
+	check "$side sees the client's selected red marine on the marine team" \
+		awk '$1 !~ /^#/ && $2 == 1 && $8 == 0 && $10 == "C7PlayerRed" { found=1 }
+		     END { exit !found }' "$work/$side.players"
+done
 
 if [ ! -s "$work/client.checksum" ] || [ ! -s "$work/host.checksum" ]; then
 	for side in host client; do

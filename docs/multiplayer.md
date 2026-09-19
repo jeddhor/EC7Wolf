@@ -34,7 +34,7 @@ Established by reading the code and running it, not assumed:
 | --- | --- |
 | **ECWolf has netcode** | `src/wl_net.cpp`, 1031 lines: UDP, host and client, cooperative and battle modes, an arbiter, acked reliable packets, per-player classes |
 | **It is reachable only by flag** | `--host <players>`, `--join <address>`, `--port` — no menu path at all |
-| **The arenas exist and load** | `MAP51`–`MAP58`, already translated and named "Corridor 7 Network Level 1–8" in `mapinfo/corridor7.txt`. MAP51, 55 and 58 load and render; the HUD reads level 51 and **ALIENS 0**, as a deathmatch map should |
+| **The arenas exist and load** | Eight of them, already translated and named "Corridor 7 Network Level 1–8" in `mapinfo/corridor7.txt`. Not the contiguous `MAP51`–`MAP58` block this line first claimed: `MAP58` and `MAP59` are named "Network Level 9" and "10" and are unused boxes, so Network Level 8 is **`MAP60`** and the set is `MAP51`–`MAP57` plus `MAP60`. `src/wl_menu.cpp` and `tools/test_multiplayer_arenas.sh` have always had it right. MAP51, 55 and 60 load and render; the HUD reads level 51 and **ALIENS 0**, as a deathmatch map should |
 | **The menu has the pieces** | `LabelMenuItem` renders as a section heading — small dim capitals over a hairline — which is exactly the separator this needs, and the Corridor 7 shell already draws it. `TextInputMenuItem` exists for an address field. `MenuSwitcherMenuItem` opens a submenu |
 | **There is a determinism harness** | `--capture-checksum` and the `corridor7_determinism` gate. Lockstep multiplayer is only correct while every machine simulates identically, so this is not a nicety — it is the instrument the whole feature is tested with |
 
@@ -615,38 +615,70 @@ Two things that are *not* defects and are worth saying so:
   `wl_agent.cpp` clamps `controly` to ±100 before using it, so a peer sending
   nonsense moves absurdly rather than dangerously.
 
-#### The exchange that starts a level, which is still fragile
+#### The exchange that starts a level — fixed, and the old measurement was wrong
 
 `Net::NewGame` exchanges the map and difficulty with a synchronous
 `ExchangePacket`: every player sends, every player waits for everyone else's
-packet *and* for everyone else to acknowledge its own. There is no delay window
-to hide a round trip in, and no recovery once a peer has left the exchange.
+packet *and* for everyone else to acknowledge its own.
 
-**Measured at 5% loss and an 80 ms round trip: six connections in twelve
-complete.** The rest hang before the level loads. Once a match is running the
-delayed tic path rides out the same link without trouble; this is the minute
-before that.
+**What this section used to say, and why it was wrong.** It recorded "six
+connections in twelve complete" at 5% loss. Measured again with a harness that
+runs the pair properly, it is **23 of 24**. The old figure counted an artifact:
+a test match is given a fixed number of tics, whichever process reaches them
+first exits, and the other then waits for commands that will never come. In the
+log that is indistinguishable from a wedged handshake -- the first version of
+the new harness made the same mistake and reported 62% until its "failures"
+were read rather than counted. The defect was real; its rate was not.
 
-A stuck exchange used to say nothing whatever -- the game simply stopped. It
-now reports, every three seconds, which player it is waiting on and which half
-it is waiting for, because those fail for different reasons: *no packet* means
-theirs is not arriving, *no ack* means ours is not.
+**The defect, in two halves.** A peer left the exchange as soon as everyone had
+acked its packet and it held everyone else's, which says nothing about whether
+its own acks arrived.
 
-**An attempted fix made it markedly worse, and is recorded here so that nobody
-tries it again without measuring.** A player leaves the exchange as soon as it
-has everyone's packet and everyone has acked its own -- which says nothing
-about whether its own ack arrived. If that ack is lost, the player it was owed
-to waits for ever, resending a packet the sender no longer recognizes:
-`HandleCommandPackets` knows `StartPacket` and re-acks it, and did not know
-`NewGamePacket`. Teaching it to re-ack that too is the obvious symmetry, it is
-what the start packet already does, and measured over twelve connections each
-way it took the success rate from **6 in 12 down to 1 in 12**. The reason is
-not yet understood. It is not in the tree.
+* If *our ack* to a peer was lost, that peer resends its packet for ever, to a
+  machine that has gone to load the level and no longer answers.
+* If *their packet* to us was lost while everyone had already acked ours, we
+  waited in complete silence: the resend loop only contacted peers who had not
+  acked us, so we sent nothing, to anyone, while waiting for a packet nobody
+  was going to send again.
 
-Fixing this properly means reworking the exchange so that leaving it is
-negotiated rather than assumed, which is a larger change than hardening and
-wants its own measurements. Until then: a connection that does not complete
-should be retried, and the diagnostic says which end to look at.
+That second half explains the attempted fix recorded here before — teaching
+`HandleCommandPackets` to re-ack `NewGamePacket` — and why it could not work.
+Re-acking answers a packet that arrives; in the silent case nothing arrives,
+because nothing is being sent. (It was also measured as making matters *worse*,
+1 in 12 against 6 in 12. Against the corrected baseline that comparison is not
+meaningful, and the code was never in the tree.)
+
+**The fix, which is the negotiated exit this section asked for.** Three parts,
+none of them a wire-format change:
+
+1. The resend rule now covers anyone who has not acked ours **or** whose packet
+   we do not have. A peer can no longer wait in silence, and a resend doubles
+   as a request.
+2. A duplicate is treated as a request. Receiving a packet we already hold
+   means something of ours did not arrive, so we answer with our own packet as
+   well as the ack.
+3. Each machine keeps its setup packet, exactly as it went out, and answers
+   stale ones after it has left the exchange — with both the ack and the packet,
+   because it cannot tell which was lost. This is the half that cannot live in
+   the exchange: by the time it matters, that machine is loading a level.
+
+**Measured, 24 connections each, same seeds, before and after:**
+
+| loss each way | before | after |
+| --- | --- | --- |
+| 5% | 23/24 (95%) | 24/24 (100%) |
+| 15% | 19/24 (79%) | 24/24 (100%) |
+| 30% | 7/16 (43%) | 16/16 (100%) |
+
+Thirty percent loss is not a link anyone should play on, and it is the row that
+says most: the old exchange was not merely unlucky at 5%, it fell apart as soon
+as losses stopped being rare, while the fixed one still starts every match.
+
+`tools/test_multiplayer_handshake.sh` is the harness and the gate. It defaults
+to 15% loss, where the old behaviour scores about 79% and the fixed one 100%,
+because at 5% the failure is too rare for a dozen runs to see. `HANDSHAKE_RUNS`
+and `HANDSHAKE_LOSS` are what to turn up when the number itself is the point:
+a dozen runs cannot tell 60% from 75%.
 
 #### Pressing Start on a screen nobody has typed in
 
@@ -952,6 +984,47 @@ the menu previously meant swiping up the system navigation bar, which is hidden
 while the game is full screen.
 
 ---
+
+### Rounds end on their limits, and can move between arenas
+
+**The elevator no longer ends a battle.** Seven of the eight arenas are built
+from campaign floors and still have an elevator switch in them (MAP60 is the
+exception). `Exit_Normal`, `Exit_Secret` and `Exit_Victory` never asked what
+kind of game was running, so any player could end the round for everyone by
+pressing it -- including the player who was losing. In a deathmatch all three
+now refuse, with the elevator's denied sound and "NO EXIT DURING BATTLE", so
+the switch reads as locked rather than broken. Co-operative play keeps its
+exits: it is the campaign, and the elevator is how a floor is finished.
+
+**A time limit** joins the frag limit, and whichever is reached first ends the
+round: None, 5, 10, 15, 20 or 30 minutes in the menu, `--timelimit MINUTES` on
+the command line. It is measured on `gamestate.TimeCount`, the level clock,
+which restarts with each round, advances only on simulated tics and not while
+paused, and reads the same on every machine at the same tic. So, like the frag
+limit, every peer ends the round on its own and nothing is sent about it. It is
+checked after the thinkers, so a frag scored on the final tic still counts.
+While a limit is set, the scoreboard's title shows the time left.
+
+**Automatically cycle maps** (`--mapcycle`) plays each new round on the next
+arena in number order, wrapping from the last back to the first. Every arena's
+MAPINFO `next` names itself, which is right for a match that stays put, so the
+cycle is decided where the round ends rather than in the map data. The order
+is MAP51 to MAP57 and then MAP60: the compendium's 58 and 59 are empty boxes,
+and a cycle that counted by one would load one. With cycling on, the menu's
+Arena is where the match starts. A battle started by hand on a map that is not
+an arena has no place in the cycle and keeps the map's own `next`. The arena
+list now lives in one place, `Net::ArenaMap`, which the menu reads as well.
+
+Both settings travel in the `StartPacket` beside the frag limit, which made it
+protocol 6. A client that missed either would end its round at a different
+tic or load a different arena, and would be simulating another match.
+
+`tools/test_multiplayer_match_rules.sh` forces each case rather than waiting
+for it: an idle player and one bot with no frag limit, so only the time limit
+can end a round; the elevator pressed from a fixed spot, with the same press in
+single player as the control; two rounds from MAP57, which cover both the gap
+at 58-59 and the wrap; and a networked host and client where only the host is
+given the settings and both must record the same match, tic for tic.
 
 ## What is not in this plan
 

@@ -74,6 +74,11 @@ struct InitStatus
 	FString      detail;	// the address being dialled, or the port being held
 	unsigned int seconds;	// since the wait began
 	TArray<Peer> peers;	// hosts only; empty while joining
+	// Why the wait ended badly, shown instead of the progress line. A refusal
+	// a player can read beats a wait that quietly turns into single player,
+	// and there is nowhere else to say it: the console scrolls past on a
+	// desktop and does not exist on a phone.
+	FString      failure;
 };
 
 // Returns false to give up waiting. The connect loops poll this every frame
@@ -116,15 +121,49 @@ struct NetInit
 	// Kills that end a match, or 0 for a match that only ends when someone
 	// leaves. Counted per team in team play, per player otherwise.
 	byte fragLimit;
+	// Percent of normal damage a player's weapon does to another player, 100
+	// being the game's own numbers.
+	//
+	// Corridor 7's guns are lethal: inside two tiles the M16 rolls an average
+	// of 128 against 100 health, so most exchanges are decided by whoever
+	// shoots first and a room can be cleared by spraying it. That is faithful
+	// and it is not always what a deathmatch wants, so it is a dial rather
+	// than an edit to the weapons -- single player is untouched, and the
+	// number applies to every player in the match alike, bots included.
+	byte damageScale;
+	// Minutes a deathmatch round lasts, or 0 for a round only the frag limit
+	// ends. Measured on the level clock, which only advances on simulated
+	// tics, so every machine reaches the limit on the same tic and none of
+	// them has to tell the others.
+	byte timeLimit;
+	// Nonzero: each new deathmatch round is played on the next arena in
+	// number order, wrapping after the last, instead of the same one again.
+	byte mapCycle;
 };
 
 extern NetInit InitVars;
+
+// The deathmatch arenas, in play order. Eight, and not a contiguous run: the
+// compendium's 58 and 59 are empty boxes, and the eighth real arena is 60. See
+// the note above the network levels in mapinfo/corridor7.txt.
+unsigned int ArenaCount();
+const char *ArenaMap(unsigned int index);
+// The arena after `map`, wrapping from the last back to the first, or NULL
+// when `map` is not one of the arenas -- a battle started on some other map
+// by hand has no place in the cycle and keeps the map's own MAPINFO `next`.
+const char *NextArena(const char *map);
 
 // True once a peer has been written off and the match ended for that reason;
 // the string says who, for showing to the player.
 bool Abandoned();
 const char *AbandonedReason();
 void ClearAbandoned();
+
+// Writes this build's real packet layout to a file, so the hostile-packet
+// gate can build its shots from what the encoder actually emits instead of a
+// hand-maintained guess. Needs no game data and no window. Returns an exit
+// code. See tools/netfuzz.py.
+int WriteProtocolVectors(const char *path);
 
 bool IsArbiter();
 bool IsBlocked();
@@ -146,6 +185,10 @@ void StartAck(AckType type);
 // existed. Team play has no monsters and respawns items exactly as free-for-all
 // does; the only thing it changes is who may shoot whom.
 static bool Deathmatch() { return InitVars.gameMode != GM_Cooperative; }
+// Whether a socket is open and other machines are simulating the same world.
+// Distinct from Deathmatch(), which is a rules question: the two answers come
+// apart the moment there is an offline deathmatch to answer them about.
+static bool IsNetworked() { return InitVars.mode != MODE_SinglePlayer; }
 static bool RespawnItems() { return Deathmatch(); }
 static bool NoMonsters() { return Deathmatch(); }
 

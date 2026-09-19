@@ -352,8 +352,28 @@ bool C7Menu_Draw(const Menu *menu)
 					tx + tw - (tw * r) / (2 * th), listBottom + Scaled(6) + r + 1, tip, 0);
 		}
 
+		// Counted in items a player can land on. The raw indices also include
+		// section labels, which are headings drawn between rows rather than
+		// rows themselves; hidden items; and disabled ones, which navigation
+		// steps over (Menu::handle loops while !isEnabled). So once the
+		// multiplayer setup screen grew long enough to scroll, a joining
+		// player saw "13 / 13" on a screen where the cursor reaches seven
+		// rows -- the six greyed host settings and the total-slots heading
+		// were all being counted. The resolution picker has none of these,
+		// which is why it looked right there.
+		int choices = 0, here = 0;
+		for(int i = 0;i < count;++i)
+		{
+			MenuItem *item = menu->getIndex(i);
+			if(item == NULL || !item->isVisible() || item->isSectionLabel() ||
+				!item->isEnabled())
+				continue;
+			++choices;
+			if(i <= cur)
+				here = choices;
+		}
 		FString pos;
-		pos.Format("%d / %d", cur + 1, count);
+		pos.Format("%d / %d", here, choices);
 		V_TTDrawText(g_regular, Scaled(13), labelX, listBottom + Scaled(6),
 			pos, kDimR, kDimG, kDimB);
 	}

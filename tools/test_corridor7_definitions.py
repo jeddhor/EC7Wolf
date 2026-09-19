@@ -417,6 +417,15 @@ if shotgun is None or "C814" in shotgun.group(1):
     raise SystemExit("Corridor 7 definition check failed: Ithaca reload leaks into Tebazile art")
 require(r'actor\s+C7ProximityMine.*?Spawn:.*?C067\s+A\s+36.*?Armed:.*?C067\s+A\s+1\s+A_C7MineThink',
         PLAYER, "placed mines use the released floor-mine sprite, not the pickup crate")
+# The three properties the bot's own model of a mine is built on. It prices
+# blast risk at two tiles (128 map units / 64 per tile), keeps clear of a live
+# one because the owner is not spared once it arms, and treats a mine as
+# something gunfire can set off. A DECORATE edit that changed any of these
+# would leave the bot confidently wrong, and nothing else would notice.
+require(r'actor\s+C7ProximityMine.*?health\s+1.*?\+SHOOTABLE',
+        PLAYER, "a mine can be shot, and dies to one point of damage")
+require(r'actor\s+C7ProximityMine.*?Death:.*?A_Explode\(random\(102,\s*500\),\s*128,\s*1,\s*true\)',
+        PLAYER, "a mine's blast reaches two tiles and hurts whoever laid it")
 require(r'actor\s+C7PlasmaBolt.*?speed\s+30.*?deathsound\s+"c7/teleport"'
         r'.*?Spawn:.*?C706\s+A\s+2\s+bright\s+loop.*?Death:.*?'
         r'C707\s+A\s+4\s+bright\s+A_Explode.*?C708\s+A\s+4\s+bright.*?'

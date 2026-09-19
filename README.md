@@ -1327,11 +1327,6 @@ type an address, as the original's successors did.
 
 Two rough edges, measured rather than guessed at:
 
-* **Starting a match on a bad line can fail.** The exchange that begins a level
-  has no tolerance for a lost packet once the other player has moved on; at 5%
-  packet loss about half of connections do not complete. If a match will not
-  start, try again — and if it keeps failing, the game now prints which player
-  it is waiting on and whether it is waiting to be heard or to hear.
 * **A player who quits takes about fifteen seconds to notice.** Someone who
   closes the window, loses wifi or has their phone put them to sleep is not
   distinguishable, at first, from someone whose connection hiccuped. After
@@ -1347,9 +1342,16 @@ Two rough edges, measured rather than guessed at:
   place they cannot work out. They will not fall through the floor; they will
   stand somewhere looking foolish.
 
-None of the three affects a match already running on a decent connection.
-[`docs/multiplayer.md`](docs/multiplayer.md) has the measurements, and the
-record of one attempted fix that made the first of these four times worse.
+Neither affects a match already running on a decent connection.
+[`docs/multiplayer.md`](docs/multiplayer.md) has the measurements.
+
+Starting a match on a lossy line used to be a third rough edge: the exchange
+that begins a level had no recovery from a dropped packet, and a connection
+that hit one hung for ever. It is fixed — measured over 24 connections at 15%
+packet loss, 19 completed before the fix and 24 after, and at a punishing 30%
+loss 7 of 16 before against 16 of 16 after — and the same document
+records what the fault actually was, along with the correction of an earlier
+measurement of it that was off by a factor of nine.
 
 ### When a game stops and you want to know why
 

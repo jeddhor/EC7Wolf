@@ -147,6 +147,7 @@ bot_presentation
 multiplayer_rules
 multiplayer_rounds
 multiplayer_match_rules
+multiplayer_handshake
 multiplayer_classes
 multiplayer_presentation
 multiplayer_hostile
@@ -181,7 +182,7 @@ release_gates='corridor7_release_startup'
 #
 # Split so the structural gates can run on every change and these can run
 # before a commit and on CI's slower schedule.
-slow_gates='bot_transporters bot_arenas bot_perception bot_roam multiplayer_starts bot_skill bot_footwork bot_budget bot_soak bot_sanitizer'
+slow_gates='bot_transporters bot_arenas bot_perception bot_roam multiplayer_starts bot_skill bot_footwork bot_budget bot_soak bot_sanitizer multiplayer_handshake'
 
 is_slow() {
 	for slow in $slow_gates; do

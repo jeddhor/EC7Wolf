@@ -59,7 +59,15 @@ xvfb_start "$display" "$work/xvfb.log" 640x400x24 || exit 1
 cleanup() {
 	kill_pids "${net_pid0:-}" "${net_pid1:-}"
 	xvfb_stop
-	if [ "${KEEP_WORK:-0}" = "1" ]; then printf 'kept: %s\n' "$work"; else rm -rf "$work"; fi
+	# Kept when the gate fails as well as when asked: a failure here claims
+	# two machines disagreed, and that cannot be judged from a work directory
+	# that has been deleted. This gate failed once without its traces and had
+	# to be re-run to find out what had happened.
+	if [ "$status" -ne 0 ] || [ "${KEEP_WORK:-0}" = "1" ]; then
+		printf 'kept: %s\n' "$work"
+	else
+		rm -rf "$work"
+	fi
 	true
 }
 trap cleanup EXIT INT TERM
@@ -178,9 +186,26 @@ check "the client reaches the host's time limit without being told it" \
 	test "${client_limits:-0}" -ge 1 -a "${host_limits:-0}" -ge 1
 check "and both machines move to the same next arena" \
 	test "$host_maps" = "MAP60" -a "$client_maps" = "MAP60"
-# Non-empty first: two traces that were never written compare equal too.
+# Over the tics both machines recorded, not over whole files.
+#
+# Each process is given a fixed number of tics and whichever reaches them
+# first exits; the other notices and ends a few tics later, so the two
+# recordings routinely differ in length with nothing wrong. Comparing them
+# whole made this gate fail once in a full suite and pass on every re-run,
+# which is the shape of an artifact rather than a desync -- the seed and the
+# maps are fixed here, so a real disagreement would repeat. Non-empty is
+# checked first, because two traces that were never written compare equal.
+host_lines=$(wc -l < "$work/net-0.tr" 2>/dev/null || echo 0)
+client_lines=$(wc -l < "$work/net-1.tr" 2>/dev/null || echo 0)
+common=$host_lines
+[ "$client_lines" -lt "$common" ] && common=$client_lines
+head -n "$common" "$work/net-0.tr" > "$work/net-0-common.tr" 2>/dev/null || true
+head -n "$common" "$work/net-1.tr" > "$work/net-1-common.tr" 2>/dev/null || true
+printf '  ..   host recorded %s lines, client %s; comparing the %s they share\n' \
+	"$host_lines" "$client_lines" "$common"
 check "and the two machines recorded the same match, tic for tic" \
-	sh -c "test -s '$work/net-0.tr' && test \$(wc -l < '$work/net-0.tr') -gt 4000 && cmp -s '$work/net-0.tr' '$work/net-1.tr'"
+	sh -c "test ${common:-0} -gt 4000 && \
+		cmp -s '$work/net-0-common.tr' '$work/net-1-common.tr'"
 
 printf '\n'
 if [ "$status" -eq 0 ]; then

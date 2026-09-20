@@ -37,6 +37,7 @@ build_dir=$(cd "$1" 2>/dev/null && pwd) || {
 	printf 'SKIP: no such build directory: %s\n' "$1"; exit 0; }
 data_dir=$(cd "$2" && pwd)
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo=$(CDPATH= cd -- "$here/.." && pwd)
 
 status=0
 check() {
@@ -112,6 +113,15 @@ check "the engine started with the pack loaded" \
 check "no sniffer overflowed on it" test "${overflows:-0}" -eq 0
 check "and nothing was read out of bounds" \
 	sh -c "! grep -q 'ERROR: AddressSanitizer' '$work/game.log'"
+
+# And nothing else undefined either. The pack is untrusted input, so this is
+# the run most likely to reach a parser nobody has pointed a sanitizer at
+# before; anything not already accounted for in tools/ubsan-accepted.txt is a
+# finding about handling somebody else's data.
+printf '  ..   '
+check "no undefined behaviour beyond what is already accepted" \
+	python3 "$here/ubsan_check.py" "$work/game.log" \
+		--accepted "$here/ubsan-accepted.txt" --root "$repo" --no-stale
 
 printf '\n'
 if [ "$status" -eq 0 ]; then

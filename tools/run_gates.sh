@@ -115,6 +115,7 @@ bot_budget
 bot_netplay
 bot_soak
 bot_sanitizer
+untrusted_lumps
 ec7edit_e9
 ec7edit_e10
 ec7edit_e11
@@ -587,10 +588,10 @@ for g in $data_gates; do
 		skip_gate "$g" "no ec7wolf in $build_dir"
 		continue
 	fi
-	# One gate wants a different binary: the sanitizer build, which is a
+	# Two gates want a different binary: the sanitizer build, which is a
 	# separate configuration and not what anybody has lying about by default.
-	# It skips itself when there is none, and says so.
-	if [ "$g" = bot_sanitizer ]; then
+	# They skip themselves when there is none, and say so.
+	if [ "$g" = bot_sanitizer ] || [ "$g" = untrusted_lumps ]; then
 		run_gate "$g" "gate" "$script" "$sanitizer_dir" "$data_dir"
 		continue
 	fi

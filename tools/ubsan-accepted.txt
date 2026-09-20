@@ -1,0 +1,48 @@
+# UndefinedBehaviorSanitizer findings this project has looked at and accepted.
+#
+# One line per kind-and-file: `kind  path  # why`. The gate that reads this
+# (tools/ubsan_check.py, used by test_bot_sanitizer.sh and
+# test_untrusted_lumps.sh) fails on any finding that is not listed here, so
+# the list is the difference between "we know about these" and "nobody is
+# looking". It only ever shrinks: fixing something deletes a line, and the
+# checker reports entries that no longer fire so they do not linger.
+#
+# Keyed by file rather than by line, deliberately. Line numbers move whenever
+# anything above them is edited, and a list that needs rewriting every time
+# somebody adds a comment is a list people stop maintaining.
+#
+# The survey behind these, and what was fixed rather than accepted, is in
+# docs/undefined-behaviour.md.
+
+# --- ZDoom's DECORATE defaults object -------------------------------------
+#
+# Properties are written into a defaults instance before it is an object of
+# the class being defined: `((AWeapon *)defaults)->ammogive[...] = give`, with
+# defaults declared AActor*. Every handler downcasts, so the vptr check fires
+# on the cast and again on the member access. Nothing virtual is called
+# through these pointers and the layout is correct by construction. Fixing it
+# means giving every actor class a constructed default instance, which is a
+# rewrite of the property system for no change in behaviour.
+vptr  src/thingdef/thingdef_properties.cpp  # 66: one per property handler
+vptr  src/thingdef/thingdef.cpp             # 16: class setup and state install
+vptr  src/thingdef/thingdef_parse.cpp       # 1
+vptr  src/thingdef/thingdef.h               # 1
+vptr  src/g_shared/a_keys.cpp               # 6: key classes read their defaults
+vptr  src/g_shared/a_playerpawn.cpp         # 2: ((AKey *)cls->GetDefault())->KeyNumber
+vptr  src/actor.cpp                         # 1: GetDefault()->health, deciding a gib
+vptr  src/wl_state.cpp                      # 1
+
+# --- offsets computed through a null or invented pointer -------------------
+#
+# offsetof, written by hand, years before offsetof was usable on these types:
+# the class metadata tables take the address of a member on a pointer that
+# points nowhere (0x179, or 0) and subtract. No memory is touched. The
+# sanitizer sees a member access on an address that cannot hold the type,
+# which is exactly what it is.
+alignment  src/dobject.h                    # 3: TObjPtr::operator& at static init
+alignment  src/actor.cpp                    # 2
+alignment  src/lnspec.cpp                   # 3
+alignment  src/g_shared/a_inventory.cpp     # 3
+alignment  src/g_shared/a_deathcam.cpp      # 2
+alignment  src/g_shared/a_randomspawner.cpp # 1
+null       src/dosbox/dbopl.cpp             # 2: OPL channel offset tables

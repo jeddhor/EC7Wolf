@@ -39,6 +39,7 @@ build_dir=$(cd "$1" 2>/dev/null && pwd) || {
 	printf 'SKIP: no such build directory: %s\n' "$1"; exit 0; }
 data_dir=$(cd "$2" && pwd)
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo=$(CDPATH= cd -- "$here/.." && pwd)
 
 status=0
 check() {
@@ -101,24 +102,22 @@ play() {  # play TAG MAP [EXTRA...]
 # too-soon-to-repeat guard does constantly once eleven players are shooting.
 # That is memory corruption in every build, silent without instrumentation.
 #
-# UndefinedBehaviorSanitizer fails the gate only for the code this milestone
-# is about -- the bots, their perception and navigation, the command path and
-# the netcode. Inherited ECWolf and ZDoom code trips it in quantity at
-# start-up and while loading: TObjPtr offset arithmetic in dobject.h, null
-# references in TArray, misaligned reads of packed art and palette data, left
-# shifts of negative values in the raycaster. Those are real UB and worth
-# fixing, but they are not this milestone, they fire before a bot exists, and
-# a gate that failed on them would report the same page of upstream findings
-# for ever while saying nothing about the bots. They are recorded in the B10
-# record instead.
-BOT_SOURCES='src/g_bot|src/g_botnav|src/g_perception|src/g_command|src/g_skill|src/g_items|src/g_combat|src/wl_net'
-
+# UndefinedBehaviorSanitizer is checked against tools/ubsan-accepted.txt --
+# the findings inherited from ECWolf and ZDoom that this project has looked at
+# and cannot fix without replacing machinery it did not write. Anything not on
+# that list fails. The list is keyed by kind and file, it only ever shrinks,
+# and docs/undefined-behaviour.md says what is on it and why. This replaces an
+# earlier rule that passed anything outside a hand-written list of bot source
+# files, which would have let a new fault in any other file through.
 clean() {  # clean TAG
 	if grep -qE 'ERROR: AddressSanitizer|SEGV|stack-buffer|heap-buffer|use-after' \
 		"$work/$1.log"; then
 		return 1
 	fi
-	! grep -E 'runtime error:' "$work/$1.log" | grep -qE "$BOT_SOURCES"
+	# --no-stale: one scenario does not reach every accepted file, and the
+	# combined report below is where staleness can honestly be judged.
+	python3 "$here/ubsan_check.py" "$work/$1.log" \
+		--accepted "$here/ubsan-accepted.txt" --root "$repo" --quiet --no-stale
 }
 
 ran() {  # ran TAG
@@ -147,11 +146,11 @@ check "and it too was clean" clean rounds
 # Said either way: a run with no AddressSanitizer report but a page of
 # inherited UB findings is a different thing from a clean one, and the count
 # is how a regression in that page would be noticed.
-for tag in max rounds; do
-	inherited=$(grep -cE 'runtime error:' "$work/$tag.log" 2>/dev/null || true)
-	printf '  ..   %s: %s inherited UB finding(s), none in bot or net code\n' \
-		"$tag" "${inherited:-0}"
-done
+# Both runs together, which is the only view in which "accepted but never
+# seen" means anything: between them they start the game, load a map, fight a
+# full roster and change rounds.
+python3 "$here/ubsan_check.py" "$work/max.log" "$work/rounds.log" \
+	--accepted "$here/ubsan-accepted.txt" --root "$repo" || true
 
 if [ "$status" -ne 0 ]; then
 	printf '\n  first report:\n'

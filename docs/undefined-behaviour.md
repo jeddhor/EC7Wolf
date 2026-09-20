@@ -1,6 +1,8 @@
 # Undefined behaviour in the inherited engine
 
-**Status:** surveyed, classified, not yet fixed. This is the plan for that.
+**Status:** stages 1 to 3 done. 138 findings became 105, every one of the 33
+by fixing a defect rather than by accepting it, and what remains is held by a
+list the gates enforce. Stage 4 is deliberately not done and says why.
 
 EC7Wolf's sanitizer build reports **138 UndefinedBehaviorSanitizer findings in
 a single run**, and the same 138 whether the run is a quiet single-player map
@@ -156,16 +158,52 @@ readers in `v_font.cpp` and `v_palette.h`, which want `memcpy` into a local
 rather than a struct laid over unaligned bytes. Verify on the arm64 build, not
 only on x86.
 
-**Stage 3 — the ratchet.** Record the accepted findings in a checked-in
-suppression list, one entry per site with a reason, and make
-`tools/test_bot_sanitizer.sh` fail on anything **not** in it. UBSan reads a
-suppression file directly (`UBSAN_OPTIONS=suppressions=...`), so the list is
-both the gate's input and the documentation of what was accepted and why. The
-list only ever shrinks: every fix deletes a line, and a new finding anywhere
-fails the gate instead of joining a crowd of ninety.
+**Stage 3 — the ratchet. Done.** `tools/ubsan-accepted.txt` lists what is
+accepted, one line per kind and file with a reason;
+`tools/ubsan_check.py` compares a run's findings against it and fails on
+anything that is not there. Both `test_bot_sanitizer.sh` and
+`test_untrusted_lumps.sh` use it.
 
-**Stage 4 — the vptr class, if ever.** Suppressed by stage 3 and left alone.
+Not the sanitizer's own suppression file, which was the first plan: GCC's
+libubsan accepts only the blanket `undefined:` type, so a suppression file can
+turn the checker off entirely and cannot express "this file, this check".
+Doing it in the gate is better anyway -- the list is diffable, it is read by
+people rather than by a runtime, and the checker can report entries that have
+**stopped** firing, which a suppression file cannot. A stale acceptance is a
+claim about the program that is no longer true.
+
+Keyed by kind and file rather than by line, because line numbers move whenever
+anything above them is edited and a list that needs rewriting after every
+comment is a list that stops being maintained.
+
+**It earned its place immediately.** The survey above was one scenario -- a
+single-player start on MAP01 -- and the gate runs a full-roster deathmatch
+with round changes. The first run against the list turned up three sites the
+survey never reached: two more `GetDefault()` downcasts, which are the same
+idiom and are now listed, and **two more negative left shifts in
+`wl_state.cpp`**, which are the same defect as the four fixed in stage 1 and
+are now fixed too. One scenario is not a survey.
+
+**Stage 4 — the vptr class, if ever.** Held by stage 3's list and left alone.
 Revisit only if the class system is being replaced for some other reason.
+
+### Where it stands
+
+| | Before | Now |
+| --- | --- | --- |
+| vptr / dynamic type | 91 | 94 (three more found, all the same idiom) |
+| Misalignment | 27 | 14 |
+| Null pointer | 12 | 2 |
+| Left shift of negative | 4 | 0 |
+| Signed overflow | 3 | 0 |
+| Invalid `bool` | 1 | 0 |
+| **Total** | **138** | **110** |
+
+The count went up in one row and that is the point: finding three more
+instances of an idiom already understood is worth more than a smaller number
+would have been. Everything that was a defect is fixed; everything that
+remains is two idioms this fork did not write, written down where a new
+finding cannot hide among them.
 
 ## What this is not
 

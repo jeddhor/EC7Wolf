@@ -915,7 +915,10 @@ bool CheckLine (const AActor *ob, const AActor *ob2)
 
 		deltafrac = abs(x2-x1);
 		delta = y2-y1;
-		ltemp = ((int32_t)delta<<8)/deltafrac;
+		// Multiplied: delta is the signed difference between two coordinates
+		// and is negative for half the directions a sight line can take, which
+		// makes the shift undefined. The scale is what was meant.
+		ltemp = ((int32_t)delta*256)/deltafrac;
 		if (ltemp > 0x7fffl)
 			ystep = 0x7fff;
 		else if (ltemp < -0x7fffl)
@@ -981,7 +984,10 @@ bool CheckLine (const AActor *ob, const AActor *ob2)
 
 		deltafrac = abs(y2-y1);
 		delta = x2-x1;
-		ltemp = ((int32_t)delta<<8)/deltafrac;
+		// Multiplied: delta is the signed difference between two coordinates
+		// and is negative for half the directions a sight line can take, which
+		// makes the shift undefined. The scale is what was meant.
+		ltemp = ((int32_t)delta*256)/deltafrac;
 		if (ltemp > 0x7fffl)
 			xstep = 0x7fff;
 		else if (ltemp < -0x7fffl)

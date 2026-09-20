@@ -288,7 +288,17 @@ class ClassDef
 		size_t					GetSize() const { return size; }
 		const Frame				*GetState(unsigned int index) const { return &frameList[index]; }
 		static void				LoadActors();
-		bool					IsStateOwner(const Frame *frame) const { return frame >= &frameList[0] && frame < &frameList[frameList.Size()]; }
+		// A range test written without taking the address of elements that
+		// may not exist: an actor with no frames has null storage, and both
+		// &frameList[0] and the one-past-the-end form bind a reference to
+		// nothing. Such a class owns no frame at all, which is the answer.
+		bool					IsStateOwner(const Frame *frame) const
+		{
+			if(frameList.Size() == 0)
+				return false;
+			const Frame *first = &frameList[0];
+			return frame >= first && frame < first + frameList.Size();
+		}
 		static void				UnloadActors();
 
 		unsigned int			ClassIndex;

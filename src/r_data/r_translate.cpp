@@ -110,9 +110,23 @@ FRemapTable::~FRemapTable()
 
 void FRemapTable::Alloc(int count)
 {
-	Remap = (BYTE *)M_Malloc(count*sizeof(*Remap) + count*sizeof(*Palette));
+	// One allocation holding a byte table and then a palette, with the
+	// palette rounded up to where a PalEntry can live.
+	//
+	// The palette used to begin at exactly count bytes, so any table whose
+	// entry count was not a multiple of four put four-byte PalEntries on an
+	// address that could not hold one -- which is most fonts, since a font's
+	// colour count is whatever the artwork needed. Every read and write of
+	// remap.Palette[j] downstream was then misaligned, which is where six of
+	// this engine's sanitizer findings came from. See
+	// docs/undefined-behaviour.md.
+	const size_t remapBytes = (size_t)count*sizeof(*Remap);
+	const size_t paletteStart =
+		(remapBytes + sizeof(*Palette) - 1) & ~(sizeof(*Palette) - 1);
+
+	Remap = (BYTE *)M_Malloc(paletteStart + (size_t)count*sizeof(*Palette));
 	assert (Remap != NULL);
-	Palette = (PalEntry *)(Remap + count*(sizeof(*Remap)));
+	Palette = (PalEntry *)(Remap + paletteStart);
 	NumEntries = count;
 }
 

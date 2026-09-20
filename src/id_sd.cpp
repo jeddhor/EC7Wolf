@@ -210,7 +210,11 @@ static inline void YM3812UpdateOne(DBOPL::Chip &which, int16_t *stream, int leng
 		{
 			// Multiply by 4 to match loudness of MAME emulator.
 			// Then upconvert to stereo.
-			Bit32s sample = buffer[i] << 2;
+			//
+			// Multiplied rather than shifted: these samples are signed and
+			// routinely negative, and shifting a negative value left is
+			// undefined before C++20. The product is what was meant.
+			Bit32s sample = buffer[i] * 4;
 			if(sample > 32767) sample = 32767;
 			else if(sample < -32768) sample = -32768;
 			stream[i * 2] = stream[i * 2 + 1] = (int16_t) LittleShort(sample);

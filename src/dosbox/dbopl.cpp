@@ -1304,12 +1304,16 @@ void Chip::Setup( Bit32u rate ) {
 			//Below our target
 			if ( diff < 0 ) {
 				//Better than the last time
+				// Widened: guessAdd and mul are both large enough that their
+				// product leaves a 32-bit int -- 591053 * 4158, measured --
+				// and the shift back down is what makes the result fit again.
+				// The arithmetic is unchanged; only the type it happens in is.
 				Bit32s mul = ((original - diff) << 12) / original;
-				guessAdd = ((guessAdd * mul) >> 12);
+				guessAdd = (Bit32s)(((int64_t)guessAdd * mul) >> 12);
 				guessAdd++;
 			} else if ( diff > 0 ) {
 				Bit32s mul = ((original - diff) << 12) / original;
-				guessAdd = (guessAdd * mul) >> 12;
+				guessAdd = (Bit32s)(((int64_t)guessAdd * mul) >> 12);
 				guessAdd--;
 			}
 		}

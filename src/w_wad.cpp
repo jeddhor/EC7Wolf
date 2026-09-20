@@ -729,11 +729,16 @@ void FWadCollection::InitHashChains (void)
 	char name[8];
 	unsigned int i, j;
 
-	// Mark all buckets as empty
-	memset (FirstLumpIndex, 255, NumLumps*sizeof(FirstLumpIndex[0]));
-	memset (NextLumpIndex, 255, NumLumps*sizeof(NextLumpIndex[0]));
-	memset (FirstLumpIndex_FullName, 255, NumLumps*sizeof(FirstLumpIndex_FullName[0]));
-	memset (NextLumpIndex_FullName, 255, NumLumps*sizeof(NextLumpIndex_FullName[0]));
+	// Mark all buckets as empty. With no lumps there are no buckets and the
+	// four pointers are null; memset over zero bytes is still undefined if the
+	// destination is null, and this runs before any archive has been opened.
+	if (NumLumps > 0)
+	{
+		memset (FirstLumpIndex, 255, NumLumps*sizeof(FirstLumpIndex[0]));
+		memset (NextLumpIndex, 255, NumLumps*sizeof(NextLumpIndex[0]));
+		memset (FirstLumpIndex_FullName, 255, NumLumps*sizeof(FirstLumpIndex_FullName[0]));
+		memset (NextLumpIndex_FullName, 255, NumLumps*sizeof(NextLumpIndex_FullName[0]));
+	}
 
 	// Now set up the chains
 	for (i = 0; i < (unsigned)NumLumps; i++)
@@ -1271,7 +1276,10 @@ long FWadLump::Read (void *buffer, long len)
 		{
 			len = Length - FilePos;
 		}
-		memcpy(buffer, Lump->Cache + FilePos, len);
+		// A zero-length read of a lump that was never cached copies nothing
+		// from a null pointer, which is undefined even at zero length.
+		if (len > 0)
+			memcpy(buffer, Lump->Cache + FilePos, len);
 		FilePos += len;
 		numread = len;
 	}

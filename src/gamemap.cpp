@@ -571,18 +571,41 @@ void GameMap::SetSpotTag(MapSpot spot, unsigned int tag)
 		tagMap.Insert(tag, spot);
 }
 
+// Round an offset up to something the next type can live at.
+static inline size_t AlignUp(size_t offset, size_t alignment)
+{
+	return (offset + alignment - 1) & ~(alignment - 1);
+}
+
 void GameMap::SetupLinks()
 {
 	// Allocate as one large block for locality.
-	const unsigned int zdSize = sizeof(bool)*zonePalette.Size()
-		+ sizeof(unsigned short)*((zonePalette.Size()*(zonePalette.Size()+1))>>1);
-	byte* zoneData = new byte[zdSize + sizeof(unsigned short*)*zonePalette.Size()];
-	memset(zoneData, 0, zdSize);
+	//
+	// Padded between the regions, because one block holding three types is
+	// only safe if each starts where its type can be. The offsets used to be
+	// computed from sizes alone, so with an odd number of zones the table of
+	// unsigned shorts began on an odd byte and the table of pointers after it
+	// on an odd address -- and the engine then stored and loaded eight-byte
+	// pointers there. x86 tolerates it and AArch64 tolerates it for ordinary
+	// loads, but it is undefined, and a compiler that knows a pointer's
+	// declared alignment is entitled to widen or vectorise an access on the
+	// strength of it. See docs/undefined-behaviour.md.
+	//
+	// The flags stay at offset zero: zoneTraversed is what UnloadLinks passes
+	// to delete[], so it has to remain the address the allocation returned.
+	const unsigned int zones = zonePalette.Size();
+	const size_t flagBytes = sizeof(bool)*zones;
+	const size_t linkStart = AlignUp(flagBytes, sizeof(unsigned short));
+	const size_t linkBytes = sizeof(unsigned short)*((zones*(zones+1))>>1);
+	const size_t tableStart = AlignUp(linkStart + linkBytes, sizeof(unsigned short*));
+
+	byte* zoneData = new byte[tableStart + sizeof(unsigned short*)*zones];
+	memset(zoneData, 0, tableStart);
 	zoneTraversed = reinterpret_cast<bool*>(zoneData);
 
 	// Set up the table
-	unsigned short* ptr = reinterpret_cast<unsigned short*>(zoneData + sizeof(bool)*zonePalette.Size());
-	zoneLinks = reinterpret_cast<unsigned short**>(zoneData+zdSize);
+	unsigned short* ptr = reinterpret_cast<unsigned short*>(zoneData + linkStart);
+	zoneLinks = reinterpret_cast<unsigned short**>(zoneData + tableStart);
 	for(unsigned int i = 0;i < zonePalette.Size();++i)
 	{
 		zoneLinks[i] = ptr;

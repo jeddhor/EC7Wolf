@@ -630,8 +630,10 @@ AActor *ClassDef::CreateInstance() const
 // Perform any actions necessary after actor class is completely parsed
 void ClassDef::FinalizeActorClass()
 {
-	// Sort the symbol table.
-	qsort(&symbols[0], symbols.Size(), sizeof(symbols[0]), SymbolCompare);
+	// Sort the symbol table. An actor with no symbols at all sorts nothing,
+	// and must not take the address of the first element to say so.
+	if(symbols.Size() > 0)
+		qsort(&symbols[0], symbols.Size(), sizeof(symbols[0]), SymbolCompare);
 
 	// Register conversation id into table if assigned
 	if(int convid = Meta.GetMetaInt(AMETA_ConversationID))
@@ -793,7 +795,9 @@ void ClassDef::InstallStates(const TArray<StateDefinition> &stateDefs)
 	FString thisLabel;
 	Frame *prevFrame = NULL;
 	Frame *loopPoint = NULL;
-	Frame *thisFrame = &frameList[0];
+	// An actor with no frames has an empty list, and &frameList[0] on it is a
+	// reference bound to null before anything looks at the value.
+	Frame *thisFrame = frameList.Size() > 0 ? &frameList[0] : NULL;
 	for(unsigned int iter = 0;iter < stateDefs.Size();++iter)
 	{
 		const StateDefinition &thisStateDef = stateDefs[iter];
@@ -873,8 +877,14 @@ void ClassDef::InstallStates(const TArray<StateDefinition> &stateDefs)
 		}
 	}
 
-	// Safe guard to make sure state counting stays in sync
-	assert(thisFrame == &frameList[frameList.Size()]);
+	// Safe guard to make sure state counting stays in sync.
+	//
+	// Written without &frameList[size]: that binds a reference to the element
+	// one past the end, and on an actor with no frames at all the array's
+	// storage is null and it binds to nothing. The walk above starts at the
+	// same NULL for that case, so the comparison is the same one.
+	assert(thisFrame == (frameList.Size() > 0 ?
+		&frameList[0] + frameList.Size() : NULL));
 
 	// Resolve Gotos
 	for(unsigned int iter = 0;iter < gotos.Size();++iter)

@@ -99,7 +99,11 @@ void FTextureManager::InitSwitchList ()
 	}
 
 	mSwitchDefs.ShrinkToFit ();
-	qsort (&mSwitchDefs[0], mSwitchDefs.Size(), sizeof(FSwitchDef *), SortSwitchDefs);
+	// Nothing to sort is not the same as sorting nothing: &array[0] on an
+	// empty TArray binds a reference to a null pointer, and qsort's first
+	// argument is declared never-null whatever the count says.
+	if (mSwitchDefs.Size() > 0)
+		qsort (&mSwitchDefs[0], mSwitchDefs.Size(), sizeof(FSwitchDef *), SortSwitchDefs);
 }
 
 //==========================================================================

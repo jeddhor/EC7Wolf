@@ -87,6 +87,15 @@ class Scanner
 
 		struct ParserState
 		{
+			// Initialised, because this struct is copied whole -- ExpandState
+			// assigns one to another on every token the DECORATE parser looks
+			// ahead at -- and a bool that was never written holds whatever was
+			// in the memory. Observed holding 3, which is undefined to copy
+			// and which a compiler may assume cannot happen: it is entitled to
+			// treat the value as 0-or-1 and fold a test on it either way.
+			ParserState() : number(0), decimal(0.0), boolean(false), token(0),
+				tokenLine(0), tokenLinePosition(0), scanPos(0) {}
+
 			SCString		str;
 			int				number;
 			double			decimal;

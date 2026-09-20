@@ -113,8 +113,11 @@ namespace
 					sample = NumOriginalSamples - 1;
 				const unsigned int next = sample + 1 < NumOriginalSamples ? sample + 1 : sample;
 				const double fraction = sourcePosition - static_cast<unsigned int>(sourcePosition);
-				const int currentValue = (int(original[sample]) - 128) << 8;
-				const int nextValue = (int(original[next]) - 128) << 8;
+				// Unsigned 8-bit samples centred on 128, so the difference is
+				// negative for half of them, and shifting that left is undefined.
+				// Scaling to 16-bit is a multiply.
+				const int currentValue = (int(original[sample]) - 128) * 256;
+				const int nextValue = (int(original[next]) - 128) * 256;
 				output[i] = LittleShort(static_cast<SWORD>(currentValue +
 					fraction * (nextValue - currentValue)));
 				sourcePosition += sourceStep;

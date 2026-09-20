@@ -798,7 +798,9 @@ bool R_GetPlayerSpriteInfo(AActor *actor, const Frame *frame, fixed offsetX,
 
 	const fixed scale = viewheight<<(FRACBITS-1);
 
-	const fixed centeringOffset = (centerx - 2*centerxwide)<<FRACBITS;
+	// A fixed-point conversion of a value that is negative whenever the view is
+	// wider than it is centred, which is undefined as a shift.
+	const fixed centeringOffset = (centerx - 2*centerxwide)*FRACUNIT;
 	const fixed leftedge = FixedMul((160<<FRACBITS) - fixed(tex->GetScaledLeftOffsetDouble()*FRACUNIT) + offsetX, pspritexscale) + centeringOffset;
 	fixed upperedge = ((100-32)<<FRACBITS) + fixed(tex->GetScaledTopOffsetDouble()*FRACUNIT) - offsetY - AspectCorrection[r_ratio].tallscreen;
 	if(viewsize == 21 && players[ConsolePlayer].ReadyWeapon)

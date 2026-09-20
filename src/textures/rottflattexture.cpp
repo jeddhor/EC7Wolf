@@ -79,9 +79,12 @@ static bool CheckIfRottFlat(FileReader &file)
 	file.Seek(0, SEEK_SET);
 	file.Read(header, 4);
 
-	WORD Width = LittleShort(header[0]);
-	WORD Height = LittleShort(header[1]);
-	if(file.GetLength() == Width*Height+8)
+	// See the note in wolfrawtexture.cpp: the same two bytes, the same
+	// promotion to int, and the same overflow on a lump that is not one of
+	// these.
+	const unsigned int Width = LittleShort(header[0]);
+	const unsigned int Height = LittleShort(header[1]);
+	if((uint64_t)file.GetLength() == (uint64_t)Width*Height+8)
 		return true;
 	return false;
 }

@@ -81,14 +81,23 @@ static bool CheckIfWolfRaw(FileReader &file)
 	file.Seek(0, SEEK_SET);
 	file.Read(header, 4);
 
-	WORD Width = LittleShort(header[0]);
-	WORD Height = LittleShort(header[1]);
-	if(file.GetLength() == Width*Height+4) // Raw page
+	// The product in a type that can hold it.
+	//
+	// Width and Height are read straight out of the first four bytes of the
+	// lump, and both promote to int, so two large 16-bit values multiply to
+	// something an int cannot represent -- 64768 * 47104, in the archive this
+	// game ships with. That is undefined behaviour in a routine whose whole
+	// job is to decide what an untrusted file is, and it runs over every lump
+	// in every archive the engine opens, including resource packs a player
+	// downloaded from somebody else.
+	unsigned int Width = LittleShort(header[0]);
+	unsigned int Height = LittleShort(header[1]);
+	if((uint64_t)file.GetLength() == (uint64_t)Width*Height+4) // Raw page
 		return true;
 
 	Width = BigShort(header[0]);
 	Height = BigShort(header[1]);
-	if(file.GetLength() == Width*Height+4) // Mac raw
+	if((uint64_t)file.GetLength() == (uint64_t)Width*Height+4) // Mac raw
 		return true;
 	return false;
 }

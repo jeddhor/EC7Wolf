@@ -4031,6 +4031,20 @@ says.
 fail rather than only when asked, and print the exact command and seed to
 reproduce with.
 
+**B10 is closed, and with it Phase B.** The exit conditions are met: section
+3.2's list is satisfied item by item, `tools/package_corridor7_release.sh`
+rebuilds `builds/release` from the optimized build and owned data,
+`tools/test_corridor7_release_startup.sh` passes against the packaged copy,
+and no commercial Corridor 7 file is committed anywhere. The suite stands at
+105 gates. Shipped in `v1.0-beta266` and `v1.0-beta268`, and other people have
+since built and installed the release themselves (reported 2026-09-20), which
+is the part no gate can stand in for.
+
+What Phase B does **not** include, said plainly so that nobody reads the
+closure as more than it is: the bots are built and measured for the eight
+arenas, a custom map may still defeat them; they do not play the campaign;
+and the dedicated server is Phase D, which has not begun.
+
 ---
 
 ## 21. Phase B verification

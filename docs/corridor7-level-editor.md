@@ -1,7 +1,9 @@
 # EC7Wolf Corridor 7 Level Editor — Master Design Guide and AI Agent Development Plan
 
-**Status:** design and implementation plan; no production level editor exists
-yet
+**Status:** built and shipping. E0 through E14 are done; EC7Edit is packaged
+for Linux and Windows and published with each release. This document is both
+the plan it was written as and the record of what was built, milestone by
+milestone -- the status notes under each one say which.
 
 **Scope:** a simple, point-and-click desktop level editor for Corridor 7:
 Alien Invasion and EC7Wolf, including lossless native-level import, visual wall
@@ -4489,7 +4491,7 @@ source-format knowledge.
 report, manual test record, performance baseline, fresh package/startup output,
 review signoffs, and final git status/diff check.
 
-**Status: shipped, with two items explicitly outstanding.**
+**Status: shipped.** Both of the items left outstanding here have since been closed; see the end of this record.
 
 Built:
 
@@ -4517,15 +4519,19 @@ Built:
   EC7Edit 0.1.0": one product under two version schemes made every report
   carry a relationship the reader had to work out.
 
-Outstanding, and not claimed:
+Outstanding when this was written, and since closed:
 
-- **Windows and macOS packages are wired but unbuilt here.** The release
-  workflow freezes the editor on each platform's own runner, and the packager
-  handles the `.exe`/`.zip` cases, but only Linux x64 has actually been built
-  and started. The first Windows release is the test.
-- **The first-time-tester run has not happened.** The exit gate asks for
-  somebody who has not seen the source to complete the core workflow, and no
-  automated check substitutes for that.
+- **The Windows package built and shipped.** It failed on its first attempt --
+  two MSYS path bugs that only exist on that platform, recorded in the commit
+  that fixed them -- and CI has built and started it on every release since.
+  `v1.0-beta268` carries `EC7Edit-1.0-beta268-windows-x64.zip` beside the two
+  Linux builds. **macOS is still wired and unbuilt**; nothing has run there.
+- **Other people have built and installed the release**, reported 2026-09-20.
+  That closes the "somebody who has not seen the source" half of the exit
+  gate for the engine and the installer. What it does not cover is the
+  editor's own core workflow -- making a map, testing it, exporting it -- by
+  somebody who has not seen this document. That remains unevidenced, and is
+  worth the asking whenever an author turns up.
 
 ### E13 — Custom resource packs
 
@@ -4615,7 +4621,7 @@ unchanged.
 
 ### E14 — Custom cinematics
 
-**Dependencies:** E13. **Not started.**
+**Dependencies:** E13.
 
 **The problem.** `C7Flic_Play` takes hard-coded names -- `SEQONE`, `SEQTHREE`,
 `SEQFOUR` -- and reads `<name>.CO7` from a `video/` directory beside the game

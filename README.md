@@ -314,6 +314,7 @@ behavior for other games was preserved wherever possible; these are the deltas.
 | [`docs/renderer/`](docs/renderer/) | The renderer redesign, one document per phase — baseline and harness through the OpenGL cutover, hardening and optimization. |
 | [`docs/corridor7-video.md`](docs/corridor7-video.md) | The CD cinematics: what is on the disc, the FLIC format they are in, and how extraction and playback work. |
 | [`docs/multiplayer.md`](docs/multiplayer.md) | Network play, milestone by milestone: what the original had, what the map archive turned out to contain, what was reconstructed and from what evidence, and every wrong turn taken on the way. |
+| [`docs/undefined-behaviour.md`](docs/undefined-behaviour.md) | The 138 UndefinedBehaviorSanitizer findings inherited from ECWolf and ZDoom: what each class of them is, which six are ordinary bugs worth fixing, and the staged plan for the rest. |
 | [`docs/android.md`](docs/android.md) | The Android port: every milestone, what each one cost, the measurements behind the performance defaults, and the traps — from the touch overlay's four silent failures to a file picker that ignores injected input. |
 | [`docs/ci.md`](docs/ci.md) | The gate suite and what CI can and cannot run. |
 

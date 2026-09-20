@@ -37,7 +37,12 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 command -v Xvfb >/dev/null 2>&1 || { printf 'SKIP: Xvfb is missing\n'; exit 0; }
 [ -x "$build_dir/ec7wolf" ] || { printf 'SKIP: no ec7wolf in %s\n' "$build_dir"; exit 0; }
 
-tics=${TICS:-140}
+# Long enough that one hiccup does not set the score. At 140 tics a single
+# retransmit was a measurable share of the run, and the delayed figure moved
+# between 19 and 23 tics a second on an unchanged binary -- which straddles
+# the threshold, and reaches the same numbers a real regression produced.
+# Tripling the work shrinks that spread without changing what is measured.
+tics=${TICS:-420}
 one_way=${ONE_WAY_MS:-40}      # 80ms round trip
 loss=${LOSS:-2}                # percent
 
@@ -140,16 +145,17 @@ printf 'a %sms round trip with %s%% loss, %s tics each way\n' \
 # -- so the gate passed or failed on which sample it happened to keep. Noise
 # here only ever makes a run slower, so the fastest completed run of each kind
 # is the honest one, and both kinds are measured the same way.
-best_rate() {  # best_rate TAG DELAY MONITOR_CLIENT ATTEMPTS
+best_rate() {  # best_rate TAG DELAY MONITOR_CLIENT ATTEMPTS [GOOD_RUNS_WANTED]
 	_tag=$1; _delay=$2; _monitor=$3; _tries=$4
 	_best=0
 	_good=0
+	_want=${5:-2}
 	_try=1
 	# Two completed runs are enough to have a best worth keeping; a third
 	# would only pay the stall cost again. A stall takes twenty-six seconds
 	# against six for a run that works, so stopping early is most of this
 	# gate's wall clock.
-	while [ "$_try" -le "$_tries" ] && [ "$_good" -lt 2 ]; do
+	while [ "$_try" -le "$_tries" ] && [ "$_good" -lt "$_want" ]; do
 		match "$_tag" "$_delay" "$_monitor"
 		_host=$(cat "$work/$_tag.tics")
 		_client=$(cat "$work/$_tag.client-tics")
@@ -183,8 +189,11 @@ best_rate() {  # best_rate TAG DELAY MONITOR_CLIENT ATTEMPTS
 	[ "$_best" -gt 0 ]
 }
 
-best_rate delayed 8 0 4 || true
-best_rate immediate 0 1 2 || true
+# Three good runs for the delayed case and two for the immediate one: the
+# delayed case is the noisy one, because it is the one the link's stalls and
+# retransmits land in.
+best_rate delayed 8 0 6 3 || true
+best_rate immediate 0 1 3 2 || true
 
 status=0
 
@@ -222,12 +231,24 @@ else
 	fi
 fi
 
-# 2. And it has to be worth having. The effect measured while writing this was
-#    8.6 -> 21.4 tics/sec; requiring only 1.5x leaves room for a busy machine
-#    without letting a regression through.
+# 2. And it has to be worth having.
+#
+#    Measured over 420-tic runs on this machine: 37 to 41 tics a second with
+#    the delay, and 18 without it on every single run -- a ratio between 2.05
+#    and 2.3, and the immediate figure barely moves at all.
+#
+#    The bound is 1.8, not the 1.5 it was. 1.5 was set when the runs were 140
+#    tics, where a fixed three-second startup was most of what was being
+#    timed: the delayed figure then wandered between 19 and 23 and the
+#    immediate one between 12 and 14, so the ratio drifted across the bound
+#    and the gate failed about one full suite in three for no reason at all.
+#    Worse, the noise reached the same numbers a real regression had produced
+#    -- 19 against 14 -- which meant the gate could not have told the two
+#    apart. Longer runs measure the thing itself rather than the startup, and
+#    a bound with real margin under the measurement can fail for a reason.
 delayed=$(cat "$work/delayed.rate")
 immediate=$(cat "$work/immediate.rate")
-if [ "$immediate" -gt 0 ] && [ $((delayed * 10)) -lt $((immediate * 15)) ]; then
+if [ "$immediate" -gt 0 ] && [ $((delayed * 10)) -lt $((immediate * 18)) ]; then
 	printf '\nFAIL: input delay bought almost nothing (%s vs %s tics/sec).\n' \
 		"$delayed" "$immediate"
 	printf '      It should be several times faster; the round trip is\n'

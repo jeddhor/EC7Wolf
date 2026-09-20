@@ -1233,8 +1233,11 @@ in. **Connection** chooses the window:
 | Poor | 16 tics | A long way, or a bad line |
 
 More delay costs responsiveness and buys tolerance. Measured over a link with
-an 80 ms round trip and 2% packet loss, a match runs at about 8 tics a second
-with no delay and about 21 with it.
+an 80 ms round trip and 2% packet loss, a match runs at about 18 tics a second
+with no delay and about 38 with it — roughly twice the speed, measured over
+420-tic runs. (An earlier note here said 8 against 21. That came from runs
+short enough that a fixed three-second startup was most of what was being
+timed; the ratio was about right, the absolute figures were not.)
 
 ### Marine or alien
 

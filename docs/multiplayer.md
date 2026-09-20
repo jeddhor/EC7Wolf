@@ -145,6 +145,14 @@ round trip and 2% loss — still in sync and still running at full tic rate.
 | --- | --- | --- |
 | loopback | 22.4 | 22.1 |
 | 80 ms round trip | **8.6** | **21.4** |
+
+Re-measured later over 420-tic runs rather than 140: **18** without the delay
+and **37 to 41** with it, on six consecutive runs where the no-delay figure
+came out 18 every time. The ratio is the same claim; the earlier absolute
+numbers were depressed by a fixed three-second startup that a short run spends
+most of its time in. `tools/test_multiplayer_latency.sh` measures the longer
+runs now, takes the best of several, and holds the ratio to 1.8 -- see the
+note in the gate about why 1.5 could not tell noise from a regression.
 | 150 ms round trip | — | 20.8 |
 
 TICRATE is 70; the ceiling of about 22 is what this headless test environment

@@ -72,10 +72,23 @@ actor C7ProbeEye : C7Monster
 			PROB A -1 NOP A_Look
 			stop
 		Path:
-			PROB ABCD 7 NOP A_Chase
+			// CORR7CD.EXE 39ac:0012..006c: raised A is idle only.
+			// Preserve the short thinker-free dwells on B and D as well.
+			PROB B 10 NOP A_Chase
+			PROB B 2.5
+			PROB C 7.5 NOP A_Chase
+			PROB D 10 NOP A_Chase
+			PROB D 2.5
+			PROB E 7.5 NOP A_Chase
 			loop
 		See:
-			PROB ABCD 5 NOP A_Chase
+			// 39ac:00ea..0144, in native 70Hz ticks: 10,3,8,10,3,8.
+			PROB B 5 NOP A_Chase
+			PROB B 1.5
+			PROB C 4 NOP A_Chase
+			PROB D 5 NOP A_Chase
+			PROB D 1.5
+			PROB E 4 NOP A_Chase
 			loop
 		Missile:
 			C286 A 3 A_FaceTarget

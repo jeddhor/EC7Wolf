@@ -415,14 +415,19 @@ namespace
 		{
 			if(!(iter->flags & FL_ISMONSTER) || iter->health <= 0)
 				continue;
-			fprintf(g_actorFile, "%lu %s %d %d %d %d %d %d\n",
+			char sprite[5] = "----";
+			if(iter->state)
+				memcpy(sprite, iter->state->sprite, 4);
+			fprintf(g_actorFile, "%lu %s %d %d %d %d %d %d %s %c %d\n",
 				(unsigned long)g_ticCount,
 				iter->GetClass()->GetName().GetChars(),
 				iter->tilex, iter->tiley,
 				(int)iter->dir,
 				(iter->flags & FL_PATHING) ? 1 : 0,
 				(iter->flags & FL_ATTACKMODE) ? 1 : 0,
-				iter->health);
+				iter->health, sprite,
+				iter->state ? 'A'+iter->state->frame : '-',
+				iter->state ? iter->state->duration : 0);
 		}
 	}
 
@@ -1180,7 +1185,7 @@ void ParseArgs(int argc, char **argv)
 			Printf("Capture: FAILED to open actor trace '%s'\n",
 				g_actorPath.GetChars());
 		else
-			fprintf(g_actorFile, "# tic class tilex tiley dir pathing attack health\n");
+			fprintf(g_actorFile, "# tic class tilex tiley dir pathing attack health sprite frame duration\n");
 	}
 
 #ifdef ECWOLF_RENDERER_OPENGL

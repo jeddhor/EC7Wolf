@@ -597,10 +597,9 @@ if "C750" in weapon_blocks["C7Bayonet"]:
 # The sway table still gates on a ready frame; C7ApplyWalkPose returns early for
 # anything else rather than nesting the body in an if(readyFrame) block.
 require(r'0,\s*1,\s*2,\s*3,\s*4,\s*3,\s*2,\s*1,\s*0,\s*-1,\s*-2,\s*-3,\s*-4,\s*-3,\s*-2,\s*-1.*?if\(!readyFrame\)\s*\n\s*return;.*?xoffset\s*\+=\s*corridor7X\[phase\]', WL_DRAW, "released 16-step Corridor 7 stationary-frame weapon bob")
-require(r'readyBase\+\(\(phase&4\)\s*\?\s*4\s*:\s*7\).*?spriteOverride\s*=\s*R_GetSprite',
-        WL_DRAW, "weapon bob alternates only the moving and stationary pages")
-if "corridor7Poses" in WL_DRAW:
-    raise SystemExit("Corridor 7 definition check failed: weapon bob must not insert intermediate pose pages")
+require(r'7,\s*7,\s*6,\s*5,\s*4,\s*5,\s*6,\s*7,\s*7,\s*7,\s*6,\s*5,\s*4,\s*5,\s*6,\s*7.*?'
+        r'readyBase\+corridor7Pose\[phase\].*?spriteOverride\s*=\s*R_GetSprite',
+        WL_DRAW, "weapon walk poses follow CORR7CD.EXE's complete four-pose cycle")
 if "corridor7Frame" in WL_DRAW:
     raise SystemExit("Corridor 7 definition check failed: weapon bob must not copy live Frames")
 require(r'C7CycleSpriteColor.*?color\s*>=\s*208\s*&&\s*color\s*<=\s*239.*?'

@@ -14,6 +14,7 @@
 #include <math.h>
 
 #include "r_capture.h"
+#include "r_sprites.h"
 #include "wl_def.h"
 #include "g_session.h"
 #include "g_command.h"
@@ -257,6 +258,8 @@ namespace
 	// says nothing about whether an alien patrolled, backed off, or stood still
 	// for 500 tics -- so the AI work is measured from this rather than by eye.
 	FString  g_actorPath;
+	FString  g_viewModelPath;
+	FILE    *g_viewModelFile = NULL;
 	// --capture-players PATH: trace each player's pawn each tic. Deliberately
 	// a second file rather than more rows in the actor trace, whose readers
 	// take every row to be one monster and the population to be stable.
@@ -623,6 +626,12 @@ namespace
 			g_playerFile = NULL;
 		}
 
+		if(g_viewModelFile != NULL)
+		{
+			fclose(g_viewModelFile);
+			g_viewModelFile = NULL;
+		}
+
 		if(g_actorFile != NULL)
 		{
 			fclose(g_actorFile);
@@ -767,6 +776,11 @@ void ParseArgs(int argc, char **argv)
 		else if(strcmp(arg, "--capture-players") == 0 && i + 1 < argc)
 		{
 			g_playerPath = argv[++i];
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-viewmodel") == 0 && i + 1 < argc)
+		{
+			g_viewModelPath = argv[++i];
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-actors") == 0 && i + 1 < argc)
@@ -1176,6 +1190,14 @@ void ParseArgs(int argc, char **argv)
 				g_playerPath.GetChars());
 		else
 			fprintf(g_playerFile, "# tic player tilex tiley angle health frags team teamfrags class x y\n");
+	}
+
+	if(g_armed && !g_viewModelPath.IsEmpty())
+	{
+		g_viewModelFile = fopen(g_viewModelPath.GetChars(), "w");
+		if(g_viewModelFile == NULL)
+			I_Error("Capture: failed to open viewmodel trace");
+		fprintf(g_viewModelFile, "# tic time texture x y\n");
 	}
 
 	if(g_armed && !g_actorPath.IsEmpty())
@@ -2316,6 +2338,15 @@ void PostFrame()
 
 	WriteSpriteBanks();
 	++g_frameCount;
+	if(g_viewModelFile != NULL && map != NULL && players[ConsolePlayer].mo != NULL)
+	{
+		ViewModelSprite sprites[player_t::NUM_PSPRITES];
+		const unsigned int count = R_GetViewModelSprites(sprites, player_t::NUM_PSPRITES);
+		for(unsigned int i = 0; i < count; ++i)
+			fprintf(g_viewModelFile, "%lu %d %s %d %d\n",
+				(unsigned long)g_ticCount, gamestate.TimeCount,
+				sprites[i].tex->Name.GetChars(), sprites[i].x, sprites[i].y);
+	}
 
 	// The editor's Snapshot: first frame drawn at or after the chosen tic.
 	// One line of result, then out -- the editor is waiting on the process, and

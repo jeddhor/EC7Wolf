@@ -1201,7 +1201,7 @@ void DrawScaleds (void)
 */
 
 // Corridor 7's ready weapons carry a walk cycle: the gun sways side to side and
-// alternates between two poses while the player moves. It advances once per
+// cycles through four ready poses while the player moves. It advances once per
 // simulation tic and is asked for again by every renderer that needs to place
 // the sprite, so re-entry inside one tic is a no-op by construction.
 static void C7ApplyWalkPose(const Frame *frame, fixed &xoffset,
@@ -1210,6 +1210,11 @@ static void C7ApplyWalkPose(const Frame *frame, fixed &xoffset,
 	static const int corridor7Bases[] = { 746, 786, 754, 762, 770, 778, 794, 802 };
 	static const int corridor7X[16] =
 		{ 0, 1, 2, 3, 4, 3, 2, 1, 0, -1, -2, -3, -4, -3, -2, -1 };
+	// CORR7CD.EXE data 4557:2c3e, used by renderer 1cb7:0e81. These
+	// four ready poses provide vertical motion in their artwork; the shotgun
+	// is drawn nearly level across them. Skipping 5/6 removed the U-shaped bob.
+	static const int corridor7Pose[16] =
+		{ 7, 7, 6, 5, 4, 5, 6, 7, 7, 7, 6, 5, 4, 5, 6, 7 };
 	static int corridor7Phase[MAXPLAYERS] = { 0 };
 	static int corridor7LastTime[MAXPLAYERS] = { 0 };
 
@@ -1232,9 +1237,19 @@ static void C7ApplyWalkPose(const Frame *frame, fixed &xoffset,
 	}
 	if(!readyFrame)
 		return;
+	if(movebob <= 0 || !(players[ConsolePlayer].flags & player_t::PF_WEAPONBOBBING))
+	{
+		corridor7Phase[ConsolePlayer] = 0;
+		corridor7LastTime[ConsolePlayer] = gamestate.TimeCount;
+		return;
+	}
 
 	if(corridor7LastTime[ConsolePlayer] != gamestate.TimeCount)
 	{
+		const int elapsed = gamestate.TimeCount >= corridor7LastTime[ConsolePlayer] ?
+			gamestate.TimeCount-corridor7LastTime[ConsolePlayer] : 0;
+		if(gamestate.TimeCount < corridor7LastTime[ConsolePlayer])
+			corridor7Phase[ConsolePlayer] = 0;
 		TicCmd_t &cmd = control[ConsolePlayer];
 		if(cmd.controly == 0)
 			corridor7Phase[ConsolePlayer] = 0;
@@ -1244,18 +1259,14 @@ static void C7ApplyWalkPose(const Frame *frame, fixed &xoffset,
 				(!alwaysrun && cmd.buttonstate[bt_run]) ||
 				(alwaysrun && !cmd.buttonstate[bt_run]);
 			corridor7Phase[ConsolePlayer] =
-				(corridor7Phase[ConsolePlayer]+(running ? 2 : 1))&15;
+				(corridor7Phase[ConsolePlayer]+(elapsed&15)*(running ? 2 : 1))&15;
 		}
 		corridor7LastTime[ConsolePlayer] = gamestate.TimeCount;
 	}
 	const int phase = corridor7Phase[ConsolePlayer]&15;
-	// Each eight-page weapon family has four firing pages, one moving pose at
-	// base+4, two unused transition pages, and its stationary pose at base+7.
-	// Alternate only the two actual movement poses; indexing through base+5/6
-	// makes the gun visibly stutter.
-	xoffset += corridor7X[phase]<<FRACBITS;
+	xoffset += corridor7X[phase]*FRACUNIT;
 	char poseName[5];
-	mysnprintf(poseName, sizeof(poseName), "C%03d", readyBase+((phase&4) ? 4 : 7));
+	mysnprintf(poseName, sizeof(poseName), "C%03d", readyBase+corridor7Pose[phase]);
 	spriteOverride = R_GetSprite(poseName);
 }
 

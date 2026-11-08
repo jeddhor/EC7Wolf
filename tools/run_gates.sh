@@ -110,6 +110,7 @@ corridor7_upscale
 corridor7_controls
 controls_binding
 mouse_sensitivity
+corridor7_animated_doors
 ui_buttons
 bot_footwork
 bot_budget

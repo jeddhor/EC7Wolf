@@ -169,7 +169,7 @@ bool ProjectileTryMove (AActor *ob)
 			{
 				for(unsigned short i = 0;i < 4;++i)
 				{
-					if(check->slideAmount[i] != 0xFFFF && checkLines[i])
+					if(check->sideSolid[i] && check->slideAmount[i] != 0xFFFF && checkLines[i])
 						return false;
 				}
 			}

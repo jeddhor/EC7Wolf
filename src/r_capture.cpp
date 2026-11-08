@@ -2218,13 +2218,14 @@ static void TraceVerbs()
 	player_t &player = players[ConsolePlayer];
 	AActor *pawn = player.mo;
 
-	int visor = 0, charge = 0, mines = 0, ammo = 0, health = 0;
+	int visor = 0, charge = 0, mines = 0, ammo = 0, health = 0, plan = 0;
 	if(pawn)
 	{
 		if(AInventory *mode = pawn->FindInventory(ClassDef::FindClass("C7VisorMode")))
 			visor = mode->amount;
 		if(AInventory *battery = pawn->FindInventory(ClassDef::FindClass("C7VisorCharge")))
 			charge = battery->amount;
+		plan = pawn->FindInventory(ClassDef::FindClass("C7FloorPlan")) ? 1 : 0;
 		if(AInventory *m = pawn->FindInventory(ClassDef::FindClass("C7Mines")))
 			mines = m->amount;
 		health = player.health;
@@ -2238,17 +2239,18 @@ static void TraceVerbs()
 	const int y = pawn ? (int)(pawn->y >> 10) : 0;
 
 	static bool first = true;
-	static int lastVisor, lastCharge, lastMines, lastAmmo, lastHealth, lastMap, lastAngle, lastX, lastY;
+	static int lastVisor, lastCharge, lastMines, lastAmmo, lastHealth, lastMap, lastAngle, lastX, lastY, lastPlan;
 	if(first || visor != lastVisor || mines != lastMines || ammo != lastAmmo ||
 		health != lastHealth || map != lastMap || angle != lastAngle ||
-		x != lastX || y != lastY || charge != lastCharge)
+		x != lastX || y != lastY || charge != lastCharge || plan != lastPlan)
 	{
-		Printf("verbs tic=%lu visor=%d mines=%d map=%d ammo=%d health=%d x=%d y=%d angle=%d charge=%d\n",
-			(unsigned long)g_ticCount, visor, mines, map, ammo, health, x, y, angle, charge);
+		Printf("verbs tic=%lu visor=%d mines=%d map=%d ammo=%d health=%d x=%d y=%d angle=%d charge=%d plan=%d fullmap=%d\n",
+			(unsigned long)g_ticCount, visor, mines, map, ammo, health, x, y, angle, charge, plan, gamestate.fullmap ? 1 : 0);
 		first = false;
 		lastVisor = visor; lastMines = mines; lastAmmo = ammo; lastHealth = health;
 		lastMap = map; lastAngle = angle; lastX = x; lastY = y;
 		lastCharge = charge;
+		lastPlan = plan;
 	}
 }
 

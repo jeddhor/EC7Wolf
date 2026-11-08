@@ -623,6 +623,10 @@ bool Load(const FString &filename)
 	}
 
 	FRandom::StaticReadRNGState(png);
+	// Quickload stays in the play loop. Repair the missing low-rank map token
+	// in older saves here as well as at ordinary level entry.
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
+		C7GiveDifficultyFloorPlan(players[i].mo);
 	// It is apparently possible to load a game at just the right time and end
 	// up in the wrong play state.
 	playstate = ex_stillplaying;

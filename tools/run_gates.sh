@@ -112,6 +112,7 @@ controls_binding
 mouse_sensitivity
 corridor7_animated_doors
 corridor7_visor_station
+corridor7_rank_maps
 ui_buttons
 bot_footwork
 bot_budget

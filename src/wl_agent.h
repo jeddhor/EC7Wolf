@@ -19,6 +19,7 @@ extern  AActor   *LastAttacker;
 
 void    CheckSpawnPlayer (bool setup=false);
 void    SpawnPlayer (int num);
+void    C7GiveDifficultyFloorPlan(AActor *pawn);
 
 //
 // Status bar interface

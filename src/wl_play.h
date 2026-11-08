@@ -33,7 +33,7 @@ extern unsigned short Paused;
 //
 struct TicCmd_t
 {
-	int controlx,controly, controlstrafe; // range from -100 to 100
+	int controlx,controly, controlstrafe; // yaw: Command::TURN_*, movement: ±100
 	int controlpanx, controlpany;
 	BYTE buttonstate[NUMBUTTONS], ambuttonstate[NUMAMBUTTONS];
 	BYTE buttonheld[NUMBUTTONS], ambuttonheld[NUMAMBUTTONS];
@@ -63,6 +63,7 @@ void    FinishPaletteShifts (void);
 
 void    CheckKeys();
 void    PollControls (bool);
+void    ApplyMouseMovement(TicCmd_t &cmd, int dx, int dy);
 int     StopMusic(void);
 void    StartMusic(void);
 void    ContinueMusic(int offs);

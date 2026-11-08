@@ -40,11 +40,11 @@ struct TicCmd_t;
 
 namespace Command {
 
-// The canonical axis range. PollControls already produces values in it, and
-// ControlMovement reads walk or run out of the magnitude, so a producer that
-// exceeds it is not "fast" -- it is outside the range the game was balanced
-// and tested in. Clamped rather than rejected, and the clamp is counted.
+// Movement is a speed; turning includes relative mouse displacement. Giving
+// both the movement ceiling discarded fast mouse sweeps (issue #1). Keep an
+// explicit, generous turn bound for untrusted commands and arithmetic safety.
 enum { AXIS_MIN = -100, AXIS_MAX = 100 };
+enum { TURN_MIN = -32767, TURN_MAX = 32767 };
 
 // What a producer says it wants. Deliberately not a TicCmd_t: there is no
 // pan/pitch here (multiplayer has no canonical representation for it, see

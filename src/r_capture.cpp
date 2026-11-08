@@ -162,6 +162,12 @@ namespace
 	TArray<PressWindow> g_forwardWindows;
 	TArray<PressWindow> g_turnWindows;
 	TArray<PressWindow> g_useWindows;
+	struct MouseWindow
+	{
+		long from, tics;
+		int dx, dy;
+	};
+	TArray<MouseWindow> g_mouseWindows;
 
 	// --capture-place TIC X Y [ANGLE]: put the player at one exact spot, once.
 	// Unlike --capture-warp, which pins them there every tic, this is a single
@@ -837,6 +843,16 @@ void ParseArgs(int argc, char **argv)
 		else if(strcmp(arg, "--capture-tape") == 0 && i + 1 < argc)
 		{
 			g_tapes.Push(argv[++i]);
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-mouse") == 0 && i + 4 < argc)
+		{
+			MouseWindow w;
+			w.from = atol(argv[++i]);
+			w.tics = atol(argv[++i]);
+			w.dx = atoi(argv[++i]);
+			w.dy = atoi(argv[++i]);
+			g_mouseWindows.Push(w);
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-commands") == 0 && i + 1 < argc)
@@ -1719,6 +1735,12 @@ void NoteUiAction(UiAction what)
 
 void InjectControls(TicCmd_t &cmd)
 {
+	for(unsigned int i = 0; i < g_mouseWindows.Size(); ++i)
+	{
+		const MouseWindow &w = g_mouseWindows[i];
+		if(gamestate.TimeCount >= w.from && gamestate.TimeCount < w.from + w.tics)
+			ApplyMouseMovement(cmd, w.dx, w.dy);
+	}
 	if(g_holdScoreboard)
 		cmd.buttonstate[bt_scoreboard] = true;
 

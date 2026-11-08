@@ -109,6 +109,7 @@ corridor7_topmessage
 corridor7_upscale
 corridor7_controls
 controls_binding
+mouse_sensitivity
 ui_buttons
 bot_footwork
 bot_budget

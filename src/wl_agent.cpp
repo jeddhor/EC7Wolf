@@ -193,7 +193,7 @@ void ControlMovement (APlayerPawn *ob)
 		//
 		// not strafing
 		//
-		ob->angle -= controlx*(ANGLE_1/ANGLESCALE);
+		ob->angle -= angle_t(int64_t(controlx)*(ANGLE_1/ANGLESCALE));
 	}
 
 	if(strafe)

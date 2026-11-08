@@ -175,7 +175,7 @@ printf '\nA producer that asks for things it may not have\n'
 cat > "$work/bad.tape" <<'EOF'
 # Axes far outside the human range, and buttons belonging to this machine's
 # own screen rather than to the game.
-500 -900 400 attack esc pause automap c7map statusbar scoreboard
+2147483647 -900 400 attack esc pause automap c7map statusbar scoreboard
 repeat 100
 loop
 EOF
@@ -198,8 +198,8 @@ strafe=$(printf '%s' "$line" | awk '{print $5}')
 pressed=$(printf '%s' "$line" | awk '{print $6}')
 printf '  ..   the slot received turn %s forward %s strafe %s buttons %s\n' \
 	"$turn" "$fwd" "$strafe" "$pressed"
-check "every axis is inside the range the game was balanced for" \
-	test "$turn" -le 100 -a "$turn" -ge -100 \
+check "turning is bounded separately from movement" \
+	test "$turn" -eq 32767 \
 		-a "$fwd" -le 100 -a "$fwd" -ge -100 \
 		-a "$strafe" -le 100 -a "$strafe" -ge -100
 # bt_attack is bit 0 and is the only one that should have survived.

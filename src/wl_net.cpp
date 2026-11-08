@@ -78,7 +78,7 @@
 // version mismatch and is far harder to diagnose than a refusal. Bump this
 // whenever a packet's layout or meaning changes -- including the day the
 // canonical command frame grows a slot number.
-#define NET_PROTOCOL_VERSION 6
+#define NET_PROTOCOL_VERSION 7
 // Present in the first datagram of every connection. A request used to be one
 // lone zero byte, so any stray packet arriving on the port was a new player.
 static const BYTE NetMagic[3] = { 'E', '7', 'N' };

@@ -247,7 +247,7 @@ for wall_id, result_id, kind in ((9, 10, 1), (11, 12, 2), (30, 31, 3)):
 require(r'FUNC\(C7_WallSwitch\).*?C7Static001.*?C7Static002.*?GiveInventory.*?P_AlertCorridor7Monsters', LNSPEC, "Corridor 7 terminals grant access cards or raise the intruder alert")
 require(r'RED Access Granted.*?BLUE Access Granted', LNSPEC, "access terminals display their released grant messages")
 require(r'Lock\s+1\s+Corridor7.*?BLUE Access Required.*?Lock\s+2\s+Corridor7.*?RED Access Required', LOCKDEFS, "locked doors display their released access requirements")
-for wall_id, kind in ((85, 1), (88, 1), (111, 2), (110, 3)):
+for wall_id, kind in ((85, 1), (88, 1), (111, 2), (93, 3)):
     require(
         rf'trigger\s+{wall_id}\s*\{{.*?action\s*=\s*"C7_Dispenser".*?arg0\s*=\s*{kind}.*?playeruse\s*=\s*true.*?repeatable\s*=\s*true',
         XLAT,
@@ -259,8 +259,10 @@ require(r'FUNC\(C7_Dispenser\).*?C7MedicPack.*?GiveInventory.*?SetC7WallTexture\
 # That grouping is what identifies all five as wall-unit text: the floor
 # pickups live in their own block at 0x3ADDA. This check used to assert
 # "VISOR BATTERY RECHARGED", which was ours and not the game's.
-require(r'args\[0\]\s*==\s*3.*?C7VisorCharge.*?FULL VISOR CHARGE.*?visor->amount\s*=\s*visor->maxamount.*?"Visor Battery"',
-        LNSPEC, "wall 110 is a non-wasteful reusable visor charger")
+require(r'args\[0\]\s*==\s*3.*?C7WallTexture\(93\).*?C7VisorCharge.*?visor->amount\s*=.*?\+\s*100.*?SetC7WallTexture\(spot,\s*94\).*?"Visor Battery"',
+        LNSPEC, "wall 93 adds one visor battery and becomes spent wall 94")
+forbid(r'trigger\s+110\s*\{.*?C7_Dispenser', XLAT,
+       "numbered panel wall 110 is not a battery dispenser")
 require(r'FULL HEALTH.*?return\s+false', INVENTORY,
         "health packs remain in the world when the player is full")
 require(r'amount\s*<\s*maxamount.*?else.*?FULL AMMO.*?return\s+true', INVENTORY,
@@ -663,7 +665,7 @@ require(r'action\s+native\s+A_C7AlienAlarm', NATIVE_ACTORS,
         "the Ailoprobe alarm action is registered")
 require(r'P_AlertCorridor7MonstersNear.*?12\*TILEGLOBAL', WL_AGENT,
 		"ordinary alien alarms wake a local group instead of the whole floor")
-require(r'TileBlocksSight.*?CheckGameFilter\("Corridor7"\).*?return\s+true.*?'
+require(r'TileBlocksSight.*?CheckGameFilter\("Corridor7"\).*?return\s+spot->corridor7WallMarker\s*!=\s*107.*?'
 		r'else if \(TileBlocksSight\(spot\)\)', WL_STATE,
 		"Corridor 7 glass remains opaque to alien line-of-sight")
 require(r'C7VisorCanSeeActor.*?C7Eniram.*?infrared',

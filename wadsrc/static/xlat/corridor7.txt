@@ -52,7 +52,7 @@ tiles
 		playeruse = true;
 		repeatable = true;
 	}
-	trigger 110
+	trigger 93
 	{
 		action = "C7_Dispenser";
 		arg0 = 3;

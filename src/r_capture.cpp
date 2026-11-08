@@ -28,6 +28,7 @@
 #include "actor.h"
 #include "wl_agent.h"
 #include "wl_game.h"
+#include "wl_loadsave.h"
 #include "m_random.h"
 #include "m_crc32.h"
 #include "m_png.h"
@@ -81,6 +82,8 @@ namespace
 
 	int      g_maxFrames      = -1;      // quit after this many rendered frames
 	int      g_maxTics        = -1;      // quit after this many simulation tics
+	long     g_saveTic = -1, g_loadTic = -1;
+	FString  g_savePath, g_loadPath;
 
 	bool     g_haveOpenDoors  = false;   // --capture-open-doors world override
 	int      g_openDoors      = 0;       // forced slide amount 0..65535
@@ -843,6 +846,15 @@ void ParseArgs(int argc, char **argv)
 		else if(strcmp(arg, "--capture-tape") == 0 && i + 1 < argc)
 		{
 			g_tapes.Push(argv[++i]);
+			g_armed = true;
+		}
+		else if((strcmp(arg, "--capture-save") == 0 || strcmp(arg, "--capture-load") == 0) && i + 2 < argc)
+		{
+			const bool saving = strcmp(arg, "--capture-save") == 0;
+			const long tic = atol(argv[++i]);
+			const char *path = argv[++i];
+			if(saving) { g_saveTic = tic; g_savePath = path; }
+			else { g_loadTic = tic; g_loadPath = path; }
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-mouse") == 0 && i + 4 < argc)
@@ -1778,6 +1790,23 @@ void PreTic()
 {
 	if(!g_armed || map == NULL)
 		return;
+	if(g_saveTic >= 0 && g_ticCount >= (uint64_t)g_saveTic && Session::AllowsSaving())
+	{
+		g_saveTic = -1;
+		if(!GameSave::Save(g_savePath, "Regression snapshot"))
+			I_Error("Capture: save failed");
+		Printf("Capture: saved snapshot %s\n", g_savePath.GetChars());
+	}
+	if(g_loadTic >= 0 && g_ticCount >= (uint64_t)g_loadTic && Session::AllowsSaving())
+	{
+		g_loadTic = -1;
+		loadedgame = true;
+		const bool ok = GameSave::Load(g_loadPath);
+		loadedgame = false;
+		if(!ok)
+			I_Error("Capture: load failed");
+		Printf("Capture: loaded snapshot %s\n", g_loadPath.GetChars());
+	}
 
 	// Once, on the first tic the map exists: the answer is about the map's
 	// static geometry, and writing it every tic would say the same thing four
@@ -2189,11 +2218,13 @@ static void TraceVerbs()
 	player_t &player = players[ConsolePlayer];
 	AActor *pawn = player.mo;
 
-	int visor = 0, mines = 0, ammo = 0, health = 0;
+	int visor = 0, charge = 0, mines = 0, ammo = 0, health = 0;
 	if(pawn)
 	{
 		if(AInventory *mode = pawn->FindInventory(ClassDef::FindClass("C7VisorMode")))
 			visor = mode->amount;
+		if(AInventory *battery = pawn->FindInventory(ClassDef::FindClass("C7VisorCharge")))
+			charge = battery->amount;
 		if(AInventory *m = pawn->FindInventory(ClassDef::FindClass("C7Mines")))
 			mines = m->amount;
 		health = player.health;
@@ -2207,16 +2238,17 @@ static void TraceVerbs()
 	const int y = pawn ? (int)(pawn->y >> 10) : 0;
 
 	static bool first = true;
-	static int lastVisor, lastMines, lastAmmo, lastHealth, lastMap, lastAngle, lastX, lastY;
+	static int lastVisor, lastCharge, lastMines, lastAmmo, lastHealth, lastMap, lastAngle, lastX, lastY;
 	if(first || visor != lastVisor || mines != lastMines || ammo != lastAmmo ||
 		health != lastHealth || map != lastMap || angle != lastAngle ||
-		x != lastX || y != lastY)
+		x != lastX || y != lastY || charge != lastCharge)
 	{
-		Printf("verbs tic=%lu visor=%d mines=%d map=%d ammo=%d health=%d x=%d y=%d angle=%d\n",
-			(unsigned long)g_ticCount, visor, mines, map, ammo, health, x, y, angle);
+		Printf("verbs tic=%lu visor=%d mines=%d map=%d ammo=%d health=%d x=%d y=%d angle=%d charge=%d\n",
+			(unsigned long)g_ticCount, visor, mines, map, ammo, health, x, y, angle, charge);
 		first = false;
 		lastVisor = visor; lastMines = mines; lastAmmo = ammo; lastHealth = health;
 		lastMap = map; lastAngle = angle; lastX = x; lastY = y;
+		lastCharge = charge;
 	}
 }
 

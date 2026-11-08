@@ -402,7 +402,8 @@ Append an output directory and `--all` to load-check every map in the archive.
   transporters. Audible projectiles, alien energy regeneration/capacity,
   persistent mines, and the level-30/40 exit-vortex behavior are retained.
 - Stateful access/alarm computers, health and ammunition dispensers, the
-  reusable visor charger, and health chambers that turn the player toward the
+  single-use visor battery station (wall 93 becomes 94, adding 100 charge),
+  and health chambers that turn the player toward the
   exit, immediately show their green-to-red meter, close the chamber door,
   heal from a persistent 100-point reservoir, and retain any unused charge.
   The remaining-power gradient fills the complete 42x5 recessed well in the

@@ -467,14 +467,15 @@
       "name": "BLUE access terminal",
       "subcategory": "terminal"
     },
-    "0:110": {
+    "0:93": {
       "aliases": [
-        "energy",
+        "visor",
         "dispenser",
         "charge"
       ],
-      "description": "Dispenses alien-weapon energy on use.",
-      "name": "Energy dispenser"
+      "description": "Adds 100 visor charge once, then becomes spent wall 94.",
+      "evidence": "retail MAP02 (57,54); CORR7CD.EXE wall-use case 93",
+      "name": "Visor battery station"
     },
     "0:111": {
       "aliases": [

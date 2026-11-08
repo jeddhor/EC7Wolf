@@ -439,14 +439,14 @@ PREFABS: tuple[Prefab, ...] = (
     ),
     Prefab(
         key="prefab.dispenser.visor",
-        name="Visor recharger",
-        description="The wall unit that refills the visor. Corridor 7 has no visor "
-                    "battery to pick up; this is how the visor is recharged.",
+        name="Visor battery station",
+        description="The fan-shaped wall unit adds 100 visor charge once, then "
+                    "becomes its spent frame (wall 94).",
         category="specials",
-        writes=(Write(0, 0, 0, 110),),
+        writes=(Write(0, 0, 0, 93),),
         preconditions=(Precondition(0, 0, "reachable", "floor beside it"),),
         erase_to=(Write(0, 0, 0, DEFAULT_FLOOR), Write(1, 0, 0, EMPTY_OBJECT)),
-        evidence="xlat/corridor7.txt tiles trigger 110, C7_Dispenser arg0 = 3",
+        evidence="retail MAP02 (57,54); xlat trigger 93, C7_Dispenser arg0 = 3",
     ),
     _wall_marker(
         "prefab.pushwall.plain-alt", "Moving wall (alternate)", 102,

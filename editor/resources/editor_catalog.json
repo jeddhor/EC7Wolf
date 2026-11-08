@@ -1683,29 +1683,6 @@
     },
     {
       "aliases": [
-        "C7W0092"
-      ],
-      "blocking": true,
-      "category": "walls",
-      "evidence": "xlat/corridor7.txt tile 93",
-      "grade": "A",
-      "key": "wall.093",
-      "minskill": 0,
-      "name": "Wall 093",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 93,
-      "safe_for_new_maps": true,
-      "subcategory": "material",
-      "test_vector": "wall-093",
-      "texture": "C7W0092",
-      "value": 93,
-      "values": [
-        93
-      ]
-    },
-    {
-      "aliases": [
         "C7W0093"
       ],
       "blocking": true,
@@ -2070,6 +2047,29 @@
       "value": 109,
       "values": [
         109
+      ]
+    },
+    {
+      "aliases": [
+        "C7W0109"
+      ],
+      "blocking": true,
+      "category": "walls",
+      "evidence": "xlat/corridor7.txt tile 110",
+      "grade": "A",
+      "key": "wall.110",
+      "minskill": 0,
+      "name": "Wall 110",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 110,
+      "safe_for_new_maps": true,
+      "subcategory": "material",
+      "test_vector": "wall-110",
+      "texture": "C7W0109",
+      "value": 110,
+      "values": [
+        110
       ]
     },
     {
@@ -5126,6 +5126,31 @@
     },
     {
       "aliases": [
+        "visor",
+        "dispenser",
+        "charge",
+        "C7_Dispenser"
+      ],
+      "category": "specials",
+      "description": "Adds 100 visor charge once, then becomes spent wall 94.",
+      "evidence": "xlat/corridor7.txt tiles trigger 93",
+      "grade": "A",
+      "key": "special.0.093",
+      "minskill": 0,
+      "name": "Visor battery station",
+      "placement": "wall",
+      "plane": 0,
+      "rank": 93,
+      "safe_for_new_maps": true,
+      "subcategory": "dispenser",
+      "test_vector": "special-0-093",
+      "value": 93,
+      "values": [
+        93
+      ]
+    },
+    {
+      "aliases": [
         "pushwall",
         "secret",
         "moving wall",
@@ -5220,31 +5245,6 @@
       "value": 106,
       "values": [
         106
-      ]
-    },
-    {
-      "aliases": [
-        "energy",
-        "dispenser",
-        "charge",
-        "C7_Dispenser"
-      ],
-      "category": "specials",
-      "description": "Dispenses alien-weapon energy on use.",
-      "evidence": "xlat/corridor7.txt tiles trigger 110",
-      "grade": "A",
-      "key": "special.0.110",
-      "minskill": 0,
-      "name": "Energy dispenser",
-      "placement": "wall",
-      "plane": 0,
-      "rank": 110,
-      "safe_for_new_maps": true,
-      "subcategory": "dispenser",
-      "test_vector": "special-0-110",
-      "value": 110,
-      "values": [
-        110
       ]
     },
     {

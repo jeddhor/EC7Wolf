@@ -1028,6 +1028,18 @@ FArchive &operator<< (FArchive &arc, GameMap *&gm)
 
 		for(unsigned int i = 0;i < gm->GetHeader().width*gm->GetHeader().height;++i)
 		{
+			// Saves contain triggers and would otherwise retain beta273's
+			// misplaced charger on 110 while erasing the corrected one on 93.
+			// Retain the current map's authored trigger as the migration template;
+			// texture/state still comes from the save, so a spent unit stays spent.
+			const bool repairVisor = !arc.IsStoring() && IWad::CheckGameFilter("Corridor7") &&
+				(plane.map[i].corridor7WallID == 93 || plane.map[i].corridor7WallID == 110);
+			TArray<MapTrigger> visorTriggers;
+			if(repairVisor)
+				for(unsigned int t = 0;t < plane.map[i].triggers.Size();++t)
+					if(plane.map[i].triggers[t].action == Specials::C7_Dispenser &&
+						plane.map[i].triggers[t].arg[0] == 3)
+						visorTriggers.Push(plane.map[i].triggers[t]);
 			BYTE pushdir = plane.map[i].pushDirection;
 			arc << pushdir;
 			plane.map[i].pushDirection = static_cast<MapTile::Side>(pushdir);
@@ -1081,6 +1093,27 @@ FArchive &operator<< (FArchive &arc, GameMap *&gm)
 
 			if(!arc.IsStoring())
 				plane.map[i].plane = &plane;
+			if(repairVisor)
+			{
+				bool found = false;
+				for(unsigned int t = 0;t < plane.map[i].triggers.Size();)
+				{
+					const MapTrigger &trig = plane.map[i].triggers[t];
+					if(trig.action == Specials::C7_Dispenser && trig.arg[0] == 3)
+					{
+						if(visorTriggers.Size() == 0)
+						{
+							plane.map[i].triggers.Delete(t);
+							continue;
+						}
+						found = true;
+					}
+					++t;
+				}
+				if(!found)
+					for(unsigned int t = 0;t < visorTriggers.Size();++t)
+						plane.map[i].triggers.Push(visorTriggers[t]);
+			}
 		}
 	}
 

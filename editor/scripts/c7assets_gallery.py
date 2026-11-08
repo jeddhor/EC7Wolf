@@ -128,6 +128,8 @@ WEAPON_MANUAL = [
 # Plane-0 (map geometry) semantics, keyed by the raw map word.
 WALL_CODE_NOTES = {
     63: "Player-use normal elevator switch.",
+    93: "Single-use visor battery station; adds 100 charge and becomes wall 94.",
+    94: "Spent visor battery station.",
     105: "Sight-transparent special wall page.",
     107: "Sight-transparent special wall page.",
     251: "Door (axis inferred from map topology).",

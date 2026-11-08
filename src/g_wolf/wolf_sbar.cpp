@@ -660,13 +660,11 @@ void WolfStatusBar::DrawStatusBar()
 			DrawC7Gauge(149, 193,
 				MIN(25U, unsigned(visor ? visor->amount : 0)>>2), 3, 56);
 
-			const char *itemGraphics[3] =
+			const struct { const char *className; const char *graphic; } items[] =
 			{
-				"C7G0019", "C7G0020", "C7G0021"
-			};
-			const char *itemClasses[3] =
-			{
-				"C7Static001", "C7Static002", "C7FloorPlan"
+				{ "C7Static001", "C7G0021" },
+				{ "C7Static002", "C7G0020" },
+				{ "C7FloorPlan", "C7G0019" }
 			};
 			unsigned int slot = 0;
 			for(;slot < 3;++slot)
@@ -674,8 +672,8 @@ void WolfStatusBar::DrawStatusBar()
 			slot = 0;
 			for(unsigned int item = 0;item < 3 && slot < 3;++item)
 			{
-				if(pawn->FindInventory(ClassDef::FindClass(itemClasses[item])))
-					VWB_DrawGraphic(TexMan(itemGraphics[item]), 256+(slot++)*8, 176);
+				if(pawn->FindInventory(ClassDef::FindClass(items[item].className)))
+					VWB_DrawGraphic(TexMan(items[item].graphic), 256+(slot++)*8, 176);
 			}
 		}
 		return;

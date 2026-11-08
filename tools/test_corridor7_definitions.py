@@ -488,7 +488,9 @@ require(r'IWad::CheckGameFilter\("Corridor7"\).*?HIGH SCORES', WL_INTER, "Corrid
 require(r'LevelBonus\s*==\s*-1.*?ForceTally.*?!\(IWad::CheckGameFilter\("Corridor7"\)\s*&&\s*levelInfo->BonusLevel\)', WL_INTER, "bonus floors stay out of forty-floor victory averages")
 require(r'LatchString\(10,\s*16,\s*2.*?LatchNumber\(30,\s*16,\s*7.*?LatchNumber\(296,\s*16,\s*2', WOLF_SBAR, "released HUD number placement")
 require(r'DrawC7Gauge\(97,\s*172,.*?health\s*<\s*32\s*\?\s*80\s*:\s*128\).*?DrawC7Gauge\(97,\s*191,.*?5,\s*56\).*?DrawC7Gauge\(200,\s*172,.*?5,\s*104\).*?DrawC7Gauge\(200,\s*190,.*?5,\s*104\).*?DrawC7Gauge\(149,\s*193,.*?3,\s*56\)', WOLF_SBAR, "released native-index HUD gauge ramps")
-require(r'C7G0019.*?C7G0020.*?C7G0021.*?C7G0018.*?256\+\(slot\+\+\)\*8,\s*176', WOLF_SBAR, "released three-slot HUD item graphics")
+for cls, graphic in (("C7Static001", "C7G0021"), ("C7Static002", "C7G0020"), ("C7FloorPlan", "C7G0019")):
+    require(rf'"{cls}"\s*,\s*"{graphic}"', WOLF_SBAR, f"{cls} uses its released HUD graphic")
+require(r'C7G0018.*?256\+\(slot\+\+\)\*8,\s*176', WOLF_SBAR, "released three-slot HUD item graphics")
 require(r'component\s*<<\s*2.*?component\s*>>\s*4', VSWAP, "Corridor 7 VGA DAC palette expansion")
 require(r'PSPR_CORRIDOR7.*?TopOffset\s*=\s*-54.*?xScale\s*=\s*4\*FRACUNIT/5', WOLF_SHAPE, "native Corridor 7 weapon scale and anchor")
 require(r'actor\s+C7M16.*?Ready:\s*C761\s+A\s+1\s+A_WeaponReady', PLAYER, "M-16 uses its released stationary frame")

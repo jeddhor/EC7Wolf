@@ -61,6 +61,9 @@ FString vid_renderer_requested = "opengl";
 bool vid_gldebug = false;
 bool vid_glprofile = false;
 bool snd_cdmusic = true;
+bool c7_minihud = true;
+bool c7_numeric_hud = false;
+bool c7_enhanced_shotgun = false;
 int vid_glfilter = 0;
 int vid_glmsaa = 0;
 int vid_maxfps = 0;					// 0 = unlimited
@@ -247,6 +250,9 @@ void ReadConfig(void)
 	config.CreateSetting("QuitOnEscape", quitonescape);
 	config.CreateSetting("ControlStyle", controlstyle);
 	config.CreateSetting("MoveBob", FRACUNIT);
+	config.CreateSetting("C7MiniHUD", true);
+	config.CreateSetting("C7NumericHUD", false);
+	config.CreateSetting("C7EnhancedShotgun", false);
 	config.CreateSetting("Gamma", 1.0f);
 	config.CreateSetting("AM_Rotate", 0);
 	config.CreateSetting("AM_DrawTexturedWalls", true);
@@ -366,6 +372,9 @@ void ReadConfig(void)
 		ControlScheme::Style_Classic ?
 		ControlScheme::Style_Classic : ControlScheme::Style_Modern;
 	movebob = config.GetSetting("MoveBob")->GetInteger();
+	c7_minihud = config.GetSetting("C7MiniHUD")->GetInteger() != 0;
+	c7_numeric_hud = config.GetSetting("C7NumericHUD")->GetInteger() != 0;
+	c7_enhanced_shotgun = config.GetSetting("C7EnhancedShotgun")->GetInteger() != 0;
 	screenGamma = static_cast<float>(config.GetSetting("Gamma")->GetFloat());
 	am_rotate = config.GetSetting("AM_Rotate")->GetInteger();
 	am_drawtexturedwalls = config.GetSetting("AM_DrawTexturedWalls")->GetInteger() != 0;
@@ -525,6 +534,9 @@ void WriteConfig(void)
 	config.GetSetting("QuitOnEscape")->SetValue(quitonescape);
 	config.GetSetting("ControlStyle")->SetValue(controlstyle);
 	config.GetSetting("MoveBob")->SetValue(movebob);
+	config.GetSetting("C7MiniHUD")->SetValue(c7_minihud);
+	config.GetSetting("C7NumericHUD")->SetValue(c7_numeric_hud);
+	config.GetSetting("C7EnhancedShotgun")->SetValue(c7_enhanced_shotgun);
 	config.GetSetting("Gamma")->SetValue(screenGamma);
 	config.GetSetting("AM_Rotate")->SetValue(am_rotate);
 	config.GetSetting("AM_DrawTexturedWalls")->SetValue(am_drawtexturedwalls);

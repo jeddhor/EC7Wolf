@@ -20,6 +20,8 @@
 #include "a_keys.h"
 #include "wl_iwad.h"
 #include "wl_net.h"
+#include "c_cvars.h"
+#include "g_command.h"
 
 /*
 =============================================================================
@@ -613,6 +615,76 @@ void WolfStatusBar::RefreshBackground(bool noborder)
 	VWB_DrawGraphic(TexMan("STBACK"), 0, 160);
 }
 
+namespace
+{
+	// Reuse the native small font for the optional compact overlay.
+	void C7HudText(int x, int y, const FString &text)
+	{
+		screen->DrawText(SmallFont,CR_BLACK,x+1,y+1,text,
+			DTA_VirtualWidth,320,DTA_VirtualHeight,200,
+			DTA_FillColor,PalEntry(0,0,0).d,TAG_DONE);
+		screen->DrawText(SmallFont,CR_YELLOW,x,y,text,
+			DTA_VirtualWidth,320,DTA_VirtualHeight,200,
+			DTA_FillColor,PalEntry(255,255,0).d,TAG_DONE);
+	}
+
+	void C7HudRect(int x,int y,int width,int height,PalEntry color)
+	{
+		screen->VirtualToRealCoordsInt(x,y,width,height,320,200,true,true);
+		color.a=255;
+		screen->Clear(x,y,x+width,y+height,-1,color);
+	}
+
+	void C7HudNumber(int x, int y, unsigned int amount)
+	{
+		// A 3x5 numeric face fits the existing 25x5 meter wells without
+		// downsampling the native font or hiding stacked armor totals.
+		static const WORD digits[] = { 0x7b6f, 0x2c97, 0x73e7, 0x73cf, 0x5bc9, 0x79cf, 0x79ef, 0x7249, 0x7bef, 0x7bcf };
+		C7HudRect(x,y,25,7,PalEntry(0,0,0));
+		FString text; text.Format("%u",amount);
+		x += (25-(int(text.Len())*4-1))/2;
+		for(unsigned int i=0;i<text.Len();++i)
+			for(unsigned int row=0;row<5;++row)
+				for(unsigned int col=0;col<3;++col)
+					if(digits[text[i]-'0'] & (1U<<(14-row*3-col)))
+						C7HudRect(x+i*4+col,y+1+row,1,1,PalEntry(255,255,0));
+	}
+
+	void C7MiniHud()
+	{
+		AActor *pawn = players[ConsolePlayer].mo;
+		if(!pawn) return;
+		const struct { const char *label; const char *item; int x,y; } fields[] = {
+			{ "AR", "C7BodyArmor", 58,180 },
+			{ "MINES", "C7Mines", 4,191 },
+			{ "VIS", "C7VisorCharge", 68,191 }
+		};
+		FString text; text.Format("HP %d",MAX(0,players[ConsolePlayer].health));
+		C7HudText(4,180,text);
+		for(unsigned int i=0; i<sizeof(fields)/sizeof(fields[0]); ++i)
+		{
+			AInventory *item = pawn->FindInventory(ClassDef::FindClass(fields[i].item));
+			text.Format("%s %u",fields[i].label,item ? item->amount : 0);
+			C7HudText(fields[i].x,fields[i].y,text);
+		}
+		unsigned int ammo = 0;
+		if(players[ConsolePlayer].ReadyWeapon && players[ConsolePlayer].ReadyWeapon->ammo[AWeapon::PrimaryFire])
+			ammo=players[ConsolePlayer].ReadyWeapon->ammo[AWeapon::PrimaryFire]->amount;
+		text.Format("AMMO %u",ammo); C7HudText(114,180,text);
+		text.Format("FL %s",levelInfo->FloorNumber.GetChars()); C7HudText(220,180,text);
+		text.Format("ALIENS %d",MAX(0,gamestate.killtotal-gamestate.killcount)); C7HudText(258,180,text);
+		if(Net::Deathmatch()) text.Format("FRAGS %d",players[ConsolePlayer].frags);
+		else text.Format("SCORE %d",players[ConsolePlayer].score);
+		C7HudText(220,191,text);
+		const char *items[] = { "C7Static001", "C7Static002", "C7FloorPlan" };
+		const char *icons[] = { "C7G0021", "C7G0020", "C7G0019" };
+		int slot=0;
+		for(unsigned int i=0;i<3;++i)
+			if(pawn->FindInventory(ClassDef::FindClass(items[i])))
+				VWB_DrawGraphic(TexMan(icons[i]),178+(slot++)*8,183);
+	}
+}
+
 void WolfStatusBar::DrawStatusBar()
 {
 	if(viewsize == 21 && ingame)
@@ -659,6 +731,13 @@ void WolfStatusBar::DrawStatusBar()
 				MIN(25U, unsigned(mines ? mines->amount : 0)), 5, 104);
 			DrawC7Gauge(149, 193,
 				MIN(25U, unsigned(visor ? visor->amount : 0)>>2), 3, 56);
+
+			if(c7_numeric_hud)
+			{
+				C7HudNumber(97,171,unsigned(MAX(0,players[ConsolePlayer].health)));
+				C7HudNumber(97,190,armor ? armor->amount : 0);
+				C7HudNumber(200,171,ammo);
+			}
 
 			const struct { const char *className; const char *graphic; } items[] =
 			{
@@ -720,6 +799,21 @@ static void DrawC7TopMessage(const char *message)
 
 void WolfStatusBar::DrawTopOverlay()
 {
+	// A port enhancement: the largest DOS view observed by Jason retained
+	// the normal status bar. Draw every frame so uncapped/GL views do not flicker.
+	if(corridor7 && ingame && viewsize == 21)
+	{
+		if(Command::LocalUi().buttonstate[bt_showstatusbar] ||
+			Command::LocalUi().buttonheld[bt_showstatusbar])
+		{
+			ingame=false;
+			DrawStatusBar();
+			ingame=true;
+		}
+		else if(c7_minihud)
+			C7MiniHud();
+	}
+
 	if(corridor7 && gamestate.TimeCount < c7ChamberPowerUntil)
 	{
 		// The decoded 48x32 C7G0062 panel contains a 42x5 red meter well at

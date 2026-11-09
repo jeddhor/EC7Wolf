@@ -1917,7 +1917,8 @@ void R_RenderView()
 	DrawPlayerWeapon ();    // draw player's hands
 
 	if((Command::LocalUi().buttonstate[bt_showstatusbar] ||
-		Command::LocalUi().buttonheld[bt_showstatusbar]) && viewsize == 21)
+		Command::LocalUi().buttonheld[bt_showstatusbar]) && viewsize == 21 &&
+		!IWad::CheckGameFilter("Corridor7"))
 	{
 		ingame = false;
 		StatusBar->DrawStatusBar();

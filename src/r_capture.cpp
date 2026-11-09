@@ -349,6 +349,7 @@ namespace
 		DWORD crc = 0;
 
 		crc = Fold(crc, &gamestate.TimeCount, sizeof(gamestate.TimeCount));
+		crc = Fold(crc, &gamestate.enhancedShotgun, sizeof(gamestate.enhancedShotgun));
 
 		const DWORD rng = FRandom::StaticSumSeeds();
 		crc = Fold(crc, &rng, sizeof(rng));

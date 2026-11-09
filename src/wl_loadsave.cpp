@@ -611,6 +611,9 @@ bool Load(const FString &filename)
 	SaveProdVersion = (DWORD)atoll(prodver);
 	delete[] prodver;
 
+	char *shotgunRule = M_GetPNGText(png, "EC7Wolf Enhanced Shotgun");
+	gamestate.enhancedShotgun = shotgunRule && strcmp(shotgunRule, "1") == 0;
+	delete[] shotgunRule;
 	M_GetPNGText(png, "Current Map", gamestate.mapname, 8);
 	SetupGameLevel();
 
@@ -724,6 +727,7 @@ bool Save(const FString &filename, const FString &title)
 	}
 	M_AppendPNGText(fileh, "Title", title);
 	M_AppendPNGText(fileh, "Current Map", levelInfo->MapName);
+	M_AppendPNGText(fileh, "EC7Wolf Enhanced Shotgun", gamestate.enhancedShotgun ? "1" : "0");
 
 	FString comment;
 	// Creation Time

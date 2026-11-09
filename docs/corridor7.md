@@ -516,3 +516,18 @@ there would restart the playlist every time somebody opened a menu. Leaving the
 game entirely is the one place that has to say so outright, and did not -- so a
 level's track played on underneath the menu, and then underneath the next
 game's.
+
+### Optional HUD and shotgun settings
+
+In Options > Graphics, Full-screen Mini HUD supplies compact status at 100%
+view size. This is a port enhancement; the maximum original-game view observed
+by Jason retains the normal bar. Numeric Status Bar independently replaces the
+large bar's health, armor and ammunition meters with exact values, including
+over-max totals. It defaults off. Both settings persist. Holding Show Status
+works at full-screen view size in software and OpenGL.
+
+Options > Gameplay > Shotgun Minimum 50 raises the final shotgun damage to at
+least 50 after distance calculation. It defaults off and applies to new games;
+the menu shows the current mission's rule. The host decides in multiplayer,
+and saves restore their own rule. Older saves and legacy demos use classic
+damage. Music/effects balance remains unchanged pending original-game testing.

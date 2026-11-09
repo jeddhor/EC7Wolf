@@ -36,8 +36,8 @@ LEGEND = {
     "B": (252, 18),      # door needing the BLUE card
     "R": (253, 18),      # door needing the RED card
     "D": (254, 18),      # plain door
-    "b": (256, 25),      # the BLUE access card, lying on the floor
-    "r": (256, 24),      # the RED access card
+    "b": (256, 25),      # decorative blue ceiling lamp
+    "r": (256, 24),      # decorative red ceiling lamp
     "T": (256, 18),      # a wall terminal is painted separately
     "1": (279, 18),      # transporter channel 1
     "2": (280, 18),      # transporter channel 2
@@ -99,12 +99,12 @@ class OpenRoutes(unittest.TestCase):
 
 
 class Keys(unittest.TestCase):
-    def test_a_card_on_the_floor_opens_its_door(self):
-        document = draw(["#######",
-                         "#@.b.B#",
-                         "#######"])
-        reach = analyze(document, CATALOG)
-        self.assertIn("BLUE", reach.keys)
+    def test_ceiling_lamps_do_not_grant_access(self):
+        for lamp in ("b", "r"):
+            document = draw(["#######", f"#@.{lamp}.B#", "#######"])
+            reach = analyze(document, CATALOG)
+            self.assertEqual(reach.keys, set())
+            self.assertIn("BLUE", reach.blocked)
 
     def test_a_door_without_its_card_stays_shut(self):
         document = draw(["######",
@@ -125,26 +125,25 @@ class Keys(unittest.TestCase):
         reach = analyze(document, CATALOG)
         self.assertIn("BLUE", reach.keys)
 
-    def test_a_card_behind_its_own_door_is_a_warning(self):
-        # The one key layout that is always a mistake: the fixpoint stops with
-        # the color still blocking and its card still out of reach.
+    def test_a_terminal_behind_its_own_door_is_a_warning(self):
+        # The only blue terminal is beyond the blue lock.
         document = draw(["#######",
-                         "#@.B.b#",
-                         "#######"])
+                         "#@.B..#",
+                         "#####T#"], terminals={(5, 2): 11})
         self.assertIn("C7E-DOOR-004", codes(document))
 
-    def test_a_card_in_front_of_its_door_is_not(self):
-        document = draw(["#######",
-                         "#@.b.B#",
-                         "#######"])
+    def test_a_terminal_in_front_of_its_door_is_not(self):
+        document = draw(["###T###",
+                         "#@...B#",
+                         "#######"], terminals={(3, 0): 11})
         self.assertNotIn("C7E-DOOR-004", codes(document))
 
     def test_two_colors_in_sequence_resolve(self):
-        # Blue opens the way to red, which opens the way onward: the fixpoint
-        # has to run more than once to see it.
-        document = draw(["##########",
-                         "#@.b.B.r.#",
-                         "##########"])
+        # Blue opens the way to the red terminal; each is used from adjacent
+        # reachable floor rather than collected by walking over a lamp.
+        document = draw(["###T###T##",
+                         "#@...B...#",
+                         "##########"], terminals={(3, 0): 11, (7, 0): 9})
         reach = analyze(document, CATALOG)
         self.assertEqual(reach.keys, {"BLUE", "RED"})
 

@@ -17,8 +17,9 @@ mistake, such as an exit nobody can walk to.
   play. That direction is safe: it means this under-reports.
 * A door is passable when its lock is held. An unlocked door is always
   passable, which is true -- every door in the game opens on use.
-* Keys are picked up by walking onto them, and granted by using a wall
-  terminal, which needs a floor cell beside the terminal. Both are modeled.
+* Access comes from using a wall terminal beside reachable floor. Catalog-
+  declared key pickups can also be modeled for custom maps; retail map words
+  24/25 are ceiling lamps and never supply access.
 * A transporter pair is a two-way edge between its endpoints. Reaching either
   end reaches the other.
 * Progress is a fixpoint: flood, collect whatever keys the flood reached, flood

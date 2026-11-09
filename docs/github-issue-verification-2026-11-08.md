@@ -55,6 +55,8 @@ decorations. Existing access-token classes remain available to terminals and
 old inventories. Loading an older save replaces their erroneous world actors
 with matching lamps while retaining owned access tokens. The editor catalog
 now describes lamps and directs access searches toward the wall terminals.
+Editor validation/reachability fixtures use actual terminals and explicitly
+assert that neither ceiling-lamp color grants access.
 
 Already acquired access is retained: old saves do not record whether a token
 came from a legitimate terminal or the former bug, so revoking it would also

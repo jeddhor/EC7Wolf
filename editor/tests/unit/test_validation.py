@@ -39,7 +39,7 @@ FLOOR_EXIT = 287
 PLAYER_START_EAST = 19
 RODEX_EAST = 216
 RED_DOOR = 253      # lock 2; lockdefs.txt Lock 2 Corridor7 is the red card
-RED_CARD = 24
+RED_CEILING_LAMP = 24
 RED_TERMINAL = 9
 EMPTY = 18
 
@@ -292,10 +292,10 @@ class Doors(unittest.TestCase):
         document = self.place(build(), 0, 4, 4, RED_DOOR)
         self.assertIn("C7E-DOOR-003", codes(document))
 
-    def test_the_key_being_present_silences_it(self):
+    def test_a_ceiling_lamp_does_not_supply_access(self):
         document = self.place(build(), 0, 4, 4, RED_DOOR)
-        document = self.place(document, 1, 3, 3, RED_CARD)
-        self.assertNotIn("C7E-DOOR-003", codes(document))
+        document = self.place(document, 1, 3, 3, RED_CEILING_LAMP)
+        self.assertIn("C7E-DOOR-003", codes(document))
 
     def test_the_terminal_that_grants_it_also_silences_it(self):
         # Corridor 7 hands out its cards at wall terminals, not off the floor.

@@ -21,6 +21,7 @@
 // Command line switches (see r_capture.cpp for details):
 //   --capture-rngseed N     Force the RNG seed for reproducible simulation.
 //   --capture-checksum PATH Write a per-tic + summary checksum log to PATH.
+//   --capture-killstats     Log changed kill totals, live population and score.
 //   --capture-frame N       Screenshot after rendered frame N (1-based).
 //   --capture-file PATH     Destination PNG for --capture-frame.
 //   --capture-sprite-bank BANK PATH Export resolved sprite textures as JSON

@@ -58,6 +58,8 @@ mkdir -p "$staging_dir/savegames"
 cp -a "$data_dir/." "$staging_dir/"
 install -m 755 "$build_dir/ec7wolf" "$staging_dir/ec7wolf"
 install -m 644 "$build_dir/ec7wolf.pk3" "$staging_dir/ec7wolf.pk3"
+# Retain the package's historical data filename beside the product-named pk3.
+ln -s ec7wolf.pk3 "$staging_dir/ecwolf.pk3"
 install -m 755 "$script_dir/corridor7-release/run-corridor7.sh" \
 	"$staging_dir/run-corridor7.sh"
 install -m 644 "$script_dir/corridor7-release/README.txt" \

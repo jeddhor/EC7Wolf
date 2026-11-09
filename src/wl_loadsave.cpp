@@ -581,6 +581,42 @@ static void Serialize(FArchive &arc)
 
 #define SNAP_ID MAKE_ID('s','n','A','p')
 
+static void RepairCorridor7KillCount()
+{
+	if(!IWad::CheckGameFilter("Corridor7") || !Session::AllowsSaving() ||
+		Session::ActiveSlotCount() != 1)
+		return;
+
+	// The campaign retains its counted aliens as corpses. Reconcile old
+	// burst-weapon overcounts only when the saved population still accounts
+	// for the entire total; mods which remove corpses or clear COUNTKILL do
+	// not satisfy that invariant and must retain their own statistics.
+	int counted = 0, living = 0;
+	for(AActor::Iterator iter = AActor::GetIterator(); iter.Next();)
+	{
+		if(!(iter->flags & FL_COUNTKILL))
+			continue;
+		++counted;
+		if(iter->health > 0)
+			++living;
+	}
+	if(counted != gamestate.killtotal || gamestate.killcount == counted-living)
+		return;
+
+	Printf("Repaired Corridor 7 alien count: %d -> %d kills (%d living, %d total).\n",
+		gamestate.killcount, counted-living, living, counted);
+	gamestate.killcount = counted-living;
+
+	player_t &player = players[0];
+	if(living > 0 || counted == 0)
+		player.c7FloorSecuredNotified = false;
+	static const unsigned int clearance[4] = { 10, 75, 100, 100 };
+	const unsigned int skill = MIN<unsigned int>(MAX<unsigned int>(1,
+		gamestate.difficulty->SpawnFilter)-1, 3);
+	if(counted == 0 || static_cast<unsigned int>((gamestate.killcount*100)/counted) < clearance[skill])
+		player.c7ClearanceNotified = false;
+}
+
 bool Load(const FString &filename)
 {
 	FILE *fileh = OpenSaveFile(filename, "rb");
@@ -651,6 +687,7 @@ bool Load(const FString &filename)
 		}
 		AActor::FinishSpawningActors();
 	}
+	RepairCorridor7KillCount();
 	FRandom::StaticReadRNGState(png);
 	// Quickload stays in the play loop. Repair the missing low-rank map token
 	// in older saves here as well as at ordinary level entry.

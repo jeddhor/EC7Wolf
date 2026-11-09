@@ -117,6 +117,7 @@ corridor7_probe_frames
 corridor7_weapon_walk
 corridor7_access_lamps
 corridor7_enhancements
+corridor7_alien_counter
 ui_buttons
 bot_footwork
 bot_budget

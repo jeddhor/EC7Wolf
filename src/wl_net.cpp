@@ -79,7 +79,9 @@
 // version mismatch and is far harder to diagnose than a refusal. Bump this
 // whenever a packet's layout or meaning changes -- including the day the
 // canonical command frame grows a slot number.
-#define NET_PROTOCOL_VERSION 8
+// Protocol 9 also requires the dead-target damage guard: an older peer would
+// replay burst hits as extra deaths and diverge in cooperative play.
+#define NET_PROTOCOL_VERSION 9
 // Present in the first datagram of every connection. A request used to be one
 // lone zero byte, so any stray packet arriving on the port was a new player.
 static const BYTE NetMagic[3] = { 'E', '7', 'N' };

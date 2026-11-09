@@ -776,6 +776,12 @@ void DamageActor (AActor *ob, AActor *attacker, unsigned damage)
 		return;
 	}
 
+	// A burst can retain its target after an earlier hit has killed it. Do
+	// not run death rewards, drops, or kill credit again for the later hits.
+	// Revived monsters have positive health and can be damaged normally.
+	if(ob->health <= 0)
+		return;
+
 	madenoise = true;
 
 	//

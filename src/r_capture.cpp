@@ -266,6 +266,7 @@ namespace
 	FString  g_playerPath;
 	FILE    *g_playerFile     = NULL;
 	FILE    *g_actorFile      = NULL;
+	bool     g_killStats      = false;
 
 	// --capture-give CLASS: hand the player an inventory item once, at the first
 	// tic. A powerup is the only way to reach some render states, and picking one
@@ -1100,6 +1101,11 @@ void ParseArgs(int argc, char **argv)
 			if(el.frame <= 0)
 				g_extraLight = el.value;	// active from the first frame
 			g_haveExtraLight = true;
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-killstats") == 0)
+		{
+			g_killStats = true;
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-give") == 0 && i + 1 < argc)
@@ -2282,6 +2288,27 @@ static void TraceVerbs()
 	}
 }
 
+static void TraceKillStats()
+{
+	if(!g_killStats)
+		return;
+	int living = 0;
+	for(AActor::Iterator iter = AActor::GetIterator(); iter.Next();)
+		if((iter->flags & FL_COUNTKILL) && iter->health > 0)
+			++living;
+	const player_t &player = players[ConsolePlayer];
+	FString line;
+	line.Format("killed=%d total=%d living=%d score=%d clearance=%d secured=%d",
+		gamestate.killcount, gamestate.killtotal, living, player.score,
+		player.c7ClearanceNotified ? 1 : 0, player.c7FloorSecuredNotified ? 1 : 0);
+	static FString last;
+	if(line.Compare(last.GetChars()) != 0)
+	{
+		Printf("killstats tic=%lu %s\n", (unsigned long)g_ticCount, line.GetChars());
+		last = line;
+	}
+}
+
 void PerTic()
 {
 	if(!g_armed)
@@ -2298,6 +2325,7 @@ void PerTic()
 	TraceActors();
 	TracePlayers();
 	TraceVerbs();
+	TraceKillStats();
 
 	// A tic-based quit keeps the determinism gate reproducible under the
 	// current wall-clock frame pacing, where the tic-per-frame ratio varies.

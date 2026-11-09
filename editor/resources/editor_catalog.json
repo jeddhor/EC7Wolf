@@ -5418,27 +5418,26 @@
       ]
     },
     {
-      "actor": "C7Static001",
+      "actor": "C7RedCeilingLamp",
       "aliases": [
-        "red key",
-        "keycard",
-        "access",
+        "ceiling light",
+        "lamp",
         "static 001"
       ],
-      "blocking": false,
+      "blocking": true,
       "category": "objects",
-      "description": "Opens red-locked doors. Per-floor: it does not survive a floor change.",
-      "evidence": "xlat/corridor7.txt things 24; actor C7Static001",
+      "description": "Red ceiling lamp. Decorative; access comes from wall terminals.",
+      "evidence": "xlat/corridor7.txt things 24; actor C7RedCeilingLamp",
       "grade": "A",
-      "key": "thing.c7static001",
+      "key": "thing.c7redceilinglamp",
       "minskill": 0,
-      "name": "RED access card",
+      "name": "Red ceiling lamp",
       "placement": "floor",
       "plane": 1,
       "rank": 24,
       "safe_for_new_maps": true,
       "sprite": 2,
-      "subcategory": "pickup",
+      "subcategory": "decoration",
       "test_vector": "thing-024",
       "value": 24,
       "values": [
@@ -5446,27 +5445,26 @@
       ]
     },
     {
-      "actor": "C7Static002",
+      "actor": "C7BlueCeilingLamp",
       "aliases": [
-        "blue key",
-        "keycard",
-        "access",
+        "ceiling light",
+        "lamp",
         "static 002"
       ],
-      "blocking": false,
+      "blocking": true,
       "category": "objects",
-      "description": "Opens blue-locked doors. Per-floor: it does not survive a floor change.",
-      "evidence": "xlat/corridor7.txt things 25; actor C7Static002",
+      "description": "Blue ceiling lamp. Decorative; access comes from wall terminals.",
+      "evidence": "xlat/corridor7.txt things 25; actor C7BlueCeilingLamp",
       "grade": "A",
-      "key": "thing.c7static002",
+      "key": "thing.c7blueceilinglamp",
       "minskill": 0,
-      "name": "BLUE access card",
+      "name": "Blue ceiling lamp",
       "placement": "floor",
       "plane": 1,
       "rank": 25,
       "safe_for_new_maps": true,
       "sprite": 3,
-      "subcategory": "pickup",
+      "subcategory": "decoration",
       "test_vector": "thing-025",
       "value": 25,
       "values": [
@@ -12474,6 +12472,8 @@
     "actor C7AmmoClip (item) has no xlat entry that places it",
     "actor C7MedicPack (item) has no xlat entry that places it",
     "actor C7ScoreBonus (item) has no xlat entry that places it",
+    "actor C7Static001 (item) has no xlat entry that places it",
+    "actor C7Static002 (item) has no xlat entry that places it",
     "actor C7VisorBattery (item) has no xlat entry that places it"
   ]
 }

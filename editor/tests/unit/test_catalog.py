@@ -263,7 +263,7 @@ class RealCatalog(unittest.TestCase):
         self.assertEqual(clashes, [])
 
     def test_the_curated_names_are_applied(self):
-        self.assertEqual(self.catalog.by_key("thing.c7static001").name, "RED access card")
+        self.assertEqual(self.catalog.by_key("thing.c7redceilinglamp").name, "Red ceiling lamp")
         self.assertEqual(
             self.catalog.for_value(1, 108).name, "Alioprobe"
         )
@@ -278,7 +278,7 @@ class RealCatalog(unittest.TestCase):
 
     def test_search_finds_a_curated_alias(self):
         names = [e.name for e in self.catalog.search("keycard")]
-        self.assertIn("RED access card", names)
+        self.assertIn("RED access terminal", names)
 
     def test_generation_is_deterministic(self):
         again = build_catalog(self.xlat, self.actors, self.curation)

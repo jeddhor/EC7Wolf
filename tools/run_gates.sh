@@ -115,6 +115,7 @@ corridor7_visor_station
 corridor7_rank_maps
 corridor7_probe_frames
 corridor7_weapon_walk
+corridor7_access_lamps
 ui_buttons
 bot_footwork
 bot_budget

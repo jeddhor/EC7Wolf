@@ -55,6 +55,8 @@
 #include "wl_inter.h"
 #include "wl_iwad.h"
 #include "wl_loadsave.h"
+#include "a_inventory.h"
+#include "thingdef/thingdef.h"
 #include "wl_main.h"
 #include "wl_menu.h"
 #include "wl_net.h"
@@ -622,6 +624,30 @@ bool Load(const FString &filename)
 		Serialize(snarc);
 	}
 
+	// Older translators spawned the two ceiling lamps as collectible keys.
+	// Keep owned access tokens; replace only their erroneous world actors.
+	if(IWad::CheckGameFilter("Corridor7"))
+	{
+		const char *tokens[] = { "C7Static001", "C7Static002" };
+		const char *lamps[] = { "C7RedCeilingLamp", "C7BlueCeilingLamp" };
+		for(unsigned int color = 0; color < 2; ++color)
+		{
+			const ClassDef *token = ClassDef::FindClass(tokens[color]);
+			const ClassDef *lamp = ClassDef::FindClass(lamps[color]);
+			if(!token || !lamp) continue;
+			for(AActor::Iterator iter = AActor::GetIterator().Next(); iter;)
+			{
+				AActor *actor = iter;
+				iter.Next();
+				if(actor->GetClass() != token || static_cast<AInventory *>(actor)->owner)
+					continue;
+				AActor *replacement = AActor::Spawn(lamp, actor->x, actor->y, actor->z, 0);
+				replacement->angle = actor->angle;
+				actor->Destroy();
+			}
+		}
+		AActor::FinishSpawningActors();
+	}
 	FRandom::StaticReadRNGState(png);
 	// Quickload stays in the play loop. Repair the missing low-rank map token
 	// in older saves here as well as at ordinary level entry.

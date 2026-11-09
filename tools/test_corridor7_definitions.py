@@ -59,8 +59,8 @@ def forbid(pattern: str, text: str, description: str) -> None:
 
 
 for object_id, actor in {
-    24: "C7Static001",       # red card
-    25: "C7Static002",       # blue card
+    24: "C7RedCeilingLamp",  # decorative statinfo type 0
+    25: "C7BlueCeilingLamp", # decorative statinfo type 0
     28: "C7Static005",       # non-pickup row
     29: "C7M343",
     51: "C7DualBlaster",

@@ -343,28 +343,6 @@
       "name": "Solrac",
       "subcategory": "boss"
     },
-    "C7Static001": {
-      "aliases": [
-        "red key",
-        "keycard",
-        "access"
-      ],
-      "description": "Opens red-locked doors. Per-floor: it does not survive a floor change.",
-      "evidence": "lnspec.cpp:366 maps door arg 1 to this class",
-      "name": "RED access card",
-      "subcategory": "pickup"
-    },
-    "C7Static002": {
-      "aliases": [
-        "blue key",
-        "keycard",
-        "access"
-      ],
-      "description": "Opens blue-locked doors. Per-floor: it does not survive a floor change.",
-      "evidence": "lnspec.cpp:366 maps door arg 2 to this class",
-      "name": "BLUE access card",
-      "subcategory": "pickup"
-    },
     "C7Tebazile": {
       "aliases": [
         "boss",
@@ -450,6 +428,26 @@
       "evidence": "xlat things 19",
       "name": "Player start",
       "subcategory": "player"
+    },
+    "C7RedCeilingLamp": {
+      "aliases": [
+        "ceiling light",
+        "lamp"
+      ],
+      "description": "Red ceiling lamp. Decorative; access comes from wall terminals.",
+      "evidence": "CORR7CD.EXE statinfo row has type 0; original MAP05 walk grants no access",
+      "name": "Red ceiling lamp",
+      "subcategory": "decoration"
+    },
+    "C7BlueCeilingLamp": {
+      "aliases": [
+        "ceiling light",
+        "lamp"
+      ],
+      "description": "Blue ceiling lamp. Decorative; access comes from wall terminals.",
+      "evidence": "CORR7CD.EXE statinfo row has type 0; original MAP05 walk grants no access",
+      "name": "Blue ceiling lamp",
+      "subcategory": "decoration"
     }
   },
   "values": {
@@ -467,14 +465,15 @@
       "name": "BLUE access terminal",
       "subcategory": "terminal"
     },
-    "0:110": {
+    "0:93": {
       "aliases": [
-        "energy",
+        "visor",
         "dispenser",
         "charge"
       ],
-      "description": "Dispenses alien-weapon energy on use.",
-      "name": "Energy dispenser"
+      "description": "Adds 100 visor charge once, then becomes spent wall 94.",
+      "evidence": "retail MAP02 (57,54); CORR7CD.EXE wall-use case 93",
+      "name": "Visor battery station"
     },
     "0:111": {
       "aliases": [

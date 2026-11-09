@@ -193,7 +193,7 @@ void ControlMovement (APlayerPawn *ob)
 		//
 		// not strafing
 		//
-		ob->angle -= controlx*(ANGLE_1/ANGLESCALE);
+		ob->angle -= angle_t(int64_t(controlx)*(ANGLE_1/ANGLESCALE));
 	}
 
 	if(strafe)
@@ -1408,6 +1408,20 @@ void CheckSpawnPlayer(bool setup)
 	}
 }
 
+void C7GiveDifficultyFloorPlan(AActor *pawn)
+{
+	// CORR7CD.EXE 18b8's floor setup grants graphic 0x14 / item bit 0x20
+	// for ranks 0 and 1, on each floor. Use the ordinary inventory token so
+	// the inset map, full automap, HUD, and saves agree about possession.
+	if(!pawn || !IWad::CheckGameFilter("Corridor7") || Net::Deathmatch() ||
+		SkillInfo::GetSkillIndex(*gamestate.difficulty) > 1)
+		return;
+	const ClassDef *plan = ClassDef::FindClass("C7FloorPlan");
+	if(plan && !pawn->FindInventory(plan))
+		pawn->GiveInventory(plan);
+	gamestate.fullmap = true;
+}
+
 /*
 ===============
 =
@@ -1442,6 +1456,7 @@ void SpawnPlayer (int num)
 	player.camera = player.mo;
 	player.state = player_t::PST_LIVE;
 	player.extralight = 0;
+	C7GiveDifficultyFloorPlan(player.mo);
 
 	// Re-raise the weapon like Doom if we don't have the flag set in mapinfo.
 	if(!levelInfo->SpawnWithWeaponRaised && player.PendingWeapon == WP_NOCHANGE)
@@ -1718,6 +1733,10 @@ ACTION_FUNCTION(A_C7GunAttack)
 			if(weapon == 1)
 				damage += 25;
 		}
+		// This optional floor follows the ordinary distance calculation. Legacy
+		// demo files cannot encode rules, so recording/playback remain classic.
+		if(weapon == 1 && gamestate.enhancedShotgun && !demorecord && !demoplayback)
+			damage = MAX(damage, 50);
 		DamageActor(closest, self, damage);
 		hit = true;
 	}

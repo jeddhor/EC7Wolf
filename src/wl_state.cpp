@@ -123,7 +123,7 @@ bool TrySpot(AActor *ob, MapSpot spot)
 static inline short CheckSide(AActor *ob, unsigned int x, unsigned int y, MapTrigger::Side dir, bool canuse)
 {
 	MapSpot spot = map->GetSpot(x, y, 0);
-	if(spot->tile)
+	if(spot->tile && spot->sideSolid[dir])
 	{
 		if(canuse)
 		{
@@ -841,7 +841,9 @@ static inline bool TileBlocksSight(MapSpot spot)
 	// cannot acquire or shoot the player through them. Rendering transparency
 	// and AI line-of-sight are deliberately separate properties in that game.
 	if(IWad::CheckGameFilter("Corridor7"))
-		return true;
+		// An animated door keeps its aperture tile for rendering after it
+		// opens. Marker 107 is open floor, unlike transparent solid glass.
+		return spot->corridor7WallMarker != 107;
 	return !spot->tile->sightTransparent && !spot->corridor7SightTransparent;
 }
 

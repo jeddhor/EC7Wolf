@@ -77,10 +77,10 @@ void ToCommand(const Intent &intent, TicCmd_t &cmd)
 		cmd.buttonstate[i] = intent.press[i] ? 1 : 0;
 }
 
-int ClampAxis(int value, unsigned int *clamped)
+int ClampAxis(int value, unsigned int *clamped, int low = AXIS_MIN, int high = AXIS_MAX)
 {
-	if(value < AXIS_MIN) { if(clamped) ++*clamped; return AXIS_MIN; }
-	if(value > AXIS_MAX) { if(clamped) ++*clamped; return AXIS_MAX; }
+	if(value < low) { if(clamped) ++*clamped; return low; }
+	if(value > high) { if(clamped) ++*clamped; return high; }
 	return value;
 }
 
@@ -146,7 +146,7 @@ void Record(Session::PlayerSlot slot, const TicCmd_t &cmd)
 // authority authoring a command for a sequence some way ahead.
 void FinalizeShared(TicCmd_t &cmd)
 {
-	cmd.controlx = ClampAxis(cmd.controlx, &g_violations.clampedAxes);
+	cmd.controlx = ClampAxis(cmd.controlx, &g_violations.clampedAxes, TURN_MIN, TURN_MAX);
 	cmd.controly = ClampAxis(cmd.controly, &g_violations.clampedAxes);
 	cmd.controlstrafe = ClampAxis(cmd.controlstrafe, &g_violations.clampedAxes);
 

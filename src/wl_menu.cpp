@@ -59,6 +59,8 @@ bool menusAreFaded = true;
 EMenuStyle MenuStyle = MENUSTYLE_Wolf;
 
 MENU_LISTENER(EnterControlBase);
+MENU_LISTENER(EnterGameplayEnhancements);
+static LabelMenuItem *shotgunCurrentRule = NULL;
 MENU_LISTENER(JoinNetGame);
 
 // --- Multiplayer setup ------------------------------------------------------
@@ -141,6 +143,7 @@ Menu soundBase(24, 45, 284, 24);
 Menu controlBase(CTL_X, CTL_Y, CTL_W, 56, EnterControlBase);
 Menu displayMenu(20, 75, 285, 56);
 Menu automapMenu(40, 55, 260, 56);
+Menu gameplayEnhancements(24, 70, 284, 56, EnterGameplayEnhancements);
 Menu mouseSensitivity(20, 50, 300, 24);
 Menu joySensitivity(20, 30, 300, 24);
 Menu playerClasses(NM_X, NM_Y, NM_W, 24);
@@ -353,6 +356,14 @@ MENU_LISTENER(SetMusicC7)
 		C7CD::Stop();
 		StartCPMusic(gameinfo.MenuMusic);
 	}
+	return true;
+}
+
+MENU_LISTENER(EnterGameplayEnhancements)
+{
+	if(shotgunCurrentRule)
+		shotgunCurrentRule->setText(!ingame ? "New games; host decides in multiplayer" :
+			(gamestate.enhancedShotgun ? "Current mission: minimum 50" : "Current mission: classic"));
 	return true;
 }
 
@@ -1470,13 +1481,19 @@ void CreateMenus()
 	optionsMenu.setHeadPicture("M_OPTION");
 	if(MenuStyle == MENUSTYLE_Corridor7)
 	{
-		// Four categories under one Options screen, so the main menu stays
+		// Categories under one Options screen, so the main menu stays
 		// short. The submenus themselves are the engine's existing ones -- only
 		// the grouping and the titles change.
 		optionsMenu.addItem(new MenuSwitcherMenuItem("Automap", automapMenu));
 		optionsMenu.addItem(new MenuSwitcherMenuItem("Graphics", displayMenu));
 		optionsMenu.addItem(new MenuSwitcherMenuItem("Audio", soundBase));
 		optionsMenu.addItem(new MenuSwitcherMenuItem("Controls", controlBase));
+		optionsMenu.addItem(new MenuSwitcherMenuItem("Gameplay", gameplayEnhancements));
+		gameplayEnhancements.setHeadText("Gameplay Enhancements");
+		gameplayEnhancements.addItem(new BooleanMenuItem("Shotgun Minimum 50", c7_enhanced_shotgun));
+		gameplayEnhancements.addItem(new LabelMenuItem("Applies to new games"));
+		shotgunCurrentRule = new LabelMenuItem("New games; host decides in multiplayer");
+		gameplayEnhancements.addItem(shotgunCurrentRule);
 
 	}
 	else
@@ -1601,6 +1618,8 @@ void CreateMenus()
 		AddLabeled(displayMenu, new MultipleChoiceMenuItem(SetGamma, gammaOptions, 6,
 			NearestOption(kGammaValues, screenGamma)), "Brightness");
 		AddLabeled(displayMenu, new SliderMenuItem(viewsize, 110, 21, language["STR_SMALL"], language["STR_LARGE"], AdjustViewSize), "View Size");
+		displayMenu.addItem(new BooleanMenuItem("Full-screen Mini HUD", c7_minihud));
+		displayMenu.addItem(new BooleanMenuItem("Numeric Status Bar", c7_numeric_hud));
 		displayMenu.addItem(new MenuSwitcherMenuItem("Advanced Graphics", advancedGraphics));
 
 		static const char *xbrzOptions[] = { "Off", "Auto", "2x", "3x", "4x", "5x", "6x" };

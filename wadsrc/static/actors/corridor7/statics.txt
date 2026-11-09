@@ -12,6 +12,29 @@ actor C7Static000
 	}
 }
 
+// Original statinfo rows 1/2 (map words 24/25) have type 0: ceiling
+// decorations, not access-card pickups. Access terminals grant the separate
+// inventory tokens below; their old class names are retained for save files.
+actor C7RedCeilingLamp
+{
+    states
+    {
+        Spawn:
+            C002 A -1
+            stop
+    }
+}
+
+actor C7BlueCeilingLamp
+{
+    states
+    {
+        Spawn:
+            C003 A -1
+            stop
+    }
+}
+
 // The RED and BLUE access cards. Both are per-floor: the switch that grants
 // access has to be found again on every level, so they must NOT survive a
 // floor change. Key already sets inventory.interhubamount 0 for exactly this

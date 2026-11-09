@@ -455,10 +455,11 @@ private:
 };
 IMPLEMENT_INTERNAL_CLASS(C7HealthDispenser)
 
-// Corridor 7 has two consumable wall units and a reusable visor charger. Wall
+// Corridor 7 has three consumable wall units. Wall
 // 85 animates through 88, where a second use supplies 25 health and leaves
 // empty wall 89. Wall 111 supplies a 50-round clip and immediately changes to
-// empty wall 112. Wall 110 refills the visor without consuming the station.
+// empty wall 112. The fan at wall 93 adds 100 visor charge, then becomes 94.
+// Verified in CORR7CD.EXE's wall-use branch and on retail MAP02 (57,54).
 // The three wall units say what the shipped game says. Those strings live
 // together at 0x3B002 in CORR7CD.EXE -- "Medic Pack", "50 Rnd Clip",
 // "Visor Battery", then the two access-terminal messages -- which is how the
@@ -530,16 +531,16 @@ FUNC(C7_Dispenser)
 
 	if(args[0] == 3)
 	{
+		const FTextureID loaded = C7WallTexture(93);
+		if(!loaded.isValid() || spot->texture[0] != loaded)
+			return 0;
 		AInventory *visor = activator->FindInventory(ClassDef::FindClass("C7VisorCharge"));
 		if(!visor)
 			return 0;
-		if(visor->amount >= visor->maxamount)
-		{
-			if(activator == players[ConsolePlayer].camera)
-				StatusBar->SetTopMessage("FULL VISOR CHARGE");
-			return 1;
-		}
-		visor->amount = visor->maxamount;
+		// The original consumes the battery even at full charge and adds a
+		// whole battery, rather than clipping to the 100-point gauge capacity.
+		visor->amount = MIN(visor->amount, 0xffffU-100) + 100;
+		SetC7WallTexture(spot, 94);
 		PlaySoundLocMapSpot("c7/dispenser/visor", spot);
 		if(activator == players[ConsolePlayer].camera)
 			StatusBar->SetTopMessage("Visor Battery");

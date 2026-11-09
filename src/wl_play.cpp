@@ -653,9 +653,28 @@ void PollKeyboardMove (void)
 
 void PollMouseMove (void)
 {
-	SDL_GetRelativeMouseState(&control[ConsolePlayer].controlpanx, &control[ConsolePlayer].controlpany);
+	int dx, dy;
+	SDL_GetRelativeMouseState(&dx, &dy);
+	ApplyMouseMovement(control[ConsolePlayer], dx, dy);
+}
 
-	control[ConsolePlayer].controlx += control[ConsolePlayer].controlpanx * 20 / (21 - mousexadjustment);
+void ApplyMouseMovement(TicCmd_t &cmd, int dx, int dy)
+{
+	cmd.controlpanx = dx;
+	cmd.controlpany = dy;
+	const int divisor = 21 - clamp(mousexadjustment, 0, 20);
+	static int lastDivisor = 0, remainder = 0;
+	if(divisor != lastDivisor)
+	{
+		remainder = 0;
+		lastDivisor = divisor;
+	}
+	// Keep sub-unit motion: fifty one-count samples must turn as far as one
+	// fifty-count sample. Widen before multiplying even for extreme SDL input.
+	const int64_t scaled = int64_t(dx)*20 + remainder;
+	remainder = int(scaled % divisor);
+	cmd.controlx = int(clamp<int64_t>(int64_t(cmd.controlx) + scaled/divisor,
+		Command::TURN_MIN, Command::TURN_MAX));
 	if(mouselook)
 	{
 		// The one place a human still reaches past the command boundary and
@@ -689,7 +708,9 @@ void PollMouseMove (void)
 			players[ConsolePlayer].mo->pitch = ANGLE_NEG(56*ANGLE_1);
 	}
 	else if(mousemovesforward)
-		control[ConsolePlayer].controly += control[ConsolePlayer].controlpany * 40 / (21 - mouseyadjustment);
+		cmd.controly = int(clamp<int64_t>(int64_t(cmd.controly) +
+			int64_t(dy)*40/(21-clamp(mouseyadjustment, 0, 20)),
+			Command::AXIS_MIN, Command::AXIS_MAX));
 }
 
 
@@ -837,6 +858,9 @@ void PollControls (bool absolutes)
 
 	if (demorecord)
 	{
+		// Legacy demos store signed bytes. Apply the same bounded command we
+		// record, so playback cannot disagree with the recorded session.
+		cmd.controlx = clamp(cmd.controlx, -127, 127);
 		//
 		// save info out to demo buffer
 		//

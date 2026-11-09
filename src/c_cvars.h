@@ -97,6 +97,7 @@ extern bool		r_interpolate_actors;		// interpolate non-camera actors
 extern bool		r_interpolate_dynamicwalls;	// interpolate doors/pushwalls (Phase 7)
 extern bool		quitonescape;
 extern fixed	movebob;
+extern bool c7_minihud, c7_numeric_hud, c7_enhanced_shotgun;
 
 extern float	localDesiredFOV;
 //

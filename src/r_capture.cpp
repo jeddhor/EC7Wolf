@@ -14,6 +14,7 @@
 #include <math.h>
 
 #include "r_capture.h"
+#include "r_sprites.h"
 #include "wl_def.h"
 #include "g_session.h"
 #include "g_command.h"
@@ -28,6 +29,7 @@
 #include "actor.h"
 #include "wl_agent.h"
 #include "wl_game.h"
+#include "wl_loadsave.h"
 #include "m_random.h"
 #include "m_crc32.h"
 #include "m_png.h"
@@ -81,6 +83,8 @@ namespace
 
 	int      g_maxFrames      = -1;      // quit after this many rendered frames
 	int      g_maxTics        = -1;      // quit after this many simulation tics
+	long     g_saveTic = -1, g_loadTic = -1;
+	FString  g_savePath, g_loadPath;
 
 	bool     g_haveOpenDoors  = false;   // --capture-open-doors world override
 	int      g_openDoors      = 0;       // forced slide amount 0..65535
@@ -162,6 +166,12 @@ namespace
 	TArray<PressWindow> g_forwardWindows;
 	TArray<PressWindow> g_turnWindows;
 	TArray<PressWindow> g_useWindows;
+	struct MouseWindow
+	{
+		long from, tics;
+		int dx, dy;
+	};
+	TArray<MouseWindow> g_mouseWindows;
 
 	// --capture-place TIC X Y [ANGLE]: put the player at one exact spot, once.
 	// Unlike --capture-warp, which pins them there every tic, this is a single
@@ -248,6 +258,8 @@ namespace
 	// says nothing about whether an alien patrolled, backed off, or stood still
 	// for 500 tics -- so the AI work is measured from this rather than by eye.
 	FString  g_actorPath;
+	FString  g_viewModelPath;
+	FILE    *g_viewModelFile = NULL;
 	// --capture-players PATH: trace each player's pawn each tic. Deliberately
 	// a second file rather than more rows in the actor trace, whose readers
 	// take every row to be one monster and the population to be stable.
@@ -337,6 +349,7 @@ namespace
 		DWORD crc = 0;
 
 		crc = Fold(crc, &gamestate.TimeCount, sizeof(gamestate.TimeCount));
+		crc = Fold(crc, &gamestate.enhancedShotgun, sizeof(gamestate.enhancedShotgun));
 
 		const DWORD rng = FRandom::StaticSumSeeds();
 		crc = Fold(crc, &rng, sizeof(rng));
@@ -406,14 +419,19 @@ namespace
 		{
 			if(!(iter->flags & FL_ISMONSTER) || iter->health <= 0)
 				continue;
-			fprintf(g_actorFile, "%lu %s %d %d %d %d %d %d\n",
+			char sprite[5] = "----";
+			if(iter->state)
+				memcpy(sprite, iter->state->sprite, 4);
+			fprintf(g_actorFile, "%lu %s %d %d %d %d %d %d %s %c %d\n",
 				(unsigned long)g_ticCount,
 				iter->GetClass()->GetName().GetChars(),
 				iter->tilex, iter->tiley,
 				(int)iter->dir,
 				(iter->flags & FL_PATHING) ? 1 : 0,
 				(iter->flags & FL_ATTACKMODE) ? 1 : 0,
-				iter->health);
+				iter->health, sprite,
+				iter->state ? 'A'+iter->state->frame : '-',
+				iter->state ? iter->state->duration : 0);
 		}
 	}
 
@@ -609,6 +627,12 @@ namespace
 			g_playerFile = NULL;
 		}
 
+		if(g_viewModelFile != NULL)
+		{
+			fclose(g_viewModelFile);
+			g_viewModelFile = NULL;
+		}
+
 		if(g_actorFile != NULL)
 		{
 			fclose(g_actorFile);
@@ -755,6 +779,11 @@ void ParseArgs(int argc, char **argv)
 			g_playerPath = argv[++i];
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-viewmodel") == 0 && i + 1 < argc)
+		{
+			g_viewModelPath = argv[++i];
+			g_armed = true;
+		}
 		else if(strcmp(arg, "--capture-actors") == 0 && i + 1 < argc)
 		{
 			g_actorPath = argv[++i];
@@ -837,6 +866,25 @@ void ParseArgs(int argc, char **argv)
 		else if(strcmp(arg, "--capture-tape") == 0 && i + 1 < argc)
 		{
 			g_tapes.Push(argv[++i]);
+			g_armed = true;
+		}
+		else if((strcmp(arg, "--capture-save") == 0 || strcmp(arg, "--capture-load") == 0) && i + 2 < argc)
+		{
+			const bool saving = strcmp(arg, "--capture-save") == 0;
+			const long tic = atol(argv[++i]);
+			const char *path = argv[++i];
+			if(saving) { g_saveTic = tic; g_savePath = path; }
+			else { g_loadTic = tic; g_loadPath = path; }
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-mouse") == 0 && i + 4 < argc)
+		{
+			MouseWindow w;
+			w.from = atol(argv[++i]);
+			w.tics = atol(argv[++i]);
+			w.dx = atoi(argv[++i]);
+			w.dy = atoi(argv[++i]);
+			g_mouseWindows.Push(w);
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-commands") == 0 && i + 1 < argc)
@@ -1145,6 +1193,14 @@ void ParseArgs(int argc, char **argv)
 			fprintf(g_playerFile, "# tic player tilex tiley angle health frags team teamfrags class x y\n");
 	}
 
+	if(g_armed && !g_viewModelPath.IsEmpty())
+	{
+		g_viewModelFile = fopen(g_viewModelPath.GetChars(), "w");
+		if(g_viewModelFile == NULL)
+			I_Error("Capture: failed to open viewmodel trace");
+		fprintf(g_viewModelFile, "# tic time texture x y\n");
+	}
+
 	if(g_armed && !g_actorPath.IsEmpty())
 	{
 		g_actorFile = fopen(g_actorPath.GetChars(), "w");
@@ -1152,7 +1208,7 @@ void ParseArgs(int argc, char **argv)
 			Printf("Capture: FAILED to open actor trace '%s'\n",
 				g_actorPath.GetChars());
 		else
-			fprintf(g_actorFile, "# tic class tilex tiley dir pathing attack health\n");
+			fprintf(g_actorFile, "# tic class tilex tiley dir pathing attack health sprite frame duration\n");
 	}
 
 #ifdef ECWOLF_RENDERER_OPENGL
@@ -1719,6 +1775,12 @@ void NoteUiAction(UiAction what)
 
 void InjectControls(TicCmd_t &cmd)
 {
+	for(unsigned int i = 0; i < g_mouseWindows.Size(); ++i)
+	{
+		const MouseWindow &w = g_mouseWindows[i];
+		if(gamestate.TimeCount >= w.from && gamestate.TimeCount < w.from + w.tics)
+			ApplyMouseMovement(cmd, w.dx, w.dy);
+	}
 	if(g_holdScoreboard)
 		cmd.buttonstate[bt_scoreboard] = true;
 
@@ -1756,6 +1818,23 @@ void PreTic()
 {
 	if(!g_armed || map == NULL)
 		return;
+	if(g_saveTic >= 0 && g_ticCount >= (uint64_t)g_saveTic && Session::AllowsSaving())
+	{
+		g_saveTic = -1;
+		if(!GameSave::Save(g_savePath, "Regression snapshot"))
+			I_Error("Capture: save failed");
+		Printf("Capture: saved snapshot %s\n", g_savePath.GetChars());
+	}
+	if(g_loadTic >= 0 && g_ticCount >= (uint64_t)g_loadTic && Session::AllowsSaving())
+	{
+		g_loadTic = -1;
+		loadedgame = true;
+		const bool ok = GameSave::Load(g_loadPath);
+		loadedgame = false;
+		if(!ok)
+			I_Error("Capture: load failed");
+		Printf("Capture: loaded snapshot %s\n", g_loadPath.GetChars());
+	}
 
 	// Once, on the first tic the map exists: the answer is about the map's
 	// static geometry, and writing it every tic would say the same thing four
@@ -2167,11 +2246,14 @@ static void TraceVerbs()
 	player_t &player = players[ConsolePlayer];
 	AActor *pawn = player.mo;
 
-	int visor = 0, mines = 0, ammo = 0, health = 0;
+	int visor = 0, charge = 0, mines = 0, ammo = 0, health = 0, plan = 0;
 	if(pawn)
 	{
 		if(AInventory *mode = pawn->FindInventory(ClassDef::FindClass("C7VisorMode")))
 			visor = mode->amount;
+		if(AInventory *battery = pawn->FindInventory(ClassDef::FindClass("C7VisorCharge")))
+			charge = battery->amount;
+		plan = pawn->FindInventory(ClassDef::FindClass("C7FloorPlan")) ? 1 : 0;
 		if(AInventory *m = pawn->FindInventory(ClassDef::FindClass("C7Mines")))
 			mines = m->amount;
 		health = player.health;
@@ -2185,16 +2267,18 @@ static void TraceVerbs()
 	const int y = pawn ? (int)(pawn->y >> 10) : 0;
 
 	static bool first = true;
-	static int lastVisor, lastMines, lastAmmo, lastHealth, lastMap, lastAngle, lastX, lastY;
+	static int lastVisor, lastCharge, lastMines, lastAmmo, lastHealth, lastMap, lastAngle, lastX, lastY, lastPlan;
 	if(first || visor != lastVisor || mines != lastMines || ammo != lastAmmo ||
 		health != lastHealth || map != lastMap || angle != lastAngle ||
-		x != lastX || y != lastY)
+		x != lastX || y != lastY || charge != lastCharge || plan != lastPlan)
 	{
-		Printf("verbs tic=%lu visor=%d mines=%d map=%d ammo=%d health=%d x=%d y=%d angle=%d\n",
-			(unsigned long)g_ticCount, visor, mines, map, ammo, health, x, y, angle);
+		Printf("verbs tic=%lu visor=%d mines=%d map=%d ammo=%d health=%d x=%d y=%d angle=%d charge=%d plan=%d fullmap=%d\n",
+			(unsigned long)g_ticCount, visor, mines, map, ammo, health, x, y, angle, charge, plan, gamestate.fullmap ? 1 : 0);
 		first = false;
 		lastVisor = visor; lastMines = mines; lastAmmo = ammo; lastHealth = health;
 		lastMap = map; lastAngle = angle; lastX = x; lastY = y;
+		lastCharge = charge;
+		lastPlan = plan;
 	}
 }
 
@@ -2255,6 +2339,15 @@ void PostFrame()
 
 	WriteSpriteBanks();
 	++g_frameCount;
+	if(g_viewModelFile != NULL && map != NULL && players[ConsolePlayer].mo != NULL)
+	{
+		ViewModelSprite sprites[player_t::NUM_PSPRITES];
+		const unsigned int count = R_GetViewModelSprites(sprites, player_t::NUM_PSPRITES);
+		for(unsigned int i = 0; i < count; ++i)
+			fprintf(g_viewModelFile, "%lu %d %s %d %d\n",
+				(unsigned long)g_ticCount, gamestate.TimeCount,
+				sprites[i].tex->Name.GetChars(), sprites[i].x, sprites[i].y);
+	}
 
 	// The editor's Snapshot: first frame drawn at or after the chosen tic.
 	// One line of result, then out -- the editor is waiting on the process, and

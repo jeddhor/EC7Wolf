@@ -52,7 +52,7 @@ tiles
 		playeruse = true;
 		repeatable = true;
 	}
-	trigger 110
+	trigger 93
 	{
 		action = "C7_Dispenser";
 		arg0 = 3;
@@ -2057,8 +2057,8 @@ things
 	// Keep these as distinct classes so collision and pickup
 	// behavior can be specialized without changing the map-number contract.
 	{23, C7Static000, 0, 0, 0}
-	{24, C7Static001, 0, 0, 0}
-	{25, C7Static002, 0, 0, 0}
+	{24, C7RedCeilingLamp, 0, 0, 0}
+	{25, C7BlueCeilingLamp, 0, 0, 0}
 	{26, C7Static003, 0, 0, 0}
 	{27, C7Static004, 0, 0, 0}
 	{28, C7Static005, 0, 0, 0}

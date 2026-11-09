@@ -207,7 +207,7 @@ seen_near = seen_far = False
 for line in open(sys.argv[1]):
     if line.startswith("#"):
         continue
-    _, name, _, _, _, _, attack, _ = line.split()
+    _, name, _, _, _, _, attack, _ = line.split()[:8]
     if name == "C7ProbeEye":
         seen_near = True
         near_woke |= attack == "1"

@@ -59,8 +59,8 @@ def forbid(pattern: str, text: str, description: str) -> None:
 
 
 for object_id, actor in {
-    24: "C7Static001",       # red card
-    25: "C7Static002",       # blue card
+    24: "C7RedCeilingLamp",  # decorative statinfo type 0
+    25: "C7BlueCeilingLamp", # decorative statinfo type 0
     28: "C7Static005",       # non-pickup row
     29: "C7M343",
     51: "C7DualBlaster",
@@ -247,7 +247,7 @@ for wall_id, result_id, kind in ((9, 10, 1), (11, 12, 2), (30, 31, 3)):
 require(r'FUNC\(C7_WallSwitch\).*?C7Static001.*?C7Static002.*?GiveInventory.*?P_AlertCorridor7Monsters', LNSPEC, "Corridor 7 terminals grant access cards or raise the intruder alert")
 require(r'RED Access Granted.*?BLUE Access Granted', LNSPEC, "access terminals display their released grant messages")
 require(r'Lock\s+1\s+Corridor7.*?BLUE Access Required.*?Lock\s+2\s+Corridor7.*?RED Access Required', LOCKDEFS, "locked doors display their released access requirements")
-for wall_id, kind in ((85, 1), (88, 1), (111, 2), (110, 3)):
+for wall_id, kind in ((85, 1), (88, 1), (111, 2), (93, 3)):
     require(
         rf'trigger\s+{wall_id}\s*\{{.*?action\s*=\s*"C7_Dispenser".*?arg0\s*=\s*{kind}.*?playeruse\s*=\s*true.*?repeatable\s*=\s*true',
         XLAT,
@@ -259,8 +259,10 @@ require(r'FUNC\(C7_Dispenser\).*?C7MedicPack.*?GiveInventory.*?SetC7WallTexture\
 # That grouping is what identifies all five as wall-unit text: the floor
 # pickups live in their own block at 0x3ADDA. This check used to assert
 # "VISOR BATTERY RECHARGED", which was ours and not the game's.
-require(r'args\[0\]\s*==\s*3.*?C7VisorCharge.*?FULL VISOR CHARGE.*?visor->amount\s*=\s*visor->maxamount.*?"Visor Battery"',
-        LNSPEC, "wall 110 is a non-wasteful reusable visor charger")
+require(r'args\[0\]\s*==\s*3.*?C7WallTexture\(93\).*?C7VisorCharge.*?visor->amount\s*=.*?\+\s*100.*?SetC7WallTexture\(spot,\s*94\).*?"Visor Battery"',
+        LNSPEC, "wall 93 adds one visor battery and becomes spent wall 94")
+forbid(r'trigger\s+110\s*\{.*?C7_Dispenser', XLAT,
+       "numbered panel wall 110 is not a battery dispenser")
 require(r'FULL HEALTH.*?return\s+false', INVENTORY,
         "health packs remain in the world when the player is full")
 require(r'amount\s*<\s*maxamount.*?else.*?FULL AMMO.*?return\s+true', INVENTORY,
@@ -486,7 +488,9 @@ require(r'IWad::CheckGameFilter\("Corridor7"\).*?HIGH SCORES', WL_INTER, "Corrid
 require(r'LevelBonus\s*==\s*-1.*?ForceTally.*?!\(IWad::CheckGameFilter\("Corridor7"\)\s*&&\s*levelInfo->BonusLevel\)', WL_INTER, "bonus floors stay out of forty-floor victory averages")
 require(r'LatchString\(10,\s*16,\s*2.*?LatchNumber\(30,\s*16,\s*7.*?LatchNumber\(296,\s*16,\s*2', WOLF_SBAR, "released HUD number placement")
 require(r'DrawC7Gauge\(97,\s*172,.*?health\s*<\s*32\s*\?\s*80\s*:\s*128\).*?DrawC7Gauge\(97,\s*191,.*?5,\s*56\).*?DrawC7Gauge\(200,\s*172,.*?5,\s*104\).*?DrawC7Gauge\(200,\s*190,.*?5,\s*104\).*?DrawC7Gauge\(149,\s*193,.*?3,\s*56\)', WOLF_SBAR, "released native-index HUD gauge ramps")
-require(r'C7G0019.*?C7G0020.*?C7G0021.*?C7G0018.*?256\+\(slot\+\+\)\*8,\s*176', WOLF_SBAR, "released three-slot HUD item graphics")
+for cls, graphic in (("C7Static001", "C7G0021"), ("C7Static002", "C7G0020"), ("C7FloorPlan", "C7G0019")):
+    require(rf'"{cls}"\s*,\s*"{graphic}"', WOLF_SBAR, f"{cls} uses its released HUD graphic")
+require(r'C7G0018.*?256\+\(slot\+\+\)\*8,\s*176', WOLF_SBAR, "released three-slot HUD item graphics")
 require(r'component\s*<<\s*2.*?component\s*>>\s*4', VSWAP, "Corridor 7 VGA DAC palette expansion")
 require(r'PSPR_CORRIDOR7.*?TopOffset\s*=\s*-54.*?xScale\s*=\s*4\*FRACUNIT/5', WOLF_SHAPE, "native Corridor 7 weapon scale and anchor")
 require(r'actor\s+C7M16.*?Ready:\s*C761\s+A\s+1\s+A_WeaponReady', PLAYER, "M-16 uses its released stationary frame")
@@ -593,10 +597,9 @@ if "C750" in weapon_blocks["C7Bayonet"]:
 # The sway table still gates on a ready frame; C7ApplyWalkPose returns early for
 # anything else rather than nesting the body in an if(readyFrame) block.
 require(r'0,\s*1,\s*2,\s*3,\s*4,\s*3,\s*2,\s*1,\s*0,\s*-1,\s*-2,\s*-3,\s*-4,\s*-3,\s*-2,\s*-1.*?if\(!readyFrame\)\s*\n\s*return;.*?xoffset\s*\+=\s*corridor7X\[phase\]', WL_DRAW, "released 16-step Corridor 7 stationary-frame weapon bob")
-require(r'readyBase\+\(\(phase&4\)\s*\?\s*4\s*:\s*7\).*?spriteOverride\s*=\s*R_GetSprite',
-        WL_DRAW, "weapon bob alternates only the moving and stationary pages")
-if "corridor7Poses" in WL_DRAW:
-    raise SystemExit("Corridor 7 definition check failed: weapon bob must not insert intermediate pose pages")
+require(r'7,\s*7,\s*6,\s*5,\s*4,\s*5,\s*6,\s*7,\s*7,\s*7,\s*6,\s*5,\s*4,\s*5,\s*6,\s*7.*?'
+        r'readyBase\+corridor7Pose\[phase\].*?spriteOverride\s*=\s*R_GetSprite',
+        WL_DRAW, "weapon walk poses follow CORR7CD.EXE's complete four-pose cycle")
 if "corridor7Frame" in WL_DRAW:
     raise SystemExit("Corridor 7 definition check failed: weapon bob must not copy live Frames")
 require(r'C7CycleSpriteColor.*?color\s*>=\s*208\s*&&\s*color\s*<=\s*239.*?'
@@ -663,7 +666,7 @@ require(r'action\s+native\s+A_C7AlienAlarm', NATIVE_ACTORS,
         "the Ailoprobe alarm action is registered")
 require(r'P_AlertCorridor7MonstersNear.*?12\*TILEGLOBAL', WL_AGENT,
 		"ordinary alien alarms wake a local group instead of the whole floor")
-require(r'TileBlocksSight.*?CheckGameFilter\("Corridor7"\).*?return\s+true.*?'
+require(r'TileBlocksSight.*?CheckGameFilter\("Corridor7"\).*?return\s+spot->corridor7WallMarker\s*!=\s*107.*?'
 		r'else if \(TileBlocksSight\(spot\)\)', WL_STATE,
 		"Corridor 7 glass remains opaque to alien line-of-sight")
 require(r'C7VisorCanSeeActor.*?C7Eniram.*?infrared',

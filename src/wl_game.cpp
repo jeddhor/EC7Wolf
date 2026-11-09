@@ -851,6 +851,11 @@ restartgame:
 			StartMusic ();
 		}
 
+		// FinishTravel may have replaced the temporary spawn pawn, and a map
+		// may have reset inventory. Apply the rank entitlement to the final
+		// pawn after both, including when entering a bonus floor.
+		for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
+			C7GiveDifficultyFloorPlan(players[i].mo);
 		ingame = true;
 
 		if (!died)

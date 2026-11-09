@@ -55,6 +55,8 @@
 #include "wl_inter.h"
 #include "wl_iwad.h"
 #include "wl_loadsave.h"
+#include "a_inventory.h"
+#include "thingdef/thingdef.h"
 #include "wl_main.h"
 #include "wl_menu.h"
 #include "wl_net.h"
@@ -609,6 +611,9 @@ bool Load(const FString &filename)
 	SaveProdVersion = (DWORD)atoll(prodver);
 	delete[] prodver;
 
+	char *shotgunRule = M_GetPNGText(png, "EC7Wolf Enhanced Shotgun");
+	gamestate.enhancedShotgun = shotgunRule && strcmp(shotgunRule, "1") == 0;
+	delete[] shotgunRule;
 	M_GetPNGText(png, "Current Map", gamestate.mapname, 8);
 	SetupGameLevel();
 
@@ -622,7 +627,35 @@ bool Load(const FString &filename)
 		Serialize(snarc);
 	}
 
+	// Older translators spawned the two ceiling lamps as collectible keys.
+	// Keep owned access tokens; replace only their erroneous world actors.
+	if(IWad::CheckGameFilter("Corridor7"))
+	{
+		const char *tokens[] = { "C7Static001", "C7Static002" };
+		const char *lamps[] = { "C7RedCeilingLamp", "C7BlueCeilingLamp" };
+		for(unsigned int color = 0; color < 2; ++color)
+		{
+			const ClassDef *token = ClassDef::FindClass(tokens[color]);
+			const ClassDef *lamp = ClassDef::FindClass(lamps[color]);
+			if(!token || !lamp) continue;
+			for(AActor::Iterator iter = AActor::GetIterator().Next(); iter;)
+			{
+				AActor *actor = iter;
+				iter.Next();
+				if(actor->GetClass() != token || static_cast<AInventory *>(actor)->owner)
+					continue;
+				AActor *replacement = AActor::Spawn(lamp, actor->x, actor->y, actor->z, 0);
+				replacement->angle = actor->angle;
+				actor->Destroy();
+			}
+		}
+		AActor::FinishSpawningActors();
+	}
 	FRandom::StaticReadRNGState(png);
+	// Quickload stays in the play loop. Repair the missing low-rank map token
+	// in older saves here as well as at ordinary level entry.
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
+		C7GiveDifficultyFloorPlan(players[i].mo);
 	// It is apparently possible to load a game at just the right time and end
 	// up in the wrong play state.
 	playstate = ex_stillplaying;
@@ -694,6 +727,7 @@ bool Save(const FString &filename, const FString &title)
 	}
 	M_AppendPNGText(fileh, "Title", title);
 	M_AppendPNGText(fileh, "Current Map", levelInfo->MapName);
+	M_AppendPNGText(fileh, "EC7Wolf Enhanced Shotgun", gamestate.enhancedShotgun ? "1" : "0");
 
 	FString comment;
 	// Creation Time

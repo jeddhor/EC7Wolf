@@ -170,7 +170,7 @@ class Placement(unittest.TestCase):
 
     def test_a_dispenser_is_one_word(self):
         self.assertEqual(by_key("prefab.dispenser.visor").placement(3, 3),
-                         [(0, 3, 3, 110)])
+                         [(0, 3, 3, 93)])
 
     def test_the_vortex_goes_on_plane_one(self):
         self.assertEqual(by_key("prefab.exit.vortex").placement(2, 2),

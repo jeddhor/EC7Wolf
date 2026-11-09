@@ -291,6 +291,19 @@ int SpriteCompare(const void *s1, const void *s2)
 void R_InitSprites()
 {
 	static const uint8_t MAX_SPRITE_FRAMES = 29; // A-Z, [, \, ]
+	// Cosmetic ready poses are selected by C7ApplyWalkPose rather than actor
+	// states. Register them before sorting; otherwise R_GetSprite silently
+	// returns SPR_NONE and the renderer falls back to the stationary frame.
+	if(IWad::CheckGameFilter("Corridor7"))
+	{
+		for(unsigned int base = 746; base <= 802; base += 8)
+			for(unsigned int pose = 4; pose <= 7; ++pose)
+			{
+				char name[5];
+				mysnprintf(name, sizeof(name), "C%03u", base+pose);
+				R_LoadSprite(name);
+			}
+	}
 
 	// First sort the loaded sprites list
 	qsort(&loadedSprites[NUM_SPECIAL_SPRITES], loadedSprites.Size()-NUM_SPECIAL_SPRITES, sizeof(loadedSprites[0]), SpriteCompare);

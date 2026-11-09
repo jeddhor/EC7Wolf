@@ -293,10 +293,9 @@ def validate_map(document: MapDocument, catalog: Catalog | None = None, *,
                 color = "RED" if "red" in entry.aliases else "BLUE"
                 locks.setdefault(color, coordinates(index, width))
         if locks:
-            # A card reaches the player two ways: lying on the floor, or handed
-            # over by the wall terminal of that color. Corridor 7 mostly uses
-            # the terminal, so counting only floor cards would warn about the
-            # ordinary case.
+            # Retail access comes from wall terminals. Catalog-declared floor
+            # keys can serve custom maps; ordinary ceiling lamps must never
+            # count as keys.
             keys = set()
             for value in plane1:
                 entry = catalog.for_value(1, value)

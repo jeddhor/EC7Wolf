@@ -63,7 +63,7 @@ ln -s ec7wolf.pk3 "$staging_dir/ecwolf.pk3"
 install -m 755 "$script_dir/corridor7-release/run-corridor7.sh" \
 	"$staging_dir/run-corridor7.sh"
 install -m 644 "$script_dir/corridor7-release/README.txt" \
-	"$staging_dir/README.txt"
+	"$staging_dir/EC7Wolf-README.txt"
 
 rm -rf "$output_dir"
 mv "$staging_dir" "$output_dir"

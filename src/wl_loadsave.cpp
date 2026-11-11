@@ -648,8 +648,15 @@ bool Load(const FString &filename)
 	delete[] prodver;
 
 	char *shotgunRule = M_GetPNGText(png, "EC7Wolf Enhanced Shotgun");
-	gamestate.enhancedShotgun = shotgunRule && strcmp(shotgunRule, "1") == 0;
+	gamestate.shotgunMinimum = shotgunRule && strcmp(shotgunRule, "1") == 0 ? 50 : 0;
 	delete[] shotgunRule;
+	char *minimum = M_GetPNGText(png, "EC7Wolf Shotgun Minimum");
+	if(minimum)
+	{
+		gamestate.shotgunMinimum = strcmp(minimum, "50") == 0 ? 50 :
+			(strcmp(minimum, "100") == 0 ? 100 : 0);
+		delete[] minimum;
+	}
 	M_GetPNGText(png, "Current Map", gamestate.mapname, 8);
 	SetupGameLevel();
 
@@ -764,7 +771,9 @@ bool Save(const FString &filename, const FString &title)
 	}
 	M_AppendPNGText(fileh, "Title", title);
 	M_AppendPNGText(fileh, "Current Map", levelInfo->MapName);
-	M_AppendPNGText(fileh, "EC7Wolf Enhanced Shotgun", gamestate.enhancedShotgun ? "1" : "0");
+	M_AppendPNGText(fileh, "EC7Wolf Enhanced Shotgun", gamestate.shotgunMinimum ? "1" : "0");
+	M_AppendPNGText(fileh, "EC7Wolf Shotgun Minimum", gamestate.shotgunMinimum == 100 ? "100" :
+		(gamestate.shotgunMinimum == 50 ? "50" : "0"));
 
 	FString comment;
 	// Creation Time

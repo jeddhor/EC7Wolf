@@ -31,7 +31,7 @@ extern struct gametype
 	int32_t     TimeCount;
 	bool        victoryflag;            // set during victory animations
 	bool		fullmap;
-	bool enhancedShotgun; // authority-owned rule, fixed for the current game
+	BYTE shotgunMinimum; // 0, 50 or 100; fixed by the authority for this game.
 } gamestate;
 
 extern  char            demoname[13];

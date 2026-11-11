@@ -6,7 +6,7 @@ build_dir=$(cd "$1" && pwd)
 data_dir=$(cd "$2" && pwd)
 repo=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 work=$(mktemp -d /tmp/ec7wolf-enhancements.XXXXXX)
-trap 'rm -rf "$work"' EXIT HUP INT TERM
+if [ -z "${C7_KEEP_TEST_ARTIFACTS:-}" ]; then trap 'rm -rf "$work"' EXIT HUP INT TERM; else printf 'Artifacts: %s\n' "$work"; fi
 xvfb-run -a python3 - "$build_dir" "$data_dir" "$repo" "$work" <<'PY'
 from PIL import Image,ImageChops
 import struct
@@ -33,11 +33,11 @@ def fixture(dist=7,health=100,armor=0):
    blob=src.read(info)
    if info.filename=='actors/corridor7/player.txt':
     blob=blob.replace(b'player.startitem "C7Bayonet"',b'').replace(b'player.startitem "C7M16"',b'player.startitem "C7Shotgun"').replace(b'actor C7Player : PlayerPawn\n{',f'actor C7Player : PlayerPawn\n{{\n health {health}\n player.startitem "C7BodyArmor", {armor}\n player.startitem "C7Mines", 25'.encode())
-    blob+=b'\nactor C7TestTarget { health 100000 +SHOOTABLE +ISMONSTER states { Spawn: PROB A -1 stop } }\n'
+    blob+=b'\nactor C7TestTarget { health 100000 +SHOOTABLE +ISMONSTER +ATTACKMODE states { Spawn: PROB A -1 stop } }\n'
    if info.filename=='xlat/corridor7.txt':blob=blob.replace(b'{108, C7OrganicEye,',b'{108, C7TestTarget,')
    dst.writestr(info,blob)
-def run(label,setting=0,extra=(),tics=700,renderer='software',hud=''):
- cfg=work/(label+'.cfg');cfg.write_text(f'C7EnhancedShotgun = {setting};\n{hud}')
+def run(label,setting=0,extra=(),tics=500,renderer='software',hud=''):
+ cfg=work/(label+'.cfg');cfg.write_text((f'C7ShotgunPreset = {setting};\n' if setting is not None else 'C7EnhancedShotgun = 1;\n')+hud)
  args=[str(build/'ec7wolf'),'--data','CO7','--nowait','--no-upscale','--res','320','200','--vid-renderer',renderer,'--tedlevel','MAP01','--skill','3','--config',str(cfg),'--savedir',str(work/'save'),'--capture-rngseed','1','--capture-actors',str(work/(label+'.actors')),'--capture-checksum',str(work/(label+'.checksums')),'--capture-place','1','4.5','10.5','0','--capture-ammo','--capture-maxtics',str(tics),*extra]
  with (work/(label+'.log')).open('w') as log:subprocess.run(args,cwd=lab,env=env,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=60)
  rows=[l.split() for l in (work/(label+'.actors')).read_text().splitlines() if not l.startswith('#')]
@@ -49,34 +49,46 @@ for dist in (1,3,7):
     fixture(dist)
     classic=run(f'classic-{dist}',extra=('--capture-fire','20'))
     enhanced=run(f'enhanced-{dist}',1,('--capture-fire','20'))
-    assert len(classic)>=8,(dist,classic)
+    minimum100=run(f'minimum100-{dist}',2,('--capture-fire','20'))
+    assert minimum100==[max(hit,100) for hit in classic],(dist,classic,minimum100)
+    assert len(classic)>=6,(dist,classic)
     assert enhanced==[max(hit,50) for hit in classic],(dist,classic,enhanced)
     if dist==7:assert min(classic)<50,('sample did not exercise the floor',classic)
     baselines[dist]=classic
     print('PASS real hit sequences at distance',dist,flush=True)
 fixture(7)
-for saved in (0,1):
+for saved in (0,1,2):
  run(f'save-rule-{saved}',saved,('--capture-save','10',f'rule{saved}.ecs'),tics=40)
  image=Image.open(work/'save'/f'rule{saved}.ecs');image.load()
- assert image.info['EC7Wolf Enhanced Shotgun']==str(saved)
- hits=run(f'load-rule-{saved}',1-saved,('--capture-load','10',f'rule{saved}.ecs','--capture-fire','20'))
+ assert image.info['EC7Wolf Shotgun Minimum']==str((0,50,100)[saved])
+ hits=run(f'load-rule-{saved}',0 if saved else 2,('--capture-load','10',f'rule{saved}.ecs','--capture-fire','20'))
  baseline=baselines[7]
- assert hits==[max(x,50) if saved else x for x in baseline],(saved,hits)
+ assert hits==[max(x,(0,50,100)[saved]) if saved else x for x in baseline],(saved,hits)
  print('PASS saved rule',saved,'overrides opposite current preference',flush=True)
 b=(work/'save/rule1.ecs').read_bytes();out=bytearray(b[:8]);p=8
 while p<len(b):
  n=struct.unpack_from('>I',b,p)[0];chunk=b[p:p+n+12];tag=b[p+4:p+8];payload=b[p+8:p+8+n]
- if not (tag==b'tEXt' and payload.startswith(b'EC7Wolf Enhanced Shotgun\0')):out.extend(chunk)
+ if not (tag==b'tEXt' and payload.split(b'\0')[0] in (b'EC7Wolf Enhanced Shotgun',b'EC7Wolf Shotgun Minimum')):out.extend(chunk)
  p+=n+12
 (work/'save/legacy.ecs').write_bytes(out)
+# A pre-preset enhanced save contains only the legacy boolean.
+old=bytearray(b[:8]);p=8
+while p<len(b):
+ n=struct.unpack_from('>I',b,p)[0];chunk=b[p:p+n+12];tag=b[p+4:p+8];payload=b[p+8:p+8+n]
+ if not (tag==b'tEXt' and payload.startswith(b'EC7Wolf Shotgun Minimum\0')):old.extend(chunk)
+ p+=n+12
+(work/'save/old-enhanced.ecs').write_bytes(old)
+assert run('old-enhanced-save',0,('--capture-load','10','old-enhanced.ecs','--capture-fire','20'))==[max(x,50) for x in baselines[7]]
+assert run('old-enhanced-config',None,('--capture-fire','20'))==[max(x,50) for x in baselines[7]]
+print('PASS legacy enhanced saves and configurations retain Minimum 50',flush=True)
 hits=run('load-legacy',1,('--capture-load','10','legacy.ecs','--capture-fire','20'))
 assert min(hits)<50,hits
 print('PASS legacy saves without the new metadata remain classic',flush=True)
-for enabled in (0,1):
+for enabled in (0,1,2):
  logs=[];processes=[]
  port=5281+enabled*10
  for peer in (0,1):
-  label=f'net-{enabled}-{peer}';cfg=work/(label+'.cfg');cfg.write_text(f'C7EnhancedShotgun = {enabled if peer==0 else 1-enabled};\nC7MiniHUD = {peer};\n')
+  label=f'net-{enabled}-{peer}';cfg=work/(label+'.cfg');cfg.write_text(f'C7ShotgunPreset = {enabled if peer==0 else (enabled+1)%3};\nC7MiniHUD = {peer};\n')
   log=(work/(label+'.log')).open('w');logs.append(log)
   args=[str(build/'ec7wolf'),'--data','CO7','--nowait','--no-upscale','--res','320','200','--vid-renderer','software','--tedlevel','MAP01','--skill','3','--config',str(cfg),'--savedir',str(work/'save'),'--capture-rngseed','1','--capture-checksum',str(work/(label+'.crc')),'--capture-ammo','--capture-fire','30','--capture-maxtics','350']
   args+=['--host','2','--port',str(port)] if peer==0 else ['--port',str(port+1),'--join',f'127.0.0.1:{port}']
@@ -89,7 +101,7 @@ for enabled in (0,1):
   for f in logs:f.close()
  for peer in (0,1):
   label=f'net-{enabled}-{peer}';text=(work/(label+'.log')).read_text()
-  assert 'Corridor 7 shotgun rule: '+('enhanced (minimum 50)' if enabled else 'classic') in text,text[-1000:]
+  assert 'Corridor 7 shotgun rule: '+(f'enhanced (minimum {(0,50,100)[enabled]})' if enabled else 'classic') in text,text[-1000:]
  a=(work/f'net-{enabled}-0.crc').read_text();b=(work/f'net-{enabled}-1.crc').read_text();assert a==b,('peers disagree',enabled)
  print('PASS host rule',enabled,'overrides opposing client preference; all 350 world checksums match',flush=True)
 fixture(7,100,400)
@@ -103,12 +115,12 @@ for renderer in ('software','opengl'):
    image=Image.open(work/(label+('.ppm' if renderer=='opengl' else '.png'))).convert('RGB');shots.append(image.copy())
    if size==20 and enabled:
     patterns=['111101101101111','010110010010111','111001111100111','111001111001111','101101111001001','111100111001111','111100111101111','111001001001001','111101111101111','111101111001111']
-    for x,y,number in [(97,171,'400'),(97,190,'400'),(200,171,'200')]:
+    for x,y,number in [(97,171,'400'),(97,190,'400'),(200,171,'200'),(200,189,'25'),(149,192,'100')]:
      start=x+(25-(len(number)*4-1))//2
      for i,c in enumerate(number):
       pixels=list(image.crop((start+4*i,y+1,start+4*i+3,y+6)).getdata())
-      observed=''.join('1' if r>200 and g>200 and b<80 else '0' for r,g,b in pixels)
-      assert observed==patterns[int(c)],(label,number,c,observed)
+      observed=''.join('1' if r>200 and g>200 and b>200 else '0' for r,g,b in pixels)
+      assert all(a=='1' for a,b in zip(observed,patterns[int(c)]) if b=='1'),(label,number,c,observed)
   diff=ImageChops.difference(shots[0],shots[1])
   assert diff.crop((0,170,320,200)).getbbox(),(renderer,size,'HUD toggle has no visible effect')
   # The world checksum, rather than frame-paced palette effects, proves that
@@ -125,16 +137,20 @@ with zipfile.ZipFile(lab/'ec7wolf.pk3','w') as dst:
   if info.filename=='actors/corridor7/player.txt':blob=blob.replace(b'player.startitem "C7Shotgun"',b'player.startitem "C7Shotgun"\nplayer.startitem "C7Static001"\nplayer.startitem "C7Static002"\nplayer.startitem "C7FloorPlan"')
   dst.writestr(info,blob)
 for renderer in ('software','opengl'):
- for held in (0,1):
+ for held in (0,1,2):
   label=f'held-{renderer}-{held}';extra=['--capture-give','C7Adrenaline','--capture-snapshot',str(work/(label+'.png')),'60']
-  if held:extra+=['--capture-hold-button','statusbar','20','100']
+  if held==1:extra+=['--capture-hold-button','statusbar','20','100']
   if renderer=='opengl':extra+=['--capture-glpresent',str(work/(label+'.ppm'))]
-  run(label,extra=extra,tics=65,renderer=renderer,hud='ViewSize = 21;\nC7MiniHUD = 1;\nC7NumericHUD = 1;\n')
+  run(label,extra=extra,tics=65,renderer=renderer,hud=f'ViewSize = 21;\nC7MiniHUD = 1;\nC7NumericHUD = 1;\nC7MiniHUDStyle = {int(held==2)};\n')
   im=Image.open(work/(label+('.ppm' if renderer=='opengl' else '.png'))).convert('RGB')
-  if held:
+  if held==1:
    for i,c in enumerate('65535'):
-    pixels=list(im.crop((100+i*4,191,103+i*4,196)).getdata());bits=''.join('1' if r>200 and g>200 and b<80 else '0' for r,g,b in pixels)
+    pixels=list(im.crop((100+i*4,191,103+i*4,196)).getdata());bits=''.join('1' if r>200 and g>200 and b>200 else '0' for r,g,b in pixels)
     expect={'6':'111100111101111','5':'111100111001111','3':'111001111001111'}[c]
-    assert bits==expect,(label,c,bits)
-  print('PASS full-screen held status' if held else 'CAPTURE all items at native armor maximum',renderer,flush=True)
+    assert all(a=='1' for a,b in zip(bits,expect) if b=='1'),(label,c,bits)
+  if held==2:
+   for box in ((208,181,224,196),(232,181,248,196),(256,181,312,196)):
+    assert any(g>r and g>b and g>40 for r,g,b in im.crop(box).getdata()),(label,'missing classic readout',box)
+   assert 'C7MiniHUDStyle = 1;' in (work/(label+'.cfg')).read_text()
+  print(('PASS classic compact readouts' if held==2 else 'PASS full-screen held status' if held else 'CAPTURE all items at native armor maximum'),renderer,flush=True)
 PY

@@ -109,6 +109,7 @@ public:
 
 	void DrawStatusBar();
 	void DrawTopOverlay();
+	void DrawC7ClassicHud();
 	void SetTopMessage(const char *message, unsigned int duration);
 	void SetC7HealthChamberPower(unsigned int power, unsigned int duration);
 	unsigned int GetHeight(bool top) { return top ? 0 : STATUSLINES+!mac; }
@@ -640,14 +641,17 @@ namespace
 		// A 3x5 numeric face fits the existing 25x5 meter wells without
 		// downsampling the native font or hiding stacked armor totals.
 		static const WORD digits[] = { 0x7b6f, 0x2c97, 0x73e7, 0x73cf, 0x5bc9, 0x79cf, 0x79ef, 0x7249, 0x7bef, 0x7bcf };
-		C7HudRect(x,y,25,7,PalEntry(0,0,0));
+		// Keep the colored gauge visible, with a dark outline for contrast.
 		FString text; text.Format("%u",amount);
 		x += (25-(int(text.Len())*4-1))/2;
 		for(unsigned int i=0;i<text.Len();++i)
 			for(unsigned int row=0;row<5;++row)
 				for(unsigned int col=0;col<3;++col)
 					if(digits[text[i]-'0'] & (1U<<(14-row*3-col)))
-						C7HudRect(x+i*4+col,y+1+row,1,1,PalEntry(255,255,0));
+					{
+						C7HudRect(x+i*4+col+1,y+1+row+1,1,1,PalEntry(0,0,0));
+						C7HudRect(x+i*4+col,y+1+row,1,1,PalEntry(255,255,255));
+					}
 	}
 
 	void C7MiniHud()
@@ -683,6 +687,68 @@ namespace
 			if(pawn->FindInventory(ClassDef::FindClass(items[i])))
 				VWB_DrawGraphic(TexMan(icons[i]),178+(slot++)*8,183);
 	}
+}
+
+void WolfStatusBar::DrawC7ClassicHud()
+{
+	AActor *pawn = players[ConsolePlayer].mo;
+	if(!pawn) return;
+	auto inventoryAmount = [pawn](const char *name) -> unsigned int
+	{
+		AInventory *item = pawn->FindInventory(ClassDef::FindClass(name));
+		return item ? item->amount : 0;
+	};
+	auto rect = [](int x, int y, int w, int h, int color)
+	{
+		C7HudRect(x,y,w,h,GPalette.BaseColors[GPalette.Remap[color]]);
+	};
+	auto border = [&rect](int x, int y, int w, int h)
+	{
+		rect(x,y,w,1,7); rect(x,y,1,h,7);
+		rect(x,y+h-1,w,1,8); rect(x+w-1,y,1,h,8);
+	};
+	// Released view-21 coordinates and the third archive font. This font's
+	// 8x10 cells contain the native 3x5 numerals; no artwork is recreated.
+	FFont *tiny = V_GetFont("C7G0002");
+	auto meter = [this,tiny,&border,&rect](int x, int y, unsigned int value,
+		unsigned int fill, int ramp, int textColor)
+	{
+		rect(x,y,25,5,0);
+		DrawC7Gauge(x,y,fill,5,ramp);
+		border(x,y,26,7);
+		FString text; text.Format("%u",value);
+		if(text.Len() > 3)
+		{
+			C7HudNumber(x,y-1,value);
+			return;
+		}
+		screen->DrawText(tiny,CR_UNTRANSLATED,x,y-1,text,
+			DTA_VirtualWidth,320,DTA_VirtualHeight,200,
+			DTA_FillColor,GPalette.BaseColors[GPalette.Remap[textColor]].d,TAG_DONE);
+	};
+	const unsigned int hp = MAX(0,players[ConsolePlayer].health);
+	const unsigned int armor = inventoryAmount("C7BodyArmor");
+	const unsigned int mines = inventoryAmount("C7Mines");
+	const unsigned int visor = inventoryAmount("C7VisorCharge");
+	unsigned int ammo = 0;
+	if(players[ConsolePlayer].ReadyWeapon && players[ConsolePlayer].ReadyWeapon->ammo[AWeapon::PrimaryFire])
+		ammo = players[ConsolePlayer].ReadyWeapon->ammo[AWeapon::PrimaryFire]->amount;
+	meter(8,182,hp,MIN(25U,hp>>2),hp < 32 ? 80 : 128,0x27);
+	meter(8,190,armor,MIN(25U,armor>>2),56,0x6f);
+	meter(40,182,ammo,MIN(25U,ammo>>2),104,0x57);
+	meter(40,190,mines,MIN(25U,mines),104,0x57);
+	meter(72,182,visor,MIN(25U,visor>>2),56,0x6f);
+	const char *items[] = { "C7Static001", "C7Static002", "C7FloorPlan" };
+	const char *icons[] = { "C7G0021", "C7G0020", "C7G0019" };
+	int slot = 0;
+	for(unsigned int i=0;i<3;++i)
+		if(pawn->FindInventory(ClassDef::FindClass(items[i])))
+			VWB_DrawGraphic(TexMan(icons[i]),120-(slot++)*8,182);
+	rect(207,180,18,17,0); rect(231,180,18,17,0); rect(255,180,58,17,0);
+	LatchNumber(208,20,2,MAX(0,gamestate.killtotal-gamestate.killcount),false,true);
+	LatchString(232,20,2,levelInfo->FloorNumber);
+	LatchNumber(256,20,7,Net::Deathmatch() ? players[ConsolePlayer].frags : players[ConsolePlayer].score,false,true);
+	border(207,180,18,17); border(231,180,18,17); border(255,180,58,17);
 }
 
 void WolfStatusBar::DrawStatusBar()
@@ -737,6 +803,8 @@ void WolfStatusBar::DrawStatusBar()
 				C7HudNumber(97,171,unsigned(MAX(0,players[ConsolePlayer].health)));
 				C7HudNumber(97,190,armor ? armor->amount : 0);
 				C7HudNumber(200,171,ammo);
+				C7HudNumber(200,189,mines ? mines->amount : 0);
+				C7HudNumber(149,192,visor ? visor->amount : 0);
 			}
 
 			const struct { const char *className; const char *graphic; } items[] =
@@ -799,8 +867,8 @@ static void DrawC7TopMessage(const char *message)
 
 void WolfStatusBar::DrawTopOverlay()
 {
-	// A port enhancement: the largest DOS view observed by Jason retained
-	// the normal status bar. Draw every frame so uncapped/GL views do not flicker.
+	// The original view-21 mode is memory-limited in DOS. Keep the previously
+	// added modern style and let the player select the now-verified classic one.
 	if(corridor7 && ingame && viewsize == 21)
 	{
 		if(Command::LocalUi().buttonstate[bt_showstatusbar] ||
@@ -811,7 +879,10 @@ void WolfStatusBar::DrawTopOverlay()
 			ingame=true;
 		}
 		else if(c7_minihud)
-			C7MiniHud();
+		{
+			if(c7_minihud_style == 1) DrawC7ClassicHud();
+			else C7MiniHud();
+		}
 	}
 
 	if(corridor7 && gamestate.TimeCount < c7ChamberPowerUntil)

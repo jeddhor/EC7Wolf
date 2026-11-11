@@ -273,6 +273,8 @@ namespace
 	// up off the floor needs a Touch -- which a warp does not produce -- so the
 	// Invulnerability Sphere's strobe cannot be photographed any other way.
 	FString  g_giveClass;
+	int      g_initialHealth = -1; // --capture-health: one-time boundary-test setup
+	bool     g_healthDone = false;
 	bool     g_giveDone       = false;
 	bool     g_giveEveryone   = false;   // --capture-give-all: every slot, not just ours
 	int      g_holdButton     = bt_nobutton;
@@ -350,7 +352,7 @@ namespace
 		DWORD crc = 0;
 
 		crc = Fold(crc, &gamestate.TimeCount, sizeof(gamestate.TimeCount));
-		crc = Fold(crc, &gamestate.enhancedShotgun, sizeof(gamestate.enhancedShotgun));
+		crc = Fold(crc, &gamestate.shotgunMinimum, sizeof(gamestate.shotgunMinimum));
 
 		const DWORD rng = FRandom::StaticSumSeeds();
 		crc = Fold(crc, &rng, sizeof(rng));
@@ -1108,6 +1110,11 @@ void ParseArgs(int argc, char **argv)
 			g_killStats = true;
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-health") == 0 && i + 1 < argc)
+		{
+			g_initialHealth = clamp(atoi(argv[++i]), 1, 100000);
+			g_armed = true;
+		}
 		else if(strcmp(arg, "--capture-give") == 0 && i + 1 < argc)
 		{
 			g_giveClass = argv[++i];
@@ -1856,6 +1863,12 @@ void PreTic()
 		g_navPath = "";
 	}
 
+	if(g_initialHealth >= 0 && !g_healthDone && players[ConsolePlayer].mo)
+	{
+		players[ConsolePlayer].health = players[ConsolePlayer].mo->health = g_initialHealth;
+		g_healthDone = true;
+	}
+
 	if(!g_giveClass.IsEmpty() && !g_giveDone && players[ConsolePlayer].mo)
 	{
 		g_giveDone = true;
@@ -2252,7 +2265,7 @@ static void TraceVerbs()
 	player_t &player = players[ConsolePlayer];
 	AActor *pawn = player.mo;
 
-	int visor = 0, charge = 0, mines = 0, ammo = 0, health = 0, plan = 0;
+	int visor = 0, charge = 0, mines = 0, ammo = 0, health = 0, plan = 0, capacity = 0;
 	if(pawn)
 	{
 		if(AInventory *mode = pawn->FindInventory(ClassDef::FindClass("C7VisorMode")))
@@ -2266,25 +2279,44 @@ static void TraceVerbs()
 	}
 	if(player.ReadyWeapon && player.ReadyWeapon->ammo[AWeapon::PrimaryFire])
 		ammo = player.ReadyWeapon->ammo[AWeapon::PrimaryFire]->amount;
+	if(pawn)
+		if(AInventory *bullets = pawn->FindInventory(ClassDef::FindClass("C7Bullets")))
+			capacity = bullets->maxamount;
 
 	const int map = C7Map_Active() ? 1 : 0;
 	const int angle = pawn ? (int)(pawn->angle >> 24) : 0;
 	const int x = pawn ? (int)(pawn->x >> 10) : 0;
 	const int y = pawn ? (int)(pawn->y >> 10) : 0;
+	int packs = 0, plans = 0;
+	const ClassDef *packClass = ClassDef::FindClass("C7AmmoPack");
+	const ClassDef *planClass = ClassDef::FindClass("C7FloorPlan");
+	for(AActor::Iterator iter = AActor::GetIterator(); iter.Next();)
+		if(iter->GetClass() == packClass || iter->GetClass() == planClass)
+			if(!static_cast<AInventory *>(iter.Item())->owner &&
+				!(static_cast<AInventory *>(iter.Item())->itemFlags & IF_INACTIVE))
+			{
+				packs += iter->GetClass() == packClass;
+				plans += iter->GetClass() == planClass;
+			}
 
 	static bool first = true;
 	static int lastVisor, lastCharge, lastMines, lastAmmo, lastHealth, lastMap, lastAngle, lastX, lastY, lastPlan;
+	static int lastCapacity;
+	static int lastPacks, lastPlans;
 	if(first || visor != lastVisor || mines != lastMines || ammo != lastAmmo ||
 		health != lastHealth || map != lastMap || angle != lastAngle ||
-		x != lastX || y != lastY || charge != lastCharge || plan != lastPlan)
+		x != lastX || y != lastY || charge != lastCharge || plan != lastPlan || capacity != lastCapacity ||
+		packs != lastPacks || plans != lastPlans)
 	{
-		Printf("verbs tic=%lu visor=%d mines=%d map=%d ammo=%d health=%d x=%d y=%d angle=%d charge=%d plan=%d fullmap=%d\n",
-			(unsigned long)g_ticCount, visor, mines, map, ammo, health, x, y, angle, charge, plan, gamestate.fullmap ? 1 : 0);
+		Printf("verbs tic=%lu visor=%d mines=%d map=%d ammo=%d health=%d x=%d y=%d angle=%d charge=%d plan=%d fullmap=%d capacity=%d packs=%d plans=%d\n",
+			(unsigned long)g_ticCount, visor, mines, map, ammo, health, x, y, angle, charge, plan, gamestate.fullmap ? 1 : 0, capacity, packs, plans);
 		first = false;
 		lastVisor = visor; lastMines = mines; lastAmmo = ammo; lastHealth = health;
 		lastMap = map; lastAngle = angle; lastX = x; lastY = y;
 		lastCharge = charge;
 		lastPlan = plan;
+		lastCapacity = capacity;
+		lastPacks = packs; lastPlans = plans;
 	}
 }
 

@@ -363,7 +363,20 @@ MENU_LISTENER(EnterGameplayEnhancements)
 {
 	if(shotgunCurrentRule)
 		shotgunCurrentRule->setText(!ingame ? "New games; host decides in multiplayer" :
-			(gamestate.enhancedShotgun ? "Current mission: minimum 50" : "Current mission: classic"));
+			(gamestate.shotgunMinimum == 100 ? "Current mission: minimum 100" :
+			(gamestate.shotgunMinimum == 50 ? "Current mission: minimum 50" : "Current mission: classic")));
+	return true;
+}
+
+MENU_LISTENER(SetC7ShotgunPreset)
+{
+	c7_shotgun_preset = which;
+	return true;
+}
+
+MENU_LISTENER(SetC7MiniHUDStyle)
+{
+	c7_minihud_style = which;
 	return true;
 }
 
@@ -1490,7 +1503,9 @@ void CreateMenus()
 		optionsMenu.addItem(new MenuSwitcherMenuItem("Controls", controlBase));
 		optionsMenu.addItem(new MenuSwitcherMenuItem("Gameplay", gameplayEnhancements));
 		gameplayEnhancements.setHeadText("Gameplay Enhancements");
-		gameplayEnhancements.addItem(new BooleanMenuItem("Shotgun Minimum 50", c7_enhanced_shotgun));
+		static const char *shotgunOptions[] = { "Classic", "Minimum 50", "Minimum 100" };
+		AddLabeled(gameplayEnhancements, new MultipleChoiceMenuItem(SetC7ShotgunPreset,
+			shotgunOptions, 3, c7_shotgun_preset), "Shotgun Damage");
 		gameplayEnhancements.addItem(new LabelMenuItem("Applies to new games"));
 		shotgunCurrentRule = new LabelMenuItem("New games; host decides in multiplayer");
 		gameplayEnhancements.addItem(shotgunCurrentRule);
@@ -1619,6 +1634,9 @@ void CreateMenus()
 			NearestOption(kGammaValues, screenGamma)), "Brightness");
 		AddLabeled(displayMenu, new SliderMenuItem(viewsize, 110, 21, language["STR_SMALL"], language["STR_LARGE"], AdjustViewSize), "View Size");
 		displayMenu.addItem(new BooleanMenuItem("Full-screen Mini HUD", c7_minihud));
+		static const char *miniHUDOptions[] = { "Modern", "Classic" };
+		AddLabeled(displayMenu, new MultipleChoiceMenuItem(SetC7MiniHUDStyle,
+			miniHUDOptions, 2, c7_minihud_style), "Mini HUD Style");
 		displayMenu.addItem(new BooleanMenuItem("Numeric Status Bar", c7_numeric_hud));
 		displayMenu.addItem(new MenuSwitcherMenuItem("Advanced Graphics", advancedGraphics));
 

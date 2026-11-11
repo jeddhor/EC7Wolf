@@ -92,6 +92,7 @@ class AAmmo : public AInventory
 		unsigned int	Backpackboostamount;
 	protected:
 		AInventory		*CreateCopy(AActor *holder);
+		bool			TryPickup(AActor *toucher);
 };
 
 class ABackpackItem : public AInventory

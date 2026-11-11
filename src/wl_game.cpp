@@ -774,6 +774,12 @@ restartgame:
 			if(playstate != ex_warped)
 			{
 				FinishTravel ();
+				// Native floor setup caps excess health without healing wounds.
+				// Resuming a saved floor does not pass through this travel path.
+				if(IWad::CheckGameFilter("Corridor7") && !Net::Deathmatch())
+					for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
+						if(players[i].health > 100)
+							players[i].health = players[i].mo->health = 100;
 				if(playstate == ex_newmap)
 				{
 					// This logic could probably use refinement for multiplayer

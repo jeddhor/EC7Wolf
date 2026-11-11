@@ -37,6 +37,7 @@
 #include "farchive.h"
 #include "gamemap.h"
 #include "g_mapinfo.h"
+#include "wl_iwad.h"
 #include "id_ca.h"
 #include "id_sd.h"
 #include "thinker.h"
@@ -760,7 +761,11 @@ AActor *AActor::Spawn(const ClassDef *type, fixed x, fixed y, fixed z, int flags
 
 int32_t AActor::SpawnHealth() const
 {
-	return GetClass()->Meta.GetMetaInt(AMETA_DefaultHealth1 + gamestate.difficulty->SpawnFilter, health);
+	// C7 has five health rows but only four authored spawn bands. President
+	// shares Major's population filter, not its health row.
+	const unsigned int rank = IWad::CheckGameFilter("Corridor7") ?
+		SkillInfo::GetSkillIndex(*gamestate.difficulty) : gamestate.difficulty->SpawnFilter;
+	return GetClass()->Meta.GetMetaInt(AMETA_DefaultHealth1 + rank, health);
 }
 
 DEFINE_SYMBOL(Actor, angle)

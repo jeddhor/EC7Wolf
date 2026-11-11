@@ -520,14 +520,24 @@ game's.
 ### Optional HUD and shotgun settings
 
 In Options > Graphics, Full-screen Mini HUD supplies compact status at 100%
-view size. This is a port enhancement; the maximum original-game view observed
-by Jason retains the normal bar. Numeric Status Bar independently replaces the
-large bar's health, armor and ammunition meters with exact values, including
-over-max totals. It defaults off. Both settings persist. Holding Show Status
-works at full-screen view size in software and OpenGL.
+view size. Mini HUD Style selects Modern or Classic. Classic restores the
+original view-21 layout, whose availability in DOS depends on free conventional
+memory. Numeric Status Bar independently overlays exact health, armor,
+ammunition, mines and visor values on the colored meters, including over-max
+totals. It defaults off. These settings persist. Holding Show Status works at
+full-screen view size in software and OpenGL.
 
-Options > Gameplay > Shotgun Minimum 50 raises the final shotgun damage to at
-least 50 after distance calculation. It defaults off and applies to new games;
-the menu shows the current mission's rule. The host decides in multiplayer,
-and saves restore their own rule. Older saves and legacy demos use classic
-damage. Music/effects balance remains unchanged pending original-game testing.
+Options > Gameplay > Shotgun Damage selects Classic, Minimum 50 or Minimum 100.
+Classic remains the default and preserves native distance-dependent damage.
+The optional minimum applies after distance calculation, to new games; the
+menu shows the current mission's rule. The host decides in multiplayer, and
+saves restore their own rule. Earlier enhanced saves/settings retain Minimum
+50. Saves without a rule and legacy demos use Classic. Music/effects balance
+remains unchanged pending original-game testing.
+
+Ammo packs raise bullet capacity by 500, up to 999, without supplying rounds;
+surplus packs are consumed as in DOS. Capacity survives save/load and travel.
+Over-health is capped at 100 on campaign floor entry, while wounded players
+retain their health and same-floor save loads retain adrenaline boosts.
+President uses its native fifth alien-health row, independently of Major's
+shared population filter. Major's existing health row is unchanged.

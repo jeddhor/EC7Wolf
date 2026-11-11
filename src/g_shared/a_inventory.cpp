@@ -261,7 +261,7 @@ void AInventory::Touch(AActor *toucher)
 			static const PickupMessage messages[] = {
 				{ "C7MedicPack", "Medic Pack" },
 				{ "C7AmmoClip", "50 Rnd Clip" },
-				{ "C7AmmoPack", "100 Rounds Acquired" },
+				{ "C7AmmoPack", "Ammo Pack" },
 				{ "C7Adrenaline", "300 Health Boost" },
 				{ "C7BodyArmor", "Body Armor" },
 				{ "C7Invulnerability", "Invulnerability Sphere" },
@@ -388,6 +388,30 @@ bool AHealth::TryPickup(AActor *toucher)
 ////////////////////////////////////////////////////////////////////////////////
 
 IMPLEMENT_CLASS(Ammo)
+
+bool AAmmo::TryPickup(AActor *toucher)
+{
+	// Keep the legacy class/layout so existing saved world packs still load.
+	// The native pack upgrades bullets only and never supplies ammunition.
+	const ClassDef *pack = ClassDef::FindClass("C7AmmoPack");
+	if(IWad::CheckGameFilter("Corridor7") && pack && IsKindOf(pack) && toucher->player)
+	{
+		const ClassDef *bullets = ClassDef::FindClass("C7Bullets");
+		AInventory *ammo = toucher->FindInventory(bullets);
+		// Native GetBonus still consumes a surplus pack at the 999 cap.
+		if(!ammo)
+		{
+			ammo = static_cast<AInventory *>(AActor::Spawn(bullets, 0, 0, 0, 0));
+			ammo->amount = 0;
+			ammo->RemoveFromWorld();
+			toucher->AddInventory(ammo);
+		}
+		ammo->maxamount = MIN(999U, ammo->maxamount + 500U);
+		GoAwayAndDie();
+		return true;
+	}
+	return Super::TryPickup(toucher);
+}
 
 AInventory *AAmmo::CreateCopy(AActor *holder)
 {
@@ -1010,7 +1034,11 @@ class AMapRevealer : public AInventory
 			// its status bar. Keep its one-unit inventory token while retaining
 			// the traditional consume-on-pickup behavior for other games.
 			if(IWad::CheckGameFilter("Corridor7"))
-				return Super::TryPickup(toucher);
+			{
+				if(!toucher->FindInventory(GetClass()))
+					return Super::TryPickup(toucher);
+				// Easy ranks already own a plan, but still collect the pickup.
+			}
 			GoAwayAndDie();
 			return true;
 		}

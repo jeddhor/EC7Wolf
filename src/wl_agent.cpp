@@ -1735,8 +1735,8 @@ ACTION_FUNCTION(A_C7GunAttack)
 		}
 		// This optional floor follows the ordinary distance calculation. Legacy
 		// demo files cannot encode rules, so recording/playback remain classic.
-		if(weapon == 1 && gamestate.enhancedShotgun && !demorecord && !demoplayback)
-			damage = MAX(damage, 50);
+		if(weapon == 1 && !demorecord && !demoplayback)
+			damage = MAX(damage, int(gamestate.shotgunMinimum));
 		DamageActor(closest, self, damage);
 		hit = true;
 	}

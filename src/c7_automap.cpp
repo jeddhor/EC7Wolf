@@ -3,38 +3,12 @@
 **
 ** Corridor 7's inset map panel.
 **
-** Measured from the released game under DOSBox-X, at native 320x200 with the
-** capture mapped back through the palette embedded in CORR7CD.EXE
-** (tools/dosbox/capture_corridor7_automap.sh). Everything below that cites a
-** number was read off those captures rather than guessed:
-**
-**   * The panel is 64x64 at the top-right of the view, screen (256,0)..(319,63)
-**     in 320x200 space. One pixel border of palette index 32, interior filled
-**     with index 48.
-**   * The map is drawn one pixel per tile at a FIXED position: panel interior
-**     pixel (i,j) is always map tile (i+1,j+1), so the 62x62 interior holds the
-**     64x64 map minus its solid border ring. This was confirmed by the
-**     alignment staying put across frames while the player moved.
-**   * Within the painted region, gray (32) means the tile is solid and the
-**     background (48) means it is floor. Correlating every gray pixel against
-**     the raw MAPTEMP.CO7 plane-0 codes matched 100%, over both walls and
-**     doors, so this is "has a tile" rather than any door/wall distinction.
-**   * Only a 23x24 tile window around the player is painted; the rest of the
-**     map stays background. This is not fog of war -- exploring did not grow
-**     the painted region, and rows that had been painted stopped being painted
-**     once the player moved away, which a reveal can never do.
-**   * The player is index 63 at their own tile, with a second pixel of index 60
-**     one tile BEHIND them (opposite their facing). At spawn, facing east from
-**     (7,31), that trailing pixel sat at (6,31).
-**
-** One detail is measured only as a bound. The window's vertical origin is
-** exactly player_y-12 (two independent samples, and a two-tile walk moved the
-** painted band by exactly two rows). Horizontally every sample sat against the
-** left clamp, which only proves the offset is at least 14; walking from x=7 to
-** x=15 never scrolled it. kWindowOffsetX below is that lower bound, so it
-** reproduces every frame captured. Confirming it needs a level wide enough to
-** walk far from the left edge, which the debug warp would give us once
-** capture_corridor7_planes.sh works headlessly.
+** Native 320x200 panel and retail executable verification, November 2026:
+** 64x64 at (256,0), one pixel per tile. Without a floor plan the wall
+** bitmap is sampled in a 24x24 window, x aligned down to eight tiles.
+** Geometry is independent of the live door/zone graph. A floor plan also
+** reveals stationary/disguised aliens. Marker ramps are explicitly cycled
+** because the port does not rotate the hardware DAC used by the DOS game.
 */
 
 #include "actor.h"
@@ -63,14 +37,11 @@ static const int kFloorColor = 48;
 static const int kWallColor = 32;
 static const int kPlayerColor = 63;
 static const int kPlayerTailColor = 60;
-// Seen once on a wandering alien. It sits in the 224-231 ramp, one of the four
-// the palette animation rotates, so it blinks without any work here.
-static const int kMonsterColor = 226;
-
-// Painted window around the player, in tiles.
-static const int kWindowWidth = 23;
+static const int kMonsterColor = 224;
+static const int kMineColor = 208;
+static const int kWindowWidth = 24;
 static const int kWindowHeight = 24;
-static const int kWindowOffsetX = 14;
+static const int kWindowOffsetX = 12;
 static const int kWindowOffsetY = 12;
 
 static bool c7MapActive = false;
@@ -153,57 +124,20 @@ void C7Map_Draw()
 	const int playerTX = player->tilex;
 	const int playerTY = player->tiley;
 
-	// The floor plan reveals the whole level at once, so it simply drops the
-	// window rather than widening it -- and it drops the reachability gate
-	// below with it. A blueprint shows the floor's geometry, not where you can
-	// currently walk; leaving the gate on made the plan look like it kept
-	// expiring, because the gate is live (see below) and re-grayed everything
-	// past a door the moment that door swung shut.
+	// The floor plan drops the sampling window and reveals every living alien.
 	const bool fullmap = gamestate.fullmap ||
 		player->FindInventory(ClassDef::FindClass("C7FloorPlan")) != NULL;
 
 	int firstDrawX = 1, lastDrawX = lastX, firstDrawY = 1, lastDrawY = lastY;
 	if(!fullmap)
 	{
-		firstDrawX = clamp(playerTX - kWindowOffsetX, 1, MAX(1, lastX - kWindowWidth + 1));
-		firstDrawY = clamp(playerTY - kWindowOffsetY, 1, MAX(1, lastY - kWindowHeight + 1));
+		firstDrawX = clamp(playerTX - kWindowOffsetX, 0, MAX(0, int(mapwidth) - kWindowWidth)) & ~7;
+		firstDrawY = clamp(playerTY - kWindowOffsetY, 0, MAX(0, int(mapheight) - kWindowHeight));
 		lastDrawX = MIN(lastX, firstDrawX + kWindowWidth - 1);
 		lastDrawY = MIN(lastY, firstDrawY + kWindowHeight - 1);
+		firstDrawX = MAX(1, firstDrawX);
+		firstDrawY = MAX(1, firstDrawY);
 	}
-
-	// Floor only counts as floor if the player could currently walk to it: the
-	// original paints gray for any area not linked to the one the player stands
-	// in, so a room behind a shut door reads as solid until the door opens. That
-	// is Wolf3D's zone graph, which Corridor 7 inherited and which ECWolf still
-	// maintains for sound propagation. Without this, level 1's sealed side rooms
-	// showed as open floor where the original showed wall.
-	//
-	// Note this is a live query, not a record of what has been seen: CheckLink
-	// reads zoneLinks, which counts doors that are open right now. Reachability
-	// therefore shrinks again whenever a door closes, which is why the floor
-	// plan has to bypass it rather than merely widen the window.
-	const GameMap::Zone *playerZone = map->GetSpot(playerTX, playerTY, 0)->zone;
-	if(!fullmap && playerZone == NULL)
-	{
-		// Standing in a doorway puts the player on a door tile, and a door
-		// belongs to no zone -- it is the link between two of them. CheckLink
-		// answers false for a NULL zone, so every tile on the map read as
-		// unreachable and the panel filled solid. Borrow a zone from a
-		// neighboring tile: the player can only be inside a door that is open,
-		// and an open door links the zones on either side, so whichever of the
-		// two is found first gives the same reachability set.
-		static const int kAdjX[4] = { -1, 1, 0, 0 };
-		static const int kAdjY[4] = { 0, 0, -1, 1 };
-		for(int i = 0;i < 4 && playerZone == NULL;++i)
-		{
-			const int ax = playerTX + kAdjX[i];
-			const int ay = playerTY + kAdjY[i];
-			if(ax < 0 || ay < 0 || ax >= int(mapwidth) || ay >= int(mapheight))
-				continue;
-			playerZone = map->GetSpot(ax, ay, 0)->zone;
-		}
-	}
-	TMap<const GameMap::Zone *, bool> zoneReachable;
 
 	// Solid tiles as one run per stretch, so a row costs a handful of fills
 	// instead of one per tile.
@@ -222,24 +156,8 @@ void C7Map_Draw()
 				// are tiles. Same test the ECWolf automap uses.
 				if(solid && (spot->tile->offsetHorizontal || spot->tile->offsetVertical))
 					solid = false;
-				else if(!solid && !fullmap)
-				{
-					const GameMap::Zone *const zone = spot->zone;
-					if(zone == NULL)
-						solid = true;
-					else if(zone != playerZone)
-					{
-						bool *cached = zoneReachable.CheckKey(zone);
-						if(cached == NULL)
-						{
-							const bool linked = map->CheckLink(playerZone, zone, true);
-							zoneReachable[zone] = linked;
-							solid = !linked;
-						}
-						else
-							solid = !*cached;
-					}
-				}
+				if(spot->corridor7WallMarker == 107)
+					solid = false;
 			}
 			if(solid && runStart < 0)
 				runStart = tx;
@@ -251,32 +169,22 @@ void C7Map_Draw()
 		}
 	}
 
-	// Aliens. Without the floor plan only the ones already inside the painted
-	// window show, which is what "monsters close to you" amounts to.
-	//
-	// The panel is a motion detector, not an X-ray. It paints aliens that are
-	// moving, which is why the guide tells the player to read dot speed as a
-	// rough species classifier, and why it warns that motionless actors and
-	// still-disguised Bandors may not show up at all. Painting every living
-	// alien gives away the two things the game deliberately hides: an ambush
-	// waiting around a corner, and the filing cabinet that is about to unfold
-	// into one.
-	//
-	// dir is the existing state that already answers this, so nothing new has
-	// to be stored or saved: map setup leaves a standing actor at nodir and
-	// only gives a direction to one placed on patrol, and an actor that wakes
-	// gets a direction from SelectChaseDir on its first A_Chase.
+	// Native markers use animated red/yellow ramps. HUD Clear() does not
+	// pass through the world renderer's palette-cycle shader.
+	const int phase = (gamestate.TimeCount >> C7_RAMP_CYCLE_SHIFT) & 7;
+	const ClassDef *mineClass = ClassDef::FindClass("C7ProximityMine");
 	for(AActor::Iterator iter = AActor::GetIterator();iter.Next();)
 	{
 		AActor *const actor = iter;
-		if(actor == player || !(actor->flags & FL_ISMONSTER) || actor->health <= 0)
+		const bool mine = mineClass && actor->IsKindOf(mineClass);
+		if(actor == player || (!(actor->flags & FL_ISMONSTER) && !mine) || actor->health <= 0)
 			continue;
-		if(actor->dir == nodir)
+		if(!mine && !fullmap && actor->dir == nodir)
 			continue;
 		const int tx = actor->tilex, ty = actor->tiley;
 		if(tx < firstDrawX || tx > lastDrawX || ty < firstDrawY || ty > lastDrawY)
 			continue;
-		FillPanelRun(px, py, pw, ph, tx, tx, ty, kMonsterColor);
+		FillPanelRun(px, py, pw, ph, tx, tx, ty, GPalette.Remap[(mine ? kMineColor : kMonsterColor) + phase]);
 	}
 
 	// Player last so nothing can paint over it, with the trailing pixel one

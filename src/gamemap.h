@@ -170,7 +170,7 @@ class GameMap
 					pushDirection(Tile::East), pushAmount(0),
 					pushReceptor(NULL), maskedWallType(0),
 					corridor7WallMarker(0), corridor7ChamberPower(100), corridor7WallID(0),
-					corridor7SightTransparent(false), tag(0), nexttag(NULL)
+					corridor7SightTransparent(false), corridor7MapSolidFloor(false), tag(0), nexttag(NULL)
 				{
 					slideAmount[0] = slideAmount[1] = slideAmount[2] = slideAmount[3] = 0;
 					sideSolid[0] = sideSolid[1] = sideSolid[2] = sideSolid[3] = true;
@@ -209,6 +209,8 @@ class GameMap
 				BYTE			corridor7ChamberPower;
 				WORD			corridor7WallID;
 				bool			corridor7SightTransparent;
+				// Derived from native plane-0 code 259, including after save load.
+				bool			corridor7MapSolidFloor;
 
 				unsigned int	tag;
 				Plane::Map		*nexttag;

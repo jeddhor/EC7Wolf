@@ -21,6 +21,7 @@ a,b=[1]*4096,[18]*4096
 for y in range(7,14):
  for x in range(4,30):a[y*64+x]=256 if x<18 else 257
 for y in range(7,14):a[y*64+17]=1
+a[11*64+22]=259
 a[10*64+17]=254;b[10*64+4]=22;b[10*64+14]=85;b[10*64+25]=116
 records[0]=replace(records[0],planes=MapPlanes(64,64,(tuple(a),tuple(b),tuple([0]*4096))))
 (lab/'MAPTEMP.CO7').write_bytes(encode_archive(records))
@@ -43,10 +44,11 @@ for renderer in ('software','opengl'):
  def pixel(im,x,y):return im.getpixel((256+x,y))
  bare,full,later=images[False,10],images[True,10],images[True,12]
  assert pixel(bare,20,10)==floor,'Closed door hid the room'
+ assert pixel(bare,22,11)==pixel(full,22,11)==(142,142,142),'Native code-259 floor exposed the maze layout'
  assert pixel(bare,25,10)==floor,'Bare map revealed stationary alien'
  alien=pixel(full,25,10);mine=pixel(full,14,10)
  assert alien[0]>0 and alien[0]==alien[1] and alien[2]==0,alien
  assert mine[0]>0 and mine[1]==mine[2]==0,mine
  assert pixel(later,25,10)!=alien and pixel(later,14,10)!=mine,'Markers did not cycle'
- print('PASS closed-door room, stationary alien with plan, flashing yellow aliens/red mines:',renderer,flush=True)
+ print('PASS code-259 map mask, closed-door room, stationary alien, flashing yellow aliens/red mines:',renderer,flush=True)
 PY

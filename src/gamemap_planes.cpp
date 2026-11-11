@@ -1072,6 +1072,10 @@ void GameMap::ReadPlanesData()
 
 				for(unsigned int i = 0;i < size;++i)
 				{
+					// DOS map setup flags code-259 floor for the static map bitmap.
+					// It paints gray like walls, concealing the maze's passages.
+					mapPlane.map[i].corridor7MapSolidFloor =
+						IWad::CheckGameFilter("Corridor7") && oldplane[i] == 259;
 					if(xlat.IsValidTile(oldplane[i]))
 					{
 						unsigned int tileIndex = oldplane[i]-tileStart;

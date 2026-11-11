@@ -150,11 +150,11 @@ void C7Map_Draw()
 			if(tx <= lastDrawX)
 			{
 				const MapSpot spot = map->GetSpot(tx, ty, 0);
-				solid = spot->tile != NULL;
+				solid = spot->tile != NULL || spot->corridor7MapSolidFloor;
 				// Doors read as floor, not wall: the original paints the four
 				// doors on level 1 in the background color even though they
 				// are tiles. Same test the ECWolf automap uses.
-				if(solid && (spot->tile->offsetHorizontal || spot->tile->offsetVertical))
+				if(spot->tile && (spot->tile->offsetHorizontal || spot->tile->offsetVertical))
 					solid = false;
 				if(spot->corridor7WallMarker == 107)
 					solid = false;

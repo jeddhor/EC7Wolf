@@ -88,13 +88,19 @@ reveals stationary aliens with the plan, draws living placed mines, and
 explicitly cycles yellow/red marker ramps in both renderers. Corpses and
 exploded mines are excluded. The native open-wall marker 107 is not a map wall.
 
-**Still pending:** the claim that box mazes should disappear from the map.
-A native MAP04 bitmap inspection included the checked marker-104 glass cells
-(24 wall-57, four wall-58, two wall-61 cells). The bitmap constructor does not
-contain a blanket 104/105 or transparent-texture exclusion. We therefore did
-not guess such a rule. An exact native maze location/edition comparison should
-settle this alongside the later visual review. World transparency rendering
-remains entirely deferred to #21.
+**Follow-up during the joint #17/#21 review:** the omitted detail was the
+maze's floor encoding. Native map setup explicitly recognizes plane-0 code
+259 (0x103), sets bit 0x8000 on its temporary plane-1 cell, then the map-bitmap
+constructor paints that cell gray. All 351 such floor cells in the inspected
+MAP04 bitmap are gray. The glass walls are still drawn; the gray-filled floor
+hides the passage layout. The earlier glass-cell-only check did not establish
+this distinction.
+
+The port now retains this derived floor flag and uses it only in the inset map.
+It does not change floor collision, lighting, AI zones or world geometry. The
+flag is reconstructed from map data on save load and adds no serialized fields.
+Synthetic tests check code 259 alongside ordinary floor behind a closed door
+in both renderers. Transparency rendering remains a separate joint review.
 
 ## #22 — Pickup lighting
 
@@ -143,5 +149,7 @@ The optimized self-contained local package is refreshed with
 `tools/package_corridor7_release.sh` and tested from its own directory with
 `tools/test_corridor7_release_startup.sh`. Public issue closures and another
 published beta wait for the requested user verification. The remaining review
-list is #21, the #17 maze claim, any concrete #19 damage discrepancy, pickup/UI
-visual feedback, and the previously deferred #4 audio comparison.
+list is #21, visual confirmation of the #17 floor mask, pickup/UI visual
+feedback, and the previously deferred #4 audio comparison. Jason accepted the
+#19 correction without a blanket damage multiplier; the reporter was asked for
+a concrete remaining health discrepancy in issue comment 6808579957.

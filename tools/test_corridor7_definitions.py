@@ -193,8 +193,10 @@ require(r'#define\s+C7_RAMP_CYCLE_SHIFT\s+1\b', WL_DEF, "Corridor 7 VGA ramps ro
 require(r'color\s*>=\s*208\s*&&\s*color\s*<=\s*239.*?color\s*&\s*~7.*?TimeCount\s*>>\s*C7_RAMP_CYCLE_SHIFT', WL_DRAW, "Corridor 7 wall ramps rotate on the shared cycle constant")
 require(r'color\s*>=\s*208\s*&&\s*color\s*<=\s*239.*?color\s*&\s*~7.*?TimeCount\s*>>\s*C7_RAMP_CYCLE_SHIFT', R_SPRITES, "Corridor 7 sprite ramps rotate on the shared cycle constant")
 require(r'cyclePhase\s*=.*?TimeCount\s*>>\s*C7_RAMP_CYCLE_SHIFT', GLWORLD, "the GL renderer rotates ramps on the shared cycle constant")
-require(r'ShadeWallColor.*?GPalette\.Remap\[15\].*?GPalette\.Remap\[254\].*?GPalette\.Remap\[208\].*?GPalette\.Remap\[239\].*?NormalLight\.Maps\[color\]', WL_DRAW,
-        "Corridor 7 dedicated lamp whites and animated light ramps remain full-bright")
+require(r'ShadeWallColor.*?GPalette\.Remap\[15\].*?GPalette\.Remap\[208\].*?GPalette\.Remap\[254\].*?NormalLight\.Maps\[color\]', WL_DRAW,
+        "Corridor 7 dedicated lamp whites, animated ramps and static indicators remain full-bright")
+require(r'bool fullbright.*?uRemap15.*?uRemap208.*?uRemap254.*?row = 0', GLWORLD,
+        "OpenGL includes native static indicators in its full-bright wall range")
 if re.search(r'ShadeWallColor.*?GPalette\.Remap\[39\]', WL_DRAW, re.DOTALL):
     raise SystemExit("Corridor 7 definition check failed: ordinary structural white 39 must remain shaded")
 # The visor palettes are now the released game's own DAC, read per index

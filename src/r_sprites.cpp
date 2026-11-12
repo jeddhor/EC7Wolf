@@ -469,9 +469,8 @@ static BYTE C7CycleSpriteColor(BYTE color)
 	return color;
 }
 
-// The four cycling ramps are luminous instrumentation when they occur on the
-// first-person weapon: scanners, rangefinders, charge lamps, and energy arcs
-// retain their palette brightness even when the rest of the gun is shaded.
+// First-person instrumentation keeps the native four palette cycles. Its
+// unshaded palette row is selected by the shared viewmodel placement below.
 static BYTE C7ShadePlayerSpriteColor(BYTE color, const BYTE *colormap)
 {
 	const bool luminous = IWad::CheckGameFilter("Corridor7") &&
@@ -814,7 +813,8 @@ bool R_GetPlayerSpriteInfo(AActor *actor, const Frame *frame, fixed offsetX,
 	// the original scaler), including the jump from 160 to 200 at view 21.
 	// Its full-screen view also keeps the native anchor instead of applying
 	// Wolf's downward yadjust. Share this placement with the GL viewmodel.
-	const bool c7FullScreen = viewsize == 21 && IWad::CheckGameFilter("Corridor7");
+	const bool corridor7 = IWad::CheckGameFilter("Corridor7");
+	const bool c7FullScreen = viewsize == 21 && corridor7;
 	const fixed spriteYScale = c7FullScreen ? viewheight*FRACUNIT/160 : pspriteyscale;
 	const fixed spriteXScale = c7FullScreen ? FixedDiv(spriteYScale, yaspect) : pspritexscale;
 
@@ -836,7 +836,9 @@ bool R_GetPlayerSpriteInfo(AActor *actor, const Frame *frame, fixed offsetX,
 	info.y        = upperedge>>FRACBITS;
 	info.xStep    = FixedDiv(tex->xScale, spriteXScale);
 	info.yStep    = FixedDiv(tex->yScale, spriteYScale);
-	info.shadeRow = frame->fullbright ? 0 :
+	// The native first-person weapon scaler draws the source palette colors;
+	// it does not apply the level light used for world sprites and walls.
+	info.shadeRow = (corridor7 || frame->fullbright) ? 0 :
 		GETPALOOKUP(0, LIGHT2SHADE(gLevelLight) - (gLevelMaxLightVis/LIGHTVISIBILITY_FACTOR));
 	return true;
 }

@@ -289,13 +289,13 @@ static inline BYTE ShadeWallColor(BYTE color, const BYTE *shades)
 		// Corridor 7 reserves indices 15 and 254 for lamps embedded in wall
 		// graphics. Index 39 is the ordinary white used throughout structural
 		// artwork and must remain distance-shaded. It also uses the four
-		// rotating 208..239 ramps for illuminated animated pixels. The DOS
+		// rotating 208..239 ramps and static red/yellow 240..253 lamps. The DOS
 		// renderer leaves both groups at source brightness while shading the
 		// rest of the wall by distance. Do this per texel so a lit panel keeps
 		// its shaded housing, and so the behavior is independent of viewport
 		// resolution and scaling.
-		if(color == GPalette.Remap[15] || color == GPalette.Remap[254] ||
-			(color >= GPalette.Remap[208] && color <= GPalette.Remap[239]))
+		if(color == GPalette.Remap[15] ||
+			(color >= GPalette.Remap[208] && color <= GPalette.Remap[254]))
 			return NormalLight.Maps[color];
 	}
 	return shades[color];

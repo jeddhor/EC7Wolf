@@ -270,15 +270,16 @@ static bool IsReservedIndex (int i)
 	return i == 254 || V_IsCorridor7VisorExempt (i);
 }
 
-// The two entries the game actually wants to burn through the visor: the lamp
-// core and its halo ring. Those are allowed to survive as themselves; every
-// other reserved entry must be shaded away, because the original's own light
-// table never puts one on screen. Captured under infrared in the start
+// The wall-lamp core/halo and static red/yellow indicators are allowed to
+// survive as themselves, including at colormap row zero. The native wall
+// shade mask (DS:2a1e) exempts 240..254; matched normal-view captures of loaded
+// and spent ammo dispensers retain these source colors at different distances.
+// Other reserved entries retain the existing infrared remapping. In the start
 // corridor, the released game emits index 15 (2608 texels of lamp) and not a
 // single texel of 7 or 8, even though its wall art contains both.
 static bool IsLampIndex (int i)
 {
-	return i == 15 || i == 254;
+	return i == 15 || (i >= 240 && i <= 254);
 }
 
 // Returns the nearest entry that is not reserved, unless the source texel IS

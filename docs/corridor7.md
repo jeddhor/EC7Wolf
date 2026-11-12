@@ -314,7 +314,8 @@ Append an output directory and `--all` to load-check every map in the archive.
   pixels, four-side transparency detection for auto-oriented doors (so masked
   faces remain transparent on either map axis while jambs remain opaque),
   unshaded C010 floor lamps, dedicated full-bright wall-lamp indices 15/254 and
-  animated 208..239 light ramps (applied in texture space at every output
+  animated 208..239 light ramps and static 240..253 red/yellow indicators
+  (applied in texture space at every output
   resolution), all four native wall/force-field palette cycles, four-frame
   in-place force-field and animated-wall openings, four sliding door types with
   automatic orientation,
@@ -530,6 +531,9 @@ memory. Turning the mini HUD off restores the full status bar and its normal
 view area immediately; turning it back on restores the full-screen compact
 view. Deliberately smaller view sizes stay unchanged. Disabled-mini-HUD
 settings from older configurations also restore the full bar on startup.
+Mini HUD Score independently hides the compact score/frags field. It defaults
+on, like a fresh DOS game; the original S key toggles that field. This setting
+is available for both Classic and Modern compact styles.
 Numeric Status Bar independently overlays exact health, armor,
 ammunition, mines and visor values on the colored meters, including over-max
 totals. It defaults off. These settings persist. Holding Show Status works at

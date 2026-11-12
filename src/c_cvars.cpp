@@ -62,6 +62,7 @@ bool vid_gldebug = false;
 bool vid_glprofile = false;
 bool snd_cdmusic = true;
 bool c7_minihud = true;
+bool c7_minihud_score = true;
 bool c7_numeric_hud = false;
 int c7_minihud_style = 0; // Modern; preserve the existing preference.
 int c7_shotgun_preset = 0; // Classic, minimum 50, minimum 100.
@@ -252,6 +253,7 @@ void ReadConfig(void)
 	config.CreateSetting("ControlStyle", controlstyle);
 	config.CreateSetting("MoveBob", FRACUNIT);
 	config.CreateSetting("C7MiniHUD", true);
+	config.CreateSetting("C7MiniHUDScore", true);
 	config.CreateSetting("C7NumericHUD", false);
 	config.CreateSetting("C7EnhancedShotgun", false);
 	config.CreateSetting("C7ShotgunPreset", -1); // Import the legacy boolean once.
@@ -376,6 +378,7 @@ void ReadConfig(void)
 		ControlScheme::Style_Classic : ControlScheme::Style_Modern;
 	movebob = config.GetSetting("MoveBob")->GetInteger();
 	c7_minihud = config.GetSetting("C7MiniHUD")->GetInteger() != 0;
+	c7_minihud_score = config.GetSetting("C7MiniHUDScore")->GetInteger() != 0;
 	c7_numeric_hud = config.GetSetting("C7NumericHUD")->GetInteger() != 0;
 	c7_shotgun_preset = config.GetSetting("C7ShotgunPreset")->GetInteger();
 	if(c7_shotgun_preset < 0)
@@ -542,6 +545,7 @@ void WriteConfig(void)
 	config.GetSetting("ControlStyle")->SetValue(controlstyle);
 	config.GetSetting("MoveBob")->SetValue(movebob);
 	config.GetSetting("C7MiniHUD")->SetValue(c7_minihud);
+	config.GetSetting("C7MiniHUDScore")->SetValue(c7_minihud_score);
 	config.GetSetting("C7NumericHUD")->SetValue(c7_numeric_hud);
 	config.GetSetting("C7EnhancedShotgun")->SetValue(c7_shotgun_preset != 0);
 	config.GetSetting("C7ShotgunPreset")->SetValue(c7_shotgun_preset);

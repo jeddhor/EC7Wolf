@@ -677,9 +677,12 @@ namespace
 		text.Format("AMMO %u",ammo); C7HudText(114,180,text);
 		text.Format("FL %s",levelInfo->FloorNumber.GetChars()); C7HudText(220,180,text);
 		text.Format("ALIENS %d",MAX(0,gamestate.killtotal-gamestate.killcount)); C7HudText(258,180,text);
-		if(Net::Deathmatch()) text.Format("FRAGS %d",players[ConsolePlayer].frags);
-		else text.Format("SCORE %d",players[ConsolePlayer].score);
-		C7HudText(220,191,text);
+		if(c7_minihud_score)
+		{
+			if(Net::Deathmatch()) text.Format("FRAGS %d",players[ConsolePlayer].frags);
+			else text.Format("SCORE %d",players[ConsolePlayer].score);
+			C7HudText(220,191,text);
+		}
 		const char *items[] = { "C7Static001", "C7Static002", "C7FloorPlan" };
 		const char *icons[] = { "C7G0021", "C7G0020", "C7G0019" };
 		int slot=0;
@@ -704,8 +707,8 @@ void WolfStatusBar::DrawC7ClassicHud()
 	};
 	auto border = [&rect](int x, int y, int w, int h)
 	{
-		rect(x,y,w,1,7); rect(x,y,1,h,7);
-		rect(x,y+h-1,w,1,8); rect(x+w-1,y,1,h,8);
+		rect(x,y,w,1,7); rect(x,y+h-1,w,1,8);
+		rect(x,y,1,h,7); rect(x+w-1,y,1,h,8);
 	};
 	// Released view-21 coordinates and the third archive font. This font's
 	// 8x10 cells contain the native 3x5 numerals; no artwork is recreated.
@@ -714,7 +717,8 @@ void WolfStatusBar::DrawC7ClassicHud()
 		unsigned int fill, int ramp, int textColor)
 	{
 		// DOS leaves the unfilled part of each compact meter transparent.
-		DrawC7Gauge(x,y,fill,5,ramp);
+		// The native well has five interior rows below its top border.
+		DrawC7Gauge(x,y,fill,6,ramp);
 		border(x,y,26,7);
 		FString text; text.Format("%u",value);
 		if(text.Len() > 3)
@@ -744,11 +748,16 @@ void WolfStatusBar::DrawC7ClassicHud()
 	for(unsigned int i=0;i<3;++i)
 		if(pawn->FindInventory(ClassDef::FindClass(items[i])))
 			VWB_DrawGraphic(TexMan(icons[i]),120-(slot++)*8,182);
-	rect(207,180,18,17,0); rect(231,180,18,17,0); rect(255,180,58,17,0);
+	rect(207,180,18,17,0); rect(231,180,18,17,0);
 	LatchNumber(208,20,2,MAX(0,gamestate.killtotal-gamestate.killcount),false,true);
 	LatchString(232,20,2,levelInfo->FloorNumber);
-	LatchNumber(256,20,7,Net::Deathmatch() ? players[ConsolePlayer].frags : players[ConsolePlayer].score,false,true);
-	border(207,180,18,17); border(231,180,18,17); border(255,180,58,17);
+	border(207,180,18,17); border(231,180,18,17);
+	if(c7_minihud_score)
+	{
+		rect(255,180,58,17,0);
+		LatchNumber(256,20,7,Net::Deathmatch() ? players[ConsolePlayer].frags : players[ConsolePlayer].score,false,true);
+		border(255,180,58,17);
+	}
 }
 
 void WolfStatusBar::DrawStatusBar()

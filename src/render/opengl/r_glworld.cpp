@@ -296,7 +296,6 @@ namespace
 		"uniform int   uRemap15;\n"
 		"uniform int   uRemap254;\n"
 		"uniform int   uRemap208;\n"
-		"uniform int   uRemap239;\n"
 		"uniform int   uCorridor7;\n"
 		"uniform int   uExtraLight;\n"
 		"uniform int   uViewW;\n"
@@ -351,8 +350,8 @@ namespace
 		"    int idx = c7Cycle(idx0, isWall);\n"
 		"    int row = shadeRow;\n"
 		"    bool fullbright = uCorridor7 == 1 && isWall &&\n"
-		"        (idx == uRemap15 || idx == uRemap254 ||\n"
-		"        (idx >= uRemap208 && idx <= uRemap239));\n"
+		"        (idx == uRemap15 ||\n"
+		"        (idx >= uRemap208 && idx <= uRemap254));\n"
 		"    if(fullbright) row = 0;\n"
 		"    if(uSprite == 1 && uSpriteFullbright == 1) row = 0;\n"
 		"    row = clamp(row, 0, uNumColormaps - 1);\n"
@@ -1295,7 +1294,6 @@ namespace
 		glUniform1i(glGetUniformLocation(w.prog, "uRemap15"), (int)GPalette.Remap[15]);
 		glUniform1i(glGetUniformLocation(w.prog, "uRemap254"), (int)GPalette.Remap[254]);
 		glUniform1i(glGetUniformLocation(w.prog, "uRemap208"), (int)GPalette.Remap[208]);
-		glUniform1i(glGetUniformLocation(w.prog, "uRemap239"), (int)GPalette.Remap[239]);
 		glUniform1i(glGetUniformLocation(w.prog, "uCorridor7"), corridor7 ? 1 : 0);
 		glUniform1i(glGetUniformLocation(w.prog, "uMaskColor"), (int)GPalette.Remap[255]);
 		glUniform1i(glGetUniformLocation(w.prog, "uExtraLight"), r_extralight);

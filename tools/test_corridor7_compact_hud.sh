@@ -25,7 +25,7 @@ records[0]=replace(records[0],planes=MapPlanes(64,64,(tuple(walls),tuple(things)
 (lab/'MAPTEMP.CO7').write_bytes(encode_archive(records))
 env=dict(os.environ,SDL_AUDIODRIVER='dummy',SDL_VIDEODRIVER='x11',LIBGL_ALWAYS_SOFTWARE='1')
 with zipfile.ZipFile(build/'ec7wolf.pk3') as src:files=[(i,src.read(i)) for i in src.infolist()]
-def capture(renderer,weapon='C7M16',hud=True,res=(640,400),view=21):
+def capture(renderer,weapon='C7M16',hud=True,res=(640,400),view=21,score=True):
     # A hidden-ready-frame control gives an independent weapon silhouette.
     with zipfile.ZipFile(lab/'ec7wolf.pk3','w') as dst:
         for info,blob in files:
@@ -36,8 +36,8 @@ def capture(renderer,weapon='C7M16',hud=True,res=(640,400),view=21):
                 blob=blob.replace(b'player.startitem "C7VisorCharge", 100',b'player.startitem "C7VisorCharge", 50',1)
                 if weapon is None:blob=blob.replace(b'C761 A 1 A_WeaponReady',b'TNT1 A 1 A_WeaponReady')
             dst.writestr(info,blob)
-    name=f'{renderer}-{weapon}-{int(hud)}-{res[0]}x{res[1]}-view{view}'
-    cfg=work/(name+'.cfg');cfg.write_text(f'ViewSize = {view};\nC7MiniHUD = {int(hud)};\nC7MiniHUDStyle = 1;\n')
+    name=f'{renderer}-{weapon}-{int(hud)}-{res[0]}x{res[1]}-view{view}-score{int(score)}'
+    cfg=work/(name+'.cfg');cfg.write_text(f'ViewSize = {view};\nC7MiniHUD = {int(hud)};\nC7MiniHUDStyle = 1;\nC7MiniHUDScore = {int(score)};\n')
     out=work/(name+'.png');ppm=work/(name+'.ppm')
     cmd=[str(build/'ec7wolf'),'--data','CO7','--nowait','--no-upscale','--res',*map(str,res),'--vid-renderer',renderer,'--tedlevel','MAP01','--skill','3','--config',str(cfg),'--savedir',str(work/'save'),'--capture-rngseed','1','--capture-place','1','10.5','10.5','180','--capture-snapshot',str(out),'30','--capture-maxtics','35']
     if renderer=='opengl':cmd+=['--capture-glpresent',str(ppm)]
@@ -63,6 +63,13 @@ for renderer in ('software','opengl'):
         assert observed and all(abs(a-b)<=2 for a,b in zip(observed,expected)),(renderer,weapon,expected,observed)
     print('PASS all eight full-screen weapon bounds match native DOS:',renderer,flush=True)
     hud=capture(renderer)
+    # Measured DOS bottom interior row and bevel corner. The last numeral row
+    # belongs inside the filled well, above the border, rather than on the floor.
+    assert hud.getpixel((96,374))==(199,199,0),(renderer,'compact meter fill is one native row short')
+    assert hud.getpixel((80,376))==(170,170,170),(renderer,'wrong lower-left bevel corner')
+    # The source M16 hand uses this skin color. It must survive first-person
+    # rendering at its native brightness, independently of the level light.
+    assert sum(v==(170,93,56) for v in hud.crop((250,240,410,400)).getdata())>100,(renderer,'first-person hand was darkened')
     # Empty armor/mines and the unfilled halves of health/visor must expose
     # the scene. Exclude outlines, digits, and the filled part of each meter.
     for box in ((28,384,64,390),(92,384,128,390),(50,368,64,374),(178,368,192,374)):
@@ -85,7 +92,14 @@ for renderer in ('software','opengl'):
     full=capture(renderer,hud=False)
     standard=capture(renderer,view=20)
     assert not ImageChops.difference(full,standard).getbbox(),(renderer,'mini HUD off did not restore standard view and status bar')
-    persisted=(work/f'{renderer}-C7M16-0-640x400-view21.cfg').read_text()
+    persisted=(work/f'{renderer}-C7M16-0-640x400-view21-score1.cfg').read_text()
     assert 'ViewSize = 20;' in persisted and 'C7MiniHUD = 0;' in persisted,(renderer,'HUD-off state did not persist')
     print('PASS disabled compact HUD restores and persists the full status-bar view:',renderer,flush=True)
+    no_score=capture(renderer,score=False)
+    assert ImageChops.difference(hud.crop((510,360,626,394)),no_score.crop((510,360,626,394))).getbbox(),(renderer,'score option has no visible effect')
+    assert not ImageChops.difference(hud.crop((414,360,498,394)),no_score.crop((414,360,498,394))).getbbox(),(renderer,'hiding score changed floor/alien readouts')
+    assert all(no_score.getpixel((x,y))==no_score.getpixel((208+x%16,y)) for y in range(360,394) for x in range(510,626)),(renderer,'hidden score left an opaque panel')
+    persisted=(work/f'{renderer}-C7M16-1-640x400-view21-score0.cfg').read_text()
+    assert 'C7MiniHUDScore = 0;' in persisted,(renderer,'score preference did not persist')
+    print('PASS native meter interior, unshaded hand, and optional compact score:',renderer,flush=True)
 PY

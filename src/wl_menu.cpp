@@ -1646,6 +1646,7 @@ void CreateMenus()
 		static const char *miniHUDOptions[] = { "Modern", "Classic" };
 		AddLabeled(displayMenu, new MultipleChoiceMenuItem(SetC7MiniHUDStyle,
 			miniHUDOptions, 2, c7_minihud_style), "Mini HUD Style");
+		displayMenu.addItem(new BooleanMenuItem("Mini HUD Score", c7_minihud_score));
 		displayMenu.addItem(new BooleanMenuItem("Numeric Status Bar", c7_numeric_hud));
 		displayMenu.addItem(new MenuSwitcherMenuItem("Advanced Graphics", advancedGraphics));
 

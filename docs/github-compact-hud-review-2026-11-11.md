@@ -30,8 +30,9 @@ existing calculation.
 
 `tools/test_corridor7_compact_hud.sh BUILD DATA` compares all eight resting
 weapon bounds with DOS measurements, allowing one native pixel for scaler
-rounding. It checks empty and partly depleted meters against a HUD-hidden
-control, requires the outlines/readouts to remain visible, and covers native
+rounding. It checks empty and partly depleted meters against an unobstructed
+floor sample with matching dither phase, requires the outlines/readouts to
+remain visible, and covers native
 resolution and widescreen placement in both renderers. Matched before/after
 captures also verify that the standard status-bar view is pixel-identical to
 the previous build. Retail software/OpenGL scene parity and the required
@@ -42,3 +43,18 @@ Private screenshots are in the parent workspace's
 They include a DOS / previous port / corrected OpenGL comparison. Commercial
 artwork and game files remain outside the source commit. Visual review of
 issue 21 remains open; this follow-up does not publish a release or close it.
+
+## Mini-HUD toggle follow-up
+
+Disabling the mini HUD during a mission previously stopped drawing the compact
+overlay while retaining view 21, which also suppresses the full status bar.
+The Graphics-menu toggle now selects the normal status-bar view (20) when
+disabled and restores the compact full-screen view (21) when enabled. Smaller
+views keep their selected size. All view-size requests normalize 21 to 20 for
+C7 while the mini HUD is off, covering old configurations, video-mode changes
+and the keyboard/menu size controls. Other games retain their behavior.
+
+The compact-HUD regression now also requires an old `ViewSize=21` / mini-HUD-off
+configuration to render identically to the standard status-bar view and persist
+the corrected settings. Real keyboard/menu checks exercise off/on/off during
+a mission, size-key behavior, smaller views, and restart in both renderers.

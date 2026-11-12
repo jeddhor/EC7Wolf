@@ -526,7 +526,11 @@ game's.
 In Options > Graphics, Full-screen Mini HUD supplies compact status at 100%
 view size. Mini HUD Style selects Modern or Classic. Classic restores the
 original view-21 layout, whose availability in DOS depends on free conventional
-memory. Numeric Status Bar independently overlays exact health, armor,
+memory. Turning the mini HUD off restores the full status bar and its normal
+view area immediately; turning it back on restores the full-screen compact
+view. Deliberately smaller view sizes stay unchanged. Disabled-mini-HUD
+settings from older configurations also restore the full bar on startup.
+Numeric Status Bar independently overlays exact health, armor,
 ammunition, mines and visor values on the colored meters, including over-max
 totals. It defaults off. These settings persist. Holding Show Status works at
 full-screen view size in software and OpenGL.

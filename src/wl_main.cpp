@@ -785,6 +785,10 @@ void NewViewSize (int width, unsigned int scrWidth, unsigned int scrHeight)
 		return;
 
 	viewsize = width;
+	// C7's disabled compact HUD means the full status bar. Normalize old
+	// configs and size-key/menu requests too, so view 21 cannot hide both.
+	if(viewsize == 21 && !c7_minihud && IWad::CheckGameFilter("Corridor7"))
+		viewsize = 20;
 	SetViewSize(scrWidth, scrHeight);
 }
 

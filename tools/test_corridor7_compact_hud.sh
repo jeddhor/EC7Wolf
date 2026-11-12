@@ -9,7 +9,7 @@ if [ -z "${C7_KEEP_TEST_ARTIFACTS:-}" ]; then trap 'rm -rf "$work"' EXIT HUP INT
 xvfb-run -a python3 - "$build" "$data" "$repo" "$work" <<'PY'
 from dataclasses import replace
 from pathlib import Path
-from PIL import Image, ImageChops
+from PIL import Image, ImageChops, ImageDraw
 import os, shutil, subprocess, sys, zipfile
 build,data,repo,work=map(Path,sys.argv[1:]);sys.path.insert(0,str(repo/'editor'))
 from ec7edit_core.archive import read_archive,encode_archive
@@ -25,7 +25,7 @@ records[0]=replace(records[0],planes=MapPlanes(64,64,(tuple(walls),tuple(things)
 (lab/'MAPTEMP.CO7').write_bytes(encode_archive(records))
 env=dict(os.environ,SDL_AUDIODRIVER='dummy',SDL_VIDEODRIVER='x11',LIBGL_ALWAYS_SOFTWARE='1')
 with zipfile.ZipFile(build/'ec7wolf.pk3') as src:files=[(i,src.read(i)) for i in src.infolist()]
-def capture(renderer,weapon='C7M16',hud=False,res=(640,400)):
+def capture(renderer,weapon='C7M16',hud=True,res=(640,400),view=21):
     # A hidden-ready-frame control gives an independent weapon silhouette.
     with zipfile.ZipFile(lab/'ec7wolf.pk3','w') as dst:
         for info,blob in files:
@@ -36,8 +36,8 @@ def capture(renderer,weapon='C7M16',hud=False,res=(640,400)):
                 blob=blob.replace(b'player.startitem "C7VisorCharge", 100',b'player.startitem "C7VisorCharge", 50',1)
                 if weapon is None:blob=blob.replace(b'C761 A 1 A_WeaponReady',b'TNT1 A 1 A_WeaponReady')
             dst.writestr(info,blob)
-    name=f'{renderer}-{weapon}-{int(hud)}-{res[0]}x{res[1]}'
-    cfg=work/(name+'.cfg');cfg.write_text(f'ViewSize = 21;\nC7MiniHUD = {int(hud)};\nC7MiniHUDStyle = 1;\n')
+    name=f'{renderer}-{weapon}-{int(hud)}-{res[0]}x{res[1]}-view{view}'
+    cfg=work/(name+'.cfg');cfg.write_text(f'ViewSize = {view};\nC7MiniHUD = {int(hud)};\nC7MiniHUDStyle = 1;\n')
     out=work/(name+'.png');ppm=work/(name+'.ppm')
     cmd=[str(build/'ec7wolf'),'--data','CO7','--nowait','--no-upscale','--res',*map(str,res),'--vid-renderer',renderer,'--tedlevel','MAP01','--skill','3','--config',str(cfg),'--savedir',str(work/'save'),'--capture-rngseed','1','--capture-place','1','10.5','10.5','180','--capture-snapshot',str(out),'30','--capture-maxtics','35']
     if renderer=='opengl':cmd+=['--capture-glpresent',str(ppm)]
@@ -56,16 +56,22 @@ for renderer in ('software','opengl'):
     hidden=capture(renderer,None)
     for weapon,expected in native_bounds.items():
         image=capture(renderer,weapon)
-        observed=ImageChops.difference(image,hidden).getbbox()
+        diff=ImageChops.difference(image,hidden)
+        # Selecting an energy weapon also changes the compact ammo readout.
+        ImageDraw.Draw(diff).rectangle((0,360,199,399),fill=(0,0,0))
+        observed=diff.getbbox()
         assert observed and all(abs(a-b)<=2 for a,b in zip(observed,expected)),(renderer,weapon,expected,observed)
     print('PASS all eight full-screen weapon bounds match native DOS:',renderer,flush=True)
-    bare=capture(renderer);hud=capture(renderer,hud=True)
+    hud=capture(renderer)
     # Empty armor/mines and the unfilled halves of health/visor must expose
     # the scene. Exclude outlines, digits, and the filled part of each meter.
     for box in ((28,384,64,390),(92,384,128,390),(50,368,64,374),(178,368,192,374)):
-        assert not ImageChops.difference(bare.crop(box),hud.crop(box)).getbbox(),(renderer,'opaque meter well',box)
+        # The floor gradient is horizontally uniform apart from its ordered
+        # dither. Sample its unobstructed neighboring 16-pixel period, keeping
+        # that phase while avoiding the meters and the centered weapon.
+        assert all(hud.getpixel((x,y))==hud.getpixel((208+x%16,y)) for y in range(box[1],box[3]) for x in range(box[0],box[2])),(renderer,'opaque meter well',box)
     for box in ((16,380,68,394),(80,380,132,394)):
-        assert ImageChops.difference(bare.crop(box),hud.crop(box)).getbbox(),(renderer,'meter border/digits absent',box)
+        assert any(hud.getpixel((x,y))!=hud.getpixel((208+x%16,y)) for y in range(box[1],box[3]) for x in range(box[0],box[2])),(renderer,'meter border/digits absent',box)
     print('PASS empty/partial meters reveal the scene and retain borders:',renderer,flush=True)
     for res in ((320,200),(640,360)):
         hidden=capture(renderer,None,res=res);image=capture(renderer,res=res)
@@ -76,4 +82,10 @@ for renderer in ('software','opengl'):
         assert bounds and abs(bounds[1]-expected_top)<=2,(renderer,res,bounds)
         assert abs((bounds[0]+bounds[2])/2-res[0]/2)<=res[1]*.04,(renderer,res,'off-center',bounds)
     print('PASS native-resolution and widescreen weapon placement:',renderer,flush=True)
+    full=capture(renderer,hud=False)
+    standard=capture(renderer,view=20)
+    assert not ImageChops.difference(full,standard).getbbox(),(renderer,'mini HUD off did not restore standard view and status bar')
+    persisted=(work/f'{renderer}-C7M16-0-640x400-view21.cfg').read_text()
+    assert 'ViewSize = 20;' in persisted and 'C7MiniHUD = 0;' in persisted,(renderer,'HUD-off state did not persist')
+    print('PASS disabled compact HUD restores and persists the full status-bar view:',renderer,flush=True)
 PY

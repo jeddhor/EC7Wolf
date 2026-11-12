@@ -380,6 +380,15 @@ MENU_LISTENER(SetC7MiniHUDStyle)
 	return true;
 }
 
+MENU_LISTENER(ToggleC7MiniHUD)
+{
+	// The maximum-size views select compact or full status, never no HUD.
+	// Keep deliberately smaller views at the size the player selected.
+	if(viewsize >= 20)
+		NewViewSize(c7_minihud ? 21 : 20);
+	return true;
+}
+
 MENU_LISTENER(EnterControlBase)
 {
 	controlBase[2]->setEnabled(mouseenabled);
@@ -1633,7 +1642,7 @@ void CreateMenus()
 		AddLabeled(displayMenu, new MultipleChoiceMenuItem(SetGamma, gammaOptions, 6,
 			NearestOption(kGammaValues, screenGamma)), "Brightness");
 		AddLabeled(displayMenu, new SliderMenuItem(viewsize, 110, 21, language["STR_SMALL"], language["STR_LARGE"], AdjustViewSize), "View Size");
-		displayMenu.addItem(new BooleanMenuItem("Full-screen Mini HUD", c7_minihud));
+		displayMenu.addItem(new BooleanMenuItem("Full-screen Mini HUD", c7_minihud, ToggleC7MiniHUD));
 		static const char *miniHUDOptions[] = { "Modern", "Classic" };
 		AddLabeled(displayMenu, new MultipleChoiceMenuItem(SetC7MiniHUDStyle,
 			miniHUDOptions, 2, c7_minihud_style), "Mini HUD Style");

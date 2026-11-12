@@ -710,10 +710,10 @@ void WolfStatusBar::DrawC7ClassicHud()
 	// Released view-21 coordinates and the third archive font. This font's
 	// 8x10 cells contain the native 3x5 numerals; no artwork is recreated.
 	FFont *tiny = V_GetFont("C7G0002");
-	auto meter = [this,tiny,&border,&rect](int x, int y, unsigned int value,
+	auto meter = [this,tiny,&border](int x, int y, unsigned int value,
 		unsigned int fill, int ramp, int textColor)
 	{
-		rect(x,y,25,5,0);
+		// DOS leaves the unfilled part of each compact meter transparent.
 		DrawC7Gauge(x,y,fill,5,ramp);
 		border(x,y,26,7);
 		FString text; text.Format("%u",value);

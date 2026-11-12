@@ -810,21 +810,32 @@ bool R_GetPlayerSpriteInfo(AActor *actor, const Frame *frame, fixed offsetX,
 		return false;
 
 	const fixed scale = viewheight<<(FRACBITS-1);
+	// Native C7 sizes its weapon canvas from the view height (height/4 in
+	// the original scaler), including the jump from 160 to 200 at view 21.
+	// Its full-screen view also keeps the native anchor instead of applying
+	// Wolf's downward yadjust. Share this placement with the GL viewmodel.
+	const bool c7FullScreen = viewsize == 21 && IWad::CheckGameFilter("Corridor7");
+	const fixed spriteYScale = c7FullScreen ? viewheight*FRACUNIT/160 : pspriteyscale;
+	const fixed spriteXScale = c7FullScreen ? FixedDiv(spriteYScale, yaspect) : pspritexscale;
 
 	// A fixed-point conversion of a value that is negative whenever the view is
 	// wider than it is centred, which is undefined as a shift.
-	const fixed centeringOffset = (centerx - 2*centerxwide)*FRACUNIT;
-	const fixed leftedge = FixedMul((160<<FRACBITS) - fixed(tex->GetScaledLeftOffsetDouble()*FRACUNIT) + offsetX, pspritexscale) + centeringOffset;
-	fixed upperedge = ((100-32)<<FRACBITS) + fixed(tex->GetScaledTopOffsetDouble()*FRACUNIT) - offsetY - AspectCorrection[r_ratio].tallscreen;
-	if(viewsize == 21 && players[ConsolePlayer].ReadyWeapon)
+	const fixed centeringOffset = c7FullScreen ?
+		(viewwidth/2)*FRACUNIT - FixedMul(320*FRACUNIT, spriteXScale) :
+		(centerx - 2*centerxwide)*FRACUNIT;
+	const fixed leftedge = FixedMul((160<<FRACBITS) - fixed(tex->GetScaledLeftOffsetDouble()*FRACUNIT) + offsetX, spriteXScale) + centeringOffset;
+	// C7's shape offset (-54 at scale 4/5) places the canvas origin at
+	// -67.5. Cancel it exactly so the native canvas starts at height/4.
+	fixed upperedge = (c7FullScreen ? 135*FRACUNIT/2 : (100-32)*FRACUNIT) + fixed(tex->GetScaledTopOffsetDouble()*FRACUNIT) - offsetY - AspectCorrection[r_ratio].tallscreen;
+	if(viewsize == 21 && !c7FullScreen && players[ConsolePlayer].ReadyWeapon)
 		upperedge -= players[ConsolePlayer].ReadyWeapon->yadjust;
-	upperedge = scale - FixedMul(upperedge, pspriteyscale);
+	upperedge = scale - FixedMul(upperedge, spriteYScale);
 
 	info.tex      = tex;
 	info.x        = leftedge>>FRACBITS;
 	info.y        = upperedge>>FRACBITS;
-	info.xStep    = FixedDiv(tex->xScale, pspritexscale);
-	info.yStep    = FixedDiv(tex->yScale, pspriteyscale);
+	info.xStep    = FixedDiv(tex->xScale, spriteXScale);
+	info.yStep    = FixedDiv(tex->yScale, spriteYScale);
 	info.shadeRow = frame->fullbright ? 0 :
 		GETPALOOKUP(0, LIGHT2SHADE(gLevelLight) - (gLevelMaxLightVis/LIGHTVISIBILITY_FACTOR));
 	return true;

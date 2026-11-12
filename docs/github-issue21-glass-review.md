@@ -31,6 +31,19 @@ The native masked ray selects the first glass cell, rather than compositing
 each successive glass cell seen through its holes. Removing subsequent native
 glass layers also removes the spurious frames around the rear dispensers.
 
+A subsequent controlled two-pane playtest verifies the consequence that Jason
+flagged: the rear pane's opaque border also disappears through the nearer
+pane's clear interior. The unmodified retail executable (SHA-256
+`1287a13c2ac16624a1eb70ae1d207ad293e3aef6b852fa3d3f5eb6591d1c30f7`)
+rendered a disposable room from (10.5,10.5), heading 180, with wall 57 / marker
+104 at (8,10) and (6,10). Removing the rear pane at runtime produced a
+pixel-identical 640x400 frame. Removing the front pane exposed the smaller rear
+border inside the former front pane's clear area. Camera, executable, and other
+scene state were held constant; no executable instructions were patched.
+Thus this particular missing-border behavior matches the original renderer.
+Private captures and machine-readable results are in `layer-verification`
+beneath the existing transparency-review artifact directory.
+
 Private reference and comparison frames are in the parent workspace under
 `analysis/verification/issues-2026-11-11/transparency-review`. Views A and B
 include DOS, old-port, and prototype frames. Native executable/data and derived

@@ -113,6 +113,13 @@ bool IsMaskedWallCell(MapSpot spot)
 	return spot->maskedWallType != 0 || spot->tile->renderMasked;
 }
 
+bool IsNativeGlassCell(MapSpot spot)
+{
+	// These derived markers are assigned only by the Corridor 7 map loader.
+	return IsMaskedWallCell(spot) &&
+		(spot->corridor7WallMarker == 104 || spot->corridor7WallMarker == 105);
+}
+
 bool IsPushwallOrigin(MapSpot spot)
 {
 	// The thinker always rides the current origin cell, even across transfers.

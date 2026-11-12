@@ -449,7 +449,11 @@ map dispatch, and campaign rules are reproduced; several movement, attack,
 pain-chance, damage, and frame-timing constants remain evidence-based
 reconstructions where the executable did not yield an unambiguous value.
 Masked screens preserve collision and sight behavior while transparent columns
-are composited with walls and actors at their actual depth. Plane-1 masked-wall
+are composited with walls and actors at their actual depth. Native 104/105 glass
+retains perpendicular corner faces and selects the first glass cell per view
+ray, including its transparent texels; more distant glass does not show through
+that cell. See `github-issue21-glass-review.md` for the native comparison and
+current visual-review scope. Plane-1 masked-wall
 configuration markers 86..88 are preserved distinctly, but their exact DOS
 state differences remain unresolved. The final victory page is still the port's
 own rendering rather than a reproduction of the original's layout; the ending

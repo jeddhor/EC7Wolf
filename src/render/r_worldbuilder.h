@@ -37,7 +37,8 @@ enum WorldSurfaceKind
 	WSURF_Wall,
 	WSURF_DoorLeaf,		// sliding door leaf: wall-shaded + shader slide (Phase 7)
 	WSURF_Masked,		// color-keyed masked wall: wall-shaded + alpha test (Phase 8)
-	WSURF_Sprite		// billboard actor sprite: distance-shaded, index-0 keyed (Phase 9)
+	WSURF_Sprite,		// billboard actor sprite: distance-shaded, index-0 keyed (Phase 9)
+	WSURF_NativeGlass	// C7 104/105: nearest cell per ray, including transparent texels
 };
 
 // A run of vertices sharing a texture/kind, so the backend can bind the real

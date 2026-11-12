@@ -746,7 +746,7 @@ namespace
 	{
 		GLuint tex, opac;
 		int kind;			// shader surface kind (doors/masked/sprites -> wall)
-		int masked, sprite, spriteFb, isDoor;
+		int masked, sprite, spriteFb, isDoor, nativeGlass;
 		int slideStyle;
 		unsigned int slideAmount;
 		GLuint first, count;
@@ -785,6 +785,7 @@ namespace
 	inline bool SameDrawState(const MeshDraw &a, const MeshDraw &b)
 	{
 		return a.tex == b.tex && a.opac == b.opac && a.kind == b.kind &&
+			a.nativeGlass == b.nativeGlass &&
 			a.masked == b.masked && a.sprite == b.sprite &&
 			a.spriteFb == b.spriteFb &&
 			a.isDoor == b.isDoor && a.slideStyle == b.slideStyle &&
@@ -793,8 +794,9 @@ namespace
 
 	// Draw one mesh with the current program/uniforms. The framebuffer clear and
 	// uDebug are set by the caller so several meshes share one pass.
+	enum MeshPass { MESH_ALL, MESH_OTHER, MESH_GLASS_DEPTH, MESH_GLASS_COLOR };
 	void RenderMesh(const WorldMesh &mesh, const MeshGL &gl,
-		const SurfaceUniforms &su)
+		const SurfaceUniforms &su, MeshPass pass = MESH_ALL)
 	{
 		if(gl.draws.Size() == 0)
 			return;
@@ -812,6 +814,13 @@ namespace
 		for(unsigned int i = 0; i < gl.draws.Size(); ++i)
 		{
 			const MeshDraw &d = gl.draws[i];
+			if((pass == MESH_OTHER && d.nativeGlass) ||
+				((pass == MESH_GLASS_DEPTH || pass == MESH_GLASS_COLOR) && !d.nativeGlass))
+				continue;
+			// Select the nearest entire glass cell before testing its artwork.
+			// The color mask is disabled for this pass, including transparent texels.
+			const GLuint opacity = pass == MESH_GLASS_DEPTH ? 0 : d.opac;
+			const int masked = pass == MESH_GLASS_DEPTH ? 0 : d.masked;
 			if(d.tex != boundTex)
 			{
 				glActiveTexture(GL_TEXTURE0);
@@ -819,16 +828,16 @@ namespace
 				glUniform1i(su.uIndexTex, 0);
 				boundTex = d.tex;
 			}
-			if(d.opac != boundOpac)
+			if(opacity != boundOpac)
 			{
-				glUniform1i(su.uHasOpacity, d.opac ? 1 : 0);
-				if(d.opac)
+				glUniform1i(su.uHasOpacity, opacity ? 1 : 0);
+				if(opacity)
 				{
 					glActiveTexture(GL_TEXTURE3);
-					glBindTexture(GL_TEXTURE_2D, d.opac);
+					glBindTexture(GL_TEXTURE_2D, opacity);
 					glUniform1i(su.uOpacityTex, 3);
 				}
-				boundOpac = d.opac;
+				boundOpac = opacity;
 			}
 			if(d.kind != boundKind)
 			{
@@ -839,10 +848,10 @@ namespace
 					glUniform1f(su.uPlaneHeight, su.ceilPlaneH);
 				boundKind = d.kind;
 			}
-			if(d.masked != boundMasked)
+			if(masked != boundMasked)
 			{
-				glUniform1i(su.uMasked, d.masked);
-				boundMasked = d.masked;
+				glUniform1i(su.uMasked, masked);
+				boundMasked = masked;
 			}
 			if(d.sprite != boundSprite)
 			{
@@ -938,13 +947,15 @@ namespace
 			// the index-255 color key; sprites key on raw index 0 instead. A
 			// door leaf additionally runs the slide.
 			const bool isDoor = surf.kind == WSURF_DoorLeaf;
-			const bool isMasked = surf.kind == WSURF_Masked;
+			const bool isNativeGlass = surf.kind == WSURF_NativeGlass;
+			const bool isMasked = surf.kind == WSURF_Masked || isNativeGlass;
 			const bool isSprite = surf.kind == WSURF_Sprite;
 			SortItem it;
 			it.state.tex = surfTex[i];
 			it.state.opac = surfOpac[i];
 			it.state.kind = (isDoor || isMasked || isSprite) ? WSURF_Wall : surf.kind;
 			it.state.masked = (isDoor || isMasked) ? 1 : 0;
+			it.state.nativeGlass = isNativeGlass ? 1 : 0;
 			it.state.sprite = isSprite ? 1 : 0;
 			it.state.spriteFb = (isSprite && surf.fullbright) ? 1 : 0;
 			it.state.isDoor = isDoor ? 1 : 0;
@@ -967,6 +978,7 @@ namespace
 				if(a.state.opac != b.state.opac) return a.state.opac < b.state.opac;
 				if(a.state.kind != b.state.kind) return a.state.kind < b.state.kind;
 				if(a.state.masked != b.state.masked) return a.state.masked < b.state.masked;
+				if(a.state.nativeGlass != b.state.nativeGlass) return a.state.nativeGlass < b.state.nativeGlass;
 				if(a.state.sprite != b.state.sprite) return a.state.sprite < b.state.sprite;
 				if(a.state.spriteFb != b.state.spriteFb) return a.state.spriteFb < b.state.spriteFb;
 				if(a.state.isDoor != b.state.isDoor) return a.state.isDoor < b.state.isDoor;
@@ -1471,9 +1483,9 @@ namespace
 	}
 
 	// Render the world color pass into the bound FBO's current viewport. Static
-	// opaque world first, then dynamic door/pushwall geometry, then masked panes
-	// (biased toward the viewer so they don't z-fight a coplanar wall behind
-	// them), then sprite billboards -- all sharing one clear and depth buffer.
+	// opaque world first, then dynamic geometry, ordinary masks and sprites.
+	// Native C7 glass selects its nearest entire cell in a final depth/color
+	// pair. Every pass shares one clear and depth buffer.
 	void DrawWorldColourPass(WorldGL &w)
 	{
 		glUseProgram(w.prog);
@@ -1490,9 +1502,28 @@ namespace
 		RenderMesh(w.dynMesh, w.dynGL, w.su);
 		glEnable(GL_POLYGON_OFFSET_FILL);
 		glPolygonOffset(-1.0f, -1.0f);
-		RenderMesh(w.maskedMesh, w.maskedGL, w.su);
+		RenderMesh(w.maskedMesh, w.maskedGL, w.su, MESH_OTHER);
 		glDisable(GL_POLYGON_OFFSET_FILL);
 		RenderMesh(w.spriteMesh, w.spriteGL, w.su);
+		// DOS draws the opaque scene and sprites, then the first native glass
+		// cell reached by each ray. Its holes do not reveal further glass cells.
+		// Front sprites already own nearer depth; sprites behind the glass remain
+		// visible through its artwork's holes. The viewmodel does not use depth.
+		bool nativeGlass = false;
+		for(unsigned int i = 0;i < w.maskedGL.draws.Size();++i)
+			nativeGlass |= w.maskedGL.draws[i].nativeGlass != 0;
+		if(nativeGlass)
+		{
+			glEnable(GL_POLYGON_OFFSET_FILL);
+			glPolygonOffset(-1.0f, -1.0f);
+			glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+			RenderMesh(w.maskedMesh, w.maskedGL, w.su, MESH_GLASS_DEPTH);
+			glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+			glDepthFunc(GL_EQUAL);
+			RenderMesh(w.maskedMesh, w.maskedGL, w.su, MESH_GLASS_COLOR);
+			glDepthFunc(GL_LESS);
+			glDisable(GL_POLYGON_OFFSET_FILL);
+		}
 		DrawViewModel(w);
 	}
 

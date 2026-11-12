@@ -220,13 +220,14 @@ namespace
 		return spot->corridor7WallMarker == other->corridor7WallMarker;
 	}
 
-	// The internal tile boundaries of a run of panes are not surfaces; drawing
-	// them edge-on produces the periodic floor-to-ceiling lines seen down
-	// glass-lined corridors, so they are culled here (matches the raycaster).
+	// Native C7 glass preserves every entry face, including perpendicular run
+	// ends. Other masked walls retain the existing run merge (as in software).
 	bool MaskedRenderSide(MapSpot spot, int side)
 	{
 		if(!MaskedPassSide(spot, side))
 			return false;
+		if(DynamicWalls::IsNativeGlassCell(spot))
+			return true;
 		const bool horizontalRun = ConnectedMasked(spot, MapTile::East) ||
 			ConnectedMasked(spot, MapTile::West);
 		const bool verticalRun = ConnectedMasked(spot, MapTile::North) ||
@@ -486,9 +487,8 @@ void BuildMasked(GameMap *gm, WorldMesh &out, float camX, float camY)
 
 		// A masked tile is a see-through box: emit its boundary faces exactly like
 		// a solid wall (the same planes GetMaskedWallEndpoints uses for a
-		// non-offset masked wall), but only on sides that survive the
-		// connected-glass merge, and tagged WSURF_Masked so the backend alpha-
-		// tests the color key. The texture resolves the force-field animation.
+		// non-offset masked wall). Ordinary masks merge connected runs; native
+		// C7 glass keeps its entry faces and selects the first cell per view ray.
 		for(int side = 0; side < 4; ++side)
 		{
 			if(!MaskedRenderSide(spot, side))
@@ -504,7 +504,7 @@ void BuildMasked(GameMap *gm, WorldMesh &out, float camX, float camY)
 			if(!MaskedFaceTowardCamera(side, (int)x, (int)y, camX, camY))
 				continue;
 			PushWallFace(out, side, fx, fy, ResolveWallTexture(spot, side),
-				WSURF_Masked);
+				DynamicWalls::IsNativeGlassCell(spot) ? WSURF_NativeGlass : WSURF_Masked);
 		}
 	}
 }

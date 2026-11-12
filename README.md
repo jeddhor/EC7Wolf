@@ -224,9 +224,9 @@ behavior for other games was preserved wherever possible; these are the deltas.
 ### Rendering
 - **Single-image walls with runtime shading** instead of Wolf3D light/dark
   pairs. *(`textures/wolfrawtexture.cpp`, `textures/flattexture.cpp`)*
-- **Glass and see-through walls** — masked-wall rendering with correct
-  transparency, freshly-traced collision geometry behind transparent pixels,
-  and compositing of adjacent glass panes at true depth. *(`wl_draw.cpp`,
+- **Glass and see-through walls** — color-key transparency with freshly traced
+  scenery behind it. Native 104/105 glass preserves its foreground corner faces
+  and selects the first glass cell per view ray, as DOS does. *(`wl_draw.cpp`,
   `r_sprites.cpp`)*
 - **Animated walls & force fields** — all four native 208..239 wall/force-field
   palette cycles and four-frame in-place force-field/animated-wall openings.

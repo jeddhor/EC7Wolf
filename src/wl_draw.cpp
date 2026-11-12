@@ -17,6 +17,7 @@
 #include "wl_atmos.h"
 #include "wl_shade.h"
 #include "render/r_visibility.h"
+#include "render/r_dynamicwalls.h"
 #include "actor.h"
 #include "id_ca.h"
 #include "gamemap.h"
@@ -744,6 +745,7 @@ struct MaskedWallHit
 };
 
 static TArray<MaskedWallHit> maskedWallHits;
+static int lastNativeGlassColumn = -1;
 
 // Corridor 7 force-field doors (map marker 106) are a single see-through pane on
 // the cell-center plane -- the barrier just switches off in place, it never slides.
@@ -810,6 +812,10 @@ static bool IsMaskedWallRenderSide(MapSpot spot, MapTile::Side side)
 {
 	if(!IsMaskedWallPassSide(spot, side))
 		return false;
+	// Native glass is a cell, including its perpendicular corner face. Its
+	// second ray pass stops at the first such cell rather than merging runs.
+	if(DynamicWalls::IsNativeGlassCell(spot))
+		return true;
 
 	const bool horizontalRun = IsConnectedMaskedWall(spot, MapTile::East) ||
 		IsConnectedMaskedWall(spot, MapTile::West);
@@ -834,6 +840,12 @@ static bool IsMaskedWallRenderSide(MapSpot spot, MapTile::Side side)
 
 static void RecordMaskedWallHit(MapSpot spot, MapTile::Side side, int column)
 {
+	if(DynamicWalls::IsNativeGlassCell(spot))
+	{
+		if(column == lastNativeGlassColumn)
+			return;
+		lastNativeGlassColumn = column;
+	}
 	// Rays are traced from left to right, but each ray can cross several panes.
 	// Extend the most recent run for this exact surface instead of turning the
 	// tile-wide visibility bit into a full, guessed wall face.
@@ -1818,6 +1830,7 @@ void WallRefresh (void)
 	min_wallheight = viewheight;
 	lastside = -1;                  // the first pixel is on a new wall
 	maskedWallHits.Clear();
+	lastNativeGlassColumn = -1;
 
 	R_UpdateViewHeight();
 

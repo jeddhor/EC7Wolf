@@ -44,6 +44,8 @@ namespace DynamicWalls
 	// Doors (offsetVertical/offsetHorizontal) are excluded -- they are already
 	// handled as sliding leaves by the dynamic mesh.
 	bool IsMaskedWallCell(MapSpot spot);
+	// Explicit native glass (104/105) uses the first masked cell per view ray.
+	bool IsNativeGlassCell(MapSpot spot);
 
 	// One door leaf to render. amount is the interpolated slide (0 = closed ..
 	// 0xffff = fully open); style selects CheckSlidePass()/SlideTextureOffset().

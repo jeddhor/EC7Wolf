@@ -21,6 +21,16 @@ void    CheckSpawnPlayer (bool setup=false);
 void    SpawnPlayer (int num);
 void    C7GiveDifficultyFloorPlan(AActor *pawn);
 
+struct player_t;
+// Corridor 7 bonus floors are score runs: what the player carried in is what
+// they carry out. See player_t::c7BonusEntry.
+void    C7CaptureBonusEntry(player_t &player);
+bool    C7RestoreBonusEntry(player_t &player);
+void    C7ClearBonusEntry(player_t &player);
+// The per-floor resets of CORR7CD.EXE's floor setup that ECWolf's travel does
+// not already perform.
+void    C7NativeFloorSetup(player_t &player);
+
 //
 // Status bar interface
 //
@@ -124,6 +134,33 @@ extern class player_t
 
 		int32_t		oldscore,score,nextextra;
 		uint32_t	levelShotsFired, levelShotsHit;
+
+		// What a Corridor 7 bonus floor gives back when it ends (GitHub #23;
+		// the addresses are in the running game's memory image, as
+		// docs/github-issue-verification-2026-11-14.md explains).
+		//
+		// CORR7CD.EXE copies nine values to DS:40d2..40e2 when the player
+		// takes a bonus elevator (a14a) and copies them back when the bonus
+		// floor ends (a0f6), whether by its exit or by the player's health
+		// running out: health, bullets, armor, visor charge, alien weapon
+		// energy, the owned-weapon bits and the selected weapon with its two
+		// selection-history words. Nothing else is copied. Ammo capacity
+		// (8104) and mines (8116) are outside the set, so an upgrade or a
+		// mine spent on a bonus floor stays spent -- the live DOS run in
+		// analysis/verification/issues-2026-11-14 confirms both -- and score
+		// is the point of the floor and is kept.
+		enum { C7BONUS_COUNTERS = 4 };
+		struct C7BonusEntry
+		{
+			bool valid;
+			int32_t health;
+			// C7Bullets, C7BodyArmor, C7VisorCharge, C7Energy: the amount
+			// held, or -1 for none. Only amounts are restored; maxamount is
+			// the capacity, which the original lets a bonus floor raise.
+			int32_t counters[C7BONUS_COUNTERS];
+			TArray<const ClassDef *> weapons;
+			const ClassDef *readyWeapon;
+		} c7BonusEntry;
 		// Native Corridor 7 feedback and health-chamber state. Keeping this on
 		// the player makes save/load and level transitions deterministic.
 		uint16_t	c7MuzzleFlashTics;

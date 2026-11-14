@@ -563,46 +563,6 @@ static void DetermineIntermissionMode()
 	}
 }
 
-static void InterDoCorridor7(bool died=false)
-{
-	const uint32_t shots = players[ConsolePlayer].levelShotsFired;
-	const uint32_t hits = MIN(players[ConsolePlayer].levelShotsHit, shots);
-	const uint32_t accuracy = shots ? (hits * 100) / shots : 0;
-	// Recovered from the released hit/miss tally: each started block of one
-	// hundred shots multiplies the accuracy award by another ten points.
-	InterState.bonus = died ? 0 : accuracy * (shots / 100 + 1) * 10;
-	if(!died)
-		InterGiveBonus(InterState.bonus);
-
-	CA_CacheScreen(TexMan("C7G0014"));
-	if(died)
-		WritePixel(112, 16, "YOU'RE DEAD");
-
-	const unsigned int aliens = gamestate.killtotal ?
-		(static_cast<unsigned int>(gamestate.killcount)*100)/gamestate.killtotal : 100;
-	const unsigned int restricted = gamestate.secrettotal ?
-		(static_cast<unsigned int>(gamestate.secretcount)*100)/gamestate.secrettotal : 100;
-	// The report picture paints its labels right-aligned to the colon column
-	// at x=200 with text rows at y=71/86/101/127/141/155; the font's glyph ink
-	// starts one row into the cell, so writing at row-1 sits on each label.
-	FString value;
-	value.Format("%s", died ? "UNSECURED" : "SECURED");
-	WritePixel(208, 70, value);
-	value.Format("%u%%", aliens);
-	WritePixel(208, 85, value);
-	value.Format("%u%%", restricted);
-	WritePixel(208, 100, value);
-	value.Format("%u%%", accuracy);
-	WritePixel(208, 126, value);
-	value.Format("%u", InterState.bonus);
-	WritePixel(208, 140, value);
-	value.Format("%d", players[ConsolePlayer].score);
-	WritePixel(208, 154, value);
-
-	VW_UpdateScreen();
-	VW_FadeIn();
-}
-
 static void C7PrintAt(FFont *font, int x, int y, const char *text,
 	EColorRange color, bool rightAlign=false)
 {
@@ -693,6 +653,241 @@ static void C7DrawTiledBackdrop(FTexture *tex)
 				DTA_TopOffset, 0, DTA_LeftOffset, 0, TAG_DONE);
 		}
 	}
+}
+
+/*
+==================
+=
+= Corridor 7's end-of-floor report
+=
+==================
+*/
+
+// CORR7CD.EXE a335. Every floor ends on the status report; a bonus floor then
+// shows a second page, the hit/miss ratio (a552), and each page pays its own
+// award. The port used to have one page paying the hit/miss award under the
+// status report's "BONUS" -- so every campaign floor paid an accuracy award the
+// original pays only after a bonus floor, the status report's own award was
+// never paid at all, and the hit/miss page was missing (GitHub #23).
+//
+// Scoring is kept apart from drawing so that each award is paid exactly once,
+// and to every player, whichever screen is looking.
+struct C7StatusReport
+{
+	bool bonusFloor;
+	int aliens, restricted, efficiency;
+	int32_t award;
+};
+
+// CORR7CD.EXE's text routine (214a:2965) puts every string over a drop shadow
+// one pixel down and to the right, in the color at DS:8b68 -- black (index 0)
+// on both report pages, compared against the DOS captures glyph for glyph.
+static void C7ShadowPrintAt(FFont *font, int x, int y, const char *text,
+	BYTE color, BYTE shadow=0)
+{
+	C7StencilPrintAt(font, x+1, y+1, text, shadow);
+	C7StencilPrintAt(font, x, y, text, color);
+}
+
+static C7StatusReport C7ScoreStatusReport()
+{
+	C7StatusReport report;
+	report.bonusFloor = levelInfo->BonusLevel;
+
+	// Both start at zero and are divided only when there is a total, so a
+	// floor with no aliens has eliminated none of them. Aliens are capped at
+	// 100; restricted areas are not.
+	report.aliens = gamestate.killtotal ?
+		(gamestate.killcount*100)/gamestate.killtotal : 0;
+	if(report.aliens > 100)
+		report.aliens = 100;
+	if(report.bonusFloor)
+	{
+		// Shown as N/A. A bonus floor is rated on its aliens alone.
+		report.restricted = 100;
+		report.efficiency = report.aliens;
+	}
+	else
+	{
+		report.restricted = gamestate.secrettotal ?
+			(gamestate.secretcount*100)/gamestate.secrettotal : 0;
+		report.efficiency = (report.aliens + report.restricted)/2;
+	}
+	report.award = report.efficiency*100;
+	return report;
+}
+
+static void C7DrawStatusReport(const C7StatusReport &report)
+{
+	CA_CacheScreen(TexMan("C7G0014"));
+
+	// Full-screen picture page: the text shares the picture's stretched
+	// 320x200 mapping. The values go in the small font at the colon column,
+	// x=208, on the rows a335 passes (70/85/100 and 126/140/155), in its own
+	// formats: "%3d%%" and "%6ld" pad with spaces, which is what lines the
+	// digits up under one another. The floor's results are green (0x87) and
+	// its rating yellow (0x6f), matching the DOS capture.
+	const int oldpa = pa;
+	pa = MENU_NONE;
+	static const BYTE RESULT_COLOR = 0x87, RATING_COLOR = 0x6f;
+	FString value;
+	C7ShadowPrintAt(SmallFont, 208, 70, report.bonusFloor ? "BONUS" : "SECURED",
+		RESULT_COLOR);
+	value.Format("%3d%%", report.aliens);
+	C7ShadowPrintAt(SmallFont, 208, 85, value, RESULT_COLOR);
+	if(report.bonusFloor)
+		value = "N/A";
+	else
+		value.Format("%3d%%", report.restricted);
+	C7ShadowPrintAt(SmallFont, 208, 100, value, RESULT_COLOR);
+	value.Format("%3d%%", report.efficiency);
+	C7ShadowPrintAt(SmallFont, 208, 126, value, RATING_COLOR);
+	value.Format("%6d", report.award);
+	C7ShadowPrintAt(SmallFont, 208, 140, value, RATING_COLOR);
+	value.Format("%6d", players[ConsolePlayer].score);
+	C7ShadowPrintAt(SmallFont, 208, 155, value, RATING_COLOR);
+	pa = oldpa;
+}
+
+// The accuracy award (a73c): the percentage of shots that hit, times ten for
+// every started hundred shots. A floor without a shot earns nothing.
+static int32_t C7AccuracyAward(uint32_t shots, uint32_t hits, unsigned int &accuracy)
+{
+	hits = MIN(hits, shots);
+	accuracy = shots ? (hits*100)/shots : 0;
+	return static_cast<int32_t>(accuracy * (shots/100 + 1) * 10);
+}
+
+// One row of the hit/miss page's tally: a 3x3 block per shot, four pixels
+// apart from x=90, wrapping to a new row four pixels down once x passes 300 --
+// 53 to a row. The row advances after the block that fills it, so an exact
+// multiple of 53 leaves an empty row below, as the original's does. Returns the
+// y of the row it finished on.
+static int C7DrawHitMissBlocks(unsigned int count, int y, BYTE color)
+{
+	int x = 90;
+	for(unsigned int i = 0;i < count;++i)
+	{
+		// Anything below the page would have been drawn off it.
+		if(y+1 < 200)
+		{
+			double rx = x, ry = y+1, rw = 3, rh = 3;
+			screen->VirtualToRealCoords(rx, ry, rw, rh, 320, 200, true, true);
+			const int left = static_cast<int>(rx), top = static_cast<int>(ry);
+			VWB_Clear(color, left, top, MAX(left+1, static_cast<int>(rx+rw)),
+				MAX(top+1, static_cast<int>(ry+rh)));
+		}
+		x += 4;
+		if(x > 300)
+		{
+			x = 90;
+			y += 4;
+		}
+	}
+	return y;
+}
+
+static void C7PrintCentered(FFont *font, int y, const char *text, BYTE color)
+{
+	word width, height;
+	VW_MeasurePropString(font, text, width, height);
+	C7ShadowPrintAt(font, 160 - width/2, y, text, color);
+}
+
+// The second page after a bonus floor, laid out as a552 draws it: the large
+// font for the title and the three results, the small font for the two tally
+// labels and their counts.
+static void C7DrawHitMissPage(uint32_t shots, uint32_t hits, unsigned int accuracy,
+	int32_t award)
+{
+	C7DrawTiledBackdrop(TexMan("C7G0004"));
+
+	const int oldpa = pa;
+	pa = MENU_NONE;
+	static const BYTE YELLOW = 0x6f, WHITE = 0x27, BLUE = 0x3f;
+	static const BYTE SHOTS_COLOR = 0x57, HITS_COLOR = 0xb7;
+	FString value;
+
+	C7PrintCentered(BigFont, 10, "BONUS LEVEL HIT/MISS RATIO", YELLOW);
+
+	int y = 40;
+	C7ShadowPrintAt(SmallFont, 10, y, "Shots fired:", YELLOW);
+	value.Format("%u", shots);
+	C7ShadowPrintAt(SmallFont, 13, y+10, value, WHITE);
+	y = C7DrawHitMissBlocks(shots, y, SHOTS_COLOR) + 20;
+
+	C7ShadowPrintAt(SmallFont, 10, y, "Shots hit:", YELLOW);
+	value.Format("%u", hits);
+	C7ShadowPrintAt(SmallFont, 13, y+10, value, WHITE);
+	y = C7DrawHitMissBlocks(hits, y, HITS_COLOR) + 20;
+
+	value.Format("Accuracy = %u%%", accuracy);
+	C7PrintCentered(BigFont, y, value, BLUE);
+	y += 20;
+	value.Format("Bonus = %d points", award);
+	C7PrintCentered(BigFont, y, value, BLUE);
+	y += 20;
+	value.Format("Score = %d points", players[ConsolePlayer].score);
+	C7PrintCentered(BigFont, y, value, YELLOW);
+	pa = oldpa;
+}
+
+// The status report is dismissed with a press that may still be held, and SDL
+// repeats a held key: without this, one long press dismissed both pages.
+static void C7WaitForFreshAck()
+{
+	IN_StartAck(ACK_Any);
+	while(IN_AnyInputHeld())
+	{
+		// A peer's acknowledgement still ends the page in a netgame.
+		if(Net::CheckAck(false))
+		{
+			IN_ClearKeysDown();
+			return;
+		}
+		SDL_Delay(5);
+	}
+	IN_ClearKeysDown();
+	while(!IN_CheckAck())
+		BJ_Breathe();
+	IN_ClearKeysDown();
+}
+
+static void InterDoCorridor7()
+{
+	const C7StatusReport report = C7ScoreStatusReport();
+	InterGiveBonus(report.award);
+	C7DrawStatusReport(report);
+	VW_UpdateScreen();
+	VW_FadeIn();
+	InterWaitForAck();
+
+	if(!report.bonusFloor)
+		return;
+
+	// Each player is paid for their own shooting, so every machine in a
+	// netgame pays the same points; the page shows this screen's player.
+	unsigned int accuracy = 0;
+	int32_t award = 0;
+	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
+	{
+		unsigned int playerAccuracy;
+		const int32_t playerAward = C7AccuracyAward(players[i].levelShotsFired,
+			players[i].levelShotsHit, playerAccuracy);
+		players[i].GivePoints(playerAward);
+		if(i == ConsolePlayer)
+		{
+			accuracy = playerAccuracy;
+			award = playerAward;
+		}
+	}
+
+	// The original draws this page straight over the first, without a fade.
+	const player_t &viewer = players[ConsolePlayer];
+	C7DrawHitMissPage(viewer.levelShotsFired,
+		MIN(viewer.levelShotsHit, viewer.levelShotsFired), accuracy, award);
+	VW_UpdateScreen();
+	C7WaitForFreshAck();
 }
 
 void Corridor7Death(void)
@@ -817,7 +1012,6 @@ void LevelCompleted (void)
 	if(IWad::CheckGameFilter("Corridor7"))
 	{
 		InterDoCorridor7();
-		InterWaitForAck();
 		return;
 	}
 

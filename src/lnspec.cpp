@@ -376,7 +376,8 @@ FUNC(C7_WallSwitch)
 	}
 	else if(args[1] == 3)
 	{
-		P_AlertCorridor7Monsters(activator);
+		// One frame of noise, as a gunshot makes; see P_Corridor7IntruderAlert.
+		P_Corridor7IntruderAlert(activator);
 	}
 
 	PlaySoundLocMapSpot(args[1] == 3 ? "c7/panel/intruder" :

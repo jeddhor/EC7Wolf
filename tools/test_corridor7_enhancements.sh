@@ -87,8 +87,11 @@ print('PASS legacy saves without the new metadata remain classic',flush=True)
 for enabled in (0,1,2):
  logs=[];processes=[]
  port=5281+enabled*10
+ # The Intruder Alert rule (GitHub #24) rides the same packet: the host's
+ # alternates classic/map-wide and the client always prefers the other.
+ alert=enabled%2
  for peer in (0,1):
-  label=f'net-{enabled}-{peer}';cfg=work/(label+'.cfg');cfg.write_text(f'C7ShotgunPreset = {enabled if peer==0 else (enabled+1)%3};\nC7MiniHUD = {peer};\n')
+  label=f'net-{enabled}-{peer}';cfg=work/(label+'.cfg');cfg.write_text(f'C7ShotgunPreset = {enabled if peer==0 else (enabled+1)%3};\nC7IntruderAlert = {alert if peer==0 else 1-alert};\nC7MiniHUD = {peer};\n')
   log=(work/(label+'.log')).open('w');logs.append(log)
   args=[str(build/'ec7wolf'),'--data','CO7','--nowait','--no-upscale','--res','320','200','--vid-renderer','software','--tedlevel','MAP01','--skill','3','--config',str(cfg),'--savedir',str(work/'save'),'--capture-rngseed','1','--capture-checksum',str(work/(label+'.crc')),'--capture-ammo','--capture-fire','30','--capture-maxtics','350']
   args+=['--host','2','--port',str(port)] if peer==0 else ['--port',str(port+1),'--join',f'127.0.0.1:{port}']
@@ -102,8 +105,9 @@ for enabled in (0,1,2):
  for peer in (0,1):
   label=f'net-{enabled}-{peer}';text=(work/(label+'.log')).read_text()
   assert 'Corridor 7 shotgun rule: '+(f'enhanced (minimum {(0,50,100)[enabled]})' if enabled else 'classic') in text,text[-1000:]
+  assert 'Corridor 7 intruder alert rule: '+('map-wide' if alert else 'classic') in text,text[-1000:]
  a=(work/f'net-{enabled}-0.crc').read_text();b=(work/f'net-{enabled}-1.crc').read_text();assert a==b,('peers disagree',enabled)
- print('PASS host rule',enabled,'overrides opposing client preference; all 350 world checksums match',flush=True)
+ print('PASS host rules',enabled,'and alert',alert,'override opposing client preferences; all 350 world checksums match',flush=True)
 fixture(7,100,400)
 for renderer in ('software','opengl'):
  for size in (20,21):

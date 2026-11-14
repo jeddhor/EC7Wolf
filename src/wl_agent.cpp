@@ -430,9 +430,10 @@ void player_t::TakeDamage (int points, AActor *attacker)
 		StartDamageFlash (points);
 
 	// Bonus floors are point runs, not lives. When the player's health expires,
-	// the DOS game awards the run and advances to the next campaign floor. End
-	// the level while the traveling pawn is still alive so score, weapons,
-	// access cards, and bonus pickups survive the transition.
+	// the DOS game sets the same result as taking the exit (13e22) and never
+	// reaches its death path. End the level while the traveling pawn is still
+	// alive, so the score survives and the state carried in can be handed back
+	// by C7RestoreBonusEntry; the health set here only lasts until then.
 	if (health<=0 && IWad::CheckGameFilter("Corridor7") && levelInfo->BonusLevel)
 	{
 		health = mo->health = mo->SpawnHealth();
@@ -931,6 +932,11 @@ player_t::player_t() : levelShotsFired(0), levelShotsHit(0), c7MuzzleFlashTics(0
 	c7ChamberState(0), c7ClearanceNotified(false), c7FloorSecuredNotified(false),
 	FOV(90), DesiredFOV(90), bob(0), attackheld(false)
 {
+	c7BonusEntry.valid = false;
+	c7BonusEntry.health = 0;
+	for(unsigned int i = 0;i < C7BONUS_COUNTERS;++i)
+		c7BonusEntry.counters[i] = -1;
+	c7BonusEntry.readyWeapon = NULL;
 }
 
 // P_BobWeapon From ZDoom
@@ -1209,6 +1215,9 @@ void player_t::Reborn()
 		score = oldscore = 0;
 		nextextra = EXTRAPOINTS;
 		frags = 0;
+		// A new game or a warp starts a new pawn; nothing it carried into a
+		// bonus floor is owed back to it.
+		C7ClearBonusEntry(*this);
 	}
 
 	mo->GiveStartingInventory();
@@ -1281,6 +1290,20 @@ void player_t::Serialize(FArchive &arc)
 		arc << c7ApparitionTics;
 	else
 		c7ApparitionTics = 0;
+
+	// The bonus-floor entry state (GitHub #23). A save from before it existed
+	// leaves the entry invalid; GameSave::Load then takes the loaded state as
+	// the run's baseline if the save was made on a bonus floor, which is the
+	// most that such a save can tell anybody.
+	if(GameSave::SaveVersion >= 1794600000ULL)
+	{
+		arc << c7BonusEntry.valid << c7BonusEntry.health;
+		for(unsigned int i = 0;i < C7BONUS_COUNTERS;++i)
+			arc << c7BonusEntry.counters[i];
+		arc << c7BonusEntry.weapons << c7BonusEntry.readyWeapon;
+	}
+	else
+		C7ClearBonusEntry(*this);
 
 	if(arc.IsLoading())
 	{
@@ -1420,6 +1443,161 @@ void C7GiveDifficultyFloorPlan(AActor *pawn)
 	if(plan && !pawn->FindInventory(plan))
 		pawn->GiveInventory(plan);
 	gamestate.fullmap = true;
+}
+
+// The four counters in the native bonus-entry set, in player_t::C7BonusEntry
+// order: bullets 80d2, armor 8114, visor charge 80e6, alien weapon energy 80de.
+static const char *const C7BonusCounterClasses[player_t::C7BONUS_COUNTERS] = {
+	"C7Bullets", "C7BodyArmor", "C7VisorCharge", "C7Energy"
+};
+
+void C7ClearBonusEntry(player_t &player)
+{
+	player_t::C7BonusEntry &entry = player.c7BonusEntry;
+	entry.valid = false;
+	entry.health = 0;
+	for(unsigned int i = 0;i < player_t::C7BONUS_COUNTERS;++i)
+		entry.counters[i] = -1;
+	entry.weapons.Clear();
+	entry.readyWeapon = NULL;
+}
+
+void C7CaptureBonusEntry(player_t &player)
+{
+	C7ClearBonusEntry(player);
+	APlayerPawn *pawn = player.mo;
+	if(!pawn)
+		return;
+
+	player_t::C7BonusEntry &entry = player.c7BonusEntry;
+	entry.health = player.health;
+	for(unsigned int i = 0;i < player_t::C7BONUS_COUNTERS;++i)
+	{
+		const ClassDef *cls = ClassDef::FindClass(C7BonusCounterClasses[i]);
+		AInventory *item = cls ? pawn->FindInventory(cls) : NULL;
+		entry.counters[i] = item ? static_cast<int32_t>(item->amount) : -1;
+	}
+	for(AInventory *inv = pawn->inventory;inv;inv = inv->inventory)
+	{
+		if(inv->IsKindOf(NATIVE_CLASS(Weapon)))
+			entry.weapons.Push(inv->GetClass());
+	}
+	// A switch still in progress is the weapon the player chose.
+	AWeapon *selected = player.PendingWeapon != WP_NOCHANGE && player.PendingWeapon ?
+		player.PendingWeapon : player.ReadyWeapon;
+	entry.readyWeapon = selected ? selected->GetClass() : NULL;
+	entry.valid = true;
+}
+
+bool C7RestoreBonusEntry(player_t &player)
+{
+	player_t::C7BonusEntry &entry = player.c7BonusEntry;
+	APlayerPawn *pawn = player.mo;
+	if(!entry.valid || !pawn)
+	{
+		C7ClearBonusEntry(player);
+		return false;
+	}
+
+	player.health = pawn->health = entry.health;
+
+	for(unsigned int i = 0;i < player_t::C7BONUS_COUNTERS;++i)
+	{
+		const ClassDef *cls = ClassDef::FindClass(C7BonusCounterClasses[i]);
+		if(!cls)
+			continue;
+		const unsigned int amount = entry.counters[i] > 0 ? entry.counters[i] : 0;
+		AInventory *item = pawn->FindInventory(cls);
+		if(!item)
+		{
+			if(amount == 0)
+				continue;
+			item = static_cast<AInventory *>(AActor::Spawn(cls, 0, 0, 0, 0));
+			item->RemoveFromWorld();
+			pawn->AddInventory(item);
+		}
+		// The amount, never the maximum: a capacity upgrade found on the bonus
+		// floor is the one thing of this kind the original lets the player keep.
+		item->amount = amount;
+	}
+
+	// The owned weapons, as a set. None can be lost on a bonus floor, but a
+	// weapon found there goes back with everything else.
+	for(unsigned int i = 0;i < entry.weapons.Size();++i)
+	{
+		const ClassDef *cls = entry.weapons[i];
+		if(!cls || pawn->FindInventory(cls))
+			continue;
+		AWeapon *weapon = static_cast<AWeapon *>(AActor::Spawn(cls, 0, 0, 0, 0));
+		weapon->RemoveFromWorld();
+		weapon->ammogive[0] = weapon->ammogive[1] = 0;
+		if(!weapon->CallTryPickup(pawn))
+			weapon->Destroy();
+	}
+
+	// Select before removing, so that taking away the weapon in hand does not
+	// make the pawn choose a replacement of its own.
+	AWeapon *ready = entry.readyWeapon ?
+		static_cast<AWeapon *>(pawn->FindInventory(entry.readyWeapon)) : NULL;
+	if(ready)
+	{
+		player.ReadyWeapon = ready;
+		player.PendingWeapon = WP_NOCHANGE;
+	}
+
+	for(AInventory *inv = pawn->inventory;inv;)
+	{
+		AInventory *next = inv->inventory;
+		if(inv->IsKindOf(NATIVE_CLASS(Weapon)))
+		{
+			bool held = false;
+			for(unsigned int i = 0;i < entry.weapons.Size() && !held;++i)
+				held = entry.weapons[i] == inv->GetClass();
+			if(!held)
+			{
+				pawn->RemoveInventory(inv);
+				inv->Destroy();
+			}
+		}
+		inv = next;
+	}
+
+	Printf("Corridor 7 bonus floor ended: restored entry state (health %d, "
+		"bullets %d, armor %d, visor %d, energy %d, weapons %u, selected %s).\n",
+		entry.health, entry.counters[0], entry.counters[1], entry.counters[2],
+		entry.counters[3], entry.weapons.Size(),
+		entry.readyWeapon ? entry.readyWeapon->GetName().GetChars() : "none");
+
+	C7ClearBonusEntry(player);
+	return true;
+}
+
+void C7NativeFloorSetup(player_t &player)
+{
+	// CORR7CD.EXE 216b4, run on every floor: health is lowered to 100 but not
+	// raised (wounds are not healed), the maximum-health boost (8106) and the
+	// alien weapons' energy capacity (80f0) go back to 100, and an
+	// invulnerability sphere still running (80e8) ends. ECWolf's travel kept
+	// the last two, so a sphere picked up on a bonus floor -- or anywhere --
+	// went on protecting the player on the next floor.
+	APlayerPawn *pawn = player.mo;
+	if(!pawn)
+		return;
+	if(player.health > 100)
+		player.health = pawn->health = 100;
+	if(const ClassDef *cls = ClassDef::FindClass("C7EnergyCapacity"))
+	{
+		if(AInventory *capacity = pawn->FindInventory(cls))
+			capacity->amount = 100;
+	}
+	if(const ClassDef *cls = ClassDef::FindClass("C7Invulnerability"))
+	{
+		if(AInventory *sphere = pawn->FindInventory(cls))
+		{
+			pawn->RemoveInventory(sphere);
+			sphere->Destroy();
+		}
+	}
 }
 
 /*

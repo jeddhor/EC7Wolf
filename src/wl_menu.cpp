@@ -362,15 +362,29 @@ MENU_LISTENER(SetMusicC7)
 MENU_LISTENER(EnterGameplayEnhancements)
 {
 	if(shotgunCurrentRule)
-		shotgunCurrentRule->setText(!ingame ? "New games; host decides in multiplayer" :
-			(gamestate.shotgunMinimum == 100 ? "Current mission: minimum 100" :
-			(gamestate.shotgunMinimum == 50 ? "Current mission: minimum 50" : "Current mission: classic")));
+	{
+		FString rule;
+		if(!ingame)
+			rule = "New games; host decides in multiplayer";
+		else
+			rule.Format("Current mission: %s shotgun, %s alert",
+				gamestate.shotgunMinimum == 100 ? "minimum 100" :
+				(gamestate.shotgunMinimum == 50 ? "minimum 50" : "classic"),
+				gamestate.c7IntruderAlert == 1 ? "map-wide" : "classic");
+		shotgunCurrentRule->setText(rule);
+	}
 	return true;
 }
 
 MENU_LISTENER(SetC7ShotgunPreset)
 {
 	c7_shotgun_preset = which;
+	return true;
+}
+
+MENU_LISTENER(SetC7IntruderAlert)
+{
+	c7_intruder_alert = which;
 	return true;
 }
 
@@ -1515,6 +1529,12 @@ void CreateMenus()
 		static const char *shotgunOptions[] = { "Classic", "Minimum 50", "Minimum 100" };
 		AddLabeled(gameplayEnhancements, new MultipleChoiceMenuItem(SetC7ShotgunPreset,
 			shotgunOptions, 3, c7_shotgun_preset), "Shotgun Damage");
+		// GitHub #24. Classic is the DOS game's alarm, a noise heard through
+		// open doors; map-wide lets it through every door, which is how this
+		// port used to play it and what the reporter asked to keep.
+		static const char *alertOptions[] = { "Classic", "Map-wide" };
+		AddLabeled(gameplayEnhancements, new MultipleChoiceMenuItem(SetC7IntruderAlert,
+			alertOptions, 2, c7_intruder_alert), "Intruder Alert");
 		gameplayEnhancements.addItem(new LabelMenuItem("Applies to new games"));
 		shotgunCurrentRule = new LabelMenuItem("New games; host decides in multiplayer");
 		gameplayEnhancements.addItem(shotgunCurrentRule);

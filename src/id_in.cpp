@@ -927,6 +927,33 @@ bool IN_CheckAck (void)
 	return Net::CheckAck(false);
 }
 
+// Key presses arrive as events, and a held key goes on sending them: SDL
+// repeats it. Keyboard[] cannot answer "is anything still down" either, because
+// IN_ClearKeysDown empties it while the key stays pressed. So the keyboard is
+// asked directly. Mouse and controller buttons are polled state already.
+bool IN_AnyInputHeld()
+{
+	IN_ProcessEvents();
+#if SDL_VERSION_ATLEAST(2,0,0)
+	int count = 0;
+	const Uint8 *keys = SDL_GetKeyboardState(&count);
+	for(int i = 0;keys && i < count;++i)
+	{
+		if(keys[i])
+			return true;
+	}
+#else
+	for(int i = 0;i < SDL_NUM_SCANCODES;++i)
+	{
+		if(Keyboard[i])
+			return true;
+	}
+#endif
+	if(MousePresent && IN_MouseButtons())
+		return true;
+	return IN_JoyButtons() != 0;
+}
+
 
 void IN_Ack (AckType type)
 {

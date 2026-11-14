@@ -238,6 +238,9 @@ int IN_GetJoyAxis(int axis);
 
 void IN_StartAck(AckType type);
 bool IN_CheckAck (void);
+// True while any key, mouse button or controller button is physically down,
+// whether or not its press has been consumed.
+bool IN_AnyInputHeld();
 bool IN_IsInputGrabbed();
 void IN_CenterMouse();
 

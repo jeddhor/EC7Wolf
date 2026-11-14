@@ -225,6 +225,10 @@ enum ActorFlag
 	FL_OLDRANDOMCHASE	= 0x08000000,
 	FL_PLOTONAUTOMAP	= 0x10000000,
 	FL_BILLBOARD        = 0x20000000,
+	// Internal, not a DECORATE flag. A Corridor 7 ambush alien that heard
+	// noise and lost its ambush to it: its sighttime is now the delay before it
+	// comes looking anyway, and sight ends that delay early. See SightPlayer.
+	FL_C7NOISEWAKE      = 0x40000000,
 };
 
 enum ItemFlag

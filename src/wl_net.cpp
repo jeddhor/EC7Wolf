@@ -81,7 +81,7 @@
 // canonical command frame grows a slot number.
 // Protocol 10 carries the numeric shotgun preset and requires the corrected
 // campaign pickups, health travel and President health row on every peer.
-#define NET_PROTOCOL_VERSION 10
+#define NET_PROTOCOL_VERSION 11
 // Present in the first datagram of every connection. A request used to be one
 // lone zero byte, so any stray packet arriving on the port was a new player.
 static const BYTE NetMagic[3] = { 'E', '7', 'N' };
@@ -216,6 +216,8 @@ struct NewGamePacket
 	PlayerClass playerClass;
 	BYTE difficulty;
 	BYTE shotgunMinimum;
+	// Protocol 11: the Corridor 7 Intruder Alert rule, 0 classic or 1 map-wide.
+	BYTE c7IntruderAlert;
 	char map[9];
 	// The authority's roster, which is the only place a slot with no peer can
 	// come from. Fixed size rather than counted: eleven bytes is cheaper than
@@ -791,11 +793,11 @@ static bool ValidateDeclaredSize(const StartPacket *data, int len)
 	return true;
 }
 
-// Accept only the supported authority-owned damage presets.
+// Accept only the supported authority-owned gameplay rules.
 static bool ValidateDeclaredSize(const NewGamePacket *data, int)
 {
-	return data->shotgunMinimum == 0 || data->shotgunMinimum == 50 ||
-		data->shotgunMinimum == 100;
+	return (data->shotgunMinimum == 0 || data->shotgunMinimum == 50 ||
+		data->shotgunMinimum == 100) && data->c7IntruderAlert <= 1;
 }
 
 // The other packet whose size is not sizeof(). Same rule as the start packet
@@ -1920,6 +1922,9 @@ void NewGame(int &difficulty, FString &map, FName (&playerClassNames)[MAXPLAYERS
 	myNewGameRequest.shotgunMinimum = IWad::CheckGameFilter("Corridor7") &&
 		!demoplayback && !demorecord ? (c7_shotgun_preset == 2 ? 100 :
 			(c7_shotgun_preset == 1 ? 50 : 0)) : 0;
+	// Demos keep the DOS rules, as they do for the shotgun.
+	myNewGameRequest.c7IntruderAlert = IWad::CheckGameFilter("Corridor7") &&
+		!demoplayback && !demorecord && c7_intruder_alert == 1 ? 1 : 0;
 	myNewGameRequest.playerClass = PlayerClass::FromName(playerClassNames[ConsolePlayer]);
 	strncpy(myNewGameRequest.map, map, 8);
 	myNewGameRequest.map[8] = 0;
@@ -1948,15 +1953,20 @@ void NewGame(int &difficulty, FString &map, FName (&playerClassNames)[MAXPLAYERS
 		{
 			difficulty = newGamePackets[peer].difficulty;
 			gamestate.shotgunMinimum = newGamePackets[peer].shotgunMinimum;
+			gamestate.c7IntruderAlert = newGamePackets[peer].c7IntruderAlert;
 			newGamePackets[peer].map[8] = 0;
 			map = newGamePackets[peer].map;
 		}
 	}
 
 	if(IWad::CheckGameFilter("Corridor7"))
+	{
 		Printf("Corridor 7 shotgun rule: %s\n", gamestate.shotgunMinimum == 100 ?
 			"enhanced (minimum 100)" : (gamestate.shotgunMinimum == 50 ?
 				"enhanced (minimum 50)" : "classic"));
+		Printf("Corridor 7 intruder alert rule: %s\n",
+			gamestate.c7IntruderAlert == 1 ? "map-wide" : "classic");
+	}
 
 	// The arbiter's roster, adopted by everyone. A slot with no peer exists
 	// because the authority says it does; before this it existed only on the

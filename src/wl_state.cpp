@@ -1060,16 +1060,23 @@ bool CheckLine (const AActor *ob, const AActor *ob2)
 
 #define MINSIGHT (0x18000l*64)
 
-static bool CheckSightTo (AActor *ob, AActor *target, double minseedist, double maxseedist, double maxheardist, double fov)
+// Whether ob can hear the noise made this frame by target's side: the noise
+// reaches ob's zone through open doors -- or anywhere, for a map-wide intruder
+// alert -- and ob's hearing reaches that far.
+static bool HearsNoise (const AActor *ob, const AActor *target, double maxheardist)
+{
+	if (!madenoise)
+		return false;
+	if (!madenoiseEverywhere && !map->CheckLink(ob->GetZone(), target->GetZone(), true))
+		return false;
+	const uint32_t distance = MAX(abs(target->x - ob->x), abs(target->y - ob->y))*64;
+	return maxheardist < 0.00001 || distance < maxheardist;
+}
+
+static bool CheckSightTo (AActor *ob, AActor *target, double minseedist, double maxseedist, double maxheardist, double fov, bool hearing=true)
 {
 	if (!(target->flags & FL_SHOOTABLE))
 		return false;
-
-	bool heardnoise = madenoise;
-
-	// Check if we can hear the player's noise
-	if (heardnoise && !map->CheckLink(ob->GetZone(), target->GetZone(), true))
-		heardnoise = false;
 
 	//
 	// if the target is real close, sight is automatic
@@ -1078,9 +1085,7 @@ static bool CheckSightTo (AActor *ob, AActor *target, double minseedist, double 
 	int32_t deltay = target->y - ob->y;
 	uint32_t distance = MAX(abs(deltax), abs(deltay))*64;
 
-	if (!(ob->flags & FL_AMBUSH) && heardnoise &&
-		(maxheardist < 0.00001 ||
-		distance < maxheardist))
+	if (hearing && !(ob->flags & FL_AMBUSH) && HearsNoise(ob, target, maxheardist))
 		return true;
 
 	if (minseedist > 0.00001 &&
@@ -1115,11 +1120,11 @@ static bool CheckSightTo (AActor *ob, AActor *target, double minseedist, double 
 	return CheckLine (ob, target);
 }
 
-static int CheckSight (AActor *ob, double minseedist, double maxseedist, double maxheardist, double fov)
+static int CheckSight (AActor *ob, double minseedist, double maxseedist, double maxheardist, double fov, bool hearing=true)
 {
 	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 	{
-		if(CheckSightTo(ob, players[i].mo, minseedist, maxseedist, maxheardist, fov))
+		if(CheckSightTo(ob, players[i].mo, minseedist, maxseedist, maxheardist, fov, hearing))
 			return i;
 	}
 	return -1;
@@ -1145,34 +1150,38 @@ static void FirstSighting (AActor *ob, const Frame *state)
 	if (ob->distance < 0)
 		ob->distance = 0;       // ignore the door opening command
 
-	ob->flags &= ~FL_PATHING;
+	ob->flags &= ~(FL_PATHING|FL_C7NOISEWAKE);
 	ob->flags |= FL_ATTACKMODE|FL_FIRSTATTACK;
 
 	if(state)
 		ob->SetState(state);
 }
 
-void P_AlertCorridor7Monsters(AActor *target)
+// The Intruder Alert wall panel (GitHub #24).
+//
+// CORR7CD.EXE 14bfd: the panel plays one of its two alarm sounds and sets
+// DS:b3d7 -- the noise flag a gunshot sets -- and does nothing else. The main
+// loop clears that flag before the next frame's actors think (bf8e), so the
+// alarm is one frame of noise, judged by the same rules as gunfire in
+// SightPlayer (136e1): an alien whose area is connected to the player's reacts
+// after its usual reaction delay; an ambush alien usually does not, and
+// sometimes wakes after a long one; an alien in a sealed-off area hears
+// nothing. That is what madenoise already means here.
+//
+// It used to wake every live monster on the floor at once, bosses and ambushes
+// included, with no regard for doors. The reporter liked the panic of that, so
+// it survives as an option: the map-wide rule lets the noise through every door
+// and wall, and changes nothing else -- an ambush alien, boss or not, gets the
+// same chance as under the classic rule, and an alien's own hearing range
+// still applies.
+void P_Corridor7IntruderAlert(AActor *activator)
 {
-	if(!target)
-		return;
-
-	// The original intruder terminal sets a level-wide alert flag. Wake every
-	// live monster immediately so the result naturally survives save games
-	// after the one-shot switch has been consumed.
-	for(AActor::Iterator iterator = AActor::GetIterator();iterator.Next();)
-	{
-		AActor *actor = iterator.Item();
-		if(actor == target || actor->player || actor->health <= 0 ||
-			!(actor->flags & FL_SHOOTABLE) || !actor->SeeState ||
-			(actor->flags & FL_ATTACKMODE))
-		{
-			continue;
-		}
-		actor->target = target;
-		actor->flags &= ~FL_AMBUSH;
-		FirstSighting(actor, actor->SeeState);
-	}
+	madenoise = true;
+	if(gamestate.c7IntruderAlert == 1)
+		madenoiseEverywhere = true;
+	if(activator)
+		NetDPrintf("Intruder alert raised (%s rule)\n",
+			gamestate.c7IntruderAlert == 1 ? "map-wide" : "classic");
 }
 
 void P_AlertCorridor7MonstersNear(AActor *source, AActor *target, fixed radius)
@@ -1181,8 +1190,7 @@ void P_AlertCorridor7MonstersNear(AActor *source, AActor *target, fixed radius)
 		return;
 
 	// Ailoprobes, Eitaks, and a discovered Bandor alert the nearby group, not
-	// the entire floor. Keep the level-wide wake-up above for the Intruder
-	// Alert wall panel. Requiring a clear trace keeps sealed rooms dormant.
+	// the entire floor. Requiring a clear trace keeps sealed rooms dormant.
 	for(AActor::Iterator iterator = AActor::GetIterator();iterator.Next();)
 	{
 		AActor *actor = iterator.Item();
@@ -1217,6 +1225,36 @@ void P_AlertCorridor7MonstersNear(AActor *source, AActor *target, fixed radius)
 */
 
 static FRandom pr_sight("SightPlayer");
+static FRandom pr_c7ambush("C7AmbushNoise");
+
+// An ambush alien hearing noise, Corridor 7's way (CORR7CD.EXE 13760). Ambush
+// does not make it deaf: on each frame of noise it hears, it draws a number,
+// and above 230 -- 25 times in 256 -- it gives up its ambush and will come
+// looking after (another draw + 1) * 32 tics, between half a second and two
+// minutes. Seeing the player before then brings it at once. Otherwise it keeps
+// waiting for the player to show themselves, as Wolfenstein's ambushers do.
+static void C7AmbushHearsNoise (AActor *ob, double maxheardist)
+{
+	int heard = -1;
+	for(unsigned int i = 0;i < Session::ActiveSlotCount() && heard < 0;++i)
+	{
+		if(players[i].mo && (players[i].mo->flags & FL_SHOOTABLE) &&
+			HearsNoise(ob, players[i].mo, maxheardist))
+			heard = i;
+	}
+	if(heard < 0 || pr_c7ambush() <= 230)
+		return;
+
+	// The flag, not the value, marks this countdown as begun: a delay this
+	// long counts down through the actor's default sighttime on its way to
+	// zero, and the default is what an idle actor holds.
+	ob->target = players[heard].mo;
+	ob->flags &= ~FL_AMBUSH;
+	ob->flags |= FL_C7NOISEWAKE;
+	ob->sighttime = (pr_c7ambush() + 1) << 5;
+	ob->sightrandom = 0;
+}
+
 bool SightPlayer (AActor *ob, double minseedist, double maxseedist, double maxheardist, double fov, const Frame *state)
 {
 	if (notargetmode)
@@ -1225,34 +1263,58 @@ bool SightPlayer (AActor *ob, double minseedist, double maxseedist, double maxhe
 	if (ob->flags & FL_ATTACKMODE)
 	{
 		ob->sighttime = ob->GetDefault()->sighttime;
-		ob->flags &= ~FL_ATTACKMODE;
+		ob->flags &= ~(FL_ATTACKMODE|FL_C7NOISEWAKE);
 	}
 
-	if (ob->sighttime != ob->GetDefault()->sighttime)
+	if ((ob->flags & FL_C7NOISEWAKE) || ob->sighttime != ob->GetDefault()->sighttime)
 	{
-		//
-		// count down reaction time
-		//
-		if (ob->sightrandom)
+		if (ob->flags & FL_C7NOISEWAKE)
 		{
-			--ob->sightrandom;
-			return false;
+			// An ambush alien's delayed wake: counted down, and cut short
+			// the moment it sees a player -- seeing, not hearing (1371c).
+			const int player = CheckSight (ob, minseedist, maxseedist, maxheardist, fov, false);
+			if (player < 0 && ob->sighttime > 0)
+			{
+				--ob->sighttime;
+				return false;
+			}
+			if (player >= 0)
+				ob->target = players[player].mo;
 		}
-
-		if (ob->sighttime > 0)
+		else
 		{
-			--ob->sighttime;
-			return false;
+			//
+			// count down reaction time
+			//
+			if (ob->sightrandom)
+			{
+				--ob->sightrandom;
+				return false;
+			}
+
+			if (ob->sighttime > 0)
+			{
+				--ob->sighttime;
+				return false;
+			}
 		}
 	}
 	else
 	{
-		int player = CheckSight (ob, minseedist, maxseedist, maxheardist, fov);
+		// An ambusher only ever sees. Noise is its draw above, never a reason
+		// to react now -- including in the frame the draw takes its ambush.
+		const bool ambush = (ob->flags & FL_AMBUSH) != 0;
+		if (ambush && madenoise && IWad::CheckGameFilter("Corridor7"))
+			C7AmbushHearsNoise (ob, maxheardist);
+
+		int player = CheckSight (ob, minseedist, maxseedist, maxheardist, fov, !ambush);
 		if (player >= 0)
 		{
 			ob->target = players[player].mo;
-			ob->flags &= ~FL_AMBUSH;
+			ob->flags &= ~(FL_AMBUSH|FL_C7NOISEWAKE);
 
+			// Seen: the ordinary reaction delay, whatever the noise began.
+			ob->sighttime = ob->GetDefault()->sighttime;
 			--ob->sighttime; // We need to somehow mark we started.
 			ob->sightrandom = 1; // Account for tic.
 			if(ob->GetDefault()->sightrandom)

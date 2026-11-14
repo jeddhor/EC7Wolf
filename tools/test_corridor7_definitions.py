@@ -246,7 +246,7 @@ for wall_id, result_id, kind in ((9, 10, 1), (11, 12, 2), (30, 31, 3)):
         XLAT,
         f"wall {wall_id} must activate its native Corridor 7 terminal result",
     )
-require(r'FUNC\(C7_WallSwitch\).*?C7Static001.*?C7Static002.*?GiveInventory.*?P_AlertCorridor7Monsters', LNSPEC, "Corridor 7 terminals grant access cards or raise the intruder alert")
+require(r'FUNC\(C7_WallSwitch\).*?C7Static001.*?C7Static002.*?GiveInventory.*?P_Corridor7IntruderAlert', LNSPEC, "Corridor 7 terminals grant access cards or raise the intruder alert")
 require(r'RED Access Granted.*?BLUE Access Granted', LNSPEC, "access terminals display their released grant messages")
 require(r'Lock\s+1\s+Corridor7.*?BLUE Access Required.*?Lock\s+2\s+Corridor7.*?RED Access Required', LOCKDEFS, "locked doors display their released access requirements")
 for wall_id, kind in ((85, 1), (88, 1), (111, 2), (93, 3)):
@@ -280,7 +280,27 @@ if "2nd Lieutenant" in MAPINFO:
     raise SystemExit("Corridor 7 definition check failed: non-original 2nd Lieutenant label remains")
 require(r'RandomizeCorridor7PresidentThings.*?FL_ISMONSTER.*?NATIVE_CLASS\(Inventory\).*?pr_c7president',
         GAMEMAP, "President relocates monsters and pickups")
-require(r'P_AlertCorridor7Monsters.*?AActor::GetIterator.*?FL_SHOOTABLE.*?FirstSighting', WL_STATE, "intruder alert wakes every live monster")
+# GitHub #24. CORR7CD.EXE's alarm panel (14bfd) sets the one-frame noise flag a
+# gunshot sets and nothing else; it used to wake every live monster on the floor,
+# ambushers and bosses included. Pin the noise, the map-wide option's single
+# difference, and the native ambush draw (13760) that both rules share.
+require(r'void\s+P_Corridor7IntruderAlert\(AActor \*activator\)\s*\{\s*madenoise\s*=\s*true;\s*'
+        r'if\(gamestate\.c7IntruderAlert\s*==\s*1\)\s*madenoiseEverywhere\s*=\s*true;',
+        WL_STATE, "the intruder alert is one frame of noise, map-wide only by the optional rule")
+forbid(r'void\s+P_Corridor7IntruderAlert\(AActor \*activator\)\s*\{[^}]*(GetIterator|FirstSighting)',
+       WL_STATE, "the intruder alert must not wake monsters directly")
+require(r'!madenoiseEverywhere\s*&&\s*!map->CheckLink\(ob->GetZone\(\),\s*target->GetZone\(\),\s*true\)',
+        WL_STATE, "noise crosses only open doors unless the alert is map-wide")
+require(r'pr_c7ambush\(\)\s*<=\s*230.*?ob->flags\s*\|=\s*FL_C7NOISEWAKE;\s*ob->sighttime\s*=\s*\(pr_c7ambush\(\)\s*\+\s*1\)\s*<<\s*5;',
+        WL_STATE, "an ambush alien that hears noise draws for a delayed wake")
+# The delay counts down through the default sighttime (1 for every Corridor 7
+# alien), so the flag rather than the value must mark it as begun.
+require(r'if\s*\(\(ob->flags\s*&\s*FL_C7NOISEWAKE\)\s*\|\|\s*ob->sighttime\s*!=\s*ob->GetDefault\(\)->sighttime\)',
+        WL_STATE, "a delayed ambush wake is not mistaken for an idle actor partway down")
+require(r'FL_C7NOISEWAKE\).*?CheckSight\s*\(ob,[^;]*,\s*false\).*?--ob->sighttime',
+        WL_STATE, "a delayed ambush wake counts down and ends early only on sight")
+require(r'\(ambush\s*&&\s*madenoise\s*&&\s*IWad::CheckGameFilter\("Corridor7"\)\).*?CheckSight\s*\(ob,[^;]*!ambush\)',
+        WL_STATE, "the native ambush rule is Corridor 7's and an ambusher never reacts to noise at once")
 # The yellow is measured off a DOSBox capture of the CD release on MAP01, where
 # the banner is exactly (255,255,0) with no intermediate shades. This check used
 # to assert BaseColors[3] -- (215,215,0) -- which is the value the code had, not
@@ -338,6 +358,18 @@ require(r'templateTrigger\.arg\[4\]\s*=\s*horizontal', GAMEMAP_PLANES, "door ori
 require(r'!levelInfo->BonusLevel\s*&&\s*gamestate\.killtotal', LNSPEC, "bonus elevators bypass campaign clearance")
 require(r'health<=0\s*&&\s*IWad::CheckGameFilter\("Corridor7"\)\s*&&\s*levelInfo->BonusLevel', WL_AGENT, "bonus health expiration is intercepted before death")
 require(r'health\s*=\s*mo->health\s*=\s*mo->SpawnHealth\(\).*?playstate\s*=\s*ex_completed', WL_AGENT, "bonus completion revives and advances the traveling pawn")
+# GitHub #23. The native bonus-entry set (DS:40d2..40e2) and nothing else.
+require(r'C7BonusCounterClasses\[[^]]*\]\s*=\s*\{\s*"C7Bullets",\s*"C7BodyArmor",\s*"C7VisorCharge",\s*"C7Energy"\s*\}',
+        WL_AGENT, "the bonus entry restores bullets, armor, visor charge and energy")
+forbid(r'C7BonusCounterClasses\[[^]]*\]\s*=\s*\{[^}]*C7Mines', WL_AGENT,
+       "mines are outside the native bonus-entry set")
+require(r'bool\s+C7RestoreBonusEntry.*?player\.health\s*=\s*pawn->health\s*=\s*entry\.health.*?item->amount\s*=\s*amount;.*?NATIVE_CLASS\(Weapon\).*?RemoveInventory',
+        WL_AGENT, "leaving a bonus floor restores health, counters and the owned weapons, never capacity")
+require(r'void\s+C7NativeFloorSetup.*?health\s*>\s*100.*?C7EnergyCapacity.*?amount\s*=\s*100.*?C7Invulnerability.*?RemoveInventory',
+        WL_AGENT, "every floor caps health, refills energy capacity and ends invulnerability")
+require(r'C7RestoreBonusEntry\(players\[i\]\)', WL_GAME, "leaving a bonus floor restores the entry state")
+require(r'levelInfo->BonusLevel\)\s*C7CaptureBonusEntry\(players\[i\]\);\s*else\s*C7ClearBonusEntry',
+        WL_GAME, "the entry state is taken on arrival at a bonus floor and cleared elsewhere")
 require(r'levelShotsFired.*?levelShotsHit', WL_AGENT, "save-backed Corridor 7 hit/miss statistics")
 require(r'c7/teleport\s+\{\s+C7DS0001\s+C7AL0001\s+C7PC0001\s+\}', SNDINFO, "Corridor 7 vortex completion sound")
 require(r'c7/world/oof1\s+\{\s+C7DS0069.*?c7/world/oof2\s+\{\s+C7DS0070.*?'
@@ -459,8 +491,16 @@ for name, sound_id in weapon_sounds.items():
     require(rf'attacksound\s+"c7/weapon/{name}"', PLAYER,
             f"Corridor 7 {name} native attack sound assignment")
 require(r'accuracy\s*\*\s*\(shots\s*/\s*100\s*\+\s*1\)\s*\*\s*10', WL_INTER, "released hit/miss bonus equation")
-require(r'CA_CacheScreen\(TexMan\("C7G0014"\)\).*?SECURED.*?aliens.*?restricted.*?accuracy.*?InterState\.bonus',
-        WL_INTER, "Corridor 7 floor tally uses the original status-report screen")
+require(r'CA_CacheScreen\(TexMan\("C7G0014"\)\).*?SECURED.*?"%3d%%",\s*report\.aliens.*?"N/A".*?report\.efficiency.*?"%6d",\s*report\.award',
+        WL_INTER, "Corridor 7 floor tally uses the original status-report screen and formats")
+# GitHub #23: the status report's own award (a335) and the hit/miss page's
+# accuracy award (a552) are separate, and only a bonus floor has the second.
+require(r'report\.efficiency\s*=\s*\(report\.aliens\s*\+\s*report\.restricted\)/2;\s*\}\s*report\.award\s*=\s*report\.efficiency\*100;',
+        WL_INTER, "the status report pays its efficiency rating times one hundred")
+require(r'InterGiveBonus\(report\.award\).*?if\(!report\.bonusFloor\)\s*return;.*?C7AccuracyAward.*?GivePoints\(playerAward\).*?C7DrawHitMissPage',
+        WL_INTER, "only a bonus floor adds the hit/miss page and its accuracy award")
+require(r'"BONUS LEVEL HIT/MISS RATIO".*?"Shots fired:".*?"Shots hit:".*?"Accuracy = %u%%".*?"Bonus = %d points".*?"Score = %d points"',
+        WL_INTER, "the hit/miss page carries the released wording")
 require(r'case\s+ex_died:.*?CheckGameFilter\("Corridor7"\).*?Corridor7Death.*?CheckHighScore.*?return\s+false',
         WL_GAME, "Corridor 7 death must show its report and return to high scores/title without retrying")
 require(r'Background\s*=\s*"C7G0006".*?FadeType\s*=\s*Fizzle', MAPINFO,

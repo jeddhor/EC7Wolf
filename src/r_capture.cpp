@@ -273,6 +273,13 @@ namespace
 	// up off the floor needs a Touch -- which a warp does not produce -- so the
 	// Invulnerability Sphere's strobe cannot be photographed any other way.
 	FString  g_giveClass;
+	// Repeating --capture-give hands over each class in turn, so a run can set
+	// up a whole inventory -- a bonus floor's pickups, say -- at one tic.
+	TArray<FString> g_giveMore;
+	// --capture-inventory: print the console player's inventory on the first
+	// tic of every level, so a floor change can be checked for what it kept.
+	bool     g_inventory      = false;
+	FString  g_inventoryMap;
 	int      g_initialHealth = -1; // --capture-health: one-time boundary-test setup
 	bool     g_healthDone = false;
 	bool     g_giveDone       = false;
@@ -314,6 +321,15 @@ namespace
 	// Corridor 7 because its Tab modifier is the floor map.
 	long     g_exitLevelTic   = -1;
 	bool     g_exitLevelDone  = false;
+	// --capture-secretexit: the same, through the floor's secret exit -- the
+	// bonus elevator -- so a bonus floor can be entered the way a player does.
+	long     g_secretExitTic  = -1;
+	bool     g_secretExitDone = false;
+	// --capture-shots FIRED HIT: the console player's hit/miss tally, set as
+	// the level is completed, so the report pages can be drawn for a known
+	// count -- the DOS capture's 113 and 66 -- without staging a firefight.
+	long     g_shotsFired     = -1;
+	long     g_shotsHit       = -1;
 	// --capture-verbs: report the state each of Corridor 7's verbs acts on,
 	// whenever it changes. This is an observation, not an override: it exists so
 	// a test that presses buttons -- a touchscreen, a gamepad -- can assert that
@@ -353,6 +369,7 @@ namespace
 
 		crc = Fold(crc, &gamestate.TimeCount, sizeof(gamestate.TimeCount));
 		crc = Fold(crc, &gamestate.shotgunMinimum, sizeof(gamestate.shotgunMinimum));
+		crc = Fold(crc, &gamestate.c7IntruderAlert, sizeof(gamestate.c7IntruderAlert));
 
 		const DWORD rng = FRandom::StaticSumSeeds();
 		crc = Fold(crc, &rng, sizeof(rng));
@@ -1117,7 +1134,15 @@ void ParseArgs(int argc, char **argv)
 		}
 		else if(strcmp(arg, "--capture-give") == 0 && i + 1 < argc)
 		{
-			g_giveClass = argv[++i];
+			if(g_giveClass.IsEmpty() || g_giveEveryone)
+				g_giveClass = argv[++i];
+			else
+				g_giveMore.Push(argv[++i]);
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-inventory") == 0)
+		{
+			g_inventory = true;
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-c7map") == 0)
@@ -1138,6 +1163,17 @@ void ParseArgs(int argc, char **argv)
 		else if(strcmp(arg, "--capture-exitlevel") == 0 && i + 1 < argc)
 		{
 			g_exitLevelTic = atol(argv[++i]);
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-secretexit") == 0 && i + 1 < argc)
+		{
+			g_secretExitTic = atol(argv[++i]);
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-shots") == 0 && i + 2 < argc)
+		{
+			g_shotsFired = atol(argv[++i]);
+			g_shotsHit = atol(argv[++i]);
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-visormode") == 0 && i + 1 < argc)
@@ -1896,6 +1932,17 @@ void PreTic()
 			players[ConsolePlayer].mo->GiveInventory(cls, 0, true);
 			Printf("Capture: gave the player %s.\n", g_giveClass.GetChars());
 		}
+		for(unsigned int i = 0;i < g_giveMore.Size();++i)
+		{
+			const ClassDef *more = ClassDef::FindClass(g_giveMore[i]);
+			if(more == NULL)
+			{
+				Printf("Capture: no such class '%s' to give.\n", g_giveMore[i].GetChars());
+				continue;
+			}
+			players[ConsolePlayer].mo->GiveInventory(more, 0, true);
+			Printf("Capture: gave the player %s.\n", g_giveMore[i].GetChars());
+		}
 	}
 
 	if(g_botOverlayMap && automap == AMA_Off)
@@ -2050,7 +2097,20 @@ void PreTic()
 		g_exitLevelDone = true;
 		Printf("Capture: completing level at tic %lu\n",
 			(unsigned long)gamestate.TimeCount);
+		if(g_shotsFired >= 0)
+		{
+			players[ConsolePlayer].levelShotsFired = (uint32_t)g_shotsFired;
+			players[ConsolePlayer].levelShotsHit = (uint32_t)MAX(0L, g_shotsHit);
+		}
 		playstate = ex_completed;
+	}
+	if(g_secretExitTic >= 0 && !g_secretExitDone &&
+		(long)gamestate.TimeCount >= g_secretExitTic)
+	{
+		g_secretExitDone = true;
+		Printf("Capture: taking the secret exit at tic %lu\n",
+			(unsigned long)gamestate.TimeCount);
+		playstate = ex_secretlevel;
 	}
 
 	// Force every door cell to a fixed slide amount each tic. Applied before the
@@ -2255,6 +2315,29 @@ void ApplyPaletteOverride()
 	V_ForceBlend(g_blendR, g_blendG, g_blendB, g_blendA);
 }
 
+// One line per level: what the player arrived with. Inventory is listed in
+// pawn order as class=amount/maxamount, with the weapon in hand last.
+static void TraceInventory()
+{
+	if(!g_inventory || g_inventoryMap.CompareNoCase(gamestate.mapname) == 0)
+		return;
+	g_inventoryMap = gamestate.mapname;
+
+	const player_t &player = players[ConsolePlayer];
+	FString line;
+	line.Format("inventory tic=%lu map=%s health=%d score=%d", (unsigned long)g_ticCount,
+		gamestate.mapname, player.health, player.score);
+	if(player.mo)
+	{
+		for(AInventory *inv = player.mo->inventory;inv;inv = inv->inventory)
+			line.AppendFormat(" %s=%u/%u", inv->GetClass()->GetName().GetChars(),
+				inv->amount, inv->maxamount);
+	}
+	line.AppendFormat(" ready=%s", player.ReadyWeapon ?
+		player.ReadyWeapon->GetClass()->GetName().GetChars() : "none");
+	Printf("%s\n", line.GetChars());
+}
+
 // Printed only when something moves, so a run of any length stays readable and
 // the absence of a line is itself the assertion that nothing happened.
 static void TraceVerbs()
@@ -2357,6 +2440,7 @@ void PerTic()
 	TraceActors();
 	TracePlayers();
 	TraceVerbs();
+	TraceInventory();
 	TraceKillStats();
 
 	// A tic-based quit keeps the determinism gate reproducible under the

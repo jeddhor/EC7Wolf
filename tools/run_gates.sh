@@ -94,6 +94,8 @@ corridor7
 corridor7_determinism
 corridor7_ai
 corridor7_hearing
+corridor7_intruder_alert
+corridor7_bonus_floor
 corridor7_automap_doorway
 corridor7_door_jam
 corridor7_cdaudio

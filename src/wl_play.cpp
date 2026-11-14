@@ -61,6 +61,10 @@
 */
 
 bool madenoise;              // true when shooting or screaming
+// Set with madenoise by a Corridor 7 intruder alert played under the map-wide
+// rule: the noise is heard whether or not a door stands between. Cleared with
+// madenoise, so it lasts exactly as long as the noise does.
+bool madenoiseEverywhere;
 
 exit_t playstate;
 
@@ -1623,6 +1627,7 @@ void PlayLoop (void)
 // actor thinking
 //
 		madenoise = false;
+		madenoiseEverywhere = false;
 
 		// Run tics
 		for (unsigned int i = 0;i < tics;++i)

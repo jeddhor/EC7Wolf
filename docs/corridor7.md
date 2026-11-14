@@ -155,6 +155,63 @@ for Abort Current Mission, which had been showing Wolf3D's much wordier
 first sits with the rank-selection strings, the second with the save/load and
 F-key cluster.
 
+### Bonus floors and the floor report
+
+A bonus floor is a score run. CORR7CD.EXE sets aside health, bullets, armor,
+visor charge, alien weapon energy and the owned and selected weapons when the
+player takes a bonus elevator, and hands them back when the floor ends -- by
+its exit, or by the player's health running out, which the original counts as
+finishing the floor rather than dying. Ammo capacity and mines are not in that
+set: a capacity pack found on a bonus floor is kept, and mines dropped there
+stay spent. Score is the point of the floor and is kept. The next floor's setup
+then caps health at 100, refills alien-weapon capacity and ends an
+invulnerability sphere, as on any floor; the port now does those last two on
+every floor change, where it used to carry them over.
+
+The entry state is taken on arrival by whatever route -- elevator, warp, or a
+new game started on the floor -- and travels in saves. A save made on a bonus
+floor by a build from before this has no entry state to give; loading it takes
+the loaded inventory as the run's baseline and says so in the log, rather than
+guessing an earlier one.
+
+Every floor ends on the status report. Its BONUS is the efficiency rating times
+100, and the rating is the average of aliens eliminated and restricted areas
+found (a floor with none of either scores zero for it); a bonus floor shows
+N/A for restricted areas and is rated on aliens alone. A bonus floor then shows
+a second page, **BONUS LEVEL HIT/MISS RATIO**: a block per shot fired and per
+shot hit, the accuracy, and an award of the accuracy percentage times ten for
+each started hundred shots. The port used to pay that accuracy award on every
+floor, under the status report's name, and never paid the status report's own.
+Both pages are laid out from the executable's own drawing code and compared
+against DOS captures glyph for glyph, drop shadows included. A player who fires
+enough shots on a bonus floor pushes the original's page off the bottom of the
+screen, and the port draws it the same way.
+
+`tools/test_corridor7_bonus_floor.sh` covers the restore, its exceptions, the
+lethal route, save/load and all six bonus routes.
+
+### The Intruder Alert
+
+The wrong terminal sounds the alarm, and in the original that is all it does:
+it raises the same one-frame noise a gunshot raises. Who reacts is decided the
+way gunfire is -- an alien in an area connected to the player's through open
+doors comes after its usual reaction delay, an alien behind a closed door hears
+nothing, and an ambush alien (floor word 278, bosses included) usually stays
+put: each frame of noise it hears is a 25-in-256 chance of coming looking after
+a delay of half a second to two minutes, and sight still brings it at once.
+That ambush rule now applies to gunfire as well, which used to leave ambushers
+completely deaf. The port used to wake every alien on the floor at once instead.
+
+Options > Gameplay > Intruder Alert keeps that as a choice: **Classic** is the
+DOS behavior and the default; **Map-wide** lets the alarm through every door
+and wall and changes nothing else, so ambushers and bosses are still judged by
+the ambush rule. It follows the shotgun setting's rules: it applies to new
+games, the host decides in multiplayer, saves keep their own, and demos and
+older saves play Classic.
+
+`tools/test_corridor7_intruder_alert.sh` covers both rules, the ambush draw and
+the saved rule in a purpose-built map.
+
 ### The pause label
 
 Corridor 7 has its own pause picture — VGAGRAPH chunk 72, 64×32, the word
@@ -457,7 +514,10 @@ that cell. See `github-issue21-glass-review.md` for the native comparison and
 current visual-review scope. Plane-1 masked-wall
 configuration markers 86..88 are preserved distinctly, but their exact DOS
 state differences remain unresolved. The final victory page is still the port's
-own rendering rather than a reproduction of the original's layout; the ending
+own rendering rather than a reproduction of the original's layout, and the
+original's **MISSION HIT/MISS RATIO** page -- the bonus floors' hit/miss page
+drawn for the whole campaign, a block per hundred shots, with its own accuracy
+award -- is not yet shown before it; the ending
 cinematic that precedes it is no longer missing, and the reason once given here
 -- that the installation does not contain the external cinematic files -- has
 not been true since SEQFOUR.CO7 was taken off the CD. See "The CD cinematics"
@@ -546,6 +606,9 @@ menu shows the current mission's rule. The host decides in multiplayer, and
 saves restore their own rule. Earlier enhanced saves/settings retain Minimum
 50. Saves without a rule and legacy demos use Classic. Music/effects balance
 remains unchanged pending original-game testing.
+
+Options > Gameplay > Intruder Alert selects Classic or Map-wide, under the same
+rules; see "The Intruder Alert" above.
 
 Ammo packs raise bullet capacity by 500, up to 999, without supplying rounds;
 surplus packs are consumed as in DOS. Capacity survives save/load and travel.

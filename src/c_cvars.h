@@ -99,6 +99,7 @@ extern bool		quitonescape;
 extern fixed	movebob;
 extern bool c7_minihud, c7_numeric_hud, c7_minihud_score;
 extern int c7_minihud_style, c7_shotgun_preset;
+extern int c7_intruder_alert;
 
 extern float	localDesiredFOV;
 //

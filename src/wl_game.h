@@ -32,6 +32,10 @@ extern struct gametype
 	bool        victoryflag;            // set during victory animations
 	bool		fullmap;
 	BYTE shotgunMinimum; // 0, 50 or 100; fixed by the authority for this game.
+	// Corridor 7 Intruder Alert reach: 0 classic (the alarm is a noise heard
+	// through open doors, as in DOS), 1 map-wide (heard everywhere). Fixed by
+	// the authority for this game, like the shotgun rule.
+	BYTE c7IntruderAlert;
 } gamestate;
 
 extern  char            demoname[13];

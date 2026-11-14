@@ -102,7 +102,9 @@ restore() {  # restore STYLE EXPECTED_FORWARD
 	menu_open Escape || return 1
 	menu_press_moved Down || return 1
 	menu_enter "the options menu" || return 1
-	menu_walk_to_bottom "Controls" || return 1
+	# Gameplay is the last row of Options, with Controls just above it.
+	menu_walk_to_bottom "Gameplay" || return 1
+	menu_press_moved Up || return 1
 	menu_enter "the controls menu" || return 1
 	menu_walk_to_bottom "the last row" || return 1
 	menu_press_moved Up || return 1
@@ -166,7 +168,10 @@ MENU_ALIVE=alive
 menu_open Escape || { printf '  FAIL no menu\n'; exit 1; }
 menu_press_moved Down || exit 1
 menu_enter "the options menu" || exit 1
-menu_walk_to_bottom "Controls" || exit 1
+# Controls used to be the last row of Options; Gameplay has been below it
+# since the gameplay settings were added, so walk to that and step back.
+menu_walk_to_bottom "Gameplay" || exit 1
+menu_press_moved Up || exit 1
 menu_enter "the controls menu" || exit 1
 # Customize controls sits one above the last row, so walk to the end and step
 # back. Stepping back from wherever the screen opens instead wraps to the last

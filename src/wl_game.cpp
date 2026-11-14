@@ -767,6 +767,7 @@ restartgame:
 	do
 	{
 		startgame = false;
+		const bool resumedSave = loadedgame;
 		if (!loadedgame)
 		{
 			SetupGameLevel ();
@@ -774,12 +775,12 @@ restartgame:
 			if(playstate != ex_warped)
 			{
 				FinishTravel ();
-				// Native floor setup caps excess health without healing wounds.
+				// Native floor setup caps excess health without healing wounds
+				// and ends the per-floor boosts; see C7NativeFloorSetup.
 				// Resuming a saved floor does not pass through this travel path.
 				if(IWad::CheckGameFilter("Corridor7") && !Net::Deathmatch())
 					for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
-						if(players[i].health > 100)
-							players[i].health = players[i].mo->health = 100;
+						C7NativeFloorSetup(players[i]);
 				if(playstate == ex_newmap)
 				{
 					// This logic could probably use refinement for multiplayer
@@ -862,6 +863,22 @@ restartgame:
 		// pawn after both, including when entering a bonus floor.
 		for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 			C7GiveDifficultyFloorPlan(players[i].mo);
+
+		// The state a bonus floor gives back is taken as the player arrives on
+		// it, by whatever route: the elevator, a warp, or a new game started
+		// there, so a warp's baseline is the warp's own starting state. Any
+		// other floor holds none, which retires an entry nobody spent. A loaded
+		// game brings its own from the save.
+		if(!resumedSave && IWad::CheckGameFilter("Corridor7") && !Net::Deathmatch())
+		{
+			for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
+			{
+				if(levelInfo->BonusLevel)
+					C7CaptureBonusEntry(players[i]);
+				else
+					C7ClearBonusEntry(players[i]);
+			}
+		}
 		ingame = true;
 
 		if (!died)
@@ -1095,6 +1112,18 @@ restartgame:
 				}
 				else if(dointermission)
 					LevelCompleted ();              // do the intermission
+
+				// Leaving a bonus floor, by its exit or because the player's
+				// health ran out, hands back what was carried in. The original
+				// does this after its two report pages (a0f6) and before the
+				// next floor's setup, which then caps health and ends the
+				// per-floor boosts as on any other floor.
+				if(!newRound && IWad::CheckGameFilter("Corridor7") &&
+					levelInfo->BonusLevel)
+				{
+					for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
+						C7RestoreBonusEntry(players[i]);
+				}
 
 				LevelInfo &nextLevel = LevelInfo::Find(next);
 				if(nextLevel.Cluster != levelInfo->Cluster)

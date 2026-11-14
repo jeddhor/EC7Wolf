@@ -657,6 +657,10 @@ bool Load(const FString &filename)
 			(strcmp(minimum, "100") == 0 ? 100 : 0);
 		delete[] minimum;
 	}
+	// A save from before the rule existed plays the classic alarm.
+	char *alert = M_GetPNGText(png, "EC7Wolf Intruder Alert");
+	gamestate.c7IntruderAlert = alert && strcmp(alert, "mapwide") == 0 ? 1 : 0;
+	delete[] alert;
 	M_GetPNGText(png, "Current Map", gamestate.mapname, 8);
 	SetupGameLevel();
 
@@ -695,6 +699,22 @@ bool Load(const FString &filename)
 		AActor::FinishSpawningActors();
 	}
 	RepairCorridor7KillCount();
+	// A save made on a bonus floor by a build that did not keep the entry
+	// state cannot say what the player carried in. Do not guess an earlier
+	// inventory: what was loaded becomes this run's baseline, and the log says
+	// so. Saves from this build onward carry the real one.
+	if(IWad::CheckGameFilter("Corridor7") && levelInfo->BonusLevel &&
+		!Net::Deathmatch())
+	{
+		for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
+		{
+			if(players[i].c7BonusEntry.valid)
+				continue;
+			C7CaptureBonusEntry(players[i]);
+			Printf("Corridor 7: this save predates bonus-floor entry state; "
+				"player %u's loaded inventory is the baseline for this bonus run.\n", i);
+		}
+	}
 	FRandom::StaticReadRNGState(png);
 	// Quickload stays in the play loop. Repair the missing low-rank map token
 	// in older saves here as well as at ordinary level entry.
@@ -774,6 +794,8 @@ bool Save(const FString &filename, const FString &title)
 	M_AppendPNGText(fileh, "EC7Wolf Enhanced Shotgun", gamestate.shotgunMinimum ? "1" : "0");
 	M_AppendPNGText(fileh, "EC7Wolf Shotgun Minimum", gamestate.shotgunMinimum == 100 ? "100" :
 		(gamestate.shotgunMinimum == 50 ? "50" : "0"));
+	M_AppendPNGText(fileh, "EC7Wolf Intruder Alert",
+		gamestate.c7IntruderAlert == 1 ? "mapwide" : "classic");
 
 	FString comment;
 	// Creation Time

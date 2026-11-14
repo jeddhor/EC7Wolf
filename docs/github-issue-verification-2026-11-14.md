@@ -81,6 +81,16 @@ press no longer skips both.
 Each player is paid for their own shots, so a netgame's machines agree on the
 score whichever screen shows it.
 
+**The page overflows, as the original's does.** a552 advances y four pixels for
+every 53 blocks and never compares it with the screen height, so heavy shooting
+pushes the results down: the score line starts to clip once the two tallies
+hold 18 full rows between them (about 480 shots at 100% accuracy, 640 at 50%,
+950 at 0%) and is gone at 20. The port keeps that arithmetic and skips only
+what falls below line 200; screenshots at 500/250 (fits), 700/350 (score cut)
+and 1100/0 (score gone) confirm the thresholds. The overflow is read from the
+code, not from a DOS run at those counts. It is recorded as an original
+oddity, not a deviation, in `corridor7.md`.
+
 Not done: the original shows the same page as **MISSION HIT/MISS RATIO** after
 the final floor, over campaign totals with a block per hundred shots (a559).
 That needs campaign-wide shot counts and belongs with the unreproduced victory

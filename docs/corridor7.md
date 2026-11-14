@@ -184,8 +184,9 @@ each started hundred shots. The port used to pay that accuracy award on every
 floor, under the status report's name, and never paid the status report's own.
 Both pages are laid out from the executable's own drawing code and compared
 against DOS captures glyph for glyph, drop shadows included. A player who fires
-enough shots on a bonus floor pushes the original's page off the bottom of the
-screen, and the port draws it the same way.
+enough shots on a bonus floor pushes the page's results off the bottom of the
+screen; that is the original's layout, reproduced on purpose -- see "The
+hit/miss page runs off the screen" under known deviations.
 
 `tools/test_corridor7_bonus_floor.sh` covers the restore, its exceptions, the
 lethal route, save/load and all six bonus routes.
@@ -527,6 +528,43 @@ on two released maps and has no observed runtime effect. Original demos,
 network protocol, multiplayer rules, and other executable editions are
 deferred. Support is limited to the supplied 250,776-byte CD/Steam executable
 family.
+
+### Not deviations: oddities the original has too
+
+Some things in the port look like bugs and are not: they are what CORR7CD.EXE
+does, kept because this is a reproduction. They are listed here so nobody
+"fixes" them by accident.
+
+**The hit/miss page runs off the screen.** After a bonus floor, BONUS LEVEL
+HIT/MISS RATIO draws one 3x3 block per shot fired and per shot hit, 53 to a
+row. The original's drawing routine (a552) has no limit: each full row moves
+everything below it four pixels further down, and nothing checks the result
+against the 200-line screen. With few shots the score line sits at y=120, so
+there is room for 17 full rows between the two tallies -- the number of shots
+fired over 53 plus the number of hits over 53, each rounded down. At 18 the
+score line starts to leave the bottom of the screen, at 20 it is gone, at 25
+the bonus line goes, and at 30 the accuracy line. In practice:
+
+| Accuracy | Score line cut off from | Score line gone from |
+| --- | --- | --- |
+| 100% | about 480 shots | about 530 shots |
+| 50% | about 640 shots | about 740 shots |
+| 0% | about 950 shots | about 1060 shots |
+
+The award is still paid in full; only the drawing is lost. The tallies
+themselves never overlap the text, because each label is drawn twenty pixels
+below the last row of the tally above it. The port draws the page from the same
+arithmetic and simply does not draw what would fall below line 200. The layout
+was matched against a DOS capture at 113 shots and 66 hits; the overflow is read
+from the routine's code rather than from a DOS run at hundreds of shots, but the
+code leaves no room for anything else. Rearranging the page -- smaller blocks,
+a block per ten shots, or results moved up -- would be an invention, so none
+of it is done. (The original's end-of-game MISSION HIT/MISS RATIO page avoids
+the problem by drawing a block per hundred shots; that page is not yet in the
+port, as said above.)
+
+**No menu music with CD audio.** See "On a CD there is no menu music, and that
+is correct" below.
 
 ## The songs outside a level
 

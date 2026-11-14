@@ -1444,6 +1444,12 @@ sets out which parts are evidence and which are inference.
 Original demos and non-CD executable editions are **not** supported — this port
 targets the **250,776-byte CD/Steam executable family**.
 
+Some things that look like bugs are the original's and are kept: with a few
+hundred shots fired on a bonus floor, the **BONUS LEVEL HIT/MISS RATIO** page's
+blocks push the accuracy, bonus and score lines off the bottom of the screen,
+exactly as CORR7CD.EXE's own drawing code does. The award is still paid. The
+list of these is under "Not deviations" in [`docs/corridor7.md`](docs/corridor7.md).
+
 Full detail, including which specific values are reconstructed, lives in
 [`docs/corridor7.md`](docs/corridor7.md).
 

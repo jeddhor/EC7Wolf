@@ -534,20 +534,37 @@ void APlayerPawn::Tick()
 		// input is moving the player, so this is what makes lingering hurt.
 		C7TouchLaserBarriers(this);
 
+		// Alien charge refills by two once per pass of the play loop, in the
+		// palette-cycling routine (CORR7CD.EXE 219a8): so at the game's frame
+		// rate, not its tic rate. The port runs that routine every
+		// 1 << C7_RAMP_CYCLE_SHIFT tics, the period-correct 35 frames a
+		// second, and refills on the same beat; doing it every 70Hz tic made a
+		// drained plasma rifle full again almost at once (GitHub #25). The
+		// original's test is bestweapon > 2 -- any weapon above the M-16 has
+		// been picked up -- not which weapon is in hand, so switching away
+		// does not stop it.
 		AInventory *energy = FindInventory(ClassDef::FindClass("C7Energy"));
 		AInventory *capacity = FindInventory(ClassDef::FindClass("C7EnergyCapacity"));
 		if(energy && capacity)
 		{
 			if(energy->amount > capacity->amount)
 				energy->amount = capacity->amount;
-			const ClassDef *dual = ClassDef::FindClass("C7DualBlaster");
-			const ClassDef *plasma = ClassDef::FindClass("C7PlasmaRifle");
-			const ClassDef *assault = ClassDef::FindClass("C7AssaultCannon");
-			const ClassDef *disintegrator = ClassDef::FindClass("C7Disintegrator");
-			AWeapon *ready = player->ReadyWeapon;
-			if(ready && (ready->IsA(dual) || ready->IsA(plasma) ||
-				ready->IsA(assault) || ready->IsA(disintegrator)) &&
-				energy->amount < capacity->amount)
+			static const char *const aboveM16[] = {
+				"C7M343", "C7DualBlaster", "C7PlasmaRifle",
+				"C7AssaultCannon", "C7Disintegrator"
+			};
+			bool recharges = false;
+			for(const char *name : aboveM16)
+			{
+				const ClassDef *cls = ClassDef::FindClass(name);
+				if(cls && FindInventory(cls))
+				{
+					recharges = true;
+					break;
+				}
+			}
+			if(recharges && energy->amount < capacity->amount &&
+				(gamestate.TimeCount & ((1u << C7_RAMP_CYCLE_SHIFT) - 1)) == 0)
 				energy->amount = MIN(energy->amount + 2, capacity->amount);
 		}
 

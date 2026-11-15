@@ -220,6 +220,23 @@ the death path as well. Evidence, addresses and the DOS comparison are in
 [corridor7-ending-verification-2026-11-14.md](corridor7-ending-verification-2026-11-14.md);
 `tools/test_corridor7_ending.sh` covers it.
 
+### Combat damage
+
+Weapons and aliens hit as hard as they do in CORR7CD.EXE, which the port did
+not until beta301. Every roll is Wolf3D's `US_RndT`, 0..255. A player's gun
+does a quarter of it point-blank (0-63) and a sixth farther out, the shotgun
+adding 100, 50 or 25; the Taser is a short-range gun through the same routine.
+The M-343 and assault cannon fire three rounds a cycle on three frames, the
+dual blaster two. Alien gunfire is Wolf3D's `T_Shoot` -- 0-63 beside the
+player, 0-31 at two or three tiles, 0-15 beyond, with classes 8 and up shooting
+as if a third closer -- and every alien's attack sequence follows its released
+state chain, shot for shot. Nerraw and Eniram shoot, and the Semaj bites, on
+every frame drawn in their attack pose, five times at the period-correct rate. Alien
+charge refills by two per frame, not per tic. Before, the guns did four times
+the original's damage and the aliens about a fifth of it. Evidence and
+measurements are in
+[github-issue-verification-2026-11-15.md](github-issue-verification-2026-11-15.md).
+
 ### The Intruder Alert
 
 The wrong terminal sounds the alarm, and in the original that is all it does:
@@ -482,9 +499,9 @@ Append an output directory and `--all` to load-check every map in the archive.
 - Released per-rank enemy health tables and executable-derived object/state
   mappings for the complete CD bestiary. Unique behavior includes local
   Alioprobe/Eitak alerts, vulnerable Bandor camouflage morphs, retreating
-  Rodex/Tenaj, the melee-only Semaj, close-range-heavy Mechanoid fire and
+  Rodex/Tenaj, the melee-only Semaj, the Mechanoid's four-round volleys and
   footsteps, permanently visible C653-C664 Eniram Boss versus cloaking
-  C665-C689 ordinary Eniram, fast-dodging Tymok, sustained Solrac eye fire,
+  C665-C689 ordinary Eniram, fast-dodging Tymok, Solrac's six-round volleys,
   and Tebazile's five fully animated forms. Glass remains visually transparent
   while blocking alien sight, and active alien-world enemies can cross paired
   transporters. Audible projectiles, alien energy regeneration/capacity,
@@ -532,10 +549,16 @@ Append an output directory and `--all` to load-check every map in the archive.
 ## Known deviations
 
 This is a source-port compatibility implementation, not a cycle-accurate DOS
-reimplementation. Released enemy health, weapon resource costs, music routing,
-map dispatch, and campaign rules are reproduced; several movement, attack,
-pain-chance, damage, and frame-timing constants remain evidence-based
-reconstructions where the executable did not yield an unambiguous value.
+reimplementation. Released enemy health, weapon and alien damage, attack
+sequences, weapon resource costs, music routing, map dispatch, and campaign
+rules are reproduced; several movement, pain-chance and frame-timing
+constants remain evidence-based reconstructions where the executable did not
+yield an unambiguous value. Known combat differences: the original's pain
+states can lead Ttocs, Otrebor and Eitak straight into an attack, where the
+port returns them to the chase; its hit/miss page counts a long-range miss as
+a hit; its alien plasma also splashes nearby actors; and its damage flash
+flickers on a large hit, where the port's fades steadily. See
+[github-issue-verification-2026-11-15.md](github-issue-verification-2026-11-15.md).
 Masked screens preserve collision and sight behavior while transparent columns
 are composited with walls and actors at their actual depth. Native 104/105 glass
 retains perpendicular corner faces and selects the first glass cell per view

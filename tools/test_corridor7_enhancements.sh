@@ -44,16 +44,23 @@ def run(label,setting=0,extra=(),tics=500,renderer='software',hud=''):
  hp=[int(r[7]) for r in rows if r[1]=='C7TestTarget']
  hits=[a-b for a,b in zip(hp,hp[1:]) if b<a]
  return hits
+# The target has not seen the shooter when the first shell lands, so the
+# damage routine doubles that one hit. The minimum applies to the shotgun's
+# own roll, before the doubling: 2*max(roll,floor), not max(2*roll,floor).
+# Until GitHub #27 the roll was drawn from 0..1023 and every doubled first
+# hit already cleared 100, which hid the difference.
+def floored(hits,floor):
+    return [2*max(hits[0]//2,floor)]+[max(h,floor) for h in hits[1:]]
 baselines={}
 for dist in (1,3,7):
     fixture(dist)
     classic=run(f'classic-{dist}',extra=('--capture-fire','20'))
     enhanced=run(f'enhanced-{dist}',1,('--capture-fire','20'))
     minimum100=run(f'minimum100-{dist}',2,('--capture-fire','20'))
-    assert minimum100==[max(hit,100) for hit in classic],(dist,classic,minimum100)
+    assert minimum100==floored(classic,100),(dist,classic,minimum100)
     assert len(classic)>=6,(dist,classic)
-    assert enhanced==[max(hit,50) for hit in classic],(dist,classic,enhanced)
-    if dist==7:assert min(classic)<50,('sample did not exercise the floor',classic)
+    assert enhanced==floored(classic,50),(dist,classic,enhanced)
+    if dist==7:assert min(classic[1:])<50,('sample did not exercise the floor',classic)
     baselines[dist]=classic
     print('PASS real hit sequences at distance',dist,flush=True)
 fixture(7)
@@ -63,7 +70,7 @@ for saved in (0,1,2):
  assert image.info['EC7Wolf Shotgun Minimum']==str((0,50,100)[saved])
  hits=run(f'load-rule-{saved}',0 if saved else 2,('--capture-load','10',f'rule{saved}.ecs','--capture-fire','20'))
  baseline=baselines[7]
- assert hits==[max(x,(0,50,100)[saved]) if saved else x for x in baseline],(saved,hits)
+ assert hits==(floored(baseline,(0,50,100)[saved]) if saved else baseline),(saved,hits)
  print('PASS saved rule',saved,'overrides opposite current preference',flush=True)
 b=(work/'save/rule1.ecs').read_bytes();out=bytearray(b[:8]);p=8
 while p<len(b):

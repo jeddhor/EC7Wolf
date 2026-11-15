@@ -618,6 +618,7 @@ c7/monster/attack/class17	{ C7DS0051 C7AL0051 C7PC0051 }
 c7/monster/attack/class18	{ C7DS0024 C7AL0024 C7PC0024 }
 c7/monster/attack/class19	{ C7DS0051 C7AL0051 C7PC0051 }
 c7/monster/attack/class20	{ C7DS0051 C7AL0051 C7PC0051 }
+c7/monster/attack/class23	{ C7DS0041 C7AL0041 C7PC0041 }	// Mechanoid: the dual blaster it carries
 // The three sounds below are the audible tells the strategy guide tells the
 // player to listen for -- it lists door movement, footsteps, morphing, squeals
 // and laughs as the way to place a threat you cannot see yet, so they are

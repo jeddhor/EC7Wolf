@@ -267,6 +267,9 @@ namespace
 	FString  g_playerPath;
 	FILE    *g_playerFile     = NULL;
 	FILE    *g_actorFile      = NULL;
+	// --capture-actors-player: add the console player to that trace, as class
+	// "Player", so a test can read the damage aliens do from its health.
+	bool     g_tracePlayer    = false;
 	bool     g_killStats      = false;
 
 	// --capture-give CLASS: hand the player an inventory item once, at the first
@@ -274,6 +277,10 @@ namespace
 	// up off the floor needs a Touch -- which a warp does not produce -- so the
 	// Invulnerability Sphere's strobe cannot be photographed any other way.
 	FString  g_giveClass;
+	// --capture-select CLASS: switch the console player to a weapon it holds,
+	// once, on the first tic it can -- after any --capture-give.
+	FString  g_selectClass;
+	bool     g_selectDone     = false;
 	// Repeating --capture-give hands over each class in turn, so a run can set
 	// up a whole inventory -- a bonus floor's pickups, say -- at one tic.
 	TArray<FString> g_giveMore;
@@ -461,6 +468,13 @@ namespace
 				iter->health, sprite,
 				iter->state ? 'A'+iter->state->frame : '-',
 				iter->state ? iter->state->duration : 0);
+		}
+		if(g_tracePlayer && players[ConsolePlayer].mo != NULL)
+		{
+			const AActor *pmo = players[ConsolePlayer].mo;
+			fprintf(g_actorFile, "%lu Player %d %d 0 0 0 %d ---- - 0\n",
+				(unsigned long)g_ticCount, pmo->tilex, pmo->tiley,
+				(int)players[ConsolePlayer].health);
 		}
 	}
 
@@ -813,6 +827,8 @@ void ParseArgs(int argc, char **argv)
 			g_viewModelPath = argv[++i];
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-actors-player") == 0)
+			g_tracePlayer = true;
 		else if(strcmp(arg, "--capture-actors") == 0 && i + 1 < argc)
 		{
 			g_actorPath = argv[++i];
@@ -1139,6 +1155,11 @@ void ParseArgs(int argc, char **argv)
 		else if(strcmp(arg, "--capture-health") == 0 && i + 1 < argc)
 		{
 			g_initialHealth = clamp(atoi(argv[++i]), 1, 100000);
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-select") == 0 && i + 1 < argc)
+		{
+			g_selectClass = argv[++i];
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-give") == 0 && i + 1 < argc)
@@ -1923,6 +1944,22 @@ void PreTic()
 	{
 		players[ConsolePlayer].health = players[ConsolePlayer].mo->health = g_initialHealth;
 		g_healthDone = true;
+	}
+
+	if(!g_selectClass.IsEmpty() && !g_selectDone && players[ConsolePlayer].mo &&
+		(g_giveClass.IsEmpty() || g_giveDone))
+	{
+		g_selectDone = true;
+		const ClassDef *cls = ClassDef::FindClass(g_selectClass);
+		AInventory *held = cls ? players[ConsolePlayer].mo->FindInventory(cls) : NULL;
+		if(held && held->IsKindOf(NATIVE_CLASS(Weapon)))
+		{
+			players[ConsolePlayer].PendingWeapon = static_cast<AWeapon *>(held);
+			Printf("Capture: selected %s.\n", g_selectClass.GetChars());
+		}
+		else
+			Printf("Capture: the player holds no weapon '%s' to select.\n",
+				g_selectClass.GetChars());
 	}
 
 	if(!g_giveClass.IsEmpty() && !g_giveDone && players[ConsolePlayer].mo)

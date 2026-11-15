@@ -214,7 +214,10 @@ actor C7Bayonet : C7Weapon
 		Hold:
 			C746 A 3
 			C747 A 3
-			C748 A 3 bright A_CustomPunch(random(0, 255), true, CPF_ALWAYSPLAYSOUND)
+			// The original fires the Taser through the same hitscan routine as
+			// its guns (attack code 2, CORR7CD.EXE 1560d): a ranged 0..63 that
+			// falls to 0..42 past two tiles, not a 0..255 punch (GitHub #27).
+			C748 A 3 bright A_C7GunAttack(0)
 			C749 A 3
 			TNT1 A 0 A_ReFire
 			goto Ready
@@ -265,10 +268,12 @@ actor C7M343 : C7Weapon
 		Fire:
 		Hold:
 			// Restart held bursts at the muzzle flash, then advance through the
-			// complete rotating-barrel sequence.
-			C762 A 3
-			C763 A 3
-			C764 A 3 bright A_C7GunAttack(3)
+			// complete rotating-barrel sequence. The attack table fires on each
+			// of the first three frames (codes 1, 2, 2): one round of ammunition
+			// and its sound, then two follow-up rounds.
+			C762 A 3 A_C7GunAttack(3)
+			C763 A 3 A_C7GunAttack(3, 1)
+			C764 A 3 bright A_C7GunAttack(3, 1)
 			C765 A 3
 			TNT1 A 0 A_ReFire
 			goto Ready
@@ -293,8 +298,10 @@ actor C7DualBlaster : C7Weapon
 			C770 A 3
 			C771 A 3
 		Hold:
+			// Both barrels: the attack table's fourth frame (code 4,
+			// CORR7CD.EXE 154ec) fires again, and held fire returns to the third.
 			C772 A 3 bright A_C7GunAttack(4)
-			C773 A 3 bright
+			C773 A 3 bright A_C7GunAttack(4)
 			TNT1 A 0 A_ReFire
 			goto Ready
 		Spawn:
@@ -397,10 +404,12 @@ actor C7AssaultCannon : C7Weapon
 			C801 A 1 A_WeaponReady
 			loop
 		Fire:
-			C794 A 3
-			C795 A 3
 		Hold:
-			C796 A 3 bright A_C7GunAttack(6)
+			// The M-343's pattern (codes 1, 2, 2, then refire from the first
+			// frame): one charge-paying round and two follow-ups a cycle.
+			C794 A 3 A_C7GunAttack(6)
+			C795 A 3 A_C7GunAttack(6, 1)
+			C796 A 3 bright A_C7GunAttack(6, 1)
 			C797 A 3
 			TNT1 A 0 A_ReFire
 			goto Ready

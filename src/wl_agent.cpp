@@ -1827,8 +1827,17 @@ ACTION_FUNCTION(A_GunAttack)
 
 // Corridor 7's released hitscan routine has weapon-specific falloff rather
 // than Wolf3D's shared gun formula. The weapon number is the original index:
-// 1 shotgun, 2 M-16, 3 M-343, 4 dual blaster, 6 assault cannon, and
+// 0 Taser, 1 shotgun, 2 M-16, 3 M-343, 4 dual blaster, 6 assault cannon, and
 // 7 disintegrator. Plasma (5) is a projectile and is defined in DECORATE.
+//
+// Every roll is US_RndT, 0..255 (CORR7CD.EXE 1fc3:002e reads Wolf3D's
+// rndtable), so a point-blank hit is 0..63 and anything farther 0..42. The
+// port once drew these from 0..1023, which made every gun four times as
+// strong as the original's and is what GitHub #27 measured.
+//
+// The routine resolves one shot per call. The M-343 and assault cannon fire
+// three times a cycle because their attack table calls it on three
+// consecutive frames, and the dual blaster twice; see player.txt.
 static FRandom pr_c7bullet("Corridor7Bullet");
 
 static void ConsumeC7AlienCharge(AActor *self, int currentCost, int capacityCost)
@@ -1846,21 +1855,36 @@ static void ConsumeC7AlienCharge(AActor *self, int currentCost, int capacityCost
 
 ACTION_FUNCTION(A_C7GunAttack)
 {
+	enum
+	{
+		// The attack table's code 2 (CORR7CD.EXE 1560d): the M-343's and
+		// assault cannon's second and third rounds. The same hitscan, but no
+		// ammunition, no sound, and nothing for the hit/miss page.
+		C7GA_FOLLOWUP = 1
+	};
+
 	player_t *player = self->player;
 	ACTION_PARAM_INT(weapon, 0);
+	ACTION_PARAM_INT(attackFlags, 1);
+	const bool followup = (attackFlags & C7GA_FOLLOWUP) != 0;
 
-	if(!player || !player->ReadyWeapon->DepleteAmmo())
+	if(!player || !player->ReadyWeapon)
 		return false;
-	PlaySoundLocActor(player->ReadyWeapon->attacksound, self,
-		self == players[ConsolePlayer].camera ? SD_WEAPONS : SD_GENERIC);
-	player->c7MuzzleFlashTics = 5;
-	++player->levelShotsFired;
-	if(weapon == 4)
-		ConsumeC7AlienCharge(self, 5, 1);
-	else if(weapon == 6)
-		ConsumeC7AlienCharge(self, 10, 1);
-	else if(weapon == 7)
-		ConsumeC7AlienCharge(self, 50, 45);
+	if(!followup)
+	{
+		if(!player->ReadyWeapon->DepleteAmmo())
+			return false;
+		PlaySoundLocActor(player->ReadyWeapon->attacksound, self,
+			self == players[ConsolePlayer].camera ? SD_WEAPONS : SD_GENERIC);
+		player->c7MuzzleFlashTics = 5;
+		++player->levelShotsFired;
+		if(weapon == 4)
+			ConsumeC7AlienCharge(self, 5, 1);
+		else if(weapon == 6)
+			ConsumeC7AlienCharge(self, 10, 1);
+		else if(weapon == 7)
+			ConsumeC7AlienCharge(self, 50, 45);
+	}
 
 	if(self->MeleeState)
 		self->SetState(self->MeleeState);
@@ -1897,40 +1921,36 @@ ACTION_FUNCTION(A_C7GunAttack)
 	if(!closest)
 		return true;
 
-	int dist = MAX(abs(closest->x - self->x), abs(closest->y - self->y)) / FRACUNIT;
-	const int projectiles = weapon == 3 ? 3 : (weapon == 6 ? 4 : 1);
-	bool hit = false;
-	for(int projectile = 0; projectile < projectiles; ++projectile)
+	// CORR7CD.EXE 151b5..1305f (load module 12f95): tile distance, then one
+	// roll. The long-range miss applies to every gun but the shotgun.
+	const int dist = MAX(abs(closest->x - self->x), abs(closest->y - self->y)) / FRACUNIT;
+	int damage;
+	if(dist < 2 || weapon == 3 || weapon == 6)
 	{
-		int damage;
-		if(dist < 2 || weapon == 3 || weapon == 6)
-		{
-			damage = (pr_c7bullet.GenRand32() & 1023) / 4;
-			if(weapon == 1)
-				damage += 100;
-		}
-		else if(dist < 4 || weapon == 4)
-		{
-			damage = (pr_c7bullet.GenRand32() & 1023) / 6;
-			if(weapon == 1)
-				damage += 50;
-		}
-		else
-		{
-			if(static_cast<int>((pr_c7bullet.GenRand32() & 1023) / 12) < dist && weapon != 1)
-				continue;
-			damage = (pr_c7bullet.GenRand32() & 1023) / 6;
-			if(weapon == 1)
-				damage += 25;
-		}
-		// This optional floor follows the ordinary distance calculation. Legacy
-		// demo files cannot encode rules, so recording/playback remain classic.
-		if(weapon == 1 && !demorecord && !demoplayback)
-			damage = MAX(damage, int(gamestate.shotgunMinimum));
-		DamageActor(closest, self, damage);
-		hit = true;
+		damage = pr_c7bullet() / 4;
+		if(weapon == 1)
+			damage += 100;
 	}
-	if(hit)
+	else if(dist < 4 || weapon == 4)
+	{
+		damage = pr_c7bullet() / 6;
+		if(weapon == 1)
+			damage += 50;
+	}
+	else
+	{
+		if(pr_c7bullet() / 12 < dist && weapon != 1)
+			return true;
+		damage = pr_c7bullet() / 6;
+		if(weapon == 1)
+			damage += 25;
+	}
+	// This optional floor follows the ordinary distance calculation. Legacy
+	// demo files cannot encode rules, so recording/playback remain classic.
+	if(weapon == 1 && !demorecord && !demoplayback)
+		damage = MAX(damage, int(gamestate.shotgunMinimum));
+	DamageActor(closest, self, damage);
+	if(!followup)
 		++player->levelShotsHit;
 	return true;
 }

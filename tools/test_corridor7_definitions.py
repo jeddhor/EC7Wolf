@@ -582,9 +582,26 @@ for weapon in (
             f"Corridor 7 definition check failed: weapon {weapon} has no held-fire branch"
         )
 require(r'actor\s+C7Bayonet.*?Fire:\s*Hold:.*?C746\s+A\s+\d+.*?'
-        r'C748\s+A\s+\d+\s+bright\s+A_CustomPunch.*?C749\s+A\s+\d+\s*'
+        r'C748\s+A\s+\d+\s+bright\s+A_C7GunAttack\(0\).*?C749\s+A\s+\d+\s*'
         r'TNT1\s+A\s+0\s+A_ReFire', PLAYER,
-        "Taser held fire repeats its complete native attack sequence")
+        "Taser held fire repeats its complete native attack sequence through the gun routine")
+# GitHub #27: one US_RndT roll (0..255) per shot, never 0..1023, and the
+# M-343/assault cannon's three rounds come from three frames, not one loop.
+require(r'ACTION_FUNCTION\(A_C7GunAttack\).*?C7GA_FOLLOWUP.*?pr_c7bullet\(\)\s*/\s*4.*?'
+        r'pr_c7bullet\(\)\s*/\s*6.*?pr_c7bullet\(\)\s*/\s*12\s*<\s*dist', WL_AGENT,
+        "Corridor 7 gun damage rolls US_RndT once per shot")
+forbid(r'&\s*1023', WL_AGENT, "Corridor 7 gun damage drawn from 0..1023")
+forbid(r'projectiles\s*=\s*weapon', WL_AGENT, "several damage rolls per Corridor 7 gun call")
+for weapon, frames in {"C7M343": ("C762", "C763", "C764"),
+                       "C7AssaultCannon": ("C794", "C795", "C796")}.items():
+    number = "3" if weapon == "C7M343" else "6"
+    require(rf'actor\s+{weapon}.*?Fire:\s*Hold:.*?{frames[0]}\s+A\s+\d+\s+A_C7GunAttack\({number}\).*?'
+            rf'{frames[1]}\s+A\s+\d+\s+A_C7GunAttack\({number},\s*1\).*?'
+            rf'{frames[2]}\s+A\s+\d+\s+bright\s+A_C7GunAttack\({number},\s*1\)', PLAYER,
+            f"{weapon} fires one paid and two follow-up rounds a cycle")
+require(r'actor\s+C7DualBlaster.*?C772\s+A\s+\d+\s+bright\s+A_C7GunAttack\(4\).*?'
+        r'C773\s+A\s+\d+\s+bright\s+A_C7GunAttack\(4\)', PLAYER,
+        "dual blaster fires on both of its last two frames")
 # These check firing SEQUENCE, not duration. Durations are measured and are
 # asserted once, below, so a re-measurement does not have to touch every one.
 require(r'actor\s+C7M16.*?C756\s+A\s+\d+\s+bright\s+A_C7GunAttack\(2\).*?'
@@ -598,7 +615,7 @@ for weapon, action_frame in {
     "C7PlasmaRifle": "C781",
     "C7AssaultCannon": "C797",
 }.items():
-    require(rf'actor\s+{weapon}.*?{action_frame}\s+A\s+\d+(?:\s+bright)?\s*'
+    require(rf'actor\s+{weapon}.*?{action_frame}\s+A\s+\d+(?:\s+bright)?(?:\s+A_C7GunAttack\(\d\))?\s*'
             r'TNT1\s+A\s+0\s+A_ReFire', PLAYER,
             f"{weapon} displays its final firing frame before held refire")
 require(r'actor\s+C7Disintegrator.*?Fire:.*?C802\s+A\s+\d+.*?C803\s+A\s+\d+.*?'
@@ -682,18 +699,33 @@ require(r'^\s*\{300,\s*C7Semaj,', XLAT, "object 300 Semaj mapping")
 require(r'"AILOA1".*?"AILOA8"', CO7MAP, "Ailoprobe directional sprite set")
 require(r'"EITKA1".*?"EITKA8"', CO7MAP, "Eitak directional sprite set")
 require(r"actor\s+C7Semaj\s*:.*?A_MeleeAttack", MONSTERS, "Semaj melee-only attack")
-require(r'actor\s+C7Solrac\s*:.*?A_CustomMissile\("C7BossEnergyBolt"\)', MONSTERS, "Solrac energy projectile")
+# GitHub #26: alien gunfire is T_Shoot with Wolf3D's damage, and the bosses
+# that the port gave projectiles to are hitscan in the released tables.
+forbid(r'A_WolfAttack\([^)]*,\s*1\.0,\s*\d+', MONSTERS, "estimated alien damage caps")
+forbid(r'C7BossEnergyBolt', MONSTERS, "Solrac energy projectile (the released Solrac is hitscan)")
+require(r'actor\s+C7Solrac\s*:.*?Missile:.*?C642.*?(?:C64[34]\s+A\s+5\s+bright\s+A_WolfAttack\(0,\s*"[^"]*",\s*0\.667\)\s*){6}',
+        MONSTERS, "Solrac fires six hitscan rounds a volley")
+require(r'actor\s+C7Nerraw.*?(?:C580\s+A\s+1\s+bright\s+A_WolfAttack[^\n]*\s*){5}', MONSTERS,
+        "Nerraw shoots on each of five frames (T_Shoot is its think)")
+require(r'actor\s+C7Semaj.*?(?:C566\s+A\s+1\s+A_MeleeAttack\(random\(0,\s*15\),\s*1\.0\)\s*){5}', MONSTERS,
+        "Semaj bites on each of five frames")
+require(r'actor\s+C7Ttocs.*?C392\s+A\s+3\s+A_WolfAttack.*?A_Jump\(37,\s*"SecondShot"\).*?SecondShot:.*?A_WolfAttack',
+        MONSTERS, "Ttocs shoots on its first frame with a 1-in-7 second shot")
+require(r'actor\s+C7BossPlasmaBolt.*?random\[MissileDamage\]\(30,\s*61\)', MONSTERS,
+        "alien plasma bolt does rnd/8 + 30")
+require(r'c7/monster/attack/class23\s+\{\s+C7DS0041', SNDINFO, "Mechanoid fires with class 23's sample 41")
 require(r'actor\s+C7Eniram\s*:.*?Spawn:\s*C665.*?Missile:.*?C669.*?C672.*?A_WolfAttack.*?Pain:.*?C683.*?Death:.*?C684.*?C689',
         MONSTERS, "ordinary Eniram uses its complete C665-C689 cloaking state family")
 require(r'actor\s+C7EniramBoss\s*:.*?Spawn:\s*C653.*?Missile:.*?C657.*?C658.*?A_CustomMissile.*?Death:.*?C659.*?C664',
         MONSTERS, "golden-horned Eniram Boss uses C653-C664 and never uses cloak frames")
 require(r'actor\s+C7Rodex\s*:.*?Missile:.*?C233.*?C236.*?Pain:.*?C225.*?C226',
         MONSTERS, "Rodex attack no longer reuses its hurt frames")
-require(r'A_PlaySound\("c7/monster/attack/class20"\).*?A_CustomMissile\("C7BossEnergyBolt"\)',
-        MONSTERS, "Solrac plays its released class-17 projectile sound")
+require(r'actor\s+C7Solrac.*?attacksound\s+"c7/monster/attack/class20".*?C643\s+A\s+5\s+bright\s+A_WolfAttack\(0,\s*"\*"',
+        MONSTERS, "Solrac plays its released class-20 attack sound on its first round")
 require(r'actor\s+C7Tymok.*?activesound\s+"c7/monster/active/class25".*?'
+        r'attacksound\s+"c7/monster/attack/class25".*?'
         r'A_PlaySound\("c7/weapon/plasma"\).*?A_CustomMissile\("C7BossPlasmaBolt"\).*?'
-        r'A_PlaySound\("c7/monster/attack/class25"\)', MONSTERS,
+        r'C732\s+A\s+5\s+bright\s+A_WolfAttack\(0,\s*"\*"', MONSTERS,
         "the purple boss preserves its controlled-trace active and two attack sounds")
 require(r'^\s*\{196,\s*C7EniramBoss,.*?actor\s+C7EniramBoss.*?'
 		r'activesound\s+"c7/monster/active/class21".*?C653.*?C664',
@@ -903,6 +935,6 @@ require(r'actor\s+C7Tebazile.*?TransformEniram:.*?C822.*?C827.*?'
 		MONSTERS, "Tebazile plays all native transformation and final-death frames")
 require(r'actor\s+C7Mechanoid.*?C690.*?A_PlaySound.*?C692.*?A_PlaySound.*?'
 		r'Missile:.*?C694.*?C696.*?A_WolfAttack.*?C697.*?C696.*?A_WolfAttack',
-		MONSTERS, "Mechanoid has booming steps and two range-falling attacks")
+		MONSTERS, "Mechanoid has booming steps and its four-round volley")
 
 print("Corridor 7 definition checks passed")

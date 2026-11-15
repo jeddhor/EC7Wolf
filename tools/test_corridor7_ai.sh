@@ -184,13 +184,18 @@ done
 python3 "$(dirname "$0")/make_corridor7_ai_lab.py" \
 	"$data_dir/MAPTEMP.CO7" "$lab/MAPTEMP.CO7" 118:7 128:16 >/dev/null
 
+# The probe shoots the player for the whole run. Since aliens do the original's
+# damage (GitHub #26) it kills a 100-point player well inside 500 tics, and a
+# dead player stops the run on the death screen. This test is about who wakes,
+# not about damage, so the player is given the health to outlast it.
+
 (
 	cd "$lab"
 	timeout 600s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 \
 		xvfb-run -a -s "-screen 0 640x400x24" ./ec7wolf \
 		--data CO7 --no-upscale --nowait --vid-renderer software --res 640 400 \
 		--config "$work/labcfg" --savedir "$work/labsv" \
-		--tedlevel MAP01 --skill 2 --capture-rngseed 12345 \
+		--tedlevel MAP01 --skill 2 --capture-rngseed 12345 --capture-health 10000 \
 		--capture-actors "$work/lab.txt" --capture-maxtics 500
 ) >"$work/lab.log" 2>&1 || true
 

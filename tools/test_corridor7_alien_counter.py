@@ -118,7 +118,12 @@ for weapon in ("C7M343", "C7AssaultCannon"):
         for health in (1, 250):
             label = f"{weapon}-{base}-{health}"
             fixture(weapon, base, health)
-            one_death(label, run(label), 3)
+            # Held, not tapped: at the original's damage (GitHub #27) a single
+            # three-round burst no longer reliably kills 250 health, and what
+            # is under test is one credit and one drop however many rounds
+            # land, not how many bursts it takes.
+            one_death(label, run(label, ("--capture-hold-button", "attack", "20", "120"),
+                                 tics=200, fire=False), 3)
         print("PASS", weapon, base, "one kill, score award and drop per lethal burst", flush=True)
 
 # Single-hit, projectile, and explosive paths still kill normally.

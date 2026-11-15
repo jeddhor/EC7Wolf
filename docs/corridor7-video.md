@@ -93,7 +93,9 @@ A FLIC decoder and a player, self-contained.
   game beginning the whole sequence again at t=87.5, so they belong inside the
   cycle. Measurement beat the assumption; see [The audio](#the-audio).
 * **`SEQFOUR` on final victory**, on the `EndTitle` path in `GameLoop()`, before
-  the victory page and the high-score entry.
+  the last floor's status report, MISSION HIT/MISS RATIO and the high-score
+  entry. (Until November 2026 a victory page of the port's own followed it; the
+  original has none. See `corridor7-ending-verification-2026-11-14.md`.)
 
 Direct calls rather than a new mapinfo intermission action. The intermission
 system would be the general answer, but the startup pair has to run *outside*

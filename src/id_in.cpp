@@ -954,6 +954,28 @@ bool IN_AnyInputHeld()
 	return IN_JoyButtons() != 0;
 }
 
+bool IN_DirectionHeld()
+{
+	IN_ProcessEvents();
+#if SDL_VERSION_ATLEAST(2,0,0)
+	int count = 0;
+	const Uint8 *keys = SDL_GetKeyboardState(&count);
+	const ScanCode directions[] = {
+		KbdDefs.upleft, KbdDefs.up, KbdDefs.upright, KbdDefs.left,
+		KbdDefs.right, KbdDefs.downleft, KbdDefs.down, KbdDefs.downright
+	};
+	for(unsigned int i = 0;keys && i < sizeof(directions)/sizeof(directions[0]);++i)
+	{
+		const int code = static_cast<int>(directions[i]);
+		if(code > 0 && code < count && keys[code])
+			return true;
+	}
+	return false;
+#else
+	return Keyboard[KbdDefs.up] || Keyboard[KbdDefs.down] ||
+		Keyboard[KbdDefs.left] || Keyboard[KbdDefs.right];
+#endif
+}
 
 void IN_Ack (AckType type)
 {

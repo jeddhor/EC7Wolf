@@ -323,6 +323,11 @@ void SetupGameLevel (void)
 		for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 		{
 			players[i].killerobj = NULL;
+			// The floor that just ended joins the mission's totals here, at
+			// the next floor's setup, as 216b4 does -- bonus floors included.
+			// A new game clears the totals afterwards, in Reborn.
+			players[i].c7MissionShotsFired += players[i].levelShotsFired;
+			players[i].c7MissionShotsHit += players[i].levelShotsHit;
 			players[i].levelShotsFired = players[i].levelShotsHit = 0;
 			players[i].c7MuzzleFlashTics = players[i].c7ApparitionTics =
 				players[i].c7ChamberTics = players[i].c7ChamberState = 0;
@@ -1039,15 +1044,24 @@ restartgame:
 						// the disc nobody extracted.
 						C7Flic_Play("SEQFOUR");
 
+						// Corridor 7's ending is a2cc: the cinematic, then the
+						// last floor's status report and MISSION HIT/MISS RATIO
+						// (a335 with playstate 6), then the high scores only if
+						// the score ranks. There is no victory page: the
+						// "CONGRATULATIONS!" routine at 18af9 is never called.
+						// Every floor gets its report in the original, so a
+						// map pack's last floor does too, forcetally or not.
+						const bool c7 = IWad::CheckGameFilter("Corridor7");
 						if(dointermission)
 						{
-							if(levelInfo->ForceTally)
+							if(c7 || levelInfo->ForceTally)
 							{
-								LevelCompleted();
+								LevelCompleted(c7);
 								VW_FadeOut();
 							}
 
-							Victory (false);
+							if(!c7)
+								Victory (false);
 						}
 
 						bool gotoMenu = false;
@@ -1057,7 +1071,11 @@ restartgame:
 							gotoMenu = ShowIntermission(intermission);
 						}
 
-						CheckHighScore (players[ConsolePlayer].score,levelInfo);
+						if(!c7 || HighScoreWouldRank(players[ConsolePlayer].score, levelInfo))
+							CheckHighScore (players[ConsolePlayer].score,levelInfo);
+						else
+							Printf("Corridor 7 ending: a score of %d does not reach the high scores.\n",
+								players[ConsolePlayer].score);
 						return gotoMenu;
 					}
 				}

@@ -134,6 +134,10 @@ extern class player_t
 
 		int32_t		oldscore,score,nextextra;
 		uint32_t	levelShotsFired, levelShotsHit;
+		// Every earlier floor's shots this game, for the MISSION HIT/MISS RATIO
+		// page that ends a Corridor 7 campaign (DS:813e and DS:8144 in the
+		// original; added at each floor's setup, cleared by a new game).
+		uint32_t	c7MissionShotsFired, c7MissionShotsHit;
 
 		// What a Corridor 7 bonus floor gives back when it ends (GitHub #23;
 		// the addresses are in the running game's memory image, as

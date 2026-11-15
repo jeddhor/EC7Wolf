@@ -65,7 +65,8 @@ the game says so on startup and behaves exactly as it did before.
 `SEQFOUR.CO7` is why the victory page was listed under known deviations as an
 "evidence-based reconstruction because the installation does not contain the
 external cinematic files": it never left the CD. See
-[corridor7-video.md](corridor7-video.md).
+[corridor7-video.md](corridor7-video.md). What follows it is now the original's
+too; see "The ending" below.
 
 ### The floor objective banner
 
@@ -190,6 +191,34 @@ hit/miss page runs off the screen" under known deviations.
 
 `tools/test_corridor7_bonus_floor.sh` covers the restore, its exceptions, the
 lethal route, save/load and all six bonus routes.
+
+### The ending
+
+Leaving MAP40 ends the campaign as CORR7CD.EXE ends it: the `SEQFOUR` cinematic,
+MAP40's status report, then **MISSION HIT/MISS RATIO**, then the high scores
+-- and only if the score ranks; otherwise straight back to the attract loop.
+There is no victory page. The port used to show one ("CONGRATULATIONS! You have
+destroyed the vortex" over floor, kill and secret ratios and a rating), built
+from strings the executable carries in a routine nothing calls and from the
+labels of the death report.
+
+The mission page is the bonus floors' hit/miss page over the whole game's
+shooting: every floor's shots and hits, bonus floors included, are added to the
+mission's totals when the next floor starts, and the last floor's are added on
+the page itself. A block stands for a hundred shots, rounded down; the award is
+the same formula. The totals start at zero with a new game or a warp and travel
+in saves. A save from before them loads with zero totals and says so, so its
+ending counts from that floor on.
+
+A map pack's last floor ends the same way, and gets its status report whether or
+not its MAPINFO asks for a tally, because every floor gets one in the original.
+
+The high-score table now has the original's black drop shadows, and the row
+being earned is its navy bar in a yellow frame with the name typed in the row's
+colour. The table stays up for six seconds or a key after a name is entered, on
+the death path as well. Evidence, addresses and the DOS comparison are in
+[corridor7-ending-verification-2026-11-14.md](corridor7-ending-verification-2026-11-14.md);
+`tools/test_corridor7_ending.sh` covers it.
 
 ### The Intruder Alert
 
@@ -514,15 +543,9 @@ ray, including its transparent texels; more distant glass does not show through
 that cell. See `github-issue21-glass-review.md` for the native comparison and
 current visual-review scope. Plane-1 masked-wall
 configuration markers 86..88 are preserved distinctly, but their exact DOS
-state differences remain unresolved. The final victory page is still the port's
-own rendering rather than a reproduction of the original's layout, and the
-original's **MISSION HIT/MISS RATIO** page -- the bonus floors' hit/miss page
-drawn for the whole campaign, a block per hundred shots, with its own accuracy
-award -- is not yet shown before it; the ending
-cinematic that precedes it is no longer missing, and the reason once given here
--- that the installation does not contain the external cinematic files -- has
-not been true since SEQFOUR.CO7 was taken off the CD. See "The CD cinematics"
-above. Plane 2 contains
+state differences remain unresolved. The ending, once listed here as the port's
+own victory page with the original's MISSION HIT/MISS RATIO page missing, is now
+the original's; see "The ending" above. Plane 2 contains
 editor grouping values
 on two released maps and has no observed runtime effect. Original demos,
 network protocol, multiplayer rules, and other executable editions are
@@ -559,9 +582,21 @@ was matched against a DOS capture at 113 shots and 66 hits; the overflow is read
 from the routine's code rather than from a DOS run at hundreds of shots, but the
 code leaves no room for anything else. Rearranging the page -- smaller blocks,
 a block per ten shots, or results moved up -- would be an invention, so none
-of it is done. (The original's end-of-game MISSION HIT/MISS RATIO page avoids
-the problem by drawing a block per hundred shots; that page is not yet in the
-port, as said above.)
+of it is done. (The end-of-game MISSION HIT/MISS RATIO page avoids the problem
+by drawing a block per hundred shots: it would take tens of thousands of shots
+to push its results off.)
+
+**The tallies count up only while a direction is held.** On both hit/miss pages
+the original redraws the screen after every block and then calls Wolf3D's
+`TicDelay(50)`, which returns at once unless a direction is held. So the page
+normally appears complete, but a player holding an arrow key watches the tally
+grow a block every 50 tics, and the rest appears the moment they let go. A DOS
+run holding Right showed exactly that, and the port does the same.
+
+**There is no victory page.** CORR7CD.EXE contains a "CONGRATULATIONS! You have
+destroyed the vortex" screen, but nothing in it ever calls that routine. A won
+game goes from MISSION HIT/MISS RATIO to the high scores, and skips even those
+when the score does not rank. See "The ending" above.
 
 **No menu music with CD audio.** See "On a CD there is no menu music, and that
 is correct" below.
@@ -578,7 +613,7 @@ IMF delays at 700Hz:
 
 | lump | seconds | used for |
 | --- | --- | --- |
-| C7MUS21 | 13.7 | intermission, victory, high scores |
+| C7MUS21 | 13.7 | intermission (the ending's report pages too), high scores |
 | C7MUS19 | 16.5 | the menu |
 | C7MUS03 | 21.9 | -- |
 | C7MUS00 | 65.8 | the title and credit pages |
@@ -590,8 +625,8 @@ what the game is remembered as having. Nothing else is within eight seconds of
 any of them -- the next shortest song is 21.9s and most run past a hundred, so
 these are the only candidates for a screen you sit on briefly.
 
-The fourteen-second loop covers the intermission, the victory page and the high
-scores. It was identified from its length; a guess that it was `C7MUS04` did not
+The fourteen-second loop covers the intermission -- the ending's report pages
+included -- and the high scores. It was identified from its length; a guess that it was `C7MUS04` did not
 survive measurement, that song running 153.6 seconds.
 
 The title theme also started too early: before the Capstone logo and the story

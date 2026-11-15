@@ -29,6 +29,7 @@
 #include "actor.h"
 #include "wl_agent.h"
 #include "wl_game.h"
+#include "wl_iwad.h"
 #include "wl_loadsave.h"
 #include "m_random.h"
 #include "m_crc32.h"
@@ -330,6 +331,14 @@ namespace
 	// count -- the DOS capture's 113 and 66 -- without staging a firefight.
 	long     g_shotsFired     = -1;
 	long     g_shotsHit       = -1;
+	// --capture-mission-shots FIRED HIT: the same for the earlier floors'
+	// totals, which the campaign's MISSION HIT/MISS RATIO page adds this
+	// floor's to, so the ending can be drawn without playing forty floors.
+	long     g_missionFired   = -1;
+	long     g_missionHit     = -1;
+	// --capture-score N: the console player's score at that moment, so a
+	// report page can be compared with a DOS capture that seeded its own.
+	long     g_score          = -1;
 	// --capture-verbs: report the state each of Corridor 7's verbs acts on,
 	// whenever it changes. This is an observation, not an override: it exists so
 	// a test that presses buttons -- a touchscreen, a gamepad -- can assert that
@@ -1174,6 +1183,17 @@ void ParseArgs(int argc, char **argv)
 		{
 			g_shotsFired = atol(argv[++i]);
 			g_shotsHit = atol(argv[++i]);
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-score") == 0 && i + 1 < argc)
+		{
+			g_score = atol(argv[++i]);
+			g_armed = true;
+		}
+		else if(strcmp(arg, "--capture-mission-shots") == 0 && i + 2 < argc)
+		{
+			g_missionFired = atol(argv[++i]);
+			g_missionHit = atol(argv[++i]);
 			g_armed = true;
 		}
 		else if(strcmp(arg, "--capture-visormode") == 0 && i + 1 < argc)
@@ -2102,7 +2122,19 @@ void PreTic()
 			players[ConsolePlayer].levelShotsFired = (uint32_t)g_shotsFired;
 			players[ConsolePlayer].levelShotsHit = (uint32_t)MAX(0L, g_shotsHit);
 		}
-		playstate = ex_completed;
+		if(g_missionFired >= 0)
+		{
+			players[ConsolePlayer].c7MissionShotsFired = (uint32_t)g_missionFired;
+			players[ConsolePlayer].c7MissionShotsHit = (uint32_t)MAX(0L, g_missionHit);
+		}
+		if(g_score >= 0)
+			players[ConsolePlayer].score = players[ConsolePlayer].oldscore = (int32_t)g_score;
+		// The elevator's own rule (lnspec.cpp): leaving the last floor wins.
+		if(IWad::CheckGameFilter("Corridor7") &&
+			strcmp(gamestate.mapname, "MAP40") == 0)
+			playstate = ex_victorious;
+		else
+			playstate = ex_completed;
 	}
 	if(g_secretExitTic >= 0 && !g_secretExitDone &&
 		(long)gamestate.TimeCount >= g_secretExitTic)
@@ -2335,6 +2367,8 @@ static void TraceInventory()
 	}
 	line.AppendFormat(" ready=%s", player.ReadyWeapon ?
 		player.ReadyWeapon->GetClass()->GetName().GetChars() : "none");
+	line.AppendFormat(" mission=%u/%u", player.c7MissionShotsFired,
+		player.c7MissionShotsHit);
 	Printf("%s\n", line.GetChars());
 }
 

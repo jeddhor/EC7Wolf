@@ -241,6 +241,10 @@ bool IN_CheckAck (void);
 // True while any key, mouse button or controller button is physically down,
 // whether or not its press has been consumed.
 bool IN_AnyInputHeld();
+// Whether one of the keyboard's direction keys is physically down now, read
+// from SDL's live state rather than the Keyboard[] table, which
+// IN_ClearKeysDown empties even while a key is still held.
+bool IN_DirectionHeld();
 bool IN_IsInputGrabbed();
 void IN_CenterMouse();
 

@@ -679,9 +679,22 @@ struct C7StatusReport
 	int32_t award;
 };
 
-// CORR7CD.EXE's text routine (214a:2965) puts every string over a drop shadow
-// one pixel down and to the right, in the color at DS:8b68 -- black (index 0)
-// on both report pages, compared against the DOS captures glyph for glyph.
+// Fills a rectangle of the original's 320x200 screen with a palette colour,
+// in the full-screen pictures' stretched mapping -- VWB_Bar in the original.
+static void C7FillRect(int x, int y, int w, int h, BYTE color)
+{
+	double rx = x, ry = y, rw = w, rh = h;
+	screen->VirtualToRealCoords(rx, ry, rw, rh, 320, 200, true, true);
+	const int left = static_cast<int>(rx), top = static_cast<int>(ry);
+	VWB_Clear(color, left, top, MAX(left+1, static_cast<int>(rx+rw)),
+		MAX(top+1, static_cast<int>(ry+rh)));
+}
+
+// CORR7CD.EXE's text routine (214a:2965) puts every string over a black drop
+// shadow one pixel down and to the right. It is black even where the caller
+// sets DS:8b68 to the navy of the high-score bar, so that byte is not its
+// colour. Compared against DOS captures of the report pages, the mission page
+// and the high-score table, glyph for glyph.
 static void C7ShadowPrintAt(FFont *font, int x, int y, const char *text,
 	BYTE color, BYTE shadow=0)
 {
@@ -758,11 +771,29 @@ static int32_t C7AccuracyAward(uint32_t shots, uint32_t hits, unsigned int &accu
 	return static_cast<int32_t>(accuracy * (shots/100 + 1) * 10);
 }
 
-// One row of the hit/miss page's tally: a 3x3 block per shot, four pixels
-// apart from x=90, wrapping to a new row four pixels down once x passes 300 --
-// 53 to a row. The row advances after the block that fills it, so an exact
-// multiple of 53 leaves an empty row below, as the original's does. Returns the
-// y of the row it finished on.
+// One row of the hit/miss page's tally: a 3x3 block per shot (per hundred on
+// the mission page), four pixels apart from x=90, wrapping to a new row four
+// pixels down once x passes 300 -- 53 to a row. The row advances after the
+// block that fills it, so an exact multiple of 53 leaves an empty row below,
+// as the original's does. Returns the y of the row it finished on.
+//
+// The original redraws the screen after every block and then calls TicDelay(50)
+// (a6a4), which returns at once unless a direction is held. Nobody holding one
+// sees the finished page; somebody who is sees the tally count up a block every
+// 50 tics for as long as they hold it, and the rest appear the moment they let
+// go -- a DOS run holding Right showed exactly that. Both are kept: the redraw
+// happens only while a direction is held, which is when it could be seen.
+//
+// "Held" is asked of the live keyboard as well as the control state: the key
+// that dismissed the status report was cleared from the key table, and an
+// arrow already down when the page began would otherwise not count.
+static bool C7DirectionHeld()
+{
+	ControlInfo ci;
+	ReadAnyControl(&ci);
+	return ci.dir != dir_None || IN_DirectionHeld();
+}
+
 static int C7DrawHitMissBlocks(unsigned int count, int y, BYTE color)
 {
 	int x = 90;
@@ -770,18 +801,21 @@ static int C7DrawHitMissBlocks(unsigned int count, int y, BYTE color)
 	{
 		// Anything below the page would have been drawn off it.
 		if(y+1 < 200)
-		{
-			double rx = x, ry = y+1, rw = 3, rh = 3;
-			screen->VirtualToRealCoords(rx, ry, rw, rh, 320, 200, true, true);
-			const int left = static_cast<int>(rx), top = static_cast<int>(ry);
-			VWB_Clear(color, left, top, MAX(left+1, static_cast<int>(rx+rw)),
-				MAX(top+1, static_cast<int>(ry+rh)));
-		}
+			C7FillRect(x, y+1, 3, 3, color);
 		x += 4;
 		if(x > 300)
 		{
 			x = 90;
 			y += 4;
+		}
+
+		if(C7DirectionHeld())
+		{
+			VW_UpdateScreen();
+			const int32_t start = GetTimeCount();
+			do
+				SDL_Delay(5);
+			while((int32_t)GetTimeCount() - start < 50 && C7DirectionHeld());
 		}
 	}
 	return y;
@@ -796,10 +830,13 @@ static void C7PrintCentered(FFont *font, int y, const char *text, BYTE color)
 
 // The second page after a bonus floor, laid out as a552 draws it: the large
 // font for the title and the three results, the small font for the two tally
-// labels and their counts.
-static void C7DrawHitMissPage(uint32_t shots, uint32_t hits, unsigned int accuracy,
-	int32_t award)
+// labels and their counts. The same routine, entered at a559, ends the
+// campaign as MISSION HIT/MISS RATIO over the whole mission's shooting, with a
+// block per hundred shots rather than per shot.
+static void C7DrawHitMissPage(bool mission, uint32_t shots, uint32_t hits,
+	unsigned int accuracy, int32_t award)
 {
+	const unsigned int perBlock = mission ? 100 : 1;
 	C7DrawTiledBackdrop(TexMan("C7G0004"));
 
 	const int oldpa = pa;
@@ -808,18 +845,19 @@ static void C7DrawHitMissPage(uint32_t shots, uint32_t hits, unsigned int accura
 	static const BYTE SHOTS_COLOR = 0x57, HITS_COLOR = 0xb7;
 	FString value;
 
-	C7PrintCentered(BigFont, 10, "BONUS LEVEL HIT/MISS RATIO", YELLOW);
+	C7PrintCentered(BigFont, 10,
+		mission ? "MISSION HIT/MISS RATIO" : "BONUS LEVEL HIT/MISS RATIO", YELLOW);
 
 	int y = 40;
 	C7ShadowPrintAt(SmallFont, 10, y, "Shots fired:", YELLOW);
 	value.Format("%u", shots);
 	C7ShadowPrintAt(SmallFont, 13, y+10, value, WHITE);
-	y = C7DrawHitMissBlocks(shots, y, SHOTS_COLOR) + 20;
+	y = C7DrawHitMissBlocks(shots/perBlock, y, SHOTS_COLOR) + 20;
 
 	C7ShadowPrintAt(SmallFont, 10, y, "Shots hit:", YELLOW);
 	value.Format("%u", hits);
 	C7ShadowPrintAt(SmallFont, 13, y+10, value, WHITE);
-	y = C7DrawHitMissBlocks(hits, y, HITS_COLOR) + 20;
+	y = C7DrawHitMissBlocks(hits/perBlock, y, HITS_COLOR) + 20;
 
 	value.Format("Accuracy = %u%%", accuracy);
 	C7PrintCentered(BigFont, y, value, BLUE);
@@ -853,7 +891,14 @@ static void C7WaitForFreshAck()
 	IN_ClearKeysDown();
 }
 
-static void InterDoCorridor7()
+// After the floor's status report, a552 shows a second page in two cases. A
+// won campaign (playstate 6, which a0ab sets on leaving the last floor) gets
+// MISSION HIT/MISS RATIO over the whole mission's shooting -- every floor's
+// counts were added at the next floor's setup (216b4), and this floor's are
+// added here. A bonus floor gets BONUS LEVEL HIT/MISS RATIO over its own. The
+// finale is tested first, so a pack whose last floor is a bonus floor ends on
+// the mission page, as the original's check order would have it.
+static void InterDoCorridor7(bool finale)
 {
 	const C7StatusReport report = C7ScoreStatusReport();
 	InterGiveBonus(report.award);
@@ -862,30 +907,42 @@ static void InterDoCorridor7()
 	VW_FadeIn();
 	InterWaitForAck();
 
-	if(!report.bonusFloor)
+	if(!finale && !report.bonusFloor)
 		return;
 
 	// Each player is paid for their own shooting, so every machine in a
 	// netgame pays the same points; the page shows this screen's player.
 	unsigned int accuracy = 0;
 	int32_t award = 0;
+	uint32_t shots = 0, hits = 0;
 	for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
 	{
+		const player_t &player = players[i];
+		uint32_t playerShots = player.levelShotsFired;
+		uint32_t playerHits = player.levelShotsHit;
+		if(finale)
+		{
+			playerShots += player.c7MissionShotsFired;
+			playerHits += player.c7MissionShotsHit;
+		}
 		unsigned int playerAccuracy;
-		const int32_t playerAward = C7AccuracyAward(players[i].levelShotsFired,
-			players[i].levelShotsHit, playerAccuracy);
+		const int32_t playerAward = C7AccuracyAward(playerShots, playerHits,
+			playerAccuracy);
 		players[i].GivePoints(playerAward);
 		if(i == ConsolePlayer)
 		{
 			accuracy = playerAccuracy;
 			award = playerAward;
+			shots = playerShots;
+			hits = MIN(playerHits, playerShots);
 		}
 	}
 
+	Printf("Corridor 7 %s hit/miss: %u shots, %u hits, %u%% accuracy, %d point bonus\n",
+		finale ? "mission" : "bonus floor", shots, hits, accuracy, award);
+
 	// The original draws this page straight over the first, without a fade.
-	const player_t &viewer = players[ConsolePlayer];
-	C7DrawHitMissPage(viewer.levelShotsFired,
-		MIN(viewer.levelShotsHit, viewer.levelShotsFired), accuracy, award);
+	C7DrawHitMissPage(finale, shots, hits, accuracy, award);
 	VW_UpdateScreen();
 	C7WaitForFreshAck();
 }
@@ -961,7 +1018,7 @@ void Corridor7Death(void)
 ==================
 */
 
-void LevelCompleted (void)
+void LevelCompleted (bool finale)
 {
 	DetermineIntermissionMode();
 
@@ -1011,7 +1068,7 @@ void LevelCompleted (void)
 
 	if(IWad::CheckGameFilter("Corridor7"))
 	{
-		InterDoCorridor7();
+		InterDoCorridor7(finale);
 		return;
 	}
 
@@ -1057,29 +1114,6 @@ void Victory (bool fromIntermission)
 
 	StartCPMusic (gameinfo.VictoryMusic);
 	VWB_DrawFill(TexMan(levelInfo->GetBorderTexture()), 0, 0, screenWidth, screenHeight);
-	if(IWad::CheckGameFilter("Corridor7"))
-	{
-		int alienRatio = LevelRatios.numLevels ? LevelRatios.killratio / LevelRatios.numLevels : 100;
-		int secretRatio = LevelRatios.numLevels ? LevelRatios.secretsratio / LevelRatios.numLevels : 0;
-		Write(12, 3, "CONGRATULATIONS!");
-		Write(7, 6, "You have destroyed the vortex");
-		FString line;
-		line.Format("Total floors secured  %u", LevelRatios.numLevels);
-		Write(8, 10, line);
-		line.Format("Alien kill ratio      %d%%", alienRatio);
-		Write(8, 12, line);
-		line.Format("Secret room ratio     %d%%", secretRatio);
-		Write(8, 14, line);
-		line.Format("Total score           %d", players[ConsolePlayer].score);
-		Write(8, 16, line);
-		Write(8, 18, alienRatio >= 100 ? "Overall rating        SECURED" : "Overall rating        SURVIVOR");
-		VW_UpdateScreen();
-		VW_FadeIn();
-		IN_Ack(ACK_Any);
-		EndText(levelInfo->Cluster);
-		VW_FadeOut();
-		return;
-	}
 	if(!fromIntermission)
 		DrawPlayScreen(true);
 
@@ -1336,11 +1370,13 @@ void DrawHighScores (void)
 		const int oldpa = pa;
 		pa = MENU_NONE;
 		word titleWidth, titleHeight;
+		// Every string has the text routine's black drop shadow, which shows
+		// wherever the picture behind is light.
 		VW_MeasurePropString(font, "HIGH SCORES", titleWidth, titleHeight);
-		C7StencilPrintAt(font, 160-titleWidth/2, 20, "HIGH SCORES", 0xB7);
-		C7StencilPrintAt(font, 24, 43, "NAME", 0x24);
-		C7StencilPrintAt(font, 210, 43, "L", 0x24);
-		C7StencilPrintAt(font, 246, 43, "SCORE", 0x24);
+		C7ShadowPrintAt(font, 160-titleWidth/2, 20, "HIGH SCORES", 0xB7);
+		C7ShadowPrintAt(font, 24, 43, "NAME", 0x24);
+		C7ShadowPrintAt(font, 210, 43, "L", 0x24);
+		C7ShadowPrintAt(font, 246, 43, "SCORE", 0x24);
 		for(i = 0, s = Scores; i < MaxScores; ++i, ++s)
 		{
 			// CORR7CD.EXE draws row i at (0x3c + 0x12*i) + 2.
@@ -1348,12 +1384,12 @@ void DrawHighScores (void)
 			buffer.Format("%u.", i+1);
 			const BYTE rowColor = static_cast<BYTE>(0x57-2*i);
 			const BYTE levelColor = static_cast<BYTE>(0x6F-2*i);
-			C7StencilPrintAt(font, 6, PrintY, buffer, rowColor);
-			C7StencilPrintAt(font, 24, PrintY, s->name, rowColor);
-			C7StencilPrintAt(font, 210, PrintY, s->completed.GetChars(), levelColor);
+			C7ShadowPrintAt(font, 6, PrintY, buffer, rowColor);
+			C7ShadowPrintAt(font, 24, PrintY, s->name, rowColor);
+			C7ShadowPrintAt(font, 210, PrintY, s->completed.GetChars(), levelColor);
 			buffer.Format("%d", s->score);
 			VW_MeasurePropString(font, buffer, w, h);
-			C7StencilPrintAt(font, 300-w, PrintY, buffer, rowColor);
+			C7ShadowPrintAt(font, 300-w, PrintY, buffer, rowColor);
 		}
 		pa = oldpa;
 		VW_UpdateScreen();
@@ -1433,6 +1469,26 @@ void DrawHighScores (void)
 =======================
 */
 
+// Whether CheckHighScore would put this score in the table. A won Corridor 7
+// campaign only shows the table when it does: a2cc asks 2a49 for a rank and
+// skips the page and its wait when there is none.
+bool HighScoreWouldRank (int32_t score, const LevelInfo *levelInfo)
+{
+	if (!gameinfo.TrackHighScores || !Session::TracksHighScores())
+		return false;
+	PrepareCorridor7HighScores();
+
+	FString completed;
+	completed = levelInfo->FloorNumber;
+	for (unsigned int i = 0; i < MaxScores; i++)
+	{
+		if ((score > Scores[i].score)
+			|| ((score == Scores[i].score) && (completed.Compare(Scores[i].completed) > 0)))
+			return true;
+	}
+	return false;
+}
+
 void CheckHighScore (int32_t score, const LevelInfo *levelInfo)
 {
 	if (!gameinfo.TrackHighScores || !Session::TracksHighScores())
@@ -1481,14 +1537,43 @@ void CheckHighScore (int32_t score, const LevelInfo *levelInfo)
 		//
 		if(IWad::CheckGameFilter("Corridor7"))
 		{
-			// Type into the earned row of the picture page, in its own
-			// stretched coordinate space.
+			// The earned row as 2a7e draws it before asking for a name
+			// (241ab): a navy bar across the row in a yellow frame, the
+			// floor and score redrawn over it with the usual black shadow,
+			// and the name typed in the score's colour without one (the
+			// line-input routine draws its own text) -- at most 18
+			// characters in 262 pixels. All in the picture's mapping.
 			const int oldpa = pa;
 			pa = MENU_NONE;
-			PrintY = 62 + 18*n;
+			static const BYTE BAR = 0x30, FRAME = 0x6f;
+			const int top = 60 + 18*n;
+			C7FillRect(20, top, 280, 16, BAR);
+			C7FillRect(20, top, 281, 1, FRAME);
+			C7FillRect(20, top+16, 281, 1, FRAME);
+			C7FillRect(20, top, 1, 17, FRAME);
+			C7FillRect(300, top, 1, 17, FRAME);
+
+			const BYTE rowColor = static_cast<BYTE>(0x57-2*n);
+			const BYTE levelColor = static_cast<BYTE>(0x6F-2*n);
+			C7ShadowPrintAt(font, 210, top+2, Scores[n].completed.GetChars(), levelColor);
+			FString scoreText;
+			scoreText.Format("%d", Scores[n].score);
+			word scoreWidth, scoreHeight;
+			VW_MeasurePropString(font, scoreText, scoreWidth, scoreHeight);
+			C7ShadowPrintAt(font, 300-scoreWidth, top+2, scoreText, rowColor);
+
+			US_LineInputColor = rowColor;
+			PrintY = top + 2;
 			PrintX = 24;
-			US_LineInput (font,PrintX, PrintY, Scores[n].name, 0, true, MaxHighName, 160, BKGDCOLOR, CR_WHITE);
+			US_LineInput (font,PrintX, PrintY, Scores[n].name, 0, true, 18, 262, BAR, CR_WHITE);
+			US_LineInputColor = -1;
 			pa = oldpa;
+
+			// Both of the original's callers (a21d after a death, a31c after
+			// the campaign) leave the finished table up for IN_UserInput(420),
+			// six seconds or a keypress, before going back to the title.
+			IN_ClearKeysDown ();
+			IN_UserInput (420, ACK_Local);
 		}
 		else
 		{
@@ -1500,7 +1585,7 @@ void CheckHighScore (int32_t score, const LevelInfo *levelInfo)
 	else
 	{
 		IN_ClearKeysDown ();
-		IN_UserInput (500, ACK_Local);
+		IN_UserInput (IWad::CheckGameFilter("Corridor7") ? 420 : 500, ACK_Local);
 	}
 
 	VW_FadeOut();

@@ -715,6 +715,14 @@ bool Load(const FString &filename)
 				"player %u's loaded inventory is the baseline for this bonus run.\n", i);
 		}
 	}
+	// Nor could an older save count the mission's shooting. The ending's
+	// MISSION HIT/MISS RATIO then counts from the floor the save was made on.
+	if(IWad::CheckGameFilter("Corridor7") && !Net::Deathmatch() &&
+		GameSave::SaveVersion < 1794700000ULL)
+	{
+		Printf("Corridor 7: this save predates mission shot totals; the "
+			"ending's hit/miss page counts from this floor on.\n");
+	}
 	FRandom::StaticReadRNGState(png);
 	// Quickload stays in the play loop. Repair the missing low-rank map token
 	// in older saves here as well as at ordinary level entry.

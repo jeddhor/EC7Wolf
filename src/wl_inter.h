@@ -21,8 +21,11 @@ extern struct LRstruct
 
 void DrawHighScores(void);
 void CheckHighScore (int32_t score, const class LevelInfo *levelInfo);
+bool HighScoreWouldRank (int32_t score, const class LevelInfo *levelInfo);
 void Victory (bool fromIntermission);
-void LevelCompleted (void);
+// finale: the campaign ends with this floor. Corridor 7 then follows the
+// floor's report with the mission's hit/miss page.
+void LevelCompleted (bool finale=false);
 void Corridor7Death (void);
 // The Corridor 7 pages print through a stencil: a palette index rather than a
 // color range, so the text lands in the page's own palette. Shared with the

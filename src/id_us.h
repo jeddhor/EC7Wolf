@@ -82,6 +82,11 @@ void			US_DisplayHighScores(int which);
 extern	bool	US_UpdateCursor(void);
 bool			US_LineInput(FFont *font, int x,int y,char *buf,const char *def,bool escok,
 							int maxchars,int maxwidth, byte clearcolor, EColorRange translation=CR_UNTRANSLATED);
+// When non-negative, US_LineInput draws its text and cursor in this palette
+// index instead of through the translation, and erases only what it drew
+// rather than its whole width. Corridor 7's high-score entry is typed this
+// way. Callers set it and put it back to -1.
+extern int		US_LineInputColor;
 
 void	        USL_PrintInCenter(const char *s,Rect r);
 char 	        *USL_GiveSaveName(word game);

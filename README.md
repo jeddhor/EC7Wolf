@@ -1428,9 +1428,10 @@ reimplementation.** Enemy health, weapon costs, music routing, map dispatch, and
 campaign rules are reproduced from evidence; several movement, attack,
 pain-chance, damage, and frame-timing constants remain **evidence-based
 reconstructions** where the retail executable did not yield an unambiguous value.
-The victory *page* after the ending is the port's own rendering rather than a
-reproduction of the original's — but the **ending cinematic itself now plays**,
-from `SEQFOUR.CO7` on the CD, which this once listed as missing.
+The ending, once listed here, is now the original's: the **ending cinematic**
+from `SEQFOUR.CO7` on the CD, the last floor's report, the **MISSION HIT/MISS
+RATIO** page and the high scores. The victory page the port used to show was
+its own invention; the original has none.
 
 **Multiplayer now works, but it is not the original's multiplayer.** You can
 play over the internet against another copy of this port; you cannot play

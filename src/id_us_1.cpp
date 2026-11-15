@@ -333,6 +333,24 @@ US_RestoreWindow(WindowRec *win)
 //	USL_XORICursor() - XORs the I-bar text cursor. Used by US_LineInput()
 //
 ///////////////////////////////////////////////////////////////////////////
+int US_LineInputColor = -1;
+
+// Draws line-input text at (x,y): through the translation, or in the palette
+// colour US_LineInputColor asks for.
+static void USL_DrawLineString(FFont *font, int x, int y, const char *s, EColorRange translation)
+{
+	if(US_LineInputColor >= 0)
+	{
+		px = x;
+		py = y;
+		VWB_DrawPropString(font, s, CR_UNTRANSLATED, true, static_cast<BYTE>(US_LineInputColor));
+		return;
+	}
+	px = x;
+	py = y;
+	VWB_DrawPropString(font, s, translation);
+}
+
 static void USL_XORICursor(FFont *font, int x,int y,const char *s,word cursor,EColorRange translation)
 {
 	static	bool	status;		// VGA doesn't XOR...
@@ -343,12 +361,10 @@ static void USL_XORICursor(FFont *font, int x,int y,const char *s,word cursor,EC
 	buf[cursor] = '\0';
  	VW_MeasurePropString(font, buf,w,h);
 
-	px = x + w - 1;
-	py = y;
 	if (status^=1)
 	{
 		const char cursorString[2] = {font->GetCursor(), 0};
-		VWB_DrawPropString(font, cursorString, translation);
+		USL_DrawLineString(font, x + w - 1, y, cursorString, translation);
 	}
 }
 
@@ -639,12 +655,26 @@ bool US_LineInput(FFont *font, int x,int y,char *buf,const char *def,bool escok,
 
 		px = x;
 		py = y;
-		VWB_Clear(clearcolor, clearx, cleary, clearx+clearw, cleary+clearh);
+		if(US_LineInputColor >= 0)
+		{
+			// Erase only what the last frame drew -- the old text and the
+			// cursor -- as the original does by redrawing its text in
+			// the background colour. A full-width erase would wipe whatever
+			// shares the line, such as a high-score row's level and score.
+			word oldw, oldh;
+			VW_MeasurePropString(font, olds, oldw, oldh);
+			double ex = x-1, ey = y, ew = oldw + cursorWidth + 1, eh = font->GetHeight();
+			if(pa == MENU_NONE)
+				screen->VirtualToRealCoords(ex, ey, ew, eh, 320, 200, true, true);
+			else
+				MenuToRealCoords(ex, ey, ew, eh, MENU_CENTER);
+			VWB_Clear(clearcolor, ex, ey, ex+ew, ey+eh);
+		}
+		else
+			VWB_Clear(clearcolor, clearx, cleary, clearx+clearw, cleary+clearh);
 		strcpy(olds,s);
 
-		px = x;
-		py = y;
-		VWB_DrawPropString(font, s, translation);
+		USL_DrawLineString(font, x, y, s, translation);
 
 		if (cursormoved)
 		{
@@ -666,13 +696,26 @@ bool US_LineInput(FFont *font, int x,int y,char *buf,const char *def,bool escok,
 		VW_UpdateScreen();
 	}
 
-	if (cursorvis)
-		USL_XORICursor(font,x,y,s,cursor,translation);
-	if (!result)
+	if (US_LineInputColor >= 0)
 	{
-		px = x;
-		py = y;
-		VWB_DrawPropString(font, olds, translation);
+		// Nothing here XORs, so the cursor would stay on screen: erase the
+		// line and leave only the finished text, as the original does.
+		word oldw, oldh;
+		VW_MeasurePropString(font, olds, oldw, oldh);
+		double ex = x-1, ey = y, ew = oldw + cursorWidth + 1, eh = font->GetHeight();
+		if(pa == MENU_NONE)
+			screen->VirtualToRealCoords(ex, ey, ew, eh, 320, 200, true, true);
+		else
+			MenuToRealCoords(ex, ey, ew, eh, MENU_CENTER);
+		VWB_Clear(clearcolor, ex, ey, ex+ew, ey+eh);
+		USL_DrawLineString(font, x, y, result ? s : olds, translation);
+	}
+	else
+	{
+		if (cursorvis)
+			USL_XORICursor(font,x,y,s,cursor,translation);
+		if (!result)
+			USL_DrawLineString(font, x, y, olds, translation);
 	}
 	VW_UpdateScreen();
 

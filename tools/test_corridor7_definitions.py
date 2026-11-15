@@ -497,8 +497,24 @@ require(r'CA_CacheScreen\(TexMan\("C7G0014"\)\).*?SECURED.*?"%3d%%",\s*report\.a
 # accuracy award (a552) are separate, and only a bonus floor has the second.
 require(r'report\.efficiency\s*=\s*\(report\.aliens\s*\+\s*report\.restricted\)/2;\s*\}\s*report\.award\s*=\s*report\.efficiency\*100;',
         WL_INTER, "the status report pays its efficiency rating times one hundred")
-require(r'InterGiveBonus\(report\.award\).*?if\(!report\.bonusFloor\)\s*return;.*?C7AccuracyAward.*?GivePoints\(playerAward\).*?C7DrawHitMissPage',
-        WL_INTER, "only a bonus floor adds the hit/miss page and its accuracy award")
+require(r'InterGiveBonus\(report\.award\).*?if\(!finale\s*&&\s*!report\.bonusFloor\)\s*return;.*?C7AccuracyAward.*?GivePoints\(playerAward\).*?C7DrawHitMissPage',
+        WL_INTER, "only a bonus floor or the campaign's end adds the hit/miss page and its accuracy award")
+# The campaign's end (a2cc -> a335 with playstate 6): the mission page over
+# every floor's shooting, a block per hundred shots, and no victory page.
+require(r'if\(finale\)\s*\{\s*playerShots\s*\+=\s*player\.c7MissionShotsFired;\s*playerHits\s*\+=\s*player\.c7MissionShotsHit;',
+        WL_INTER, "the mission page adds the last floor to the mission's totals")
+require(r'perBlock\s*=\s*mission\s*\?\s*100\s*:\s*1.*?"MISSION HIT/MISS RATIO"\s*:\s*"BONUS LEVEL HIT/MISS RATIO"',
+        WL_INTER, "the mission page draws a block per hundred shots under its own title")
+require(r'c7MissionShotsFired\s*\+=\s*players\[i\]\.levelShotsFired;\s*players\[i\]\.c7MissionShotsHit\s*\+=\s*players\[i\]\.levelShotsHit;\s*players\[i\]\.levelShotsFired\s*=\s*players\[i\]\.levelShotsHit\s*=\s*0;',
+        WL_GAME, "each floor's shots join the mission's totals at the next floor's setup (216b4)")
+require(r'state\s*==\s*PST_ENTER.*?c7MissionShotsFired\s*=\s*c7MissionShotsHit\s*=\s*0;',
+        WL_AGENT, "a new game clears the mission's totals (6cfd)")
+require(r'SaveVersion\s*>=\s*1794700000ULL\)\s*arc\s*<<\s*c7MissionShotsFired\s*<<\s*c7MissionShotsHit;',
+        WL_AGENT, "the mission's totals travel in saves")
+require(r'if\(c7\s*\|\|\s*levelInfo->ForceTally\)\s*\{\s*LevelCompleted\(c7\);.*?if\(!c7\)\s*Victory\s*\(false\);.*?HighScoreWouldRank',
+        WL_GAME, "Corridor 7 ends on the report and mission page, no victory page, high scores only if ranked")
+require(r'C7DirectionHeld\(\)\)\s*\{\s*VW_UpdateScreen\(\);.*?<\s*50\s*&&\s*C7DirectionHeld\(\)',
+        WL_INTER, "a held direction paces the tally a block per 50 tics, as TicDelay(50) does")
 require(r'"BONUS LEVEL HIT/MISS RATIO".*?"Shots fired:".*?"Shots hit:".*?"Accuracy = %u%%".*?"Bonus = %d points".*?"Score = %d points"',
         WL_INTER, "the hit/miss page carries the released wording")
 require(r'case\s+ex_died:.*?CheckGameFilter\("Corridor7"\).*?Corridor7Death.*?CheckHighScore.*?return\s+false',
@@ -517,15 +533,17 @@ require(r'DrawHighScores.*?CheckGameFilter\("Corridor7"\).*?C7G0016.*?HIGH SCORE
         WL_INTER, "Corridor 7 high scores use the original portrait page")
 require(r'PrepareCorridor7HighScores.*?id software-.*?Capstone 94.*?Les.*?Joe.*?Jeff.*?Ruben.*?Carlos.*?David',
         WL_INTER, "fresh Corridor 7 high scores use the original Capstone names")
-require(r'C7StencilPrintAt.*?HIGH SCORES.*?0xB7.*?NAME.*?0x24.*?0x57-2\*i.*?0x6F-2\*i',
-        WL_INTER, "high scores use the executable's exact VGA text colors")
-require(r'PrintY\s*=\s*62\s*\+\s*18\*i.*?PrintY\s*=\s*62\s*\+\s*18\*n',
+require(r'C7ShadowPrintAt.*?HIGH SCORES.*?0xB7.*?NAME.*?0x24.*?0x57-2\*i.*?0x6F-2\*i',
+        WL_INTER, "high scores use the executable's exact VGA text colors and black shadow")
+require(r'PrintY\s*=\s*62\s*\+\s*18\*i.*?top\s*=\s*60\s*\+\s*18\*n.*?PrintY\s*=\s*top\s*\+\s*2',
         WL_INTER, "high-score rows and name entry use the executable's unclipped coordinates")
+require(r'BAR\s*=\s*0x30,\s*FRAME\s*=\s*0x6f.*?C7FillRect\(20,\s*top,\s*280,\s*16,\s*BAR\).*?US_LineInputColor\s*=\s*rowColor;.*?US_LineInput\s*\(font,PrintX,\s*PrintY,\s*Scores\[n\]\.name,\s*0,\s*true,\s*18,\s*262,\s*BAR',
+        WL_INTER, "the earned high-score row is the original's framed navy bar, typed in the row's colour (241ab)")
 require(r'struct\s+FCorridor7PaletteLump.*?BYTE\s+Palette\[768\].*?'
         r'FCorridor7PaletteLump\(const\s+BYTE\s*\*palette\).*?memcpy\(Cache,\s*Palette,\s*LumpSize\).*?'
         r'new\s+FCorridor7PaletteLump\(palette\)',
         VSWAP, "C7PAL reloads use captured data instead of reopening CORR7CD.EXE")
-require(r'CONGRATULATIONS!.*?destroyed the vortex.*?Total floors secured', WL_INTER, "Corridor 7 victory presentation")
+forbid(r'CONGRATULATIONS!', WL_INTER, "no invented victory page: the original's 18af9 is never called")
 require(r'IWad::CheckGameFilter\("Corridor7"\).*?HIGH SCORES', WL_INTER, "Corridor 7 high scores avoid Wolf-only art")
 require(r'LevelBonus\s*==\s*-1.*?ForceTally.*?!\(IWad::CheckGameFilter\("Corridor7"\)\s*&&\s*levelInfo->BonusLevel\)', WL_INTER, "bonus floors stay out of forty-floor victory averages")
 require(r'LatchString\(10,\s*16,\s*2.*?LatchNumber\(30,\s*16,\s*7.*?LatchNumber\(296,\s*16,\s*2', WOLF_SBAR, "released HUD number placement")

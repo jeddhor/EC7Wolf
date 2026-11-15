@@ -926,7 +926,8 @@ void APlayerPawn::Cmd_Use()
 =============================================================================
 */
 
-player_t::player_t() : levelShotsFired(0), levelShotsHit(0), c7MuzzleFlashTics(0),
+player_t::player_t() : levelShotsFired(0), levelShotsHit(0),
+	c7MissionShotsFired(0), c7MissionShotsHit(0), c7MuzzleFlashTics(0),
 	c7ApparitionTics(0),
 	c7ChamberX(-1), c7ChamberY(-1), c7ChamberPower(100), c7ChamberTics(0),
 	c7ChamberState(0), c7ClearanceNotified(false), c7FloorSecuredNotified(false),
@@ -1218,6 +1219,10 @@ void player_t::Reborn()
 		// A new game or a warp starts a new pawn; nothing it carried into a
 		// bonus floor is owed back to it.
 		C7ClearBonusEntry(*this);
+		// Nor is any shooting counted toward its mission: NewGame (6cfd)
+		// clears the whole block the totals live in.
+		levelShotsFired = levelShotsHit = 0;
+		c7MissionShotsFired = c7MissionShotsHit = 0;
 	}
 
 	mo->GiveStartingInventory();
@@ -1273,6 +1278,13 @@ void player_t::Serialize(FArchive &arc)
 		arc << levelShotsFired << levelShotsHit;
 	else
 		levelShotsFired = levelShotsHit = 0;
+
+	// The mission's totals. A save from before they existed restarts the
+	// count from the floor it was made on, and says so on load.
+	if(GameSave::SaveVersion >= 1794700000ULL)
+		arc << c7MissionShotsFired << c7MissionShotsHit;
+	else
+		c7MissionShotsFired = c7MissionShotsHit = 0;
 
 	if(GameSave::SaveVersion >= 1784246700ULL)
 		arc << c7MuzzleFlashTics << c7ChamberX << c7ChamberY

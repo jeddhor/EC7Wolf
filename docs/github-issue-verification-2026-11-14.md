@@ -70,8 +70,8 @@ pixels lower in white (0x27); a 3x3 block per shot from x=90, four pixels apart,
 53 to a row, salmon (0x57) and magenta (0xb7); then the accuracy and bonus in
 blue (0x3f) and the score in yellow, centered, twenty pixels apart. The award
 (a73c) is `floor(hits*100/shots) * (floor(shots/100)+1) * 10`, nothing for no
-shots. Every string has a black drop shadow one pixel down and right (the text
-routine's DS:8b68 color). With the DOS run's 113 shots and 66 hits the port's
+shots. Every string has a black drop shadow one pixel down and right (always
+black: the high-score table later showed it is not DS:8b68's color). With the DOS run's 113 shots and 66 hits the port's
 page matches the DOS capture glyph for glyph, block for block, and the status
 report's values likewise; the remaining differences are scaler noise in the
 background art. The original draws the second page without a fade, and the
@@ -91,10 +91,10 @@ and 1100/0 (score gone) confirm the thresholds. The overflow is read from the
 code, not from a DOS run at those counts. It is recorded as an original
 oddity, not a deviation, in `corridor7.md`.
 
-Not done: the original shows the same page as **MISSION HIT/MISS RATIO** after
-the final floor, over campaign totals with a block per hundred shots (a559).
-That needs campaign-wide shot counts and belongs with the unreproduced victory
-page; it is listed under known deviations in `corridor7.md`.
+Not done in this change: the original shows the same page as **MISSION HIT/MISS
+RATIO** after the final floor, over campaign totals with a block per hundred
+shots (a559). That was done next, with the rest of the ending; see
+`corridor7-ending-verification-2026-11-14.md`.
 
 ## #24 — The Intruder Alert
 

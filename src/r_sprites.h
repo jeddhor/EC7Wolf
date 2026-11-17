@@ -59,8 +59,8 @@ void R_LoadSprite(const FString &name);
 // the GL backend shades it. Returns false when the actor must not be drawn (no
 // sprite, no frame, null texture, or visor-gated out this instant).
 //
-// CalcRotate() reads actor->viewx, so the caller must run TransformActor() on the
-// actor (to populate viewx) before calling this.
+// CalcRotate() reads actor->transx/transy, so the caller must run
+// TransformActor() on the actor (to populate them) before calling this.
 struct SpriteRenderInfo
 {
 	FTexture *tex;			// selected rotation frame texture (never NULL on true)

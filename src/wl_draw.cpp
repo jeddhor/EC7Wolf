@@ -1,5 +1,6 @@
 // WL_DRAW.C
 
+#include <cmath>
 #include "wl_def.h"
 #include "g_session.h"
 #include "g_command.h"
@@ -683,10 +684,21 @@ unsigned int CalcRotate (AActor *ob)
 {
 	angle_t angle, viewangle;
 
-	// this isn't exactly correct, as it should vary by a trig value,
-	// but it is close enough with only eight rotations
-
-	viewangle = players[ConsolePlayer].camera->angle + (centerx - ob->viewx)/8;
+	// Which way the actor faces relative to the line from the eye to it, not
+	// to the way the player is looking. Wolf3D approximated that line by
+	// adding (centerx - viewx)/8 to the view angle: pixels over eight, read
+	// as degrees, since its angles ran 0..359. Carried over unchanged to
+	// ECWolf's 32-bit angles the same term is a few hundred units out of four
+	// billion -- no correction at all -- so an actor off to one side showed
+	// the frame for the view direction. On a wide screen the edges are far
+	// enough off it to cross a 22.5-degree boundary, and an Animated Probe
+	// flying straight at the player showed a diagonal (GitHub #28). The
+	// bearing comes from the coordinates TransformActor has already worked
+	// out: transy across the view, transx along it, with
+	// viewx = centerx + transy*scale/transx.
+	const double bearing = atan2(-(double)ob->transy, (double)MAX<fixed>(ob->transx, 1));
+	viewangle = players[ConsolePlayer].camera->angle +
+		(angle_t)(int32_t)(bearing * (double)ANGLE_180 / M_PI);
 
 	angle = viewangle - ob->angle;
 

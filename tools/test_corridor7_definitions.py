@@ -703,13 +703,19 @@ require(r"actor\s+C7Semaj\s*:.*?A_MeleeAttack", MONSTERS, "Semaj melee-only atta
 # that the port gave projectiles to are hitscan in the released tables.
 forbid(r'A_WolfAttack\([^)]*,\s*1\.0,\s*\d+', MONSTERS, "estimated alien damage caps")
 forbid(r'C7BossEnergyBolt', MONSTERS, "Solrac energy projectile (the released Solrac is hitscan)")
-require(r'actor\s+C7Solrac\s*:.*?Missile:.*?C642.*?(?:C64[34]\s+A\s+5\s+bright\s+A_WolfAttack\(0,\s*"[^"]*",\s*0\.667\)\s*){6}',
-        MONSTERS, "Solrac fires six hitscan rounds a volley")
+solrac = re.search(r'actor\s+C7Solrac\s*:.*?Missile:(.*?)goto', MONSTERS, re.DOTALL)
+if solrac is None or solrac.group(1).count('A_WolfAttack(0, ') != 6:
+    raise SystemExit("Corridor 7 definition check failed: Solrac fires six hitscan rounds a volley")
+# GitHub #29: a released action runs as its frame ends -- in ECWolf, at the
+# start of the next frame -- so no attack sequence may open with a shot.
+forbid(r'(?:Missile|NaturalAttack|EniramAttack|TymokAttack|SolracAttack|FinalAttack):\s*'
+       r'(?://[^\n]*\s*)*\w{4}\s+A\s+[\d.]+\s+(?:bright\s+)?A_(?:WolfAttack|CustomMissile)',
+       MONSTERS, "an alien shot on the first frame of its attack")
 require(r'actor\s+C7Nerraw.*?(?:C580\s+A\s+1\s+bright\s+A_WolfAttack[^\n]*\s*){5}', MONSTERS,
         "Nerraw shoots on each of five frames (T_Shoot is its think)")
 require(r'actor\s+C7Semaj.*?(?:C566\s+A\s+1\s+A_MeleeAttack\(random\(0,\s*15\),\s*1\.0\)\s*){5}', MONSTERS,
         "Semaj bites on each of five frames")
-require(r'actor\s+C7Ttocs.*?C392\s+A\s+3\s+A_WolfAttack.*?A_Jump\(37,\s*"SecondShot"\).*?SecondShot:.*?A_WolfAttack',
+require(r'actor\s+C7Ttocs.*?C392\s+A\s+3\s+A_FaceTarget\s+C393\s+A\s+10\s+bright\s+A_WolfAttack.*?A_Jump\(37,\s*"SecondShot"\).*?SecondShot:.*?A_WolfAttack',
         MONSTERS, "Ttocs shoots on its first frame with a 1-in-7 second shot")
 require(r'actor\s+C7BossPlasmaBolt.*?random\[MissileDamage\]\(30,\s*61\)', MONSTERS,
         "alien plasma bolt does rnd/8 + 30")
@@ -720,12 +726,12 @@ require(r'actor\s+C7EniramBoss\s*:.*?Spawn:\s*C653.*?Missile:.*?C657.*?C658.*?A_
         MONSTERS, "golden-horned Eniram Boss uses C653-C664 and never uses cloak frames")
 require(r'actor\s+C7Rodex\s*:.*?Missile:.*?C233.*?C236.*?Pain:.*?C225.*?C226',
         MONSTERS, "Rodex attack no longer reuses its hurt frames")
-require(r'actor\s+C7Solrac.*?attacksound\s+"c7/monster/attack/class20".*?C643\s+A\s+5\s+bright\s+A_WolfAttack\(0,\s*"\*"',
+require(r'actor\s+C7Solrac.*?attacksound\s+"c7/monster/attack/class20".*?C644\s+A\s+5\s+bright\s+A_WolfAttack\(0,\s*"\*"',
         MONSTERS, "Solrac plays its released class-20 attack sound on its first round")
 require(r'actor\s+C7Tymok.*?activesound\s+"c7/monster/active/class25".*?'
         r'attacksound\s+"c7/monster/attack/class25".*?'
         r'A_PlaySound\("c7/weapon/plasma"\).*?A_CustomMissile\("C7BossPlasmaBolt"\).*?'
-        r'C732\s+A\s+5\s+bright\s+A_WolfAttack\(0,\s*"\*"', MONSTERS,
+        r'C733\s+A\s+5\s+bright\s+A_WolfAttack\(0,\s*"\*"', MONSTERS,
         "the purple boss preserves its controlled-trace active and two attack sounds")
 require(r'^\s*\{196,\s*C7EniramBoss,.*?actor\s+C7EniramBoss.*?'
 		r'activesound\s+"c7/monster/active/class21".*?C653.*?C664',
@@ -934,7 +940,8 @@ require(r'actor\s+C7Tebazile.*?TransformEniram:.*?C822.*?C827.*?'
 		r'TransformFinal:.*?C840.*?C845.*?Death:.*?C846.*?C857',
 		MONSTERS, "Tebazile plays all native transformation and final-death frames")
 require(r'actor\s+C7Mechanoid.*?C690.*?A_PlaySound.*?C692.*?A_PlaySound.*?'
-		r'Missile:.*?C694.*?C696.*?A_WolfAttack.*?C697.*?C696.*?A_WolfAttack',
+		r'Missile:.*?C694.*?C695\s+A\s+5\s+A_WolfAttack.*?C697\s+A\s+5\s+A_WolfAttack.*?'
+		r'C695\s+A\s+5\s+A_WolfAttack.*?C696\s+A\s+0\s+A_WolfAttack',
 		MONSTERS, "Mechanoid has booming steps and its four-round volley")
 
 print("Corridor 7 definition checks passed")

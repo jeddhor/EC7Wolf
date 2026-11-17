@@ -236,6 +236,11 @@ charge refills by two per frame, not per tic. Before, the guns did four times
 the original's damage and the aliens about a fifth of it. Evidence and
 measurements are in
 [github-issue-verification-2026-11-15.md](github-issue-verification-2026-11-15.md).
+A released state's action runs as its frame ends, so each shot lands as the
+following frame appears, never on the tic an alien decides to attack; and an
+alien's rotation frame follows the line from the eye to it, not the view
+direction, at any aspect ratio. See
+[github-issue-verification-2026-11-16.md](github-issue-verification-2026-11-16.md).
 
 ### The Intruder Alert
 

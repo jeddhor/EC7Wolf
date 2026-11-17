@@ -458,7 +458,7 @@ namespace
 			char sprite[5] = "----";
 			if(iter->state)
 				memcpy(sprite, iter->state->sprite, 4);
-			fprintf(g_actorFile, "%lu %s %d %d %d %d %d %d %s %c %d\n",
+			fprintf(g_actorFile, "%lu %s %d %d %d %d %d %d %s %c %d",
 				(unsigned long)g_ticCount,
 				iter->GetClass()->GetName().GetChars(),
 				iter->tilex, iter->tiley,
@@ -468,6 +468,11 @@ namespace
 				iter->health, sprite,
 				iter->state ? 'A'+iter->state->frame : '-',
 				iter->state ? iter->state->duration : 0);
+			// With the player rows, also the facing angle in degrees: the
+			// sprite rotation is drawn from it, and it need not match dir.
+			if(g_tracePlayer)
+				fprintf(g_actorFile, " %.1f", iter->angle * (360.0 / 4294967296.0));
+			fputc('\n', g_actorFile);
 		}
 		if(g_tracePlayer && players[ConsolePlayer].mo != NULL)
 		{

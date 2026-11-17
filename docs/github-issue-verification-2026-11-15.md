@@ -116,7 +116,8 @@ for rnd + 25 (25-280), halved per tile of Manhattan distance across a 5x5 area
   Taser goes through it as weapon 0; the M-343 and assault cannon fire on
   their first three frames; the dual blaster on its last two.
 - Every alien `Missile` sequence follows its released state chain frame for
-  frame: `A_WolfAttack`'s defaults (which are `T_Shoot`'s numbers), snipe 0.667
+  frame (beta302 put each shot one frame early; corrected for #29, see
+  [github-issue-verification-2026-11-16.md](github-issue-verification-2026-11-16.md)): `A_WolfAttack`'s defaults (which are `T_Shoot`'s numbers), snipe 0.667
   for classes 8 and up, a shot wherever 18455 or `T_Shoot` sits, five one-tic
   shots or bites for the per-frame shooters (two tics a frame, the
   period-correct rate the palette ramps already use), and Ttocs's 1-in-7

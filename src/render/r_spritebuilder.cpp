@@ -38,7 +38,7 @@
 
 // Provided by wl_draw.cpp; not exposed in a header. TransformActor populates
 // actor->viewx / viewheight / transx / transy from the current view globals, and
-// CalcRotate reads actor->viewx to choose the eight-way rotation frame.
+// CalcRotate reads actor->transx/transy to choose the eight-way rotation frame.
 void TransformActor(AActor *ob);
 unsigned int CalcRotate(AActor *ob);
 

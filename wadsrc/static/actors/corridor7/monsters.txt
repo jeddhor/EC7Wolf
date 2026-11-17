@@ -50,10 +50,11 @@ actor C7OrganicEye : C7Monster
 			AILO BCD 6 NOP A_Chase
 			loop
 		Missile:
-			// 2baca: 121, 122 (T_Shoot), 123, twenty tics each.
+			// 2baca: 121, 122 (T_Shoot), 123, twenty tics each. A released action
+			// runs as its frame ends, which in ECWolf is the start of the next one.
 			C121 A 10 A_C7AlienAlarm
-			C122 A 10 bright A_WolfAttack(0, "*")
-			C123 A 10 bright
+			C122 A 10 bright
+			C123 A 10 bright A_WolfAttack(0, "*")
 			goto See
 		Pain:
 			C115 A 5
@@ -101,8 +102,8 @@ actor C7ProbeEye : C7Monster
 			loop
 		Missile:
 			C286 A 3 A_FaceTarget
-			C287 A 10 bright A_WolfAttack(0, "*")
-			C288 A 5
+			C287 A 10 bright
+			C288 A 5 A_WolfAttack(0, "*")
 			goto See
 		Pain:
 			C283 A 5
@@ -166,14 +167,14 @@ actor C7Bandor : C7Monster
 			loop
 		Missile:
 			C182 A 10 A_FaceTarget
-			C183 A 10 bright A_WolfAttack(0, "*", 0.667)
-			C184 A 5
-			C183 A 5 bright A_WolfAttack(0, "*", 0.667)
-			C184 A 5
-			C183 A 5 bright A_WolfAttack(0, "*", 0.667)
-			C184 A 5
-			C183 A 5 bright A_WolfAttack(0, "*", 0.667)
-			C184 A 5
+			C183 A 10 bright
+			C184 A 5 A_WolfAttack(0, "*", 0.667)
+			C183 A 5 bright
+			C184 A 5 A_WolfAttack(0, "*", 0.667)
+			C183 A 5 bright
+			C184 A 5 A_WolfAttack(0, "*", 0.667)
+			C183 A 5 bright
+			C184 A 5 A_WolfAttack(0, "*", 0.667)
 			goto See
 		Pain:
 			C176 A 2.5
@@ -207,10 +208,11 @@ actor C7Tenaj : C7Monster
 			OTRB BCD 5 NOP A_Chase("*", "*", CHF_BACKOFF|CHF_NOPLAYACTIVE)
 			loop
 		Missile:
-			// 2bf44: 340 sounds and shoots (18455), 341 shoots again.
-			C340 A 3 A_WolfAttack(0, "*")
-			C341 A 10 bright A_WolfAttack(0, "")
-			C342 A 5
+			// 2bf44: 340 sounds and shoots (18455), 341 shoots again; each as its
+			// frame ends.
+			C340 A 3 A_FaceTarget
+			C341 A 10 bright A_WolfAttack(0, "*")
+			C342 A 5 A_WolfAttack(0, "")
 			C343 A 10
 			goto See
 		Pain: C338 A 5 goto See
@@ -335,11 +337,13 @@ actor C7Rodex : C7Monster
 			RODX BCD 5 NOP A_Chase("*", "*", CHF_BACKOFF|CHF_NOPLAYACTIVE)
 			loop
 		Missile:
-			// 2c424: 233 sounds and shoots (18455), 235 shoots again.
-			C233 A 3 A_WolfAttack(0, "*")
-			C234 A 10
-			C235 A 5 bright A_WolfAttack(0, "")
-			C236 A 10
+			// 2c424: 233 sounds and shoots (18455), 235 shoots again; each as its
+			// frame ends. Firing on entry instead made a Rodex shoot the tic it
+			// decided to, before any attack frame was drawn (GitHub #29).
+			C233 A 3 A_FaceTarget
+			C234 A 10 A_WolfAttack(0, "*")
+			C235 A 5 bright
+			C236 A 10 A_WolfAttack(0, "")
 			goto See
 		Pain:
 			C225 A 3
@@ -377,18 +381,17 @@ actor C7Ttocs : C7Monster
 			TTCS ABCD 5 NOP A_Chase
 			loop
 		Missile:
-			// 2c1b4: 392 sounds and shoots (18455). 394 runs 18346, which for
-			// this class alone is a 1-in-7 (rnd % 7 == 0, 37 of 256) second
-			// shot announced by sample 55.
-			C392 A 3 A_WolfAttack(0, "*")
-			C393 A 10 bright
-			C394 A 0 A_Jump(37, "SecondShot")
+			// 2c1b4: 392 sounds and shoots (18455) as it ends. 394 runs 18346
+			// as it ends, which for this class alone is a 1-in-7 (rnd % 7 == 0,
+			// 37 of 256) second shot announced by sample 55.
+			C392 A 3 A_FaceTarget
+			C393 A 10 bright A_WolfAttack(0, "*")
 			C394 A 5
+			C395 A 0 A_Jump(37, "SecondShot")
 			C395 A 10
 			goto See
 		SecondShot:
-			C394 A 5 A_WolfAttack(0, "c7/monster/active/class6")
-			C395 A 10
+			C395 A 10 A_WolfAttack(0, "c7/monster/active/class6")
 			goto See
 		Pain:
 			C396 A 5
@@ -426,11 +429,12 @@ actor C7Eniram : C7Monster
 			C668 A 5 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
 			loop
 		Missile:
-			C669 A 0 A_PlaySound("c7/monster/cloak/materialize")
+			// 2d29a: the materialize (174d2) and firing (174f2) samples are
+			// the actions of 669 and 672, so they play as those frames end.
 			C669 A 5 A_FaceTarget
+			C670 A 0 A_PlaySound("c7/monster/cloak/materialize")
 			C670 A 5
 			C671 A 5
-			C672 A 0 A_PlaySound("c7/monster/cloak/fire")
 			// T_Shoot is this frame's think, not its action, so the original
 			// shoots on every frame it is drawn for its ten tics: five times
 			// at the period-correct two tics a frame.
@@ -439,7 +443,7 @@ actor C7Eniram : C7Monster
 			C672 A 1 bright A_WolfAttack(0, "", 0.667)
 			C672 A 1 bright A_WolfAttack(0, "", 0.667)
 			C672 A 1 bright A_WolfAttack(0, "", 0.667)
-			C673 A 5
+			C673 A 5 A_PlaySound("c7/monster/cloak/fire")
 			C674 A 5
 			C675 A 5
 			goto See
@@ -480,11 +484,12 @@ actor C7Otrebor : C7Monster
 			C429 A 4 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
 			loop
 		Missile:
-			// 2ca22: 445 sounds and shoots (18455), 447 shoots again.
-			C445 A 10 A_WolfAttack(0, "*", 0.667)
-			C446 A 3
-			C447 A 10 bright A_WolfAttack(0, "", 0.667)
-			C448 A 3
+			// 2ca22: 445 sounds and shoots (18455), 447 shoots again; each as its
+			// frame ends.
+			C445 A 10 A_FaceTarget
+			C446 A 3 A_WolfAttack(0, "*", 0.667)
+			C447 A 10 bright
+			C448 A 3 A_WolfAttack(0, "", 0.667)
 			goto See
 		Pain: C449 A 5 goto See
 		Death:
@@ -570,8 +575,8 @@ actor C7Eitak : C7Monster
 		Missile:
 			C634 A 3 A_FaceTarget
 			C635 A 10
-			C636 A 5 bright A_WolfAttack(0, "*", 0.667)
-			C637 A 10
+			C636 A 5 bright
+			C637 A 10 A_WolfAttack(0, "*", 0.667)
 			goto See
 		Pain: C630 A 5 goto See
 		Death:
@@ -655,16 +660,16 @@ actor C7Solrac : C7Monster
 			C641 A 4 NOP A_Chase("*", "*", CHF_BACKOFF|CHF_NOPLAYACTIVE)
 			loop
 		Missile:
-			// 2d00e: six hitscan rounds, not projectiles. 643 sounds and
-			// shoots (18455), the five frames after it shoot.
+			// 2d00e: six hitscan rounds, not projectiles. 643 sounds and shoots
+			// (18455) and the five frames after it shoot, each as its frame ends.
 			C642 A 15 A_FaceTarget
-			C643 A 5 bright A_WolfAttack(0, "*", 0.667)
-			C644 A 5 bright A_WolfAttack(0, "", 0.667)
+			C643 A 5 bright
+			C644 A 5 bright A_WolfAttack(0, "*", 0.667)
 			C643 A 5 bright A_WolfAttack(0, "", 0.667)
 			C644 A 5 bright A_WolfAttack(0, "", 0.667)
 			C643 A 5 bright A_WolfAttack(0, "", 0.667)
 			C644 A 5 bright A_WolfAttack(0, "", 0.667)
-			C642 A 5
+			C642 A 5 A_WolfAttack(0, "", 0.667)
 			goto See
 		Pain:
 			C645 A 5
@@ -704,9 +709,11 @@ actor C7EniramBoss : C7Monster
 			C656 A 4 NOP A_Chase("*", "*", CHF_NOPLAYACTIVE)
 			loop
 		Missile:
+			// 2d18a: the bolt (17512) is 658's action, launched as it ends.
 			C657 A 15 A_FaceTarget
-			C657 A 0 A_PlaySound("c7/weapon/plasma")
-			C658 A 5 bright A_CustomMissile("C7BossPlasmaBolt")
+			C658 A 5 bright
+			C658 A 0 A_PlaySound("c7/weapon/plasma")
+			C658 A 0 A_CustomMissile("C7BossPlasmaBolt")
 			goto See
 		Death:
 			C659 A 0 A_Fall
@@ -744,14 +751,15 @@ actor C7Tymok : C7Monster
 			C729 A 4 NOP A_Chase("*", "*", CHF_ALWAYSDODGE|CHF_BACKOFF|CHF_NOPLAYACTIVE)
 			loop
 		Missile:
+			// 2d5aa: 731 launches the bolt, 732 plays sample 24 and shoots (18455),
+			// 733 and 732 shoot; each as its frame ends.
 			C730 A 15 A_FaceTarget
-			C731 A 0 A_PlaySound("c7/weapon/plasma")
-			C731 A 5 bright A_CustomMissile("C7BossPlasmaBolt")
-			// 2d5ce: 732 plays sample 24 and shoots (18455); two more follow.
-			C732 A 5 bright A_WolfAttack(0, "*", 0.667)
-			C733 A 5 bright A_WolfAttack(0, "", 0.667)
+			C731 A 5 bright
+			C732 A 0 A_PlaySound("c7/weapon/plasma")
+			C732 A 5 bright A_CustomMissile("C7BossPlasmaBolt")
+			C733 A 5 bright A_WolfAttack(0, "*", 0.667)
 			C732 A 5 bright A_WolfAttack(0, "", 0.667)
-			C733 A 5
+			C733 A 5 A_WolfAttack(0, "", 0.667)
 			goto See
 		Death:
 			C734 A 0 A_Fall
@@ -792,13 +800,14 @@ actor C7Mechanoid : C7Monster
 			loop
 		Missile:
 			// 2d44e: 694 and 697 sound and shoot (18455), 696 shoots: four
-			// ordinary T_Shoot rounds a volley.
-			C694 A 5 A_WolfAttack(0, "*", 0.667)
-			C695 A 5
-			C696 A 5 bright A_WolfAttack(0, "", 0.667)
-			C697 A 5 A_WolfAttack(0, "*", 0.667)
-			C695 A 5
-			C696 A 5 bright A_WolfAttack(0, "", 0.667)
+			// ordinary T_Shoot rounds a volley, each as its frame ends.
+			C694 A 5 A_FaceTarget
+			C695 A 5 A_WolfAttack(0, "*", 0.667)
+			C696 A 5 bright
+			C697 A 5 A_WolfAttack(0, "", 0.667)
+			C695 A 5 A_WolfAttack(0, "*", 0.667)
+			C696 A 5 bright
+			C696 A 0 A_WolfAttack(0, "", 0.667)
 			goto See
 		Death:
 			C698 A 0 A_Fall
@@ -838,13 +847,13 @@ actor C7Tebazile : C7Monster
 			loop
 		NaturalAttack:
 			C814 A 15 A_FaceTarget
-			C815 A 5 bright A_WolfAttack(0, "*", 0.667)
-			C816 A 5 bright A_WolfAttack(0, "", 0.667)
+			C815 A 5 bright
+			C816 A 5 bright A_WolfAttack(0, "*", 0.667)
 			C815 A 5 bright A_WolfAttack(0, "", 0.667)
 			C816 A 5 bright A_WolfAttack(0, "", 0.667)
 			C815 A 5 bright A_WolfAttack(0, "", 0.667)
 			C816 A 5 bright A_WolfAttack(0, "", 0.667)
-			C814 A 5
+			C814 A 5 A_WolfAttack(0, "", 0.667)
 			goto See
 		TransformEniram:
 			C822 A 9
@@ -864,10 +873,11 @@ actor C7Tebazile : C7Monster
 			C656 A 4 NOP A_Chase("*", "EniramAttack", CHF_BACKOFF|CHF_NOPLAYACTIVE)
 			loop
 		EniramAttack:
-			// 2db3c: Tebazile's Eniram form shoots (18455); only the real
-			// Eniram Boss fires the plasma projectile.
+			// 2db3c: Tebazile's Eniram form shoots (18455) as 658 ends; only the
+			// real Eniram Boss fires the plasma projectile.
 			C657 A 15 A_FaceTarget
-			C658 A 5 bright A_WolfAttack(0, "*", 0.667)
+			C658 A 5 bright
+			C658 A 0 A_WolfAttack(0, "*", 0.667)
 			goto PhaseEniram
 		TransformTymok:
 			C828 A 9
@@ -890,10 +900,10 @@ actor C7Tebazile : C7Monster
 			// 2dc38: Tymok's sequence without its plasma projectile.
 			C730 A 15 A_FaceTarget
 			C731 A 5
-			C732 A 5 bright A_WolfAttack(0, "*", 0.667)
-			C733 A 5 bright A_WolfAttack(0, "", 0.667)
+			C732 A 5 bright
+			C733 A 5 bright A_WolfAttack(0, "*", 0.667)
 			C732 A 5 bright A_WolfAttack(0, "", 0.667)
-			C733 A 5
+			C733 A 5 A_WolfAttack(0, "", 0.667)
 			goto PhaseTymok
 		TransformSolrac:
 			C834 A 9
@@ -915,13 +925,13 @@ actor C7Tebazile : C7Monster
 		SolracAttack:
 			// 2dd7c: as Solrac's own, six hitscan rounds.
 			C642 A 15 A_FaceTarget
-			C643 A 5 bright A_WolfAttack(0, "*", 0.667)
-			C644 A 5 bright A_WolfAttack(0, "", 0.667)
+			C643 A 5 bright
+			C644 A 5 bright A_WolfAttack(0, "*", 0.667)
 			C643 A 5 bright A_WolfAttack(0, "", 0.667)
 			C644 A 5 bright A_WolfAttack(0, "", 0.667)
 			C643 A 5 bright A_WolfAttack(0, "", 0.667)
 			C644 A 5 bright A_WolfAttack(0, "", 0.667)
-			C642 A 5
+			C642 A 5 A_WolfAttack(0, "", 0.667)
 			goto PhaseSolrac
 		TransformFinal:
 			C840 A 9
@@ -942,13 +952,13 @@ actor C7Tebazile : C7Monster
 			loop
 		FinalAttack:
 			C814 A 15 A_FaceTarget
-			C815 A 5 bright A_WolfAttack(0, "*", 0.667)
-			C816 A 5 bright A_WolfAttack(0, "", 0.667)
+			C815 A 5 bright
+			C816 A 5 bright A_WolfAttack(0, "*", 0.667)
 			C815 A 5 bright A_WolfAttack(0, "", 0.667)
 			C816 A 5 bright A_WolfAttack(0, "", 0.667)
 			C815 A 5 bright A_WolfAttack(0, "", 0.667)
 			C816 A 5 bright A_WolfAttack(0, "", 0.667)
-			C814 A 5
+			C814 A 5 A_WolfAttack(0, "", 0.667)
 			goto PhaseFinal
 		Death:
 			C846 A 0 A_Fall

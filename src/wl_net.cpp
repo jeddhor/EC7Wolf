@@ -83,7 +83,9 @@
 // campaign pickups, health travel and President health row on every peer.
 // Protocol 12 requires the released combat rules (GitHub #25-#27): weapon and
 // alien damage, attack sequences and charge refill all change the simulation.
-#define NET_PROTOCOL_VERSION 12
+// Protocol 13 requires alien shots on their frames' ends (GitHub #29): an
+// alien's first round lands a frame later than under protocol 12.
+#define NET_PROTOCOL_VERSION 13
 // Present in the first datagram of every connection. A request used to be one
 // lone zero byte, so any stray packet arriving on the port was a new player.
 static const BYTE NetMagic[3] = { 'E', '7', 'N' };

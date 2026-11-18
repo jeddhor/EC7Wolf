@@ -35,6 +35,42 @@
 #include "w_wad.h"
 #include "scanner.h"
 
+#ifdef MISTER_HYBRID
+// MiSTer hybrid core: the pad's rumble (jfSW ports' scheme). MH_Rumble() is
+// the hybrid library's, linked in with the core's SDL2.
+#include <SDL.h>
+extern "C" int MH_Rumble(int strong, int weak);
+static Uint32 misterrumbleuntil = 0;
+static int misterrumblestrong = 0, misterrumbleweak = 0;
+void MisterRumble(int strong, int weak, int ms)
+{
+	static int said = 0;
+	int any;
+	if (strong < misterrumblestrong) strong = misterrumblestrong;
+	if (weak < misterrumbleweak) weak = misterrumbleweak;
+	misterrumblestrong = strong; misterrumbleweak = weak;
+	misterrumbleuntil = SDL_GetTicks() + ms;
+	any = MH_Rumble(strong, weak);
+	if (!said) {
+		said = 1;
+		printf("mister: rumble %d/%d for %d ms: %s\n", strong, weak, ms, any ? "a pad with rumble" : "no pad with rumble");
+	}
+}
+void MisterRumbleTick(void)
+{
+	if (!misterrumbleuntil) return;
+	if ((Sint32)(SDL_GetTicks() - misterrumbleuntil) >= 0) {
+		misterrumblestrong = misterrumbleweak = 0;
+		misterrumbleuntil = 0;
+		MH_Rumble(0, 0);
+	} else {
+		MH_Rumble(misterrumblestrong, misterrumbleweak);
+	}
+}
+#else
+#define MisterRumble(strong, weak, ms) ((void)0)
+#endif
+
 /*
 =============================================================================
 
@@ -389,6 +425,8 @@ void player_t::TakeDamage (int points, AActor *attacker)
 	if (gamestate.victoryflag)
 		return;
 	points = (points*gamestate.difficulty->DamageFactor)>>FRACBITS;
+	if(points > 0 && this == &players[ConsolePlayer])
+		MisterRumble(220, 0, 220);
 
 	// Corridor 7 applies its timed invulnerability and body armor after the
 	// rank damage multiplier. Armor absorbs the same half of the hit that is
@@ -1787,6 +1825,8 @@ ACTION_FUNCTION(A_GunAttack)
 		PlaySoundLocActor(player->ReadyWeapon->attacksound, self, self == players[ConsolePlayer].camera ? SD_WEAPONS : SD_GENERIC);
 	else
 		PlaySoundLocActor(sound, self, self == players[ConsolePlayer].camera ? SD_WEAPONS : SD_GENERIC);
+	if(player == &players[ConsolePlayer])
+		MisterRumble(0, 150, 110);
 
 	if(self->MeleeState)
 		self->SetState(self->MeleeState);
@@ -1878,6 +1918,8 @@ ACTION_FUNCTION(A_C7GunAttack)
 			self == players[ConsolePlayer].camera ? SD_WEAPONS : SD_GENERIC);
 		player->c7MuzzleFlashTics = 5;
 		++player->levelShotsFired;
+		if(player == &players[ConsolePlayer])
+			MisterRumble(0, 150, 110);
 		if(weapon == 4)
 			ConsumeC7AlienCharge(self, 5, 1);
 		else if(weapon == 6)
@@ -2072,6 +2114,8 @@ ACTION_FUNCTION(A_FireCustomMissile)
 	if(!cls)
 		return false;
 	AActor *newobj = AActor::Spawn(cls, newx, newy, 0, SPAWN_AllowReplacement);
+	if(self->player == &players[ConsolePlayer])
+		MisterRumble(120, 200, 160);
 	newobj->target = self;
 	newobj->angle = iangle;
 

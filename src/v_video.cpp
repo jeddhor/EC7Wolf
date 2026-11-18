@@ -1005,6 +1005,17 @@ void V_CalcCleanFacs (int designwidth, int designheight, int realwidth, int real
 	int cheight;
 	int cx1, cy1, cx2, cy2;
 
+#ifdef MISTER_HYBRID
+	// The screen is 4:3 at every resolution of the core, 640x200 included:
+	// the pixels are not square and the two factors have nothing to do with
+	// each other
+	*cleanx = MAX(realwidth / designwidth, 1);
+	*cleany = MAX(realheight / designheight, 1);
+	if (_cx1 != NULL)	*_cx1 = *cleanx;
+	if (_cx2 != NULL)	*_cx2 = *cleanx;
+	return;
+#endif
+
 	ratio = CheckRatio(realwidth, realheight);
 	if (ratio & 4)
 	{

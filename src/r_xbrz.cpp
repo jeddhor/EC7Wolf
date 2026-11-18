@@ -73,6 +73,20 @@ int R_XBRZFactor(int srcW, int srcH, int dstW, int dstH)
 		? R_XBRZAutoFactor(srcW, srcH, dstW, dstH)
 		: clamp((int)vid_xbrz, 2, XBRZ_MAX_FACTOR);
 
+	// A fixed factor is a ceiling, not an instruction: never enlarge past the
+	// smallest multiple that covers the window. Anything beyond is shrunk away
+	// again by the final stretch, so it costs factor-squared work for nothing.
+	// At Native that is every fixed factor -- the frame is the window -- and
+	// 2x of a 1920x1080 frame cost 78 ms a frame on the GL path and 6x stalled
+	// it outright, which read as the picture freezing (GitHub #30).
+	// "Covers" allows 5% short: a window a few pixels wider than four times
+	// the frame is stretched that last little way, not filtered at 5x.
+	if(vid_xbrz != 1 && dstW > 0 && dstH > 0)
+	{
+		const double ratio = MAX((double)dstW / srcW, (double)dstH / srcH);
+		factor = MIN(factor, MAX(1, (int)ceil(ratio - 0.05)));
+	}
+
 	while(factor > 1 &&
 		(int64_t)srcW * factor * (int64_t)srcH * factor > kMaxScaledPixels)
 		--factor;

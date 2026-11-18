@@ -51,7 +51,10 @@ Category Classify(AActor *thing)
 		return Category::Weapon;
 	if(thing->IsKindOf(NATIVE_CLASS(Ammo)))
 		return Category::Ammo;
-	if(thing->IsKindOf(NATIVE_CLASS(Health)))
+	// The Adrenaline Boost raises the health maximum as well as health, so
+	// it is a CustomInventory rather than a Health item (GitHub #32); to a bot
+	// it is still health.
+	if(thing->IsKindOf(NATIVE_CLASS(Health)) || name.IndexOf("Adrenaline") >= 0)
 		return Category::Health;
 
 	return Category::Other;

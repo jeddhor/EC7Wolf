@@ -496,12 +496,20 @@ FUNC(C7_Dispenser)
 				return 0;
 			SetC7WallTexture(spot, 89);
 			if(activator == players[ConsolePlayer].camera)
+			{
+				// 14b18 calls the bonus flash, as every floor pickup does; the
+				// ammo and visor units do not (GitHub #35).
+				StartBonusFlash();
 				StatusBar->SetTopMessage("Medic Pack");
+			}
 			return 1;
 		}
 		if(spot->texture[0] != initial)
 			return 0;
 
+		// Opening the blast shield plays sample 16 (14c51) before the four
+		// pages run; the port had it silent (GitHub #35).
+		SD_PlaySound("c7/dispenser/health/open");
 		new C7HealthDispenser(spot);
 		return 1;
 	}

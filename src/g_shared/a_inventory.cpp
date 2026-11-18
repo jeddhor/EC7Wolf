@@ -262,7 +262,7 @@ void AInventory::Touch(AActor *toucher)
 				{ "C7MedicPack", "Medic Pack" },
 				{ "C7AmmoClip", "50 Rnd Clip" },
 				{ "C7AmmoPack", "Ammo Pack" },
-				{ "C7Adrenaline", "300 Health Boost" },
+				{ "C7Adrenaline", "Adrenaline Boost" },
 				{ "C7BodyArmor", "Body Armor" },
 				{ "C7Invulnerability", "Invulnerability Sphere" },
 				{ "C7FloorPlan", "Floor Plan" },
@@ -629,6 +629,31 @@ IMPLEMENT_POINTY_CLASS(Weapon)
 	DECLARE_POINTER(ammo[1])
 END_POINTERS
 
+// Corridor 7's alien weapons (ammo C7Energy) do not come with charge. The
+// original's give-weapon routine (CORR7CD.EXE 13ec1) sets the energy capacity
+// back to 100 for any weapon from the dual blaster up -- even if a charge pack
+// had raised it -- and charge then regenerates to it; human weapons get 100
+// rounds instead, as ammogive already says. A duplicate is always picked up,
+// since the original never refuses one. Returns whether this was such a
+// weapon. GitHub #34.
+static bool C7AlienWeaponPickup(const AWeapon *weapon, AActor *owner)
+{
+	if(!owner || !weapon->ammotype[AWeapon::PrimaryFire] ||
+		!IWad::CheckGameFilter("Corridor7"))
+		return false;
+	static const ClassDef *const energy = ClassDef::FindClass("C7Energy");
+	if(weapon->ammotype[AWeapon::PrimaryFire] != energy)
+		return false;
+	if(const ClassDef *cls = ClassDef::FindClass("C7EnergyCapacity"))
+	{
+		if(AInventory *capacity = owner->FindInventory(cls))
+			capacity->amount = 100;
+		else
+			owner->GiveInventory(cls, 100);
+	}
+	return true;
+}
+
 void AWeapon::AttachToOwner(AActor *owner)
 {
 	Super::AttachToOwner(owner);
@@ -653,6 +678,8 @@ void AWeapon::AttachToOwner(AActor *owner)
 				ammo[i]->amount = ammo[i]->maxamount;
 		}
 	}
+
+	C7AlienWeaponPickup(this, owner);
 
 	// Autoswitch
 	owner->player->PendingWeapon = this;
@@ -797,6 +824,8 @@ bool AWeapon::UseForAmmo(AWeapon *owned)
 {
 	if(ShouldStay())
 		return false;
+	if(C7AlienWeaponPickup(this, owned->owner))
+		return true;
 
 	bool used = false;
 	for(unsigned int i = 0;i < 2;++i)

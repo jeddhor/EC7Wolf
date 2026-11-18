@@ -5,9 +5,10 @@
 
 //===========================================================================
 
-// Beyond a quarter there is nothing left to render: a 640x400 window would be
-// drawing at 160x100, well under the floor VL_UpdateRenderSize enforces.
-#define VL_MAX_RENDERSCALE 4
+// One step per xBRZ factor, so that each fixed factor has a render size to
+// enlarge from (GitHub #30). A sixth of 1920x1200 is the original's 320x200;
+// smaller windows stop at that floor, which VL_UpdateRenderSize enforces.
+#define VL_MAX_RENDERSCALE 6
 
 extern  bool	fullscreen;
 // screenWidth/screenHeight are the size the game renders at -- the framebuffer,

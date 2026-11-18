@@ -121,6 +121,8 @@ corridor7_weapon_walk
 corridor7_access_lamps
 corridor7_enhancements
 corridor7_alien_counter
+corridor7_health_energy
+corridor7_sight_screens
 ui_buttons
 bot_footwork
 bot_budget

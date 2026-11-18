@@ -100,10 +100,15 @@ import sys
 
 trace, nav, mapname = sys.argv[1], sys.argv[2], sys.argv[3]
 
+# "wall X Y marker M ...". Marker 105 screens (electric fences, girder trusses,
+# some glass) and 107 apertures are solid but see-through: CheckLine passes
+# them for everyone, as CORR7CD.EXE's does (GitHub #31).
 solid = set()
 for line in open(nav):
     f = line.split()
     if f and f[0] == "wall":
+        if len(f) > 4 and f[3] == "marker" and f[4] in ("105", "107"):
+            continue
         solid.add((int(f[1]), int(f[2])))
 
 sightings = []

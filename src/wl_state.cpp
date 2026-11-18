@@ -843,13 +843,21 @@ static inline bool TileBlocksSight(MapSpot spot)
 {
 	if(!spot || !spot->tile)
 		return false;
-	// Corridor 7 renders glass and masked walls transparently but its aliens
-	// cannot acquire or shoot the player through them. Rendering transparency
-	// and AI line-of-sight are deliberately separate properties in that game.
+	// Corridor 7 decides by the map marker, not by what is drawn. Its CheckLine
+	// (CORR7CD.EXE 1ef0:1b83 in the Ghidra export), which serves the player's
+	// guns and every alien's sight and shot alike, lets a line through a solid
+	// cell only when plane 1 there holds 105 or 107, or 106 on the last frame
+	// of a force field's opening (which the port marks 107). Marker 105 is the
+	// see-through screen: the electric fences (walls 6 and 14), the girder
+	// trusses (wall 24) and some glass. Marker 104 glass, closed force fields
+	// and the health chamber's shutter all block. Before GitHub #31 every
+	// marker-105 cell blocked too, which left floor 11's fenced-in aliens
+	// unkillable.
+	//
+	// Not corridor7SightTransparent: that flag is also how the renderer traces
+	// through keyed pixels, and a closed chamber shutter carries it.
 	if(IWad::CheckGameFilter("Corridor7"))
-		// An animated door keeps its aperture tile for rendering after it
-		// opens. Marker 107 is open floor, unlike transparent solid glass.
-		return spot->corridor7WallMarker != 107;
+		return spot->corridor7WallMarker != 105 && spot->corridor7WallMarker != 107;
 	return !spot->tile->sightTransparent && !spot->corridor7SightTransparent;
 }
 

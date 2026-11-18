@@ -1004,14 +1004,54 @@ static const int kXBRZValues[] = { 0, 1, 2, 3, 4, 5, 6 };
 // the other's row. Both are NULL outside the Corridor 7 menu, which does not
 // build them.
 static MultipleChoiceMenuItem *xbrzItem = NULL;
+static MultipleChoiceMenuItem *renderScaleItem = NULL;
 static MultipleChoiceMenuItem *upscaleItem = NULL;
 static MultipleChoiceMenuItem *glFilterItem = NULL;
+
+// Kept in the same order as renderScaleOptions below.
+static const int kRenderScaleValues[] = { 1, 2, 3, 4, 5, 6 };
+
+// A different render size is a different framebuffer, so this goes through the
+// same mode set the resolution menu does rather than taking effect at present
+// time the way xBRZ can.
+static void ApplyRenderScale(int scale)
+{
+	vid_renderscale = scale;
+	MenuFadeOut();
+	VL_UpdateRenderSize();
+	VH_Startup();	// fizzlefade tables are sized to the frame
+	VL_SetVGAPlaneMode();
+	MenuFadeIn();
+}
+
+MENU_LISTENER(SetRenderScale)
+{
+	if(vid_renderscale == kRenderScaleValues[which])
+		return true;
+	ApplyRenderScale(kRenderScaleValues[which]);
+	return true;
+}
 
 MENU_LISTENER(SetXBRZ)
 {
 	// Takes effect on the next presented frame; the upscaled texture is
 	// reallocated by the present path when the factor it was built for changes.
 	vid_xbrz = kXBRZValues[which];
+
+	// A fixed factor means "draw small and let xBRZ enlarge it that much". At
+	// Native the frame already fills the window, so there is nothing for the
+	// filter to enlarge into: R_XBRZFactor declines rather than scale a frame
+	// up only to shrink it back, which is what used to freeze the picture
+	// (GitHub #30). So choosing a factor there also lowers the render
+	// resolution to match: 3x draws at a third of the window and enlarges it
+	// three times. A render resolution chosen by hand is left alone.
+	if(vid_xbrz >= 2 && vid_renderscale == 1)
+	{
+		const int scale = MIN(vid_xbrz, VL_MAX_RENDERSCALE);
+		ApplyRenderScale(scale);
+		if(renderScaleItem)
+			renderScaleItem->setCurrentOption(NearestOption(kRenderScaleValues, scale));
+	}
 
 	// Running an edge filter over art a neural network already enlarged four
 	// times has nothing left to find -- the staircases it looks for are gone --
@@ -1049,25 +1089,6 @@ MENU_LISTENER(SetUpscaledAssets)
 	return true;
 }
 
-// Kept in the same order as renderScaleOptions below.
-static const int kRenderScaleValues[] = { 1, 2, 3, 4 };
-
-MENU_LISTENER(SetRenderScale)
-{
-	if(vid_renderscale == kRenderScaleValues[which])
-		return true;
-	vid_renderscale = kRenderScaleValues[which];
-
-	// A different render size is a different framebuffer, so this goes through
-	// the same mode set the resolution menu does rather than taking effect at
-	// present time the way xBRZ can.
-	MenuFadeOut();
-	VL_UpdateRenderSize();
-	VH_Startup();	// fizzlefade tables are sized to the frame
-	VL_SetVGAPlaneMode();
-	MenuFadeIn();
-	return true;
-}
 
 MENU_LISTENER(SetFOV)
 {
@@ -1671,7 +1692,7 @@ void CreateMenus()
 		displayMenu.addItem(new MenuSwitcherMenuItem("Advanced Graphics", advancedGraphics));
 
 		static const char *xbrzOptions[] = { "Off", "Auto", "2x", "3x", "4x", "5x", "6x" };
-		static const char *renderScaleOptions[] = { "Native", "1/2", "1/3", "1/4" };
+		static const char *renderScaleOptions[] = { "Native", "1/2", "1/3", "1/4", "1/5", "1/6" };
 		// "Sharp" rather than "Off" because nearest is a deliberate look here,
 		// not the absence of a feature -- it is what the game shipped as.
 		static const char *glFilterOptions[] = { "Sharp", "Bilinear", "Smooth" };
@@ -1709,9 +1730,10 @@ void CreateMenus()
 		// filter enlarges the frame to fit the window, so at Native -- where the
 		// frame already is the window -- there is nothing to enlarge into and it
 		// costs a frame of work to hand back the picture unchanged.
-		AddLabeled(advancedGraphics, new MultipleChoiceMenuItem(SetRenderScale,
-			renderScaleOptions, 4,
-			NearestOption(kRenderScaleValues, vid_renderscale)), "Render Resolution");
+		renderScaleItem = new MultipleChoiceMenuItem(SetRenderScale,
+			renderScaleOptions, 6,
+			NearestOption(kRenderScaleValues, vid_renderscale));
+		AddLabeled(advancedGraphics, renderScaleItem, "Render Resolution");
 		// Both renderers filter now: the software path on the CPU at scanout, the
 		// OpenGL path as a shader over the composited frame (render/opengl/
 		// r_glxbrz.cpp). The setting means the same thing to each and picks the

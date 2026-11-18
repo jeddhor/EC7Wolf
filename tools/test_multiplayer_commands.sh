@@ -113,7 +113,10 @@ repeat 400
 loop
 EOF
 
-solo duel 400 --capture-tape "$work/duel.tape" \
+# 600 tics: since the combat rework (beta302, GitHub #25-#27) the second death
+# comes near tic 275 and a respawn takes about 175, so 400 ended the run with
+# the player still waiting to come back.
+solo duel 600 --capture-tape "$work/duel.tape" \
 	--capture-duel 0 1 --capture-fire 40 --capture-ammo
 
 slots=$(awk '$1 ~ /^[0-9]+$/ {print $2}' "$work/duel.players" 2>/dev/null |

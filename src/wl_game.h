@@ -67,6 +67,7 @@ extern struct NewMap_t
 #define PlaySoundLocTile(s,tx,ty)       PlaySoundLocGlobal(s,(((int32_t)(tx) << TILESHIFT) + (1L << (TILESHIFT - 1))),(((int32_t)ty << TILESHIFT) + (1L << (TILESHIFT - 1))),SD_GENERIC)
 #define PlaySoundLocActorBoss(s,ob)     PlaySoundLocActor(s,ob,SD_BOSSWEAPONS)
 void PlaySoundLocActor(const char* s, AActor *ob, SoundChannel chan=SD_GENERIC);
+bool C7SoundLocTooFar(fixed gx, fixed gy);
 void PlaySoundLocGlobal(const char* s, fixed gx, fixed gy, SoundChannel chan=SD_GENERIC);
 void UpdateSoundLoc(void);
 

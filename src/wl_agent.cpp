@@ -1595,8 +1595,11 @@ void C7NativeFloorSetup(player_t &player)
 	APlayerPawn *pawn = player.mo;
 	if(!pawn)
 		return;
-	if(player.health > 100)
-		player.health = pawn->health = 100;
+	// The class's own maximum: 100 for the Marine, as 216ba sets it. An
+	// Adrenaline Boost raised it for the floor it was found on (GitHub #32).
+	pawn->maxhealth = static_cast<const APlayerPawn *>(pawn->GetClass()->GetDefault())->maxhealth;
+	if(player.health > pawn->maxhealth)
+		player.health = pawn->health = pawn->maxhealth;
 	if(const ClassDef *cls = ClassDef::FindClass("C7EnergyCapacity"))
 	{
 		if(AInventory *capacity = pawn->FindInventory(cls))
@@ -1962,6 +1965,83 @@ ACTION_FUNCTION(A_C7AlienAlarm)
 	AActor *alertTarget = self->target;
 	P_AlertCorridor7MonstersNear(self, alertTarget ? alertTarget : self,
 		12*TILEGLOBAL);
+	return true;
+}
+
+// The Adrenaline Boost raises the player's health *maximum*, not just health
+// (CORR7CD.EXE 13fd9, GetBonus item 5): DS:8106 += 300, capped at 999, then
+// health += 300 through the ordinary heal (13e66), which caps at that new
+// maximum. Everything else that heals -- medic packs, the med-bay dispensers,
+// the health chamber -- caps at 8106 too, so after a boost they all heal past
+// 100 (GitHub #32). C7NativeFloorSetup puts the maximum back at the start of
+// every floor, as 216ba does. The pickup is unconditional in the original.
+ACTION_FUNCTION(A_C7AdrenalineBoost)
+{
+	ACTION_PARAM_INT(raise, 0);
+	ACTION_PARAM_INT(cap, 1);
+
+	player_t *player = self->player;
+	if(!player || !player->mo || player->health <= 0)
+		return false;
+
+	APlayerPawn *pawn = player->mo;
+	pawn->maxhealth = MIN<int32_t>(pawn->maxhealth + raise, cap);
+	player->health = MIN<int32_t>(player->health + raise, pawn->maxhealth);
+	const int oldhealth = pawn->health;
+	pawn->health = player->health;
+	StatusBar->UpdateFace(oldhealth - pawn->health);
+	return true;
+}
+
+// A sound an alien makes only where the player can hear it. The original's
+// Mechanoid steps (17958) and every class's ambient call (18346) first test
+// areabyplayer[ob->areanumber] -- is the alien's sound area joined to the
+// player's through open doors -- and only then place the sample at the alien
+// (8d46). ECWolf's A_PlaySound has no such test, so a Mechanoid was audible
+// all over the floor (GitHub #33).
+//
+//   chance  out of 256; 18346 rolls US_RndT() % 7 == 0, which is 37 of 256.
+//           The roll is made whether or not anyone can hear, so peers that
+//           differ in who is listening stay on the same random stream.
+//   flags   C7AS_FARCUT applies 8d46's far-away cutoff (samples below 12).
+static FRandom pr_c7ambient("Corridor7Ambient");
+ACTION_FUNCTION(A_C7AreaSound)
+{
+	enum { C7AS_FARCUT = 1 };
+	ACTION_PARAM_STRING(sound, 0);
+	ACTION_PARAM_INT(chance, 1);
+	ACTION_PARAM_INT(flags, 2);
+
+	if(chance < 256 && pr_c7ambient() >= chance)
+		return true;
+
+	const AActor *listener = players[ConsolePlayer].camera;
+	if(!listener || !map->CheckLink(self->GetZone(), listener->GetZone(), true))
+		return true;
+	if((flags & C7AS_FARCUT) && C7SoundLocTooFar(self->x, self->y))
+		return true;
+	PlaySoundLocActor(sound, self);
+	return true;
+}
+
+// The Alien Charge Pack (CORR7CD.EXE 140f6, GetBonus item 18) adds capacity,
+// not charge: DS:80f0 += 100 up to 999, and a pack is left lying when capacity
+// is already 999. Charge then regenerates up to the new capacity. See
+// C7EnergyCapacity in player.txt (GitHub #34).
+ACTION_FUNCTION(A_C7ChargePack)
+{
+	ACTION_PARAM_INT(raise, 0);
+	ACTION_PARAM_INT(cap, 1);
+
+	const ClassDef *cls = ClassDef::FindClass("C7EnergyCapacity");
+	if(!cls)
+		return false;
+	AInventory *capacity = self->FindInventory(cls);
+	if(!capacity)
+		return self->GiveInventory(cls, MIN(raise, cap));
+	if(capacity->amount >= static_cast<unsigned>(cap))
+		return false;
+	capacity->amount = MIN<unsigned>(capacity->amount + raise, cap);
 	return true;
 }
 

@@ -543,26 +543,37 @@ void APlayerPawn::Tick()
 		// original's test is bestweapon > 2 -- any weapon above the M-16 has
 		// been picked up -- not which weapon is in hand, so switching away
 		// does not stop it.
-		AInventory *energy = FindInventory(ClassDef::FindClass("C7Energy"));
+		const ClassDef *energyClass = ClassDef::FindClass("C7Energy");
+		AInventory *energy = FindInventory(energyClass);
 		AInventory *capacity = FindInventory(ClassDef::FindClass("C7EnergyCapacity"));
+		static const char *const aboveM16[] = {
+			"C7M343", "C7DualBlaster", "C7PlasmaRifle",
+			"C7AssaultCannon", "C7Disintegrator"
+		};
+		bool recharges = false;
+		for(const char *name : aboveM16)
+		{
+			const ClassDef *cls = ClassDef::FindClass(name);
+			if(cls && FindInventory(cls))
+			{
+				recharges = true;
+				break;
+			}
+		}
+		// Charge builds up from the M-343 on, before any alien weapon is
+		// held: an alien weapon gives none of its own (GitHub #34), so the
+		// first one picked up after the M-343 arrives charged, as in DOS.
+		if(!energy && capacity && recharges && energyClass)
+		{
+			energy = static_cast<AInventory *>(AActor::Spawn(energyClass, 0, 0, 0, false));
+			energy->amount = 0;
+			AddInventory(energy);
+			energy->RemoveFromWorld();
+		}
 		if(energy && capacity)
 		{
 			if(energy->amount > capacity->amount)
 				energy->amount = capacity->amount;
-			static const char *const aboveM16[] = {
-				"C7M343", "C7DualBlaster", "C7PlasmaRifle",
-				"C7AssaultCannon", "C7Disintegrator"
-			};
-			bool recharges = false;
-			for(const char *name : aboveM16)
-			{
-				const ClassDef *cls = ClassDef::FindClass(name);
-				if(cls && FindInventory(cls))
-				{
-					recharges = true;
-					break;
-				}
-			}
 			if(recharges && energy->amount < capacity->amount &&
 				(gamestate.TimeCount & ((1u << C7_RAMP_CYCLE_SHIFT) - 1)) == 0)
 				energy->amount = MIN(energy->amount + 2, capacity->amount);

@@ -165,9 +165,10 @@ its exit, or by the player's health running out, which the original counts as
 finishing the floor rather than dying. Ammo capacity and mines are not in that
 set: a capacity pack found on a bonus floor is kept, and mines dropped there
 stay spent. Score is the point of the floor and is kept. The next floor's setup
-then caps health at 100, refills alien-weapon capacity and ends an
-invulnerability sphere, as on any floor; the port now does those last two on
-every floor change, where it used to carry them over.
+then puts the health maximum back to 100 and caps health at it, resets
+alien-weapon capacity to 100 and ends an invulnerability sphere, as on any
+floor; the port now does those on every floor change, where it used to carry
+some of them over.
 
 The entry state is taken on arrival by whatever route -- elevator, warp, or a
 new game started on the floor -- and travels in saves. A save made on a bonus
@@ -304,6 +305,14 @@ named in the startup log, and shown in the menu as *Pack Incomplete*.
 Upscaled assets and xBRZ are mutually exclusive: xBRZ looks for staircases to
 smooth, and there are none left in art a network has already enlarged four
 times. Turning either on turns the other off.
+
+xBRZ enlarges the frame into the window, so it needs the frame to be smaller
+than the window. *Auto* picks the factor that fills the window from whatever
+Render Resolution is set. A fixed factor (2x to 6x) is a ceiling: it never
+enlarges past the window, and choosing one at Native also lowers Render
+Resolution to match (1/2 to 1/6), which is what makes it do anything. Until
+GitHub #30 a fixed factor at Native enlarged every frame past the window and
+shrank it back, which cost enough per frame to look like a frozen picture.
 
 **Choosing a model matters more than anything else here**, and no single choice
 is right for the whole game. Measured on Corridor 7's own art:
@@ -505,17 +514,23 @@ Append an output directory and `--all` to load-check every map in the archive.
   mappings for the complete CD bestiary. Unique behavior includes local
   Alioprobe/Eitak alerts, vulnerable Bandor camouflage morphs, retreating
   Rodex/Tenaj, the melee-only Semaj, the Mechanoid's four-round volleys and
-  footsteps, permanently visible C653-C664 Eniram Boss versus cloaking
+  footsteps (sample 2, heard only where the player's sound area is joined to
+  its own, GitHub #33), permanently visible C653-C664 Eniram Boss versus cloaking
   C665-C689 ordinary Eniram, fast-dodging Tymok, Solrac's six-round volleys,
-  and Tebazile's five fully animated forms. Glass remains visually transparent
-  while blocking alien sight, and active alien-world enemies can cross paired
-  transporters. Audible projectiles, alien energy regeneration/capacity,
+  and Tebazile's five fully animated forms. Sight and gunfire follow the
+  original's line check: they pass marker-105 screens -- the electric fences,
+  the girder trusses and some glass -- in both directions, and stop at
+  marker-104 glass and closed force fields (GitHub #31). Active alien-world
+  enemies can cross paired transporters. Audible projectiles, alien energy regeneration/capacity,
   persistent mines, and the level-30/40 exit-vortex behavior are retained.
 - Stateful access/alarm computers, health and ammunition dispensers, the
   single-use visor battery station (wall 93 becomes 94, adding 100 charge),
+  the med bay whose blast shield sounds as it opens and whose medic pack
+  flashes like a pickup (GitHub #35),
   and health chambers that turn the player toward the
   exit, immediately show their green-to-red meter, close the chamber door,
-  heal from a persistent 100-point reservoir, and retain any unused charge.
+  heal from a persistent 100-point reservoir up to the current health
+  maximum, and retain any unused charge.
   The remaining-power gradient fills the complete 42x5 recessed well in the
   original 48x32 panel and shares the panel's virtual-screen scaling.
   Electric contact comes from the released wall IDs 6 and
@@ -564,7 +579,12 @@ port returns them to the chase; its hit/miss page counts a long-range miss as
 a hit; its alien plasma also splashes nearby actors; and its damage flash
 flickers on a large hit, where the port's fades steadily. See
 [github-issue-verification-2026-11-15.md](github-issue-verification-2026-11-15.md).
-Masked screens preserve collision and sight behavior while transparent columns
+Known pickup differences: an Alien Charge Pack in the original also switches
+back to the best alien weapon; a duplicate human weapon with its ammunition
+full is taken there and refused here; and a health chamber drains its reserve a
+little each frame where the port heals in one step. See
+[github-issue-verification-2026-11-17.md](github-issue-verification-2026-11-17.md).
+Masked screens preserve collision while transparent columns
 are composited with walls and actors at their actual depth. Native 104/105 glass
 retains perpendicular corner faces and selects the first glass cell per view
 ray, including its transparent texels; more distant glass does not show through
@@ -713,7 +733,17 @@ rules; see "The Intruder Alert" above.
 
 Ammo packs raise bullet capacity by 500, up to 999, without supplying rounds;
 surplus packs are consumed as in DOS. Capacity survives save/load and travel.
-Over-health is capped at 100 on campaign floor entry, while wounded players
-retain their health and same-floor save loads retain adrenaline boosts.
+
+The Adrenaline Boost raises the health *maximum* by 300, up to 999, and then
+adds 300 health up to it (CORR7CD.EXE 13fd9). Medic packs, the med bays and the
+health chambers all heal up to that maximum, so after a boost they work above
+100 (GitHub #32). Each campaign floor puts the maximum back to 100 and caps
+health at it, while wounded players keep their health; a same-floor save keeps
+the boost.
+
+Alien weapons come with no charge. Picking one up, new or a duplicate, sets the
+energy capacity back to 100 (13ec1), and charge regenerates up to capacity two
+points a frame once any weapon above the M-16 is owned. An Alien Charge Pack
+adds 100 capacity, up to 999, and is left lying at 999 (140f6) (GitHub #34).
 President uses its native fifth alien-health row, independently of Major's
 shared population filter. Major's existing health row is unchanged.

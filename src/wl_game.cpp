@@ -225,6 +225,16 @@ void PlaySoundLocGlobal(const char* s,fixed gx,fixed gy,SoundChannel chan)
 	}
 }
 
+// Corridor 7's PlaySoundLocGlobal (CORR7CD.EXE 8d46) skips a sound placed
+// so far off that the two channel attenuations add up to more than 12, for
+// its low-numbered samples (below 12, and 32). Wolf3D and ECWolf play it at
+// the quietest level instead.
+bool C7SoundLocTooFar(fixed gx, fixed gy)
+{
+	SetSoundLoc(gx, gy);
+	return leftchannel + rightchannel > 12;
+}
+
 void PlaySoundLocActor(const char* s, AActor *ob, SoundChannel chan)
 {
 	SetSoundLoc(ob->x, ob->y);

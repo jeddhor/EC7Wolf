@@ -66,8 +66,16 @@ for factor in $factors; do
 	# config with it already set. Vid_Renderer is pinned the same way even though
 	# --vid-renderer is passed, so a stale user config cannot pull the run back to
 	# software and quietly turn this into a test of nothing.
+	#
+	# A fixed factor only applies where the window has room for it (GitHub #30:
+	# at Native it used to enlarge the frame past the window and shrink it back),
+	# so the frame stays the 640x400 title page the bars below were measured on,
+	# in a window FACTOR times that.
+	win_w=$((640 * factor))
+	win_h=$((400 * factor))
 	{
 		printf 'Vid_xBRZ = %s;\n' "$factor"
+		printf 'Vid_RenderScale = %s;\n' "$factor"
 		printf 'Vid_Renderer = "opengl";\n'
 	} >"$work/xbrz.cfg"
 
@@ -80,9 +88,9 @@ for factor in $factors; do
 	(
 		cd "$data_dir"
 		timeout 120s env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 \
-			xvfb-run -a -s "-screen 0 640x400x24" "$ec7wolf" \
+			xvfb-run -a -s "-screen 0 ${win_w}x${win_h}x24" "$ec7wolf" \
 			--data CO7 --no-upscale --config "$work/xbrz.cfg" --savedir "$work/sv" \
-			--nowait --res 640 400 --vid-renderer opengl \
+			--nowait --res "$win_w" "$win_h" --vid-renderer opengl \
 			--capture-glxbrz "$work/p$factor" --capture-maxframes 1
 	) >"$work/run$factor.log" 2>&1 || true
 

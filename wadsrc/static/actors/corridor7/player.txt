@@ -13,11 +13,16 @@ actor C7Energy : Ammo
 }
 
 // Alien weapons drain both the displayed charge and this slowly shrinking
-// capacity. Charge regenerates by two while an alien weapon is selected.
+// capacity (DS:80f0); charge (80de) regenerates up to it, by two a frame,
+// once any weapon above the M-16 is owned. Picking up an alien weapon -- new
+// or a duplicate -- sets capacity back to 100 and gives no charge at all
+// (CORR7CD.EXE 13ec1); an Alien Charge Pack adds 100 capacity, up to 999, and
+// no charge either (140f6). Every floor starts at 100 again. Until GitHub #34
+// the port gave charge instead, which the capacity clamp took straight back.
 actor C7EnergyCapacity : Ammo
 {
 	inventory.amount 100
-	inventory.maxamount 100
+	inventory.maxamount 999
 }
 
 actor C7Mines : Ammo
@@ -288,7 +293,7 @@ actor C7DualBlaster : C7Weapon
 	attacksound "c7/weapon/dualblaster"
 	weapon.ammotype1 "C7Energy"
 	weapon.ammouse1 1
-	weapon.ammogive1 100
+	weapon.ammogive1 0	// see C7EnergyCapacity: a pickup resets capacity, gives no charge
 	states
 	{
 		Ready:
@@ -315,7 +320,7 @@ actor C7Disintegrator : C7Weapon
 	attacksound "c7/weapon/disintegrator"
 	weapon.ammotype1 "C7Energy"
 	weapon.ammouse1 1
-	weapon.ammogive1 100
+	weapon.ammogive1 0	// see C7EnergyCapacity: a pickup resets capacity, gives no charge
 	states
 	{
 		Ready:
@@ -372,7 +377,7 @@ actor C7PlasmaRifle : C7Weapon
 	attacksound "c7/weapon/plasma"
 	weapon.ammotype1 "C7Energy"
 	weapon.ammouse1 1
-	weapon.ammogive1 100
+	weapon.ammogive1 0	// see C7EnergyCapacity: a pickup resets capacity, gives no charge
 	states
 	{
 		Ready:
@@ -397,7 +402,7 @@ actor C7AssaultCannon : C7Weapon
 	attacksound "c7/weapon/assault"
 	weapon.ammotype1 "C7Energy"
 	weapon.ammouse1 1
-	weapon.ammogive1 100
+	weapon.ammogive1 0	// see C7EnergyCapacity: a pickup resets capacity, gives no charge
 	states
 	{
 		Ready:
@@ -467,13 +472,23 @@ actor C7PlasmaBolt
 	}
 }
 
-actor C7Adrenaline : Health
+// CORR7CD.EXE 13fd9: the health maximum rises by 300 (to at most 999) and then
+// 300 health is added up to it. Picked up whatever the player's health. The
+// raised maximum is what the medic packs and the health chamber heal to, until
+// the next floor puts it back to 100 (GitHub #32).
+actor C7Adrenaline : CustomInventory
 {
 	inventory.pickupsound "misc/medkit_pkup"
-	// The released game adds 300 health, up to its 400-point boosted cap.
-	inventory.amount 300
-	inventory.maxamount 400
-	states { Spawn: C058 A -1 bright stop }
+	+INVENTORY.ALWAYSPICKUP
+	states
+	{
+		Spawn:
+			C058 A -1 bright
+			stop
+		Pickup:
+			TNT1 A 0 A_C7AdrenalineBoost(300, 999)
+			stop
+	}
 }
 
 actor C7BodyArmor : Inventory
@@ -497,18 +512,17 @@ actor C7AmmoPack : C7Bullets
 	states { Spawn: C057 A -1 bright stop }
 }
 
+// CORR7CD.EXE 140f6: refused at 999 capacity; otherwise capacity + 100.
 actor C7ChargePack : CustomInventory
 {
 	inventory.pickupsound "misc/ammo_pkup"
-	+INVENTORY.ALWAYSPICKUP
 	states
 	{
 		Spawn:
 			C059 A -1 bright
 			stop
 		Pickup:
-			TNT1 A 0 A_GiveInventory("C7Energy", 100)
-			TNT1 A 0 A_GiveInventory("C7EnergyCapacity", 100)
+			TNT1 A 0 A_C7ChargePack(100, 999)
 			stop
 	}
 }

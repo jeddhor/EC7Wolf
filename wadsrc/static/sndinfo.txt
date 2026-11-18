@@ -619,6 +619,8 @@ c7/monster/attack/class18	{ C7DS0024 C7AL0024 C7PC0024 }
 c7/monster/attack/class19	{ C7DS0051 C7AL0051 C7PC0051 }
 c7/monster/attack/class20	{ C7DS0051 C7AL0051 C7PC0051 }
 c7/monster/attack/class23	{ C7DS0041 C7AL0041 C7PC0041 }	// Mechanoid: the dual blaster it carries
+c7/monster/active/class23	{ C7DS0040 C7AL0040 C7PC0040 }
+c7/monster/step/class23		{ C7DS0002 C7AL0002 C7PC0002 }
 // The three sounds below are the audible tells the strategy guide tells the
 // player to listen for -- it lists door movement, footsteps, morphing, squeals
 // and laughs as the way to place a threat you cannot see yet, so they are
@@ -686,6 +688,12 @@ c7/monster/death/022a	{ C7DS0072 C7AL0072 C7PC0072 }
 c7/monster/death/022b	{ C7DS0073 C7AL0073 C7PC0073 }
 c7/monster/death/022c	{ C7DS0003 C7AL0003 C7PC0003 }
 $random c7/monster/death/class22 { c7/monster/death/022a c7/monster/death/022b c7/monster/death/022c }
+// Mechanoid Warrior: CORR7CD.EXE 17232 picks one of DS:1bf0's four (GitHub #33).
+c7/monster/death/023a	{ C7DS0063 C7AL0063 C7PC0063 }
+c7/monster/death/023b	{ C7DS0076 C7AL0076 C7PC0076 }
+c7/monster/death/023c	{ C7DS0077 C7AL0077 C7PC0077 }
+c7/monster/death/023d	{ C7DS0082 C7AL0082 C7PC0082 }
+$random c7/monster/death/class23 { c7/monster/death/023a c7/monster/death/023b c7/monster/death/023c c7/monster/death/023d }
 c7/electric/damage		{ C7DS0013 C7AL0013 C7PC0013 }
 c7/forcefield/deactivate/53	{ C7DS0015 C7AL0015 C7PC0015 }
 c7/forcefield/deactivate/73	{ C7DS0014 C7AL0014 C7PC0014 }
@@ -701,5 +709,6 @@ c7/elevator/denied		{ C7DS0045 C7AL0045 C7PC0045 }
 c7/elevator/activate		{ C7DS0047 C7AL0047 C7PC0047 }
 c7/elevator/secret		{ C7DS0050 C7AL0050 C7PC0050 }
 c7/dispenser/ammo		{ C7DS0026 C7AL0026 C7PC0026 }
+c7/dispenser/health/open	{ C7DS0016 C7AL0016 C7PC0016 }
 c7/dispenser/visor		{ C7DS0074 C7AL0074 C7PC0074 }
 $endif

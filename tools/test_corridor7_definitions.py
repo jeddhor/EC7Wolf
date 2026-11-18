@@ -119,7 +119,44 @@ require(r'player\.startitem\s+"C7M16".*?player\.startitem\s+"C7Bayonet"', PLAYER
 require(r'player\.startitem\s+"C7Bullets",\s*100', PLAYER, "100 starting bullets")
 require(r"actor\s+C7Bullets\s*:\s*Ammo.*?inventory\.maxamount\s+200", PLAYER, "200 bullet maximum")
 require(r"actor\s+C7EnergyCapacity\s*:\s*Ammo.*?inventory\.amount\s+100", PLAYER, "alien energy capacity")
-require(r'actor\s+C7ChargePack\s*:\s*CustomInventory.*?A_GiveInventory\("C7Energy",\s*100\).*?A_GiveInventory\("C7EnergyCapacity",\s*100\)', PLAYER, "charge packs restore charge and capacity")
+# GitHub #33. The Mechanoid's chase (2d352): footstep sample 2 as 690 and 692
+# end (17958), class 23's 1-in-7 ambient sample 40 as the short 690 ends
+# (18346), both only where the player's area is joined to the alien's.
+require(r'c7/monster/step/class23\s*\{\s*C7DS0002', SNDINFO, "the Mechanoid footstep is sample 2")
+require(r'c7/monster/active/class23\s*\{\s*C7DS0040', SNDINFO, "the Mechanoid ambient is sample 40")
+require(r'actor C7Mechanoid.*?See:.*?C690 A 10 NOP A_Chase[^\n]*\n\s*C690 A 3 A_C7AreaSound\("c7/monster/step/class23", 256, 1\)\s*'
+        r'C691 A 4 A_C7AreaSound\("c7/monster/active/class23", 37\) A_Chase[^\n]*\n\s*C692 A 10 NOP A_Chase[^\n]*\n\s*'
+        r'C692 A 3 A_C7AreaSound\("c7/monster/step/class23", 256, 1\)', MONSTERS,
+        "the Mechanoid steps and mutters on the original's frames, only where it can be heard")
+if re.search(r'actor C7Mechanoid[^}]*?class20', MONSTERS, re.DOTALL):
+    raise SystemExit("Corridor 7 definition check failed: the Mechanoid must not borrow Solrac's (class 20) sounds")
+require(r'ACTION_FUNCTION\(A_C7AreaSound\).*?pr_c7ambient\(\)\s*>=\s*chance.*?CheckLink\(self->GetZone\(\), listener->GetZone\(\), true\)',
+        WL_AGENT, "area sounds roll before testing the listener, then need a joined area")
+# GitHub #35. Wall 85's blast shield plays sample 16 (14c51); the medic pack
+# behind it flashes like any pickup (14b18).
+require(r'c7/dispenser/health/open\s*\{\s*C7DS0016', SNDINFO, "the med bay opens with sample 16")
+require(r'StartBonusFlash\(\);\s*StatusBar->SetTopMessage\("Medic Pack"\)', LNSPEC, "the medic pack flashes")
+require(r'SD_PlaySound\("c7/dispenser/health/open"\);\s*new C7HealthDispenser\(spot\)', LNSPEC, "the blast shield sounds as it opens")
+# GitHub #34. CORR7CD.EXE 140f6: a charge pack adds 100 capacity up to 999 and
+# no charge; 13ec1: an alien weapon resets capacity to 100 and gives no charge.
+require(r'actor\s+C7ChargePack\s*:\s*CustomInventory.*?A_C7ChargePack\(100,\s*999\)', PLAYER, "charge packs add 100 capacity, up to 999")
+if re.search(r'actor\s+C7ChargePack\s*:[^}]*?A_GiveInventory\("C7Energy"', PLAYER, re.DOTALL):
+    raise SystemExit("Corridor 7 definition check failed: a charge pack gives capacity, not charge")
+require(r'actor\s+C7EnergyCapacity\s*:\s*Ammo.*?inventory\.maxamount\s+999', PLAYER, "energy capacity reaches 999")
+for weapon in ("C7DualBlaster", "C7Disintegrator", "C7PlasmaRifle", "C7AssaultCannon"):
+    require(r'actor\s+%s\s*:\s*C7Weapon\s*\{[^}]*?weapon\.ammogive1\s+0\b' % weapon, PLAYER,
+            "%s comes with no charge" % weapon)
+require(r'static bool C7AlienWeaponPickup.*?capacity->amount\s*=\s*100', INVENTORY,
+        "an alien weapon pickup sets energy capacity back to 100")
+require(r'bool AWeapon::UseForAmmo.*?if\(C7AlienWeaponPickup\(this, owned->owner\)\)\s*return true;', INVENTORY,
+        "a duplicate alien weapon is always picked up")
+# GitHub #32. CORR7CD.EXE 13fd9: the Adrenaline raises the health maximum by 300
+# (to 999) and heals 300 up to it; every floor resets the maximum (216ba).
+require(r'actor\s+C7Adrenaline\s*:\s*CustomInventory.*?\+INVENTORY\.ALWAYSPICKUP.*?A_C7AdrenalineBoost\(300,\s*999\)', PLAYER,
+        "the Adrenaline raises the health maximum")
+require(r'ACTION_FUNCTION\(A_C7AdrenalineBoost\).*?pawn->maxhealth\s*=\s*MIN<int32_t>\(pawn->maxhealth \+ raise, cap\).*?'
+        r'player->health\s*=\s*MIN<int32_t>\(player->health \+ raise, pawn->maxhealth\)', WL_AGENT,
+        "the boost raises the maximum first, then heals up to it")
 require(r"ConsumeC7AlienCharge\(self,\s*33,\s*4\)", (ROOT / "src/wl_agent.cpp").read_text(), "plasma 33/4 charge model")
 require(r"clearance\[4\]\s*=\s*\{\s*10,\s*75,\s*100,\s*100\s*\}", LNSPEC, "rank clearance quotas")
 require(r'trigger\s+63\s*\{.*?Exit_Normal.*?arg0\s*=\s*1', XLAT, "normal elevators pass their mode in argument zero")
@@ -365,8 +402,8 @@ forbid(r'C7BonusCounterClasses\[[^]]*\]\s*=\s*\{[^}]*C7Mines', WL_AGENT,
        "mines are outside the native bonus-entry set")
 require(r'bool\s+C7RestoreBonusEntry.*?player\.health\s*=\s*pawn->health\s*=\s*entry\.health.*?item->amount\s*=\s*amount;.*?NATIVE_CLASS\(Weapon\).*?RemoveInventory',
         WL_AGENT, "leaving a bonus floor restores health, counters and the owned weapons, never capacity")
-require(r'void\s+C7NativeFloorSetup.*?health\s*>\s*100.*?C7EnergyCapacity.*?amount\s*=\s*100.*?C7Invulnerability.*?RemoveInventory',
-        WL_AGENT, "every floor caps health, refills energy capacity and ends invulnerability")
+require(r'void\s+C7NativeFloorSetup.*?pawn->maxhealth\s*=.*?GetDefault\(\)\)->maxhealth;.*?health\s*>\s*pawn->maxhealth.*?C7EnergyCapacity.*?amount\s*=\s*100.*?C7Invulnerability.*?RemoveInventory',
+        WL_AGENT, "every floor resets the health maximum, caps health, refills energy capacity and ends invulnerability")
 require(r'C7RestoreBonusEntry\(players\[i\]\)', WL_GAME, "leaving a bonus floor restores the entry state")
 require(r'levelInfo->BonusLevel\)\s*C7CaptureBonusEntry\(players\[i\]\);\s*else\s*C7ClearBonusEntry',
         WL_GAME, "the entry state is taken on arrival at a bonus floor and cleared elsewhere")
@@ -764,9 +801,15 @@ require(r'action\s+native\s+A_C7AlienAlarm', NATIVE_ACTORS,
         "the Ailoprobe alarm action is registered")
 require(r'P_AlertCorridor7MonstersNear.*?12\*TILEGLOBAL', WL_AGENT,
 		"ordinary alien alarms wake a local group instead of the whole floor")
-require(r'TileBlocksSight.*?CheckGameFilter\("Corridor7"\).*?return\s+spot->corridor7WallMarker\s*!=\s*107.*?'
-		r'else if \(TileBlocksSight\(spot\)\)', WL_STATE,
-		"Corridor 7 glass remains opaque to alien line-of-sight")
+# CORR7CD.EXE's CheckLine (Ghidra 1ef0:1b83) passes plane-1 markers 105 and
+# 107 and nothing else solid (GitHub #31): the electric fences and trusses
+# are shot through in both directions, marker-104 glass is not.
+require(r'TileBlocksSight.*?CheckGameFilter\("Corridor7"\).*?return\s+spot->corridor7WallMarker\s*!=\s*105\s*&&\s*'
+		r'spot->corridor7WallMarker\s*!=\s*107.*?else if \(TileBlocksSight\(spot\)\)', WL_STATE,
+		"Corridor 7 sight and shots pass marker 105 and 107 cells only")
+if re.search(r'TileBlocksSight[^}]*?corridor7SightTransparent[^}]*?CheckGameFilter\("Corridor7"\)', WL_STATE, re.DOTALL) is None and \
+		re.search(r'CheckGameFilter\("Corridor7"\)\)\s*return[^;]*corridor7SightTransparent', WL_STATE):
+    raise SystemExit("Corridor 7 definition check failed: C7 sight must key on the marker, not the render flag a closed chamber shutter carries")
 require(r'C7VisorCanSeeActor.*?C7Eniram.*?infrared',
 		R_SPRITES, "infrared reveals cloaked Eniram actors")
 # A controlled DOSBox run shows the decorative statics (C010 posts, C011
@@ -939,9 +982,9 @@ require(r'actor\s+C7Tebazile.*?TransformEniram:.*?C822.*?C827.*?'
 		r'TransformTymok:.*?C828.*?C833.*?TransformSolrac:.*?C834.*?C839.*?'
 		r'TransformFinal:.*?C840.*?C845.*?Death:.*?C846.*?C857',
 		MONSTERS, "Tebazile plays all native transformation and final-death frames")
-require(r'actor\s+C7Mechanoid.*?C690.*?A_PlaySound.*?C692.*?A_PlaySound.*?'
+require(r'actor\s+C7Mechanoid.*?C690.*?A_C7AreaSound.*?C692.*?A_C7AreaSound.*?'
 		r'Missile:.*?C694.*?C695\s+A\s+5\s+A_WolfAttack.*?C697\s+A\s+5\s+A_WolfAttack.*?'
 		r'C695\s+A\s+5\s+A_WolfAttack.*?C696\s+A\s+0\s+A_WolfAttack',
-		MONSTERS, "Mechanoid has booming steps and its four-round volley")
+		MONSTERS, "Mechanoid has audible steps and its four-round volley")
 
 print("Corridor 7 definition checks passed")

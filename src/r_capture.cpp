@@ -2425,8 +2425,16 @@ static void TraceVerbs()
 	AActor *pawn = player.mo;
 
 	int visor = 0, charge = 0, mines = 0, ammo = 0, health = 0, plan = 0, capacity = 0;
+	// Alien weapon charge and its capacity, and the health maximum an
+	// Adrenaline Boost raises (GitHub #32, #34).
+	int energy = -1, ecap = -1, maxhealth = 0;
 	if(pawn)
 	{
+		if(AInventory *e = pawn->FindInventory(ClassDef::FindClass("C7Energy")))
+			energy = e->amount;
+		if(AInventory *c = pawn->FindInventory(ClassDef::FindClass("C7EnergyCapacity")))
+			ecap = c->amount;
+		maxhealth = static_cast<APlayerPawn *>(pawn)->maxhealth;
 		if(AInventory *mode = pawn->FindInventory(ClassDef::FindClass("C7VisorMode")))
 			visor = mode->amount;
 		if(AInventory *battery = pawn->FindInventory(ClassDef::FindClass("C7VisorCharge")))
@@ -2462,13 +2470,17 @@ static void TraceVerbs()
 	static int lastVisor, lastCharge, lastMines, lastAmmo, lastHealth, lastMap, lastAngle, lastX, lastY, lastPlan;
 	static int lastCapacity;
 	static int lastPacks, lastPlans;
+	static int lastEnergy, lastEcap, lastMaxHealth;
 	if(first || visor != lastVisor || mines != lastMines || ammo != lastAmmo ||
 		health != lastHealth || map != lastMap || angle != lastAngle ||
+		energy != lastEnergy || ecap != lastEcap || maxhealth != lastMaxHealth ||
 		x != lastX || y != lastY || charge != lastCharge || plan != lastPlan || capacity != lastCapacity ||
 		packs != lastPacks || plans != lastPlans)
 	{
-		Printf("verbs tic=%lu visor=%d mines=%d map=%d ammo=%d health=%d x=%d y=%d angle=%d charge=%d plan=%d fullmap=%d capacity=%d packs=%d plans=%d\n",
-			(unsigned long)g_ticCount, visor, mines, map, ammo, health, x, y, angle, charge, plan, gamestate.fullmap ? 1 : 0, capacity, packs, plans);
+		Printf("verbs tic=%lu visor=%d mines=%d map=%d ammo=%d health=%d x=%d y=%d angle=%d charge=%d plan=%d fullmap=%d capacity=%d packs=%d plans=%d energy=%d ecap=%d maxhealth=%d\n",
+			(unsigned long)g_ticCount, visor, mines, map, ammo, health, x, y, angle, charge, plan, gamestate.fullmap ? 1 : 0, capacity, packs, plans,
+			energy, ecap, maxhealth);
+		lastEnergy = energy; lastEcap = ecap; lastMaxHealth = maxhealth;
 		first = false;
 		lastVisor = visor; lastMines = mines; lastAmmo = ammo; lastHealth = health;
 		lastMap = map; lastAngle = angle; lastX = x; lastY = y;

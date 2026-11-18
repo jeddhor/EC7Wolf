@@ -774,11 +774,11 @@ actor C7Tymok : C7Monster
 
 actor C7Mechanoid : C7Monster
 {
-	// Mechanoid Warrior, released class 23. Its C690/C692 steps are audible.
-	// Its attack sound is class 23's, sample 41 -- the dual blaster it drops.
-	activesound "c7/monster/active/class20"
+	// Mechanoid Warrior, released class 23. Its attack sound is class 23's,
+	// sample 41 -- the dual blaster it drops.
+	activesound "c7/monster/active/class23"
 	attacksound "c7/monster/attack/class23"
-	deathsound "c7/monster/death/class20"
+	deathsound "c7/monster/death/class23"
 	points 2500
 	health 500, 500, 1000, 1500, 2000
 	speed 1, 2
@@ -789,13 +789,16 @@ actor C7Mechanoid : C7Monster
 			C690 A -1 NOP A_Look
 			stop
 		See:
-			C690 A 0 A_PlaySound("c7/monster/active/class20")
+			// 2d352: 690 (20) and 692 (20) end with the footstep, sample 2
+			// (17958); 690 (6) ends with class 23's 1-in-7 ambient, sample 40
+			// (18346). Both only where the player can hear: the alien's area
+			// joined to theirs, and the step not too far off (GitHub #33).
+			// Each action sits on the state after the one that owns it.
 			C690 A 10 NOP A_Chase("*", "*", CHF_BACKOFF|CHF_NOPLAYACTIVE)
-			C690 A 3
-			C691 A 4 NOP A_Chase("*", "*", CHF_BACKOFF|CHF_NOPLAYACTIVE)
-			C692 A 0 A_PlaySound("c7/monster/active/class20")
+			C690 A 3 A_C7AreaSound("c7/monster/step/class23", 256, 1)
+			C691 A 4 A_C7AreaSound("c7/monster/active/class23", 37) A_Chase("*", "*", CHF_BACKOFF|CHF_NOPLAYACTIVE)
 			C692 A 10 NOP A_Chase("*", "*", CHF_BACKOFF|CHF_NOPLAYACTIVE)
-			C692 A 3
+			C692 A 3 A_C7AreaSound("c7/monster/step/class23", 256, 1)
 			C693 A 4 NOP A_Chase("*", "*", CHF_BACKOFF|CHF_NOPLAYACTIVE)
 			loop
 		Missile:

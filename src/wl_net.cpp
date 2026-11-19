@@ -85,7 +85,10 @@
 // alien damage, attack sequences and charge refill all change the simulation.
 // Protocol 13 requires alien shots on their frames' ends (GitHub #29): an
 // alien's first round lands a frame later than under protocol 12.
-#define NET_PROTOCOL_VERSION 13
+// Protocol 14 requires the original's line of fire through marker-105 screens
+// (GitHub #31), the raised health maximum (#32) and alien weapons that reset
+// capacity rather than give charge (#34).
+#define NET_PROTOCOL_VERSION 14
 // Present in the first datagram of every connection. A request used to be one
 // lone zero byte, so any stray packet arriving on the port was a new player.
 static const BYTE NetMagic[3] = { 'E', '7', 'N' };

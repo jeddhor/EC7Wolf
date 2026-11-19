@@ -66,6 +66,10 @@
 
 #include <clocale>
 
+#ifdef MISTER_HYBRID
+#include "mister/mister.h"
+#endif
+
 /*
 =============================================================================
 
@@ -1540,6 +1544,20 @@ static const char* CheckParameters(int argc, char *argv[], TArray<FString> &file
 
 	r_ratio = static_cast<Aspect>(CheckRatio(windowWidth, windowHeight));
 
+#ifdef MISTER_HYBRID
+	// The core scans out the size picked in its menu (OSD Resolution) at
+	// 15kHz, which is 4:3 on the screen whatever the size
+	{
+		unsigned w, h;
+		MiSTer_Resolution(w, h);
+		fullscreen = true;
+		windowWidth = fullScreenWidth = windowedScreenWidth = w;
+		windowHeight = fullScreenHeight = windowedScreenHeight = h;
+		vid_aspect = ASPECT_4_3;
+		r_ratio = static_cast<Aspect>(CheckRatio(windowWidth, windowHeight));
+	}
+#endif
+
 	if(sampleRateGiven && !audioBufferGiven)
 		param_audiobuffer = 2048 / (44100 / param_samplerate);
 
@@ -1847,7 +1865,11 @@ int WL_Main (int argc, char *argv[])
 		// session that ends with no closing event at all leaves it waiting.
 		EditorLink::SessionResult("exit");
 		CallTerminateFunctions();
+#ifdef MISTER_HYBRID
+		return MiSTer_ExitCode();
+#else
 		return 0;
+#endif
 	}
 	catch(CDoomError &error)
 	{
@@ -1858,6 +1880,9 @@ int WL_Main (int argc, char *argv[])
 		EditorLink::Fatal(error.GetMessage());
 		EditorLink::SessionResult("error");
 		CallTerminateFunctions();
+#ifdef MISTER_HYBRID
+		MiSTer_ShowError(error.GetMessage());
+#endif
 
 #ifdef __ANDROID__
 		Printf("%s\n", error.GetMessage());

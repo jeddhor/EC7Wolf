@@ -9,6 +9,9 @@
 #include "render/r_interpolation.h"
 #include "render/r_dynamicwalls.h"
 #include "wl_menu.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister.h"
+#endif
 #include "id_ca.h"
 #include "id_sd.h"
 #include "id_vl.h"
@@ -1023,6 +1026,12 @@ void CheckKeys (void)
 	static bool changeSize = true;
 	ScanCode scan;
 
+
+#ifdef MISTER_HYBRID
+	// Resolution from the core's menu
+	if (!screenfaded && MiSTer_UpdateResolution())
+		DrawPlayScreen();
+#endif
 
 	if (screenfaded || demoplayback)    // don't do anything with a faded screen
 		return;

@@ -12,6 +12,9 @@
 #include "g_bot.h"
 #include "g_skill.h"
 #include "wl_menu.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister.h"
+#endif
 #include "wl_iwad.h"
 #include "c7_cdaudio.h"
 #include "c7_upscale.h"
@@ -1747,7 +1750,10 @@ void CreateMenus()
 	displayMenu.addItem(new BooleanMenuItem(language["STR_VSYNC"], vid_vsync, ToggleVsync));
 #endif
 	AddLabeled(displayMenu, new MultipleChoiceMenuItem(SetAspectRatio, aspectOptions, 8, vid_aspect), "Aspect Ratio");
+#ifndef MISTER_HYBRID
+	// The resolution is an option in the core's menu
 	displayMenu.addItem(new MenuSwitcherMenuItem(language["STR_SELECTRES"], resolutionMenu, EnterResolutionSelection));
+#endif
 	displayMenu.addItem(new LabelMenuItem(language["STR_SCREENSIZE"]));
 	AddLabeled(displayMenu, new SliderMenuItem(viewsize, 110, 21, language["STR_SMALL"], language["STR_LARGE"], AdjustViewSize), "View Size");
 	}
@@ -2321,6 +2327,15 @@ void ReadAnyControl (ControlInfo * ci)
 			ci->dir = dir_East;
 
 		jb = IN_JoyButtons ();
+#ifdef MISTER_HYBRID
+		// The buttons picked as Menu OK and Menu Back in the core's menu,
+		// whatever they do in the game
+		if (jb & (MISTER_JOY_OK_MASK | MISTER_JOY_BACK_MASK))
+		{
+			ci->button0 = !!(jb & MISTER_JOY_OK_MASK);
+			ci->button1 = !!(jb & MISTER_JOY_BACK_MASK);
+		}
+#else
 		if (jb)
 		{
 			ci->button0 = !!(jb & 1);
@@ -2328,6 +2343,7 @@ void ReadAnyControl (ControlInfo * ci)
 			ci->button2 = !!(jb & 4);
 			ci->button3 = !!(jb & 8);
 		}
+#endif
 	}
 }
 

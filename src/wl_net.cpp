@@ -88,7 +88,9 @@
 // Protocol 14 requires the original's line of fire through marker-105 screens
 // (GitHub #31), the raised health maximum (#32) and alien weapons that reset
 // capacity rather than give charge (#34).
-#define NET_PROTOCOL_VERSION 14
+// Protocol 15 requires the original's mine arming and trigger distances
+// (GitHub #37) and armor capped at 999 (#38).
+#define NET_PROTOCOL_VERSION 15
 // Present in the first datagram of every connection. A request used to be one
 // lone zero byte, so any stray packet arriving on the port was a new player.
 static const BYTE NetMagic[3] = { 'E', '7', 'N' };

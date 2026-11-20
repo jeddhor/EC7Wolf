@@ -563,6 +563,18 @@ bool ACustomInventory::TryPickup(AActor *toucher)
 	const Frame *pickup = FindState(NAME_Pickup);
 	if(!ExecuteState(toucher, pickup))
 		return false;
+	// As ZDoom does: an item with nothing to Use has done its work once its
+	// Pickup state succeeds, and goes away instead of into the inventory.
+	// Kept in the inventory, the first one made every later one a duplicate
+	// at its maxamount of 1, refused after its Pickup state had already run --
+	// so it stayed on the floor and ran again every tic. Every item here but
+	// Corridor 7's charge pack is ALWAYSPICKUP, which hid that; the pack is
+	// refused at 999 capacity, so it cannot be (GitHub #39).
+	if(!FindState(NAME_Use))
+	{
+		GoAwayAndDie();
+		return true;
+	}
 	return Super::TryPickup(toucher);
 }
 

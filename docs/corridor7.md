@@ -746,6 +746,10 @@ Alien weapons come with no charge. Picking one up, new or a duplicate, sets the
 energy capacity back to 100 (13ec1), and charge regenerates up to capacity two
 points a frame once any weapon above the M-16 is owned. An Alien Charge Pack
 adds 100 capacity, up to 999, and is left lying at 999 (140f6) (GitHub #34).
+Each pack is used up as it is taken. Like every CustomInventory item without a
+Use state, it goes away once its Pickup state succeeds, as in ZDoom; ECWolf
+used to keep it in the inventory, which made every later pack a refused
+duplicate that ran again each tic (GitHub #39).
 
 Body armor adds 200 a suit and stops at 999; a suit found at 999 is still
 picked up (13f7c, GitHub #38).

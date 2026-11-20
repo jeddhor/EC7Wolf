@@ -1,4 +1,4 @@
-"""Health, armor and alien energy follow CORR7CD.EXE (GitHub #32, #34, #38).
+"""Health, armor and alien energy follow CORR7CD.EXE (GitHub #32, #34, #38, #39).
 
 Usage: test_corridor7_health_energy.py BUILD_DIR DATA_DIR WORK_DIR
 
@@ -15,6 +15,9 @@ alien charge (energy) and its capacity (ecap) whenever one of them moves.
        a duplicate is still picked up, and restores capacity spent by firing.
        A charge pack adds 100 capacity (140f6), and charge regenerates up to
        it. Charge starts building at the M-343, before any alien weapon.
+  #39  Each charge pack is used up: ten in a row raise capacity 100 at a time
+       to 999, and only the tenth, refused at 999, is left lying. The second
+       pack used to run every tic without being taken, straight to 999.
 """
 from dataclasses import replace
 from pathlib import Path
@@ -127,6 +130,19 @@ check(not jumps, 'no pickup adds charge; it only ever regenerates by two', jumps
 check(rows[-1]['ecap'] == 200, 'a charge pack adds 100 capacity', show(rows, 'x', 'ecap')[-3:])
 check(rows[-1]['energy'] > 100, 'charge regenerates past 100 into the added capacity',
       show(rows, 'energy', 'ecap')[-3:])
+
+# --- #39: every charge pack is taken, 100 at a time, until 999 ----------------
+fixture({x: CHARGE_PACK for x in range(6, 16)})
+_, rows = run('packs', ('--capture-forward', '5', '60'), 140)
+levels = sorted({r['ecap'] for r in rows})
+check(levels == [100, 200, 300, 400, 500, 600, 700, 800, 900, 999],
+      'each charge pack adds 100 capacity, stopping at 999', levels)
+steps = [(a['tic'], a['ecap'], b['ecap']) for a, b in zip(rows, rows[1:])
+         if b['ecap'] - a['ecap'] > 100]
+check(not steps, 'no pack adds more than once', steps)
+check(rows[-1]['pickups'] - rows[0]['pickups'] == 9,
+      'nine packs are taken and the tenth, at 999, is left lying',
+      show(rows, 'x', 'ecap', 'pickups')[-4:])
 
 # --- #34: a duplicate blaster restores the capacity firing spent ---------------
 fixture({8: DUAL_BLASTER})

@@ -699,6 +699,36 @@ bool Load(const FString &filename)
 		AActor::FinishSpawningActors();
 	}
 	RepairCorridor7KillCount();
+	// An item's maxamount is saved with it, so a save keeps the caps of the
+	// build that wrote it: armor at 65535 from before 1.0-beta308 (GitHub #38),
+	// energy capacity at 100 from before beta306 (#34). Neither cap is ever
+	// raised in play, so both take the definition's, and armor already past
+	// it comes down to it.
+	if(IWad::CheckGameFilter("Corridor7"))
+	{
+		const char *capped[] = { "C7BodyArmor", "C7EnergyCapacity" };
+		for(unsigned int c = 0;c < countof(capped);++c)
+		{
+			const ClassDef *cls = ClassDef::FindClass(capped[c]);
+			if(!cls)
+				continue;
+			for(unsigned int i = 0;i < Session::ActiveSlotCount();++i)
+			{
+				AInventory *item = players[i].mo ? players[i].mo->FindInventory(cls) : NULL;
+				if(!item)
+					continue;
+				// Read at the field's offset: the default block has no live
+				// vptr to cast through.
+				unsigned int cap;
+				memcpy(&cap, reinterpret_cast<const char *>(cls->GetDefault()) +
+					(reinterpret_cast<const char *>(&item->maxamount) -
+					 reinterpret_cast<const char *>(item)), sizeof(cap));
+				item->maxamount = cap;
+				if(item->amount > cap)
+					item->amount = cap;
+			}
+		}
+	}
 	// A save made on a bonus floor by a build that did not keep the entry
 	// state cannot say what the player carried in. Do not guess an earlier
 	// inventory: what was loaded becomes this run's baseline, and the log says

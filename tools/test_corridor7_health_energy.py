@@ -1,4 +1,4 @@
-"""The health maximum and alien energy follow CORR7CD.EXE (GitHub #32, #34).
+"""Health, armor and alien energy follow CORR7CD.EXE (GitHub #32, #34, #38).
 
 Usage: test_corridor7_health_energy.py BUILD_DIR DATA_DIR WORK_DIR
 
@@ -9,6 +9,8 @@ alien charge (energy) and its capacity (ecap) whenever one of them moves.
   #32  The Adrenaline Boost raises the maximum by 300 and heals 300 up to it
        (13fd9): 100/100 -> 400/400, a second -> 700/700. The next floor puts
        the maximum back to 100 and health with it (216ba).
+  #38  Body armor adds 200 and stops at 999 (13f7c), and a suit is taken
+       even at 999.
   #34  An alien weapon resets capacity to 100 and gives no charge (13ec1);
        a duplicate is still picked up, and restores capacity spent by firing.
        A charge pack adds 100 capacity (140f6), and charge regenerates up to
@@ -23,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'editor'))
 from ec7edit_core.archive import read_archive, encode_archive
 from ec7edit_core.planes import MapPlanes
 
-M343, DUAL_BLASTER, ADRENALINE, CHARGE_PACK = 29, 51, 80, 81
+M343, DUAL_BLASTER, ADRENALINE, CHARGE_PACK, BODY_ARMOR = 29, 51, 80, 81, 82
 PLAYER_START, EMPTY, FLOOR = 22, 18, 256
 
 lab = work / 'lab'; lab.mkdir(parents=True); (work / 'saves').mkdir()
@@ -102,6 +104,16 @@ check((400, 400) in pairs and (700, 700) in pairs,
 check('MAP02 - ' in text and pairs[-1] == (100, 100),
       'the next floor puts the maximum and health back to 100',
       show(rows, 'health', 'maxhealth'))
+
+# --- #38: six suits of armor stop at 999, and every one is taken -------------
+fixture({x: BODY_ARMOR for x in range(6, 12)})
+_, rows = run('armor', ('--capture-forward', '5', '50'), 120)
+levels = sorted({r['armor'] for r in rows})
+check(levels == [0, 200, 400, 600, 800, 999],
+      'body armor adds 200 a suit and stops at 999', levels)
+check(rows[-1]['armor'] == 999 and rows[-1]['pickups'] - rows[0]['pickups'] == 6,
+      'the sixth suit is taken at 999 without raising it',
+      show(rows, 'x', 'armor', 'pickups')[-4:])
 
 # --- #34: charge from the M-343; a dual blaster and a charge pack bring none ---
 fixture({6: M343, 8: DUAL_BLASTER, 10: CHARGE_PACK})

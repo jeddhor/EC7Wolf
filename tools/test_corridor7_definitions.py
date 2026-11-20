@@ -402,7 +402,7 @@ forbid(r'C7BonusCounterClasses\[[^]]*\]\s*=\s*\{[^}]*C7Mines', WL_AGENT,
        "mines are outside the native bonus-entry set")
 require(r'bool\s+C7RestoreBonusEntry.*?player\.health\s*=\s*pawn->health\s*=\s*entry\.health.*?item->amount\s*=\s*amount;.*?NATIVE_CLASS\(Weapon\).*?RemoveInventory',
         WL_AGENT, "leaving a bonus floor restores health, counters and the owned weapons, never capacity")
-require(r'void\s+C7NativeFloorSetup.*?pawn->maxhealth\s*=.*?GetDefault\(\)\)->maxhealth;.*?health\s*>\s*pawn->maxhealth.*?C7EnergyCapacity.*?amount\s*=\s*100.*?C7Invulnerability.*?RemoveInventory',
+require(r'void\s+C7NativeFloorSetup.*?memcpy\(&pawn->maxhealth,.*?GetDefault\(\)\)\s*\+\s*offset,.*?health\s*>\s*pawn->maxhealth.*?C7EnergyCapacity.*?amount\s*=\s*100.*?C7Invulnerability.*?RemoveInventory',
         WL_AGENT, "every floor resets the health maximum, caps health, refills energy capacity and ends invulnerability")
 require(r'C7RestoreBonusEntry\(players\[i\]\)', WL_GAME, "leaving a bonus floor restores the entry state")
 require(r'levelInfo->BonusLevel\)\s*C7CaptureBonusEntry\(players\[i\]\);\s*else\s*C7ClearBonusEntry',
@@ -509,8 +509,19 @@ if plasma_bolt is None or re.search(r'C(?:738|739|740|741|742|743|744|745)', pla
     raise SystemExit(
         "Corridor 7 definition check failed: player plasma must not use exit-vortex sprites"
     )
-require(r'ACTION_FUNCTION\(A_C7MineThink\).*?32\s*\*\s*\(FRACUNIT\s*/\s*64\).*?self->temp1\s*==\s*0.*?self->temp1\s*=\s*1.*?check->player.*?FL_ISMONSTER.*?DamageActor\(self,\s*self->target,\s*self->health\)',
-        WL_AGENT, "mines arm persistently and trigger on nearby players or monsters")
+# GitHub #37. CORR7CD.EXE 2f28:2177 arms a mine with sample 33 once its owner
+# is more than 0xc350 off on either axis; 2f28:242e sets it off with sample 1
+# for anything within 0x9c40 on both.
+require(r'ACTION_FUNCTION\(A_C7MineThink\).*?armDistance\s*=\s*0xc350.*?triggerDistance\s*=\s*0x9c40.*?'
+        r'self->temp1\s*==\s*0.*?<=\s*armDistance.*?self->temp1\s*=\s*1.*?SD_PlaySound\("c7/mine/arm"\).*?'
+        r'check->player.*?FL_ISMONSTER.*?<\s*triggerDistance.*?SD_PlaySound\("c7/mine/trigger"\).*?'
+        r'DamageActor\(self,\s*self->target,\s*self->health\)',
+        WL_AGENT, "mines arm with a beep past 0xc350 and go off with a sound inside 0x9c40")
+require(r'c7/mine/arm\s*\{\s*C7DS0033', SNDINFO, "the mine arms with sample 33")
+require(r'c7/mine/trigger\s*\{\s*C7DS0001', SNDINFO, "the mine goes off with sample 1")
+# GitHub #38. 13f7c: armor += 200, capped at 999, the suit always taken.
+require(r'actor\s+C7BodyArmor\s*:\s*Inventory\s*\{[^}]*?\+INVENTORY\.ALWAYSPICKUP[^}]*?inventory\.amount\s+200[^}]*?inventory\.maxamount\s+999\b',
+        PLAYER, "body armor stacks by 200 to 999 and is always taken")
 require(r'ACTION_FUNCTION\(A_Explode\).*?attacker\s*=\s*self->target.*?XF_HURTSOURCE.*?target\s*==\s*self->target.*?attacker\s*=\s*self.*?DamageActor\(target,\s*attacker',
         THINGDEF_CODEPTR, "source-hurting explosions bypass player self-friendly-fire suppression")
 require(r'ACTION_FUNCTION\(A_C7GunAttack\).*?DepleteAmmo.*?if\(!closest\)\s*return\s+true.*?return\s+true', WL_AGENT, "missed Corridor 7 shots consume ammo and finish their weapon state")

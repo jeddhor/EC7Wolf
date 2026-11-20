@@ -2427,9 +2427,11 @@ static void TraceVerbs()
 	int visor = 0, charge = 0, mines = 0, ammo = 0, health = 0, plan = 0, capacity = 0;
 	// Alien weapon charge and its capacity, and the health maximum an
 	// Adrenaline Boost raises (GitHub #32, #34).
-	int energy = -1, ecap = -1, maxhealth = 0;
+	int energy = -1, ecap = -1, maxhealth = 0, armor = 0;
 	if(pawn)
 	{
+		if(AInventory *a = pawn->FindInventory(ClassDef::FindClass("C7BodyArmor")))
+			armor = a->amount;
 		if(AInventory *e = pawn->FindInventory(ClassDef::FindClass("C7Energy")))
 			energy = e->amount;
 		if(AInventory *c = pawn->FindInventory(ClassDef::FindClass("C7EnergyCapacity")))
@@ -2470,17 +2472,20 @@ static void TraceVerbs()
 	static int lastVisor, lastCharge, lastMines, lastAmmo, lastHealth, lastMap, lastAngle, lastX, lastY, lastPlan;
 	static int lastCapacity;
 	static int lastPacks, lastPlans;
-	static int lastEnergy, lastEcap, lastMaxHealth;
+	static int lastEnergy, lastEcap, lastMaxHealth, lastArmor;
+	static unsigned lastPickups;
 	if(first || visor != lastVisor || mines != lastMines || ammo != lastAmmo ||
 		health != lastHealth || map != lastMap || angle != lastAngle ||
-		energy != lastEnergy || ecap != lastEcap || maxhealth != lastMaxHealth ||
+		energy != lastEnergy || ecap != lastEcap || maxhealth != lastMaxHealth || armor != lastArmor ||
+		Items::PickupsBy(ConsolePlayer) != lastPickups ||
 		x != lastX || y != lastY || charge != lastCharge || plan != lastPlan || capacity != lastCapacity ||
 		packs != lastPacks || plans != lastPlans)
 	{
-		Printf("verbs tic=%lu visor=%d mines=%d map=%d ammo=%d health=%d x=%d y=%d angle=%d charge=%d plan=%d fullmap=%d capacity=%d packs=%d plans=%d energy=%d ecap=%d maxhealth=%d\n",
+		Printf("verbs tic=%lu visor=%d mines=%d map=%d ammo=%d health=%d x=%d y=%d angle=%d charge=%d plan=%d fullmap=%d capacity=%d packs=%d plans=%d energy=%d ecap=%d maxhealth=%d armor=%d pickups=%u\n",
 			(unsigned long)g_ticCount, visor, mines, map, ammo, health, x, y, angle, charge, plan, gamestate.fullmap ? 1 : 0, capacity, packs, plans,
-			energy, ecap, maxhealth);
-		lastEnergy = energy; lastEcap = ecap; lastMaxHealth = maxhealth;
+			energy, ecap, maxhealth, armor, Items::PickupsBy(ConsolePlayer));
+		lastEnergy = energy; lastEcap = ecap; lastMaxHealth = maxhealth; lastArmor = armor;
+		lastPickups = Items::PickupsBy(ConsolePlayer);
 		first = false;
 		lastVisor = visor; lastMines = mines; lastAmmo = ammo; lastHealth = health;
 		lastMap = map; lastAngle = angle; lastX = x; lastY = y;

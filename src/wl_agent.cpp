@@ -1597,7 +1597,15 @@ void C7NativeFloorSetup(player_t &player)
 		return;
 	// The class's own maximum: 100 for the Marine, as 216ba sets it. An
 	// Adrenaline Boost raised it for the floor it was found on (GitHub #32).
-	pawn->maxhealth = static_cast<const APlayerPawn *>(pawn->GetClass()->GetDefault())->maxhealth;
+	// The default block is raw storage with no live vptr, so it is read at the
+	// field's offset rather than cast to APlayerPawn (UBSan's vptr check).
+	{
+		const ptrdiff_t offset = reinterpret_cast<const char *>(&pawn->maxhealth) -
+			reinterpret_cast<const char *>(pawn);
+		memcpy(&pawn->maxhealth,
+			reinterpret_cast<const char *>(pawn->GetClass()->GetDefault()) + offset,
+			sizeof(pawn->maxhealth));
+	}
 	if(player.health > pawn->maxhealth)
 		player.health = pawn->health = pawn->maxhealth;
 	if(const ClassDef *cls = ClassDef::FindClass("C7EnergyCapacity"))
@@ -2045,20 +2053,26 @@ ACTION_FUNCTION(A_C7ChargePack)
 	return true;
 }
 
-// Armed Corridor 7 mines use a square proximity check, matching the tile-based
-// distance convention used throughout the original engine. The mine first
-// waits for its owner to clear the trigger zone, then reacts to either a player
-// or a living monster. It remains shootable, so plasma and other weapon impacts
-// can detonate it early.
+// Corridor 7 mines (CORR7CD.EXE 2f28:2177 and 2f28:242e). A dropped mine waits
+// until its owner is more than 0xc350 away along either axis, then arms with
+// sample 33 -- the same beep the menus use (2370e; GitHub #37). An armed mine
+// goes off for the player or any alien that comes within 0x9c40 along both
+// axes, with sample 1 (23985). Square distances, as everywhere in the original
+// engine. It remains shootable, so plasma and other weapon impacts can set it
+// off early.
 ACTION_FUNCTION(A_C7MineThink)
 {
-	const fixed triggerDistance = 32 * (FRACUNIT / 64);
+	const fixed armDistance = 0xc350;
+	const fixed triggerDistance = 0x9c40;
 	if(self->temp1 == 0)
 	{
 		AActor *owner = self->target;
-		if(owner && MAX(abs(owner->x - self->x), abs(owner->y - self->y)) <= triggerDistance)
+		if(owner && MAX(abs(owner->x - self->x), abs(owner->y - self->y)) <= armDistance)
 			return false;
 		self->temp1 = 1;
+		// Not positional: the original plays it to the player who dropped it.
+		if(owner && owner->player && Session::IsLocalViewSlot(owner->player->GetPlayerNum()))
+			SD_PlaySound("c7/mine/arm");
 		return false;
 	}
 
@@ -2067,8 +2081,9 @@ ACTION_FUNCTION(A_C7MineThink)
 		if(check == self || !(check->flags & FL_SHOOTABLE) ||
 			(!check->player && !(check->flags & FL_ISMONSTER)))
 			continue;
-		if(MAX(abs(check->x - self->x), abs(check->y - self->y)) <= triggerDistance)
+		if(MAX(abs(check->x - self->x), abs(check->y - self->y)) < triggerDistance)
 		{
+			SD_PlaySound("c7/mine/trigger");
 			DamageActor(self, self->target, self->health);
 			return true;
 		}

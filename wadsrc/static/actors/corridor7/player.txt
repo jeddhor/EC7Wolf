@@ -494,9 +494,12 @@ actor C7Adrenaline : CustomInventory
 actor C7BodyArmor : Inventory
 {
 	inventory.pickupsound "misc/health_pkup"
-	// Suits add 200 and stack; the HUD displays a full bar at 200.
+	// Suits add 200 and stack to 999, and a suit is taken even at 999
+	// (CORR7CD.EXE 13f7c: armor 8114 += 200, capped at 0x3e7; GitHub #38).
+	// The HUD displays a full bar at 200.
+	+INVENTORY.ALWAYSPICKUP
 	inventory.amount 200
-	inventory.maxamount 65535
+	inventory.maxamount 999
 	states { Spawn: C060 A -1 bright stop }
 }
 
@@ -541,9 +544,9 @@ actor C7ProximityMine
 	states
 	{
 		Spawn:
-			// The native mine-drop/arming path does not call SD_PlaySound.
 			// CORR7CD.EXE's static table identifies type 0x13 as shape 67,
 			// the released silver floor mine. C063 is its pickup crate.
+			// A_C7MineThink plays the arming beep and the trigger sound.
 			C067 A 36
 		Armed:
 			C067 A 1 A_C7MineThink

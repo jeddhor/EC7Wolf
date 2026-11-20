@@ -446,8 +446,9 @@ Append an output directory and `--all` to load-check every map in the archive.
   the original sprite families.
 - A Corridor 7 player, the released eight-weapon arsenal (including the
   Ithaca shotgun's secondary animation), persistent proximity mines with the
-  executable-selected silver floor sprite, owner-safe arming,
-  player/monster triggering, and
+  executable-selected silver floor sprite, owner-safe arming (beyond 0xc350
+  of the owner on either axis, with the menus' beep, sample 33),
+  player/monster triggering (within 0x9c40, with sample 1; GitHub #37), and
   self-damaging radial explosions, all weapon pickups,
   ammunition/charge/health/armor items, non-wasteful health and ammunition
   pickup rules, monster combat, projectile attacks, score, event sounds, and
@@ -745,5 +746,8 @@ Alien weapons come with no charge. Picking one up, new or a duplicate, sets the
 energy capacity back to 100 (13ec1), and charge regenerates up to capacity two
 points a frame once any weapon above the M-16 is owned. An Alien Charge Pack
 adds 100 capacity, up to 999, and is left lying at 999 (140f6) (GitHub #34).
+
+Body armor adds 200 a suit and stops at 999; a suit found at 999 is still
+picked up (13f7c, GitHub #38).
 President uses its native fifth alien-health row, independently of Major's
 shared population filter. Major's existing health row is unchanged.

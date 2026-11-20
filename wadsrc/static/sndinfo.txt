@@ -710,5 +710,7 @@ c7/elevator/activate		{ C7DS0047 C7AL0047 C7PC0047 }
 c7/elevator/secret		{ C7DS0050 C7AL0050 C7PC0050 }
 c7/dispenser/ammo		{ C7DS0026 C7AL0026 C7PC0026 }
 c7/dispenser/health/open	{ C7DS0016 C7AL0016 C7PC0016 }
+c7/mine/arm			{ C7DS0033 C7AL0033 C7PC0033 }	// the menus' sample 33 (GitHub #37)
+c7/mine/trigger			{ C7DS0001 C7AL0001 C7PC0001 }
 c7/dispenser/visor		{ C7DS0074 C7AL0074 C7PC0074 }
 $endif

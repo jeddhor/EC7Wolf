@@ -90,7 +90,9 @@
 // capacity rather than give charge (#34).
 // Protocol 15 requires the original's mine arming and trigger distances
 // (GitHub #37) and armor capped at 999 (#38).
-#define NET_PROTOCOL_VERSION 15
+// Protocol 16 requires CustomInventory items used up on pickup (GitHub #39):
+// under 15 a second charge pack ran every tic without being taken.
+#define NET_PROTOCOL_VERSION 16
 // Present in the first datagram of every connection. A request used to be one
 // lone zero byte, so any stray packet arriving on the port was a new player.
 static const BYTE NetMagic[3] = { 'E', '7', 'N' };

@@ -492,11 +492,16 @@ require(r'actor\s+C7ProximityMine.*?Spawn:.*?C067\s+A\s+36.*?Armed:.*?C067\s+A\s
         PLAYER, "placed mines use the released floor-mine sprite, not the pickup crate")
 # The three properties the bot's own model of a mine is built on. It prices
 # blast risk at two tiles (128 map units / 64 per tile), keeps clear of a live
-# one because the owner is not spared once it arms, and treats a mine as
-# something gunfire can set off. A DECORATE edit that changed any of these
+# one because the owner is not spared once it arms, and knows that only a
+# body or a projectile sets one off -- hitscan passes it by, as in DOS, where
+# mines are not objects (GitHub #49). A DECORATE edit that changed any of these
 # would leave the bot confidently wrong, and nothing else would notice.
-require(r'actor\s+C7ProximityMine.*?health\s+1.*?\+SHOOTABLE',
-        PLAYER, "a mine can be shot, and dies to one point of damage")
+mine = re.search(r'actor\s+C7ProximityMine\s*\{(.*?)\n\}', PLAYER, re.DOTALL)
+if mine is None or 'SHOOTABLE' in mine.group(1) or not re.search(r'health\s+1\b', mine.group(1)):
+    raise SystemExit("Corridor 7 definition check failed: a mine has one point of health "
+                     "and is not shootable")
+require(r'ACTION_FUNCTION\(A_C7MineThink\).*?FL_MISSILE', WL_AGENT,
+        "a projectile within range sets a mine off")
 require(r'actor\s+C7ProximityMine.*?Death:.*?A_Explode\(random\(102,\s*500\),\s*128,\s*1,\s*true\)',
         PLAYER, "a mine's blast reaches two tiles and hurts whoever laid it")
 require(r'actor\s+C7PlasmaBolt.*?speed\s+30.*?deathsound\s+"c7/teleport"'
@@ -937,10 +942,8 @@ for lump in ("C7DS0087", "C7DS0088", "C7DS0089", "C7DS0090"):
 			"cinematic's dialogue and must stay mapped" % lump)
 
 require(r'"Drop Mine".*?"Visor Mode"', WL_PLAY, "configuration-safe Corridor 7 control labels")
-require(r'const fixed distance = 40 \* \(FRACUNIT / 64\);', PLAYERPAWN,
-        "proximity-mine drop distance uses Corridor 7 world-unit scaling")
-require(r'IsValidTileCoordinate\(mineX >> FRACBITS,\s*mineY >> FRACBITS, 0\)',
-        PLAYERPAWN, "proximity-mine spawn coordinates are map-bounds checked")
+forbid(r'const fixed distance = 40 \* \(FRACUNIT / 64\);', PLAYERPAWN,
+       "the proximity mine is no longer dropped 40/64 of a tile ahead (GitHub #42)")
 
 if "Reload / Drop Mine" in WL_PLAY or "Zoom / Visor Mode" in WL_PLAY:
     raise SystemExit("Corridor 7 definition check failed: control name would corrupt the saved config")
@@ -997,5 +1000,24 @@ require(r'actor\s+C7Mechanoid.*?C690.*?A_C7AreaSound.*?C692.*?A_C7AreaSound.*?'
 		r'Missile:.*?C694.*?C695\s+A\s+5\s+A_WolfAttack.*?C697\s+A\s+5\s+A_WolfAttack.*?'
 		r'C695\s+A\s+5\s+A_WolfAttack.*?C696\s+A\s+0\s+A_WolfAttack',
 		MONSTERS, "Mechanoid has audible steps and its four-round volley")
+
+# GitHub #40-#48.
+require(r'if\(!gamestate\.c7KeepAlienCapacity\s*\|\|\s*capacity->amount\s*<\s*100\)\s*capacity->amount\s*=\s*100;',
+        INVENTORY, "alien weapons reset capacity to 100 unless the optional keep rule is on")
+require(r'return used \|\| IWad::CheckGameFilter\("Corridor7"\);', INVENTORY,
+        "a duplicate weapon is taken even with its ammunition full")
+require(r'const fixed mineX = x;\s*const fixed mineY = y;', PLAYERPAWN,
+        "a mine is dropped under the player, not ahead of them")
+require(r'case ex_died:\s*if\(IWad::CheckGameFilter\("Corridor7"\)\)\s*\{\s*VW_FadeOut\(\);.*?FinishPaletteShifts\(\);\s*Corridor7Death\(\);',
+        WL_GAME, "a Corridor 7 death clears the visor palette before the death page")
+require(r'static inline bool SpriteIsFullbright.*?c7_fullbright_sprites', R_SPRITES,
+        "the Fullbright Sprites option makes every Corridor 7 sprite fullbright")
+require(r'C7DrawHudItem\(icons\[i\],178.*?C7DrawHudItem\(icons\[i\],120.*?C7DrawHudItem\(items\[item\]\.graphic',
+        WOLF_SBAR, "every HUD layout draws its card and plan icons through the ramp cycle")
+LOADSAVE = (ROOT / "src/wl_loadsave.cpp").read_text()
+require(r'static int CompareSaveFilenames.*?isdigit.*?CompareSaveFilenames\(SaveFile::files\[j-1\]\.filename',
+        LOADSAVE, "saves are listed in numeric order, savegam10 after savegam9")
+require(r'QUICKSAVE_FILE = "quicksav\.ecs".*?if\(index >= 0 && c7_confirm_quicksave\)',
+        LOADSAVE, "F8 has its own quicksave slot and asks only when the option says so")
 
 print("Corridor 7 definition checks passed")

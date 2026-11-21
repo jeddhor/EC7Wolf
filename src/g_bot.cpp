@@ -1720,11 +1720,12 @@ private:
 	// across the arena have to use. That is map knowledge, which a player who
 	// has learned an arena also has -- section 16.7 forbids choosing placement
 	// from hidden enemy paths, and this never looks at where anyone has been.
-	// Judged on the cell the mine will land in, which is not the cell the bot
-	// is standing in: the drop goes 40/64 of a tile along the facing. Asking
-	// about the bot's own cell approved a mine that then landed in the open
-	// room next door -- MAP60 seed 5 put one at (34,4) with four ways out of
-	// it, from a bot standing in the doorway beside it.
+	// Judged on the cell the mine lands in. Since GitHub #42 that is the cell
+	// the bot stands in -- the drop goes under the dropper, as in DOS -- but it
+	// is asked of the mine's position, not the bot's, so that stays true if the
+	// drop ever moves again. (When the drop went 40/64 of a tile ahead, asking
+	// about the bot's own cell approved a mine that landed in the open room
+	// next door: MAP60 seed 5 put one at (34,4) from the doorway beside it.)
 	static bool WorthMining(const BotNav::Graph &graph, int tileX, int tileY)
 	{
 		if(tileX < 0 || tileY < 0)
@@ -1765,23 +1766,17 @@ private:
 				return;
 		}
 
-		// Where the mine will actually land, not where the bot is standing.
-		//
-		// The engine drops it 40/64 of a tile along the facing (a_playerpawn),
-		// which is frequently the next cell over. Recording the bot's own tile
-		// put the remembered mine up to a tile away from the real one, so both
-		// the avoidance below and the don't-stack test above were aimed at the
-		// wrong cell.
-		const unsigned fineangle = pawn->angle >> ANGLETOFINESHIFT;
-		const fixed dropAhead = 40 * (FRACUNIT / 64);
-		const fixed mineFX = pawn->x + FixedMul(dropAhead, finecosine[fineangle]);
-		const fixed mineFY = pawn->y - FixedMul(dropAhead, finesine[fineangle]);
+		// Where the mine will actually land: under the dropper, at its exact
+		// position (a_playerpawn; CORR7CD.EXE 2f28:1a28, GitHub #42).
+		const fixed mineFX = pawn->x;
+		const fixed mineFY = pawn->y;
 
 		// The square the trigger reaches, in cells. A_C7MineThink fires on
-		// anything within half a tile of the mine's centre, measured between
-		// actor origins -- so the danger is a 1x1 square around a point that
-		// is not a cell centre, and it straddles up to four cells.
-		const fixed triggerReach = FRACUNIT / 2;
+		// anything within 0x9c40 of the mine's centre along both axes (GitHub
+		// #37), measured between actor origins -- so the danger is a square
+		// around a point that is not a cell centre, and it straddles up to four
+		// cells.
+		const fixed triggerReach = 0x9c40;
 		const int firstX = (mineFX - triggerReach) >> FRACBITS;
 		const int lastX = (mineFX + triggerReach) >> FRACBITS;
 		const int firstY = (mineFY - triggerReach) >> FRACBITS;
@@ -1791,16 +1786,13 @@ private:
 			(int)(mineFY >> FRACBITS)))
 			return;
 
-		// Laying one in front of itself is fine, and deliberately not
-		// prevented here.
-		//
-		// bt_reload drops the mine 40/64 of a tile along the facing, so a bot
-		// walking forward does lay it onto the cell it is about to cross --
-		// but the mine spends 36 tics arming, which is longer than the
-		// crossing takes, and the routing above will not bring it back over
-		// the live one afterwards. Refusing those drops was tried: it cut
-		// mines laid on MAP60 from three to one, to prevent a death that
-		// turned out to be the bot's own plasma bolt.
+		// Laying one underfoot mid-route is fine, and deliberately not
+		// prevented here: the mine does not arm until its owner is more than
+		// 0xc350 away, and the routing below will not bring the bot back over
+		// the live one afterwards. (Refusing drops on the route was tried
+		// when the drop went ahead of the bot: it cut mines laid on MAP60 from
+		// three to one, to prevent a death that turned out to be the bot's own
+		// plasma bolt.)
 		// The ordinary drop button, pulsed. Nothing here spawns an actor or
 		// touches the mine count: the engine does both.
 		out.press[bt_reload] = true;
@@ -1812,7 +1804,7 @@ private:
 		// And remember not to walk back over it.
 		//
 		// A mine goes live for its owner the moment the owner steps away, and
-		// the trigger is anything within half a tile -- so the cell it sits in
+		// the trigger is anything within 0x9c40 -- so the cell it sits in
 		// is the thing to avoid, and the two-tile blast is what makes doing so
 		// worth the detour. Reuses the per-bot blocked list the recovery
 		// ladder already prices routes with, at an expiry long enough to
@@ -1820,9 +1812,9 @@ private:
 		// Every cell the trigger square touches, not just the one the mine
 		// sits in.
 		//
-		// A_C7MineThink fires on anything within half a tile of the mine's
-		// centre, measured between actor origins -- so the danger is a 1x1
-		// square around a point that is not a cell centre, and that square
+		// A_C7MineThink fires on anything within 0x9c40 of the mine's centre
+		// along both axes, measured between actor origins -- so the danger is
+		// a square around a point that is not a cell centre, and that square
 		// straddles up to four cells. Blocking only the mine's own cell let a
 		// bot route through the neighbour and walk into the edge of the
 		// square: MAP60 seed 1 killed a bot at (17,3) on a mine it had laid
@@ -1844,12 +1836,11 @@ private:
 		// A route planned before the mine existed does not get to keep its
 		// permission.
 		//
-		// The drop goes 40/64 of a tile along the facing, so a bot laying one
-		// mid-route puts it on the cell it is walking towards. Crossing it is
-		// survivable -- 36 tics of arming is longer than the crossing takes --
-		// and that is exactly what makes it dangerous: the bot walks through
-		// unharmed and only afterwards discovers that the mine is now between
-		// it and everywhere else. On MAP60 one mined the corridor at (17,3),
+		// A bot laying one mid-route leaves it on its own path. Walking off it
+		// is safe -- the mine only arms once its owner has gone -- and that is
+		// exactly what makes it dangerous: the bot walks on unharmed and only
+		// afterwards discovers that the mine is now between it and everywhere
+		// else. On MAP60 one mined the corridor at (17,3),
 		// walked north into the four-cell pocket beyond it, and had no way out
 		// that did not cross the live mine; the goal ladder relaxed on its
 		// last pass, as it must, and the bot walked back into it and died.

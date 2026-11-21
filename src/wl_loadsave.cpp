@@ -89,6 +89,39 @@ struct SaveFile
 };
 TArray<SaveFile> SaveFile::files;
 
+// Saves are numbered savegam0.ecs, savegam1.ecs and so on, and the directory
+// lists them in whatever order the file system keeps: alphabetical on Windows,
+// which put savegam10 between savegam1 and savegam2 (GitHub #43), and arbitrary
+// elsewhere. Runs of digits compare as numbers, so the menu shows the saves in
+// the order they were made.
+static int CompareSaveFilenames(const char *a, const char *b)
+{
+	while(*a && *b)
+	{
+		if(isdigit((unsigned char)*a) && isdigit((unsigned char)*b))
+		{
+			while(*a == '0') ++a;
+			while(*b == '0') ++b;
+			size_t lenA = 0, lenB = 0;
+			while(isdigit((unsigned char)a[lenA])) ++lenA;
+			while(isdigit((unsigned char)b[lenB])) ++lenB;
+			if(lenA != lenB)
+				return lenA < lenB ? -1 : 1;
+			if(int order = strncmp(a, b, lenA))
+				return order;
+			a += lenA;
+			b += lenB;
+			continue;
+		}
+		const int ca = tolower((unsigned char)*a), cb = tolower((unsigned char)*b);
+		if(ca != cb)
+			return ca < cb ? -1 : 1;
+		++a;
+		++b;
+	}
+	return *a ? 1 : (*b ? -1 : 0);
+}
+
 static bool quickSaveLoad = false;
 
 static inline FString GetFullSaveFileName(const FString &filename)
@@ -380,6 +413,17 @@ bool SetupSaveGames()
 		}
 	}
 
+	// Insertion sort, through SaveFile's own assignment (it holds FStrings,
+	// which must not be moved bytewise); there are only ever a few saves.
+	for(unsigned int i = 1;i < SaveFile::files.Size();++i)
+	{
+		SaveFile item = SaveFile::files[i];
+		unsigned int j = i;
+		for(;j > 0 && CompareSaveFilenames(SaveFile::files[j-1].filename, item.filename) > 0;--j)
+			SaveFile::files[j] = SaveFile::files[j-1];
+		SaveFile::files[j] = item;
+	}
+
 	loadGame.clear();
 	saveGame.clear();
 
@@ -511,8 +555,82 @@ void InitMenus()
 	saveItem->setEnabled(false);
 }
 
+// Corridor 7's quicksave has a slot of its own (GitHub #45). DOS's F8 saves
+// without asking; ECWolf's asked before saving over whichever save was last
+// used, which was slow and put a named save one keypress from being lost. F8
+// now writes quicksav.ecs, listed as "Quicksave", without asking unless
+// C7ConfirmQuickSave is set, and F9 loads it -- still asking first, since
+// loading throws away the game in progress.
+static const char *const QUICKSAVE_FILE = "quicksav.ecs";
+static const char *const QUICKSAVE_TITLE = "Quicksave";
+
+static void Corridor7QuickLoadOrSave(bool load)
+{
+	int index = -1;
+	for(unsigned int i = 0;i < SaveFile::files.Size();++i)
+	{
+		if(stricmp(SaveFile::files[i].filename, QUICKSAVE_FILE) == 0)
+		{
+			index = (int)i;
+			break;
+		}
+	}
+
+	FString question;
+	if(load)
+	{
+		// Nothing quicksaved yet, or a quicksave this build cannot read: the
+		// load menu, as before there was a slot to go to.
+		if(index < 0 || SaveFile::files[index].oldVersion || !SaveFile::files[index].hasFiles)
+		{
+			ShowMenu(loadGame);
+			return;
+		}
+		question.Format("%s\"%s\"?", language["STR_LGC"], QUICKSAVE_TITLE);
+		quickSaveLoad = true;
+		if(Confirm(question))
+			LoadSaveGame(index);
+		quickSaveLoad = false;
+		return;
+	}
+
+	if(index >= 0 && c7_confirm_quicksave)
+	{
+		question.Format("%s\"%s\"?", language["STR_SGC"], QUICKSAVE_TITLE);
+		if(!Confirm(question))
+			return;
+	}
+
+	SaveFile file;
+	file.name = QUICKSAVE_TITLE;
+	file.filename = QUICKSAVE_FILE;
+	file.oldVersion = false;
+	file.hasFiles = true;
+	file.hide = false;
+	if(index < 0)
+	{
+		SaveFile::files.Push(file);
+		const unsigned int slotIndex = loadGame.getNumItems();
+		loadGame.addItem(new SaveSlotMenuItem(slotIndex, file.name, 31, LoadSaveGame));
+		saveGame.addItem(new SaveSlotMenuItem(slotIndex, file.name, 31, BeginEditSave, PerformSaveGame));
+		mainMenu[2]->setEnabled(Session::AllowsSaving());
+	}
+	else
+		SaveFile::files[index] = file;
+
+	quickSaveLoad = true;
+	Save(file.filename, file.name);
+	quickSaveLoad = false;
+}
+
 void QuickLoadOrSave(bool load)
 {
+	if(IWad::CheckGameFilter("Corridor7"))
+	{
+		Corridor7QuickLoadOrSave(load);
+		return;
+	}
+
 	if(saveGame.getCurrentPosition() != 0)
 	{
 		const SaveSlotMenuItem *menuItem = static_cast<SaveSlotMenuItem *> (saveGame.getIndex(saveGame.getCurrentPosition()));
@@ -661,6 +779,10 @@ bool Load(const FString &filename)
 	char *alert = M_GetPNGText(png, "EC7Wolf Intruder Alert");
 	gamestate.c7IntruderAlert = alert && strcmp(alert, "mapwide") == 0 ? 1 : 0;
 	delete[] alert;
+	// Likewise the classic alien weapon pickup (GitHub #40).
+	char *capacityRule = M_GetPNGText(png, "EC7Wolf Alien Weapon Capacity");
+	gamestate.c7KeepAlienCapacity = capacityRule && strcmp(capacityRule, "keep") == 0 ? 1 : 0;
+	delete[] capacityRule;
 	M_GetPNGText(png, "Current Map", gamestate.mapname, 8);
 	SetupGameLevel();
 
@@ -834,6 +956,8 @@ bool Save(const FString &filename, const FString &title)
 		(gamestate.shotgunMinimum == 50 ? "50" : "0"));
 	M_AppendPNGText(fileh, "EC7Wolf Intruder Alert",
 		gamestate.c7IntruderAlert == 1 ? "mapwide" : "classic");
+	M_AppendPNGText(fileh, "EC7Wolf Alien Weapon Capacity",
+		gamestate.c7KeepAlienCapacity == 1 ? "keep" : "classic");
 
 	FString comment;
 	// Creation Time

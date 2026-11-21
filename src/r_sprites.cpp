@@ -469,6 +469,17 @@ static BYTE C7CycleSpriteColor(BYTE color)
 	return color;
 }
 
+// Corridor 7 draws every sprite fullbright -- aliens and props as well as the
+// pickups -- where the port shades them with distance like the walls. Shading
+// stays the default, since it is what makes the night-vision visor worth
+// using in a dark room; the Fullbright Sprites option gives the DOS look
+// (GitHub #47). The player's own weapon has its own rule below.
+static inline bool SpriteIsFullbright(const AActor *actor, const Frame *frame)
+{
+	return (actor->flags & FL_BRIGHT) || frame->fullbright ||
+		(c7_fullbright_sprites && IWad::CheckGameFilter("Corridor7"));
+}
+
 // First-person instrumentation keeps the native four palette cycles. Its
 // unshaded palette row is selected by the shared viewmodel placement below.
 static BYTE C7ShadePlayerSpriteColor(BYTE color, const BYTE *colormap)
@@ -545,7 +556,7 @@ void ScaleSprite(AActor *actor, int xcenter, const Frame *frame, unsigned height
 	const fixed yRun = MIN<fixed>(tex->GetHeight()<<FRACBITS, (yStep*((viewheight<<3)-upperedge))>>3);
 
 	const BYTE *colormap;
-	if((actor->flags & FL_BRIGHT) || frame->fullbright)
+	if(SpriteIsFullbright(actor, frame))
 		colormap = NormalLight.Maps;
 	else
 	{
@@ -605,7 +616,7 @@ bool R_GetSpriteRenderInfo(AActor *actor, SpriteRenderInfo &info)
 
 	info.tex = tex;
 	info.flip = flip;
-	info.fullbright = (actor->flags & FL_BRIGHT) || frame->fullbright;
+	info.fullbright = SpriteIsFullbright(actor, frame);
 	info.worldAligned = (actor->flags & FL_BILLBOARD) != 0;
 	return true;
 }
@@ -636,7 +647,7 @@ void Scale3DSpriter(AActor *actor, int x1, int x2, FTexture *tex, bool flip, con
 
 	// [XA] TODO: shade the sprite per-column?
 	const BYTE *colormap;
-	if((actor->flags & FL_BRIGHT) || frame->fullbright)
+	if(SpriteIsFullbright(actor, frame))
 		colormap = NormalLight.Maps;
 	else
 	{

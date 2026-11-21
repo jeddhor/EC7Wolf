@@ -585,21 +585,12 @@ void APlayerPawn::Tick()
 			const ClassDef *mineClass = ClassDef::FindClass("C7ProximityMine");
 			if(mines && mines->amount > 0 && mineClass)
 			{
-				const unsigned fineangle = angle >> ANGLETOFINESHIFT;
-				// Actor dimensions and DECORATE offsets use 64 world units per
-				// tile. Using 40 * FRACUNIT here placed the mine 40 whole tiles
-				// away, which could send its coordinates outside the map and make
-				// AActor::Spawn index beyond the map plane. Drop it 40/64 of a
-				// tile in front of the player instead.
-				const fixed distance = 40 * (FRACUNIT / 64);
-				fixed mineX = x + FixedMul(distance, finecosine[fineangle]);
-				fixed mineY = y - FixedMul(distance, finesine[fineangle]);
-				if(!map->IsValidTileCoordinate(mineX >> FRACBITS,
-					mineY >> FRACBITS, 0))
-				{
-					mineX = x;
-					mineY = y;
-				}
+				// Under the player, as CORR7CD.EXE's drop routine (2f28:1a28)
+				// copies the dropper's own x and y. The port used to put it
+				// 40/64 of a tile ahead, which could put it inside a wall
+				// (GitHub #42).
+				const fixed mineX = x;
+				const fixed mineY = y;
 				AActor *mine = AActor::Spawn(mineClass, mineX, mineY, 0,
 					SPAWN_AllowReplacement);
 				if(!mine)

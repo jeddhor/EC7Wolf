@@ -229,6 +229,8 @@ struct NewGamePacket
 	BYTE shotgunMinimum;
 	// Protocol 11: the Corridor 7 Intruder Alert rule, 0 classic or 1 map-wide.
 	BYTE c7IntruderAlert;
+	// Protocol 17: the alien weapon capacity rule, 0 classic or 1 keep.
+	BYTE c7KeepAlienCapacity;
 	char map[9];
 	// The authority's roster, which is the only place a slot with no peer can
 	// come from. Fixed size rather than counted: eleven bytes is cheaper than
@@ -808,7 +810,8 @@ static bool ValidateDeclaredSize(const StartPacket *data, int len)
 static bool ValidateDeclaredSize(const NewGamePacket *data, int)
 {
 	return (data->shotgunMinimum == 0 || data->shotgunMinimum == 50 ||
-		data->shotgunMinimum == 100) && data->c7IntruderAlert <= 1;
+		data->shotgunMinimum == 100) && data->c7IntruderAlert <= 1 &&
+		data->c7KeepAlienCapacity <= 1;
 }
 
 // The other packet whose size is not sizeof(). Same rule as the start packet
@@ -1936,6 +1939,8 @@ void NewGame(int &difficulty, FString &map, FName (&playerClassNames)[MAXPLAYERS
 	// Demos keep the DOS rules, as they do for the shotgun.
 	myNewGameRequest.c7IntruderAlert = IWad::CheckGameFilter("Corridor7") &&
 		!demoplayback && !demorecord && c7_intruder_alert == 1 ? 1 : 0;
+	myNewGameRequest.c7KeepAlienCapacity = IWad::CheckGameFilter("Corridor7") &&
+		!demoplayback && !demorecord && c7_alien_capacity == 1 ? 1 : 0;
 	myNewGameRequest.playerClass = PlayerClass::FromName(playerClassNames[ConsolePlayer]);
 	strncpy(myNewGameRequest.map, map, 8);
 	myNewGameRequest.map[8] = 0;
@@ -1965,6 +1970,7 @@ void NewGame(int &difficulty, FString &map, FName (&playerClassNames)[MAXPLAYERS
 			difficulty = newGamePackets[peer].difficulty;
 			gamestate.shotgunMinimum = newGamePackets[peer].shotgunMinimum;
 			gamestate.c7IntruderAlert = newGamePackets[peer].c7IntruderAlert;
+			gamestate.c7KeepAlienCapacity = newGamePackets[peer].c7KeepAlienCapacity;
 			newGamePackets[peer].map[8] = 0;
 			map = newGamePackets[peer].map;
 		}
@@ -1977,6 +1983,8 @@ void NewGame(int &difficulty, FString &map, FName (&playerClassNames)[MAXPLAYERS
 				"enhanced (minimum 50)" : "classic"));
 		Printf("Corridor 7 intruder alert rule: %s\n",
 			gamestate.c7IntruderAlert == 1 ? "map-wide" : "classic");
+		Printf("Corridor 7 alien weapon capacity rule: %s\n",
+			gamestate.c7KeepAlienCapacity == 1 ? "keep" : "classic");
 	}
 
 	// The arbiter's roster, adopted by everyone. A slot with no peer exists

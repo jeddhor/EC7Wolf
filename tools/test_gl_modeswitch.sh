@@ -146,10 +146,17 @@ run_case() {
 
 	# The status bar is the bottom 40 of the 200-row virtual screen; it is pure
 	# 2D resolved through the palette by both renderers, so it must be identical.
+	# The three item slots (card and floor-plan icons, virtual 256,176 to
+	# 280,192) colour-cycle with the tic count, as in DOS (GitHub #44). The two
+	# runs capture the same frame number, not the same tic, so those few pixels
+	# are allowed to differ; they are painted out of both images first.
+	slots="rectangle $((w * 256 / 320 - 2)),$((h * 176 / 200 - 2)) $((w * 280 / 320 + 2)),$((h * 192 / 200 + 2))"
+	$conv_tool "$sw" -fill black -draw "$slots" "$sw.masked.ppm"
+	$conv_tool "$gl" -fill black -draw "$slots" "$gl.masked.ppm"
 	band_h=$((h * 40 / 200))
 	band_y=$((h - band_h))
 	diffpx=$($cmp_tool -metric AE -crop "${w}x${band_h}+0+${band_y}" \
-		"$sw" "$gl" null: 2>&1 | sed -n 's/^\([0-9]*\).*/\1/p')
+		"$sw.masked.ppm" "$gl.masked.ppm" null: 2>&1 | sed -n 's/^\([0-9]*\).*/\1/p')
 	diffpx=${diffpx:-999999}
 	if [ "$diffpx" -ne 0 ] 2>/dev/null; then
 		printf 'FAIL: %-10s HUD band differs from software by %s px after the mode change; see %s\n' \

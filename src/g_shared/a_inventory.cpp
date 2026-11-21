@@ -659,7 +659,12 @@ static bool C7AlienWeaponPickup(const AWeapon *weapon, AActor *owner)
 	if(const ClassDef *cls = ClassDef::FindClass("C7EnergyCapacity"))
 	{
 		if(AInventory *capacity = owner->FindInventory(cls))
-			capacity->amount = 100;
+		{
+			// The optional rule leaves a capacity above 100 alone (GitHub
+			// #40); DOS always puts it back to 100.
+			if(!gamestate.c7KeepAlienCapacity || capacity->amount < 100)
+				capacity->amount = 100;
+		}
 		else
 			owner->GiveInventory(cls, 100);
 	}
@@ -855,7 +860,10 @@ bool AWeapon::UseForAmmo(AWeapon *owned)
 			break;
 		}
 	}
-	return used;
+	// Corridor 7 takes a duplicate even with its ammunition full: GetBonus
+	// never refuses a weapon, and GiveWeapon just tops the ammunition up
+	// (CORR7CD.EXE 13ec1; GitHub #48).
+	return used || IWad::CheckGameFilter("Corridor7");
 }
 
 bool AWeapon::ShouldStay()

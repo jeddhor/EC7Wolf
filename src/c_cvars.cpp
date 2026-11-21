@@ -64,9 +64,13 @@ bool snd_cdmusic = true;
 bool c7_minihud = true;
 bool c7_minihud_score = true;
 bool c7_numeric_hud = false;
+bool c7_confirm_quicksave = false; // DOS saves without asking (GitHub #45).
+bool c7_fullbright_sprites = false; // DOS draws them fullbright (GitHub #47).
+bool c7_red_card_icon = false; // DOS cycles the red card icon blue (GitHub #46).
 int c7_minihud_style = 0; // Modern; preserve the existing preference.
 int c7_shotgun_preset = 0; // Classic, minimum 50, minimum 100.
 int c7_intruder_alert = 0; // Classic, map-wide.
+int c7_alien_capacity = 0; // Classic (reset to 100), keep a higher capacity.
 int vid_glfilter = 0;
 int vid_glmsaa = 0;
 int vid_maxfps = 0;					// 0 = unlimited
@@ -256,9 +260,13 @@ void ReadConfig(void)
 	config.CreateSetting("C7MiniHUD", true);
 	config.CreateSetting("C7MiniHUDScore", true);
 	config.CreateSetting("C7NumericHUD", false);
+	config.CreateSetting("C7ConfirmQuickSave", false);
+	config.CreateSetting("C7FullbrightSprites", false);
+	config.CreateSetting("C7RedCardIcon", false);
 	config.CreateSetting("C7EnhancedShotgun", false);
 	config.CreateSetting("C7ShotgunPreset", -1); // Import the legacy boolean once.
 	config.CreateSetting("C7IntruderAlert", 0);
+	config.CreateSetting("C7AlienWeaponCapacity", 0);
 	config.CreateSetting("C7MiniHUDStyle", 0);
 	config.CreateSetting("Gamma", 1.0f);
 	config.CreateSetting("AM_Rotate", 0);
@@ -382,11 +390,15 @@ void ReadConfig(void)
 	c7_minihud = config.GetSetting("C7MiniHUD")->GetInteger() != 0;
 	c7_minihud_score = config.GetSetting("C7MiniHUDScore")->GetInteger() != 0;
 	c7_numeric_hud = config.GetSetting("C7NumericHUD")->GetInteger() != 0;
+	c7_confirm_quicksave = config.GetSetting("C7ConfirmQuickSave")->GetInteger() != 0;
+	c7_fullbright_sprites = config.GetSetting("C7FullbrightSprites")->GetInteger() != 0;
+	c7_red_card_icon = config.GetSetting("C7RedCardIcon")->GetInteger() != 0;
 	c7_shotgun_preset = config.GetSetting("C7ShotgunPreset")->GetInteger();
 	if(c7_shotgun_preset < 0)
 		c7_shotgun_preset = config.GetSetting("C7EnhancedShotgun")->GetInteger() ? 1 : 0;
 	c7_shotgun_preset = clamp(c7_shotgun_preset, 0, 2);
 	c7_intruder_alert = clamp(config.GetSetting("C7IntruderAlert")->GetInteger(), 0, 1);
+	c7_alien_capacity = clamp(config.GetSetting("C7AlienWeaponCapacity")->GetInteger(), 0, 1);
 	c7_minihud_style = clamp(config.GetSetting("C7MiniHUDStyle")->GetInteger(), 0, 1);
 	screenGamma = static_cast<float>(config.GetSetting("Gamma")->GetFloat());
 	am_rotate = config.GetSetting("AM_Rotate")->GetInteger();
@@ -550,9 +562,13 @@ void WriteConfig(void)
 	config.GetSetting("C7MiniHUD")->SetValue(c7_minihud);
 	config.GetSetting("C7MiniHUDScore")->SetValue(c7_minihud_score);
 	config.GetSetting("C7NumericHUD")->SetValue(c7_numeric_hud);
+	config.GetSetting("C7ConfirmQuickSave")->SetValue(c7_confirm_quicksave);
+	config.GetSetting("C7FullbrightSprites")->SetValue(c7_fullbright_sprites);
+	config.GetSetting("C7RedCardIcon")->SetValue(c7_red_card_icon);
 	config.GetSetting("C7EnhancedShotgun")->SetValue(c7_shotgun_preset != 0);
 	config.GetSetting("C7ShotgunPreset")->SetValue(c7_shotgun_preset);
 	config.GetSetting("C7IntruderAlert")->SetValue(c7_intruder_alert);
+	config.GetSetting("C7AlienWeaponCapacity")->SetValue(c7_alien_capacity);
 	config.GetSetting("C7MiniHUDStyle")->SetValue(c7_minihud_style);
 	config.GetSetting("Gamma")->SetValue(screenGamma);
 	config.GetSetting("AM_Rotate")->SetValue(am_rotate);

@@ -313,10 +313,10 @@ struct State
 	// Mines. Section 16.7.
 	//
 	// The engine's rules, read from the code rather than assumed: dropping one
-	// costs a C7Mines and spawns a C7ProximityMine 40/64 of a tile ahead; it
-	// spends 36 tics arming; it stays inert while its *owner* is within half a
-	// tile and goes live for everybody -- owner included -- once they step
-	// away; anything shootable within half a tile sets it off for 102 to 500
+	// costs a C7Mines and spawns a C7ProximityMine under the dropper; it
+	// spends 36 tics arming; it stays inert while its *owner* is within 0xc350
+	// and goes live for everybody -- owner included -- once they step away;
+	// a player, an alien or a projectile within 0x9c40 sets it off for 102 to 500
 	// damage at a radius of 128 units, which is two tiles.
 	//
 	// That last pair of facts is the whole of the self-risk model: a bot's own

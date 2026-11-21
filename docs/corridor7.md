@@ -446,9 +446,11 @@ Append an output directory and `--all` to load-check every map in the archive.
   the original sprite families.
 - A Corridor 7 player, the released eight-weapon arsenal (including the
   Ithaca shotgun's secondary animation), persistent proximity mines with the
-  executable-selected silver floor sprite, owner-safe arming (beyond 0xc350
-  of the owner on either axis, with the menus' beep, sample 33),
-  player/monster triggering (within 0x9c40, with sample 1; GitHub #37), and
+  executable-selected silver floor sprite, dropped under the player (GitHub
+  #42), owner-safe arming (beyond 0xc350 of the owner on either axis, with the
+  menus' beep, sample 33), triggering by the player, an alien or a projectile
+  such as a plasma bolt within 0x9c40 (sample 1; GitHub #37, #49) -- hitscan
+  weapons pass a mine by, as in DOS, where mines are not objects -- and
   self-damaging radial explosions, all weapon pickups,
   ammunition/charge/health/armor items, non-wasteful health and ammunition
   pickup rules, monster combat, projectile attacks, score, event sounds, and
@@ -581,9 +583,10 @@ a hit; its alien plasma also splashes nearby actors; and its damage flash
 flickers on a large hit, where the port's fades steadily. See
 [github-issue-verification-2026-11-15.md](github-issue-verification-2026-11-15.md).
 Known pickup differences: an Alien Charge Pack in the original also switches
-back to the best alien weapon; a duplicate human weapon with its ammunition
-full is taken there and refused here; and a health chamber drains its reserve a
-little each frame where the port heals in one step. See
+back to the best alien weapon; and a health chamber drains its reserve a
+little each frame where the port heals in one step. (A duplicate human weapon
+with its ammunition full, refused here until GitHub #48, is now taken as in the
+original.) See
 [github-issue-verification-2026-11-17.md](github-issue-verification-2026-11-17.md).
 Masked screens preserve collision while transparent columns
 are composited with walls and actors at their actual depth. Native 104/105 glass
@@ -731,6 +734,26 @@ remains unchanged pending original-game testing.
 
 Options > Gameplay > Intruder Alert selects Classic or Map-wide, under the same
 rules; see "The Intruder Alert" above.
+
+Options > Gameplay > Alien Weapon Capacity selects Classic or Keep Higher, under
+the same rules. Classic is DOS: picking up any alien weapon puts energy
+capacity back to 100, even from above it (GiveWeapon, 13ec1). Keep Higher only
+raises a capacity below 100 (GitHub #40).
+
+F8 saves to a slot of its own, listed as "Quicksave" (`quicksav.ecs`), without
+asking, as DOS saves without asking; Options > Gameplay > Confirm Quick Save
+brings the question back. F9 loads the quicksave, asking first. Saves are
+listed in the order they were made, so savegam10 follows savegam9 (GitHub #43,
+#45). A weapon is always picked up, even a duplicate with its ammunition full,
+as GetBonus never refuses one (GitHub #48).
+
+Graphics has two display options. **Fullbright Sprites** draws aliens and props
+fullbright, as DOS does; the default shades them with distance like the walls,
+which is what makes night vision worth using in a dark room (GitHub #47). **Red
+Access Card Icon** cycles the red card's status-bar icon in the red ramp: in
+DOS it cycles blue, though the card lying in the world cycles red (GitHub #46).
+The status bar's card and floor-plan icons colour-cycle as in DOS (GitHub #44),
+and dying with the visor on no longer tints the death page and menus (#41).
 
 Ammo packs raise bullet capacity by 500, up to 999, without supplying rounds;
 surplus packs are consumed as in DOS. Capacity survives save/load and travel.

@@ -22,6 +22,53 @@
 #include "wl_net.h"
 #include "c_cvars.h"
 #include "g_command.h"
+#include "r_data/r_translate.h"
+
+// Corridor 7 rotates its DAC ramps 208-239 every pass of the game loop, so
+// everything on screen drawn in those colors animates -- the access cards and
+// the floor plan in the status bar among them. The port cycles them per pixel
+// in the world renderers (Corridor7CycleColor), which the status bar does not
+// pass through, so its cards stood still (GitHub #44). The HUD's cycling
+// graphics are drawn through one of these eight remaps instead, chosen by the
+// same tic-driven phase the world uses.
+//
+// GitHub #46: the red card's icon (C7G0021) cycles in the blue band 216-223,
+// though the red card lying in the world (C002) cycles in the red band
+// 208-215. With the Red Access Card Icon option its blue band is read as the
+// red one, so the icon matches the card.
+static FRemapTable *C7HudRampRemap(bool redCard)
+{
+	static FRemapTable *phases[2][8];
+	FRemapTable **const set = phases[redCard ? 1 : 0];
+	if(!set[0])
+	{
+		for(int phase = 0;phase < 8;++phase)
+		{
+			FRemapTable *table = new FRemapTable;
+			table->MakeIdentity();
+			for(int color = 208;color <= 239;++color)
+			{
+				int source = color;
+				if(redCard && color >= 216 && color <= 223)
+					source = color - 8;
+				const int base = source & ~7;
+				const int cycled = base + ((source-base+phase) & 7);
+				const BYTE from = GPalette.Remap[color];
+				table->Remap[from] = GPalette.Remap[cycled];
+				table->Palette[from] = GPalette.BaseColors[GPalette.Remap[cycled]];
+				table->Palette[from].a = 255;
+			}
+			set[phase] = table;
+		}
+	}
+	return set[(gamestate.TimeCount >> C7_RAMP_CYCLE_SHIFT) & 7];
+}
+
+static void C7DrawHudItem(const char *graphic, int x, int y)
+{
+	const bool redCard = c7_red_card_icon && stricmp(graphic, "C7G0021") == 0;
+	VWB_DrawGraphic(TexMan(graphic), x, y, MENU_NONE, C7HudRampRemap(redCard));
+}
 
 /*
 =============================================================================
@@ -688,7 +735,7 @@ namespace
 		int slot=0;
 		for(unsigned int i=0;i<3;++i)
 			if(pawn->FindInventory(ClassDef::FindClass(items[i])))
-				VWB_DrawGraphic(TexMan(icons[i]),178+(slot++)*8,183);
+				C7DrawHudItem(icons[i],178+(slot++)*8,183);
 	}
 }
 
@@ -747,7 +794,7 @@ void WolfStatusBar::DrawC7ClassicHud()
 	int slot = 0;
 	for(unsigned int i=0;i<3;++i)
 		if(pawn->FindInventory(ClassDef::FindClass(items[i])))
-			VWB_DrawGraphic(TexMan(icons[i]),120-(slot++)*8,182);
+			C7DrawHudItem(icons[i],120-(slot++)*8,182);
 	rect(207,180,18,17,0); rect(231,180,18,17,0);
 	LatchNumber(208,20,2,MAX(0,gamestate.killtotal-gamestate.killcount),false,true);
 	LatchString(232,20,2,levelInfo->FloorNumber);
@@ -829,7 +876,7 @@ void WolfStatusBar::DrawStatusBar()
 			for(unsigned int item = 0;item < 3 && slot < 3;++item)
 			{
 				if(pawn->FindInventory(ClassDef::FindClass(items[item].className)))
-					VWB_DrawGraphic(TexMan(items[item].graphic), 256+(slot++)*8, 176);
+					C7DrawHudItem(items[item].graphic, 256+(slot++)*8, 176);
 			}
 		}
 		return;

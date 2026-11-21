@@ -98,8 +98,11 @@ extern bool		r_interpolate_dynamicwalls;	// interpolate doors/pushwalls (Phase 7
 extern bool		quitonescape;
 extern fixed	movebob;
 extern bool c7_minihud, c7_numeric_hud, c7_minihud_score;
+extern bool c7_confirm_quicksave;
+extern bool c7_fullbright_sprites, c7_red_card_icon;
 extern int c7_minihud_style, c7_shotgun_preset;
 extern int c7_intruder_alert;
+extern int c7_alien_capacity;
 
 extern float	localDesiredFOV;
 //

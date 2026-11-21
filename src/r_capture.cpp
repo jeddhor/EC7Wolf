@@ -386,6 +386,7 @@ namespace
 		crc = Fold(crc, &gamestate.TimeCount, sizeof(gamestate.TimeCount));
 		crc = Fold(crc, &gamestate.shotgunMinimum, sizeof(gamestate.shotgunMinimum));
 		crc = Fold(crc, &gamestate.c7IntruderAlert, sizeof(gamestate.c7IntruderAlert));
+		crc = Fold(crc, &gamestate.c7KeepAlienCapacity, sizeof(gamestate.c7KeepAlienCapacity));
 
 		const DWORD rng = FRandom::StaticSumSeeds();
 		crc = Fold(crc, &rng, sizeof(rng));
@@ -2468,6 +2469,16 @@ static void TraceVerbs()
 				plans += iter->GetClass() == planClass;
 			}
 
+	// The tile of a mine the player dropped, -1 with none (GitHub #42).
+	int minex = -1, miney = -1;
+	static const ClassDef *const mineClass = ClassDef::FindClass("C7ProximityMine");
+	for(AActor::Iterator iter = AActor::GetIterator(); iter.Next();)
+		if(pawn && mineClass && iter->GetClass() == mineClass && iter->target == pawn)
+		{
+			minex = iter->tilex;
+			miney = iter->tiley;
+		}
+
 	static bool first = true;
 	static int lastVisor, lastCharge, lastMines, lastAmmo, lastHealth, lastMap, lastAngle, lastX, lastY, lastPlan;
 	static int lastCapacity;
@@ -2481,9 +2492,9 @@ static void TraceVerbs()
 		x != lastX || y != lastY || charge != lastCharge || plan != lastPlan || capacity != lastCapacity ||
 		packs != lastPacks || plans != lastPlans)
 	{
-		Printf("verbs tic=%lu visor=%d mines=%d map=%d ammo=%d health=%d x=%d y=%d angle=%d charge=%d plan=%d fullmap=%d capacity=%d packs=%d plans=%d energy=%d ecap=%d maxhealth=%d armor=%d pickups=%u\n",
+		Printf("verbs tic=%lu visor=%d mines=%d map=%d ammo=%d health=%d x=%d y=%d angle=%d charge=%d plan=%d fullmap=%d capacity=%d packs=%d plans=%d energy=%d ecap=%d maxhealth=%d armor=%d pickups=%u minex=%d miney=%d\n",
 			(unsigned long)g_ticCount, visor, mines, map, ammo, health, x, y, angle, charge, plan, gamestate.fullmap ? 1 : 0, capacity, packs, plans,
-			energy, ecap, maxhealth, armor, Items::PickupsBy(ConsolePlayer));
+			energy, ecap, maxhealth, armor, Items::PickupsBy(ConsolePlayer), minex, miney);
 		lastEnergy = energy; lastEcap = ecap; lastMaxHealth = maxhealth; lastArmor = armor;
 		lastPickups = Items::PickupsBy(ConsolePlayer);
 		first = false;

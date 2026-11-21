@@ -36,6 +36,10 @@ extern struct gametype
 	// through open doors, as in DOS), 1 map-wide (heard everywhere). Fixed by
 	// the authority for this game, like the shotgun rule.
 	BYTE c7IntruderAlert;
+	// Alien weapon pickups: 0 classic (capacity goes back to 100, even from
+	// above it, as in DOS), 1 keep (a capacity above 100 is left alone; GitHub
+	// #40). Fixed by the authority for this game.
+	BYTE c7KeepAlienCapacity;
 } gamestate;
 
 extern  char            demoname[13];

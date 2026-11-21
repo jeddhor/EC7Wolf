@@ -2058,8 +2058,10 @@ ACTION_FUNCTION(A_C7ChargePack)
 // sample 33 -- the same beep the menus use (2370e; GitHub #37). An armed mine
 // goes off for the player or any alien that comes within 0x9c40 along both
 // axes, with sample 1 (23985). Square distances, as everywhere in the original
-// engine. It remains shootable, so plasma and other weapon impacts can set it
-// off early.
+// engine. The test runs for every object in the original's actor list
+// (0xbfc2), and the Plasma Rifle's bolts are objects there while hitscan shots
+// are not -- so a plasma bolt passing over a mine sets it off, and no other
+// player weapon can (GitHub #49).
 ACTION_FUNCTION(A_C7MineThink)
 {
 	const fixed armDistance = 0xc350;
@@ -2078,8 +2080,11 @@ ACTION_FUNCTION(A_C7MineThink)
 
 	for(AActor::Iterator check = AActor::GetIterator(); check.Next();)
 	{
-		if(check == self || !(check->flags & FL_SHOOTABLE) ||
-			(!check->player && !(check->flags & FL_ISMONSTER)))
+		if(check == self)
+			continue;
+		const bool body = (check->flags & FL_SHOOTABLE) &&
+			(check->player || (check->flags & FL_ISMONSTER));
+		if(!body && !(check->flags & FL_MISSILE))
 			continue;
 		if(MAX(abs(check->x - self->x), abs(check->y - self->y)) < triggerDistance)
 		{

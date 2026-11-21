@@ -5,10 +5,10 @@
 # Milestone B7 of docs/multiplayer-bots-and-server.md, section 16.7.
 #
 # The engine's rules, read from the code rather than assumed. Dropping a mine
-# costs one C7Mines and spawns a C7ProximityMine 40/64 of a tile ahead. It
-# spends 36 tics arming. It stays inert while its *owner* is within half a
-# tile and goes live for everybody -- owner included -- once they step away.
-# Anything shootable within half a tile sets it off: 102 to 500 damage at a
+# costs one C7Mines and spawns a C7ProximityMine under the dropper (GitHub #42).
+# It spends 36 tics arming. It stays inert while its *owner* is within 0xc350
+# and goes live for everybody -- owner included -- once they step away.
+# Anything shootable within 0x9c40 sets it off (#37): 102 to 500 damage at a
 # radius of 128 units, which is two tiles.
 #
 # Placement comes from the graph, not from anybody's movements: a cell with

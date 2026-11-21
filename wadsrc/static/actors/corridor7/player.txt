@@ -536,11 +536,14 @@ actor C7MinePack : C7Mines
 	states { Spawn: C063 A -1 bright stop }
 }
 
+// Not shootable (GitHub #49): in DOS a mine is an entry in its own table, not
+// an object, so a hitscan weapon cannot hit it and an explosion cannot chain
+// into it. Only an object coming within range sets it off -- the player, an
+// alien, or a projectile such as a plasma bolt; see A_C7MineThink.
 actor C7ProximityMine
 {
 	health 1
 	radius 8
-	+SHOOTABLE
 	states
 	{
 		Spawn:

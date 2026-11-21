@@ -1179,6 +1179,12 @@ restartgame:
 				if(IWad::CheckGameFilter("Corridor7"))
 				{
 					VW_FadeOut();
+					// The play loop leaves the palette shifted on a death, for
+					// the red of the death itself. A visor's night or infrared
+					// DAC was left with it, and the death page, the high scores
+					// and the menus behind them came up green or red (GitHub
+					// #41). Cleared on the black screen, as the menu does.
+					FinishPaletteShifts();
 					Corridor7Death();
 					if(screenHeight % 200 != 0)
 						VL_ClearScreen(0);

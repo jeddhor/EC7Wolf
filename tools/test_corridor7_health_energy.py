@@ -1,4 +1,5 @@
-"""Health, armor and alien energy follow CORR7CD.EXE (GitHub #32, #34, #38, #39).
+"""Health, armor, alien energy and mines follow CORR7CD.EXE (GitHub #32, #34,
+#38, #39, #40, #42).
 
 Usage: test_corridor7_health_energy.py BUILD_DIR DATA_DIR WORK_DIR
 
@@ -18,6 +19,14 @@ alien charge (energy) and its capacity (ecap) whenever one of them moves.
   #39  Each charge pack is used up: ten in a row raise capacity 100 at a time
        to 999, and only the tenth, refused at 999, is left lying. The second
        pack used to run every tic without being taken, straight to 999.
+  #40  With the optional Alien Weapon Capacity rule set to keep, an alien
+       weapon leaves a capacity above 100 alone; by default it goes back to
+       100, as in DOS.
+  #42  A dropped mine lands under the player (2f28:1a28 copies the dropper's
+       x and y), not 40/64 of a tile ahead -- facing a wall, that was inside it.
+  #49  Only a projectile sets a mine off from a distance: DOS tests every object
+       against the mines (0xbfc2), and a plasma bolt is one while a hitscan
+       shot is not. The M-16 leaves a mine alone; the Plasma Rifle does not.
 """
 from dataclasses import replace
 from pathlib import Path
@@ -62,17 +71,17 @@ def fixture(pickups):
             dst.writestr(info, b)
 
 
-def run(label, extra, tics):
+def run(label, extra, tics, config='', place=('4.5', '10.5')):
     log = work / (label + '.log')
     # No mouse: under Xvfb the pointer can be warped as the window grabs it,
     # and that arrives as movement, which walks the player off the line.
-    (work / (label + '.cfg')).write_text('MouseEnabled = 0;\n')
+    (work / (label + '.cfg')).write_text('MouseEnabled = 0;\n' + config)
     args = [str(build / 'ec7wolf'), '--data', 'CO7', '--nowait', '--no-upscale',
             '--res', '320', '200', '--vid-renderer', 'software', '--tedlevel', 'MAP01',
             '--skill', '3', '--config', str(work / (label + '.cfg')),
             '--savedir', str(work / 'saves'), '--capture-rngseed', '1',
             '--capture-verbs', '--capture-maxtics', str(tics),
-            '--capture-place', '1', '4.5', '10.5', '0', *extra]
+            '--capture-place', '1', *place, '0', *extra]
     with log.open('w') as f:
         subprocess.run(args, cwd=lab, env=env, stdout=f, stderr=subprocess.STDOUT,
                        check=True, timeout=60)
@@ -158,5 +167,42 @@ check(after and after[-1]['ecap'] == 100,
       show(after, 'x', 'ecap')[-3:])
 check(all(b['energy'] - a['energy'] <= 2 for a, b in zip(rows, rows[1:])),
       'and gives no charge', show(rows, 'energy')[-6:])
+
+# --- #40: the optional rule keeps a capacity above 100 -------------------------
+fixture({6: M343, 8: CHARGE_PACK, 10: CHARGE_PACK, 12: DUAL_BLASTER})
+for keep in (0, 1):
+    text, rows = run('capacity-%d' % keep, ('--capture-forward', '5', '50'), 140,
+                     'C7AlienWeaponCapacity = %d;\n' % keep)
+    peak = max(r['ecap'] for r in rows)
+    rule = 'keep' if keep else 'classic'
+    check('Corridor 7 alien weapon capacity rule: ' + rule in text and peak == 300 and
+          rows[-1]['ecap'] == (300 if keep else 100),
+          ('with the keep rule an alien weapon leaves 300 capacity alone' if keep else
+           'by default an alien weapon puts 300 capacity back to 100, as in DOS'),
+          show(rows, 'x', 'ecap')[-4:])
+
+# --- #42: a mine lands under the player, even facing a wall --------------------
+fixture({})
+_, rows = run('mine', ('--capture-give', 'C7Mines', '--capture-hold-button', 'reload', '10', '1'),
+              40, place=('39.5', '10.5'))
+laid = [(r['minex'], r['miney']) for r in rows if r['minex'] >= 0]
+check(laid and laid[-1] == (39, 10),
+      'a mine dropped facing the end wall lands under the player, not in the wall', laid)
+
+# --- #49: hitscan passes a mine by; a plasma bolt sets it off -----------------
+fixture({})
+for weapon in ('C7M16', 'C7PlasmaRifle'):
+    extra = ('--capture-mine-at', '10', '10', '1',
+             '--capture-hold-button', 'attack', '80', '60')
+    if weapon != 'C7M16':
+        extra = ('--capture-give', weapon, '--capture-select', weapon) + extra
+    text, rows = run('shoot-' + weapon, extra, 200)
+    there = [r['minex'] for r in rows if r['tic'] >= 60]
+    if weapon == 'C7M16':
+        check('mine placed at 10,10' in text and there and there[-1] == 10,
+              'an M-16 burst down the corridor leaves the mine lying', show(rows, 'ammo', 'minex')[-3:])
+    else:
+        check('mine placed at 10,10' in text and there and there[-1] == -1,
+              'a plasma bolt sets the mine off', show(rows, 'energy', 'minex')[-3:])
 
 sys.exit(1 if failed else 0)

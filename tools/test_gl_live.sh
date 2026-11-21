@@ -98,10 +98,17 @@ if command -v magick >/dev/null 2>&1 || command -v convert >/dev/null 2>&1; then
 			"$glh" "$swh"
 	else
 		# The status-bar band below the 3D view is pure 2D and must be identical.
+		# The three item slots (card and floor-plan icons, virtual 256,176 to
+		# 280,192) colour-cycle with the tic count, as in DOS (GitHub #44). The two
+		# runs capture the same frame number, not the same tic, so those few pixels
+		# are allowed to differ; they are painted out of both images first.
+		slots="rectangle $((glw * 256 / 320 - 2)),$((glh * 176 / 200 - 2)) $((glw * 280 / 320 + 2)),$((glh * 192 / 200 + 2))"
+		$conv_tool "$out_dir/software.ppm" -fill black -draw "$slots" "$out_dir/software.masked.ppm"
+		$conv_tool "$out_dir/gllive.ppm" -fill black -draw "$slots" "$out_dir/gllive.masked.ppm"
 		band_h=100
 		band_y=$((glh - band_h))
 		diffpx=$($cmp_tool -metric AE -crop "${glw}x${band_h}+0+${band_y}" \
-			"$out_dir/software.ppm" "$out_dir/gllive.ppm" null: 2>&1 |
+			"$out_dir/software.masked.ppm" "$out_dir/gllive.masked.ppm" null: 2>&1 |
 			sed -n 's/^\([0-9]*\).*/\1/p')
 		diffpx=${diffpx:-999999}
 		if [ "$diffpx" -eq 0 ] 2>/dev/null; then

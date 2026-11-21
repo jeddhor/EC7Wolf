@@ -367,10 +367,11 @@ MENU_LISTENER(EnterGameplayEnhancements)
 		if(!ingame)
 			rule = "New games; host decides in multiplayer";
 		else
-			rule.Format("Current mission: %s shotgun, %s alert",
+			rule.Format("Current mission: %s shotgun, %s alert, %s capacity",
 				gamestate.shotgunMinimum == 100 ? "minimum 100" :
 				(gamestate.shotgunMinimum == 50 ? "minimum 50" : "classic"),
-				gamestate.c7IntruderAlert == 1 ? "map-wide" : "classic");
+				gamestate.c7IntruderAlert == 1 ? "map-wide" : "classic",
+				gamestate.c7KeepAlienCapacity == 1 ? "kept" : "classic");
 		shotgunCurrentRule->setText(rule);
 	}
 	return true;
@@ -385,6 +386,12 @@ MENU_LISTENER(SetC7ShotgunPreset)
 MENU_LISTENER(SetC7IntruderAlert)
 {
 	c7_intruder_alert = which;
+	return true;
+}
+
+MENU_LISTENER(SetC7AlienCapacity)
+{
+	c7_alien_capacity = which;
 	return true;
 }
 
@@ -1556,9 +1563,18 @@ void CreateMenus()
 		static const char *alertOptions[] = { "Classic", "Map-wide" };
 		AddLabeled(gameplayEnhancements, new MultipleChoiceMenuItem(SetC7IntruderAlert,
 			alertOptions, 2, c7_intruder_alert), "Intruder Alert");
+		// GitHub #40. Classic is DOS: any alien weapon puts energy capacity
+		// back to 100, even from above it. Keep leaves a higher capacity.
+		static const char *capacityOptions[] = { "Classic", "Keep Higher" };
+		AddLabeled(gameplayEnhancements, new MultipleChoiceMenuItem(SetC7AlienCapacity,
+			capacityOptions, 2, c7_alien_capacity), "Alien Weapon Capacity");
 		gameplayEnhancements.addItem(new LabelMenuItem("Applies to new games"));
 		shotgunCurrentRule = new LabelMenuItem("New games; host decides in multiplayer");
 		gameplayEnhancements.addItem(shotgunCurrentRule);
+		// GitHub #45. F8 writes its own Quicksave entry without asking, as
+		// DOS saves without asking; this brings the question back.
+		gameplayEnhancements.addItem(new LabelMenuItem("Saving"));
+		gameplayEnhancements.addItem(new BooleanMenuItem("Confirm Quick Save", c7_confirm_quicksave));
 
 	}
 	else
@@ -1689,6 +1705,11 @@ void CreateMenus()
 			miniHUDOptions, 2, c7_minihud_style), "Mini HUD Style");
 		displayMenu.addItem(new BooleanMenuItem("Mini HUD Score", c7_minihud_score));
 		displayMenu.addItem(new BooleanMenuItem("Numeric Status Bar", c7_numeric_hud));
+		// GitHub #46: the red card's HUD icon cycles blue in DOS, though the
+		// card itself cycles red. GitHub #47: DOS draws aliens and props
+		// fullbright; shading them with distance is the port's default.
+		displayMenu.addItem(new BooleanMenuItem("Red Access Card Icon", c7_red_card_icon));
+		displayMenu.addItem(new BooleanMenuItem("Fullbright Sprites", c7_fullbright_sprites));
 		displayMenu.addItem(new MenuSwitcherMenuItem("Advanced Graphics", advancedGraphics));
 
 		static const char *xbrzOptions[] = { "Off", "Auto", "2x", "3x", "4x", "5x", "6x" };

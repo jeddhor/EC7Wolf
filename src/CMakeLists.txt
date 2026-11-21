@@ -291,6 +291,12 @@ if(NO_GTK)
 	target_compile_definitions(engine PRIVATE -DNO_GTK=1)
 endif()
 
+option(MISTER_HYBRID "Build for the MiSTer hybrid core (needs SDL2 with the MiSTer drivers)" OFF)
+if(MISTER_HYBRID)
+	target_compile_definitions(engine PRIVATE -DMISTER_HYBRID=1)
+	target_sources(engine PRIVATE mister/mister.cpp)
+endif()
+
 if(APPLE)
 	target_sources(engine PRIVATE
 		macosx/filesys.mm

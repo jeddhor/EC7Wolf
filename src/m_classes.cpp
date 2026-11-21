@@ -6,6 +6,9 @@
 #include "net_watchdog.h"
 #include "wl_menu.h"
 #include "wl_play.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister.h"
+#endif
 #include "id_sd.h"
 #include "id_vl.h"
 #include "id_vh.h"
@@ -1058,6 +1061,12 @@ int Menu::handle()
 				exit = 2;
 			}
 		}
+
+#ifdef MISTER_HYBRID
+		// Resolution from the core's menu
+		if(MiSTer_UpdateResolution())
+			draw();
+#endif
 
 		//
 		// GET INPUT

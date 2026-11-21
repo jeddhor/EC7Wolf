@@ -594,9 +594,15 @@ void IN_ClearTyped()
 	TypedHead = TypedTail = 0;
 }
 
+#ifdef MISTER_HYBRID
+void MisterRumbleTick(void);
+#endif
 void IN_ProcessEvents()
 {
 	SDL_Event event;
+#ifdef MISTER_HYBRID
+	MisterRumbleTick();
+#endif
 
 #ifdef __ANDROID__
 	if(ShadowingEnabled)

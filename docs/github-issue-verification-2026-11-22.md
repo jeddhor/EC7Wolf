@@ -9,11 +9,11 @@ addresses in the memory image.
 
 | # | Report | Finding | Change |
 | --- | --- | --- | --- |
-| 54 | Quicksave is silent | DOS says "Game %s saved." | Fixed |
-| 55 | Elevator resets alien charge | Port bug | Fixed |
-| 56 | Mines too weak | Port bug | Fixed: the original's blast |
+| 54 | Quicksave is silent | DOS says "Game %s saved." | Fixed (beta317) |
+| 55 | Elevator resets alien charge | Port bug | Fixed (beta317) |
+| 56 | Mines too weak | Port bug | Fixed (beta317): the original's blast |
 | 57 | Infrared renders walls strangely | Distance shading differs from DOS | Open |
-| 58 | Closing a blocked door blocks shots | Port bug (saves) | Fixed |
+| 58 | Closing a blocked door blocks shots | Port bug (saves) | Fixed (beta317) |
 
 ## #54: quicksave message
 

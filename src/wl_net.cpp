@@ -96,7 +96,9 @@
 // rules to the new-game packet, and requires mines that only projectiles set
 // off, dropped underfoot (#42, #49), duplicate weapons always taken (#48) and
 // doorless health chambers (#53).
-#define NET_PROTOCOL_VERSION 17
+// Protocol 18 requires charge left above capacity (GitHub #55) and the
+// original's three-pass mine blast that hits its trigger again (#56).
+#define NET_PROTOCOL_VERSION 18
 // Present in the first datagram of every connection. A request used to be one
 // lone zero byte, so any stray packet arriving on the port was a new player.
 static const BYTE NetMagic[3] = { 'E', '7', 'N' };

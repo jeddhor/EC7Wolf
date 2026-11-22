@@ -1,6 +1,7 @@
 # GitHub #40 to #53
 
-Thirteen reports against 1.0-beta310, all from one tester (there is no #50). Baseline: EC7Wolf
+Fourteen reports against 1.0-beta310, all from one tester. #50 was missed when
+the others were pulled and is fixed after beta313. Baseline: EC7Wolf
 1.0-beta310. Engine base: ECWolf 1.4.2-9-g1bff92d (18 February 2026), on the
 upstream 1.5.0pre line. Addresses follow
 [github-issue-verification-2026-11-17.md](github-issue-verification-2026-11-17.md):
@@ -19,6 +20,7 @@ addresses in the memory image.
 | 47 | DOS sprites are fullbright | Accepted | Optional, shaded by default |
 | 48 | Duplicate weapons refused at full ammo | Port bug | Fixed |
 | 49 | Every weapon sets mines off | Port bug | Fixed: only projectiles |
+| 50 | Tymok and Solrac heard floor-wide | Port bug | Fixed after beta313 |
 | 51 | Floor 17 secret unreachable | DOS map error | Optional fix, Classic by default |
 | 52 | Automap shows a broken status bar | Port bug (GL) | Fixed |
 | 53 | Floor 16 health chambers inert | Port bug | Fixed |
@@ -104,6 +106,23 @@ and since an explosion is not an object either, mines do not chain. The port's
 mine was shootable, so every weapon hit it. It is no longer shootable, and its
 trigger test now also accepts projectiles (alien ones too, as in DOS).
 
+## #50: bosses heard across the floor
+
+Once per walk cycle, Tymok (class 25, sample 21), Solrac (20, sample 68), the
+Eniram Boss (21, 68), the Mechanoid (23, 40) and Otrebor (13, 57, after a
+further one-in-nine) run the ambient action 18346. It begins
+`cmp word [bx+43a8h],0` on the alien's area number, `areabyplayer`, and
+returns unless the alien's area is joined to the player's through open doors;
+only then does it roll one in seven (US_RndT mod 7). The port's A_Chase
+made the roll, but played the sound wherever the alien was, so a boss chasing
+anywhere on the floor could be heard. #33 had added the area test to the
+Mechanoid alone, through its own action. A_Chase now makes it for every
+Corridor 7 alien with an active sound. As there, the roll comes before the
+test, so multiplayer peers, whose listeners differ, draw the same numbers.
+
+With the reporter's floor 15 save, Tymok chasing out of the player's area was
+heard 75 times in a minute; now not at all.
+
 ## #51: floor 17's secret
 
 The secret pushwall at (13,2) is pushed south from the corridor at (13,1). It
@@ -154,6 +173,11 @@ and heals. With the reporter's save, the panel heals 226 to 326.
   option the red icon has no blue-ramp pixel left (#46); F8 writes and
   rewrites `quicksav.ecs` without asking, and with Confirm Quick Save on a
   second F8 waits (#45). On beta310 every one of these fails.
+- `corridor7_boss_sounds` (new, Xvfb): a Tymok and a Solrac chasing in the
+  player's area are heard; once the player is moved to a sealed area, neither
+  is, though both keep chasing (#50). It fails without the area test.
+  `--capture-sounds` was added for it: it prints each positioned sound with
+  its game tic.
 - `corridor7_definitions` pins the source of every change, including the
   numeric save order (#43), the fullbright option (#47) and duplicate weapons
   (#48).

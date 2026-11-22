@@ -352,6 +352,9 @@ namespace
 	// the press reached the simulation, which a screenshot cannot do on a screen
 	// where the textures animate on their own.
 	bool     g_verbs          = false;
+	// --capture-sounds: print every positioned sound the game starts, with its
+	// game tic and where it came from. Observation only (GitHub #50).
+	bool     g_sounds         = false;
 	bool     g_haveVisorMode  = false;   // --capture-visormode: force the C7 visor
 	int      g_visorMode      = 0;       // 0 off, 1 night vision, 2 infrared, 3 shock
 
@@ -1192,6 +1195,11 @@ void ParseArgs(int argc, char **argv)
 			g_verbs = true;
 			g_armed = true;
 		}
+		else if(strcmp(arg, "--capture-sounds") == 0)
+		{
+			g_sounds = true;
+			g_armed = true;
+		}
 		else if(strcmp(arg, "--capture-floorplan") == 0)
 		{
 			g_c7FloorPlan = true;
@@ -1325,6 +1333,14 @@ void ParseArgs(int argc, char **argv)
 bool Active()
 {
 	return g_armed;
+}
+
+void NoteSound(const char *sound, int32_t x, int32_t y)
+{
+	if(!g_sounds)
+		return;
+	Printf("Capture: sound %s tic %u at %.2f %.2f\n", sound,
+		(unsigned)gamestate.TimeCount, FIXED2FLOAT(x), FIXED2FLOAT(y));
 }
 
 bool OverrideRNGSeed(DWORD &seed)

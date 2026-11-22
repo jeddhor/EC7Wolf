@@ -205,6 +205,8 @@ SetSoundLoc(fixed gx,fixed gy)
 */
 void PlaySoundLocGlobal(const char* s,fixed gx,fixed gy,SoundChannel chan)
 {
+	if(Capture::Active())
+		Capture::NoteSound(s, gx, gy);
 	SetSoundLoc(gx, gy);
 	SD_PositionSound(leftchannel, rightchannel);
 
@@ -237,6 +239,8 @@ bool C7SoundLocTooFar(fixed gx, fixed gy)
 
 void PlaySoundLocActor(const char* s, AActor *ob, SoundChannel chan)
 {
+	if(Capture::Active())
+		Capture::NoteSound(s, ob->x, ob->y);
 	SetSoundLoc(ob->x, ob->y);
 	SD_PositionSound(leftchannel, rightchannel);
 

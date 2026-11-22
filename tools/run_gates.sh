@@ -124,6 +124,7 @@ corridor7_alien_counter
 corridor7_health_energy
 corridor7_sight_screens
 corridor7_ui_fixes
+corridor7_boss_sounds
 ui_buttons
 bot_footwork
 bot_budget

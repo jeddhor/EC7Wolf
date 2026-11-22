@@ -22,6 +22,7 @@
 #include "wl_draw.h"
 #include "wl_game.h"
 #include "wl_net.h"
+#include "wl_play.h"
 #include "wl_state.h"
 
 static const angle_t dirangle[9] = {0,ANGLE_45,2*ANGLE_45,3*ANGLE_45,4*ANGLE_45,
@@ -729,6 +730,15 @@ ACTION_FUNCTION(A_Chase)
 			static const FName class13Active("c7/monster/active/class13");
 			if(playActive && self->activesound == class13Active)
 				playActive = pr_chase(9) == 0;
+			// 18346 plays nothing unless areabyplayer[ob->areanumber]: the
+			// alien's area joined to the player's through open doors (GitHub
+			// #50: Tymok, Solrac and the Eniram Boss were heard floor-wide).
+			// DOS tests the area before rolling; the roll comes first here so
+			// that peers, whose listeners differ, draw the same numbers.
+			const AActor *listener = players[ConsolePlayer].camera;
+			if(playActive && (!listener ||
+				!map->CheckLink(self->GetZone(), listener->GetZone(), true)))
+				playActive = false;
 		}
 		else
 			playActive = pr_chase.RandomOld(false) < 3;

@@ -74,6 +74,9 @@ namespace Capture
 	// all work in ordinary runs.
 	bool Active();
 
+	// --capture-sounds: report a positioned sound as it starts.
+	void NoteSound(const char *sound, int32_t x, int32_t y);
+
 	// If --capture-rngseed was supplied, overwrite seed with the fixed value
 	// and return true.  Called right after the engine picks its RNG seed.
 	bool OverrideRNGSeed(DWORD &seed);

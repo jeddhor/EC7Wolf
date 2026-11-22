@@ -1,5 +1,5 @@
 """Health, armor, alien energy and mines follow CORR7CD.EXE (GitHub #32, #34,
-#38, #39, #40, #42).
+#38, #39, #40, #42, #55, #56).
 
 Usage: test_corridor7_health_energy.py BUILD_DIR DATA_DIR WORK_DIR
 
@@ -31,6 +31,10 @@ alien charge (energy) and its capacity (ecap) whenever one of them moves.
        block at (13,4) and plugs the way on; the optional Original Map Errors
        rule makes that block floor, so the wall slides two tiles and the
        player can step into (13,3). Played on the shipped floor 17.
+  #55  A new floor sets capacity back to 100 but leaves the charge alone
+       (216b4): charge above 100 survives the elevator.
+  #56  A mine blast (23720) rolls 100..610 three times, a frame apart, and an
+       alien that set it off takes each roll in full on top of its share.
   #49  Only a projectile sets a mine off from a distance: DOS tests every object
        against the mines (0xbfc2), and a plasma bolt is one while a hitscan
        shot is not. The M-16 leaves a mine alone; the Plasma Rifle does not.
@@ -81,14 +85,15 @@ def fixture(pickups, walls_at=None):
             dst.writestr(info, b)
 
 
-def run(label, extra, tics, config='', place=('4.5', '10.5'), level='MAP01', angle='0'):
+def run(label, extra, tics, config='', place=('4.5', '10.5'), level='MAP01', angle='0',
+        skill='3'):
     log = work / (label + '.log')
     # No mouse: under Xvfb the pointer can be warped as the window grabs it,
     # and that arrives as movement, which walks the player off the line.
     (work / (label + '.cfg')).write_text('MouseEnabled = 0;\n' + config)
     args = [str(build / 'ec7wolf'), '--data', 'CO7', '--nowait', '--no-upscale',
             '--res', '320', '200', '--vid-renderer', 'software', '--tedlevel', level,
-            '--skill', '3', '--config', str(work / (label + '.cfg')),
+            '--skill', skill, '--config', str(work / (label + '.cfg')),
             '--savedir', str(work / 'saves'), '--capture-rngseed', '1',
             '--capture-verbs', '--capture-maxtics', str(tics),
             '--capture-place', '1', *place, angle, *extra]
@@ -191,6 +196,16 @@ for keep in (0, 1):
            'by default an alien weapon puts 300 capacity back to 100, as in DOS'),
           show(rows, 'x', 'ecap')[-4:])
 
+# --- #55: charge above 100 survives the next floor ----------------------------
+fixture({6: M343, 8: CHARGE_PACK, 10: CHARGE_PACK})
+text, rows = run('floor-charge', ('--capture-forward', '5', '45', '--capture-exitlevel', '330'), 400)
+before = [r for r in rows if r['tic'] < 330]
+after = [r for r in rows if r['tic'] >= 330]
+check(before and before[-1]['energy'] > 200 and 'MAP02 - ' in text and after and
+      after[-1]['ecap'] == 100 and after[-1]['energy'] >= before[-1]['energy'] - 2,
+      'the next floor puts capacity back to 100 and keeps the charge above it, as in DOS',
+      (show(before, 'energy', 'ecap')[-1:], show(after, 'energy', 'ecap')[-2:]))
+
 # --- #42: a mine lands under the player, even facing a wall --------------------
 fixture({})
 _, rows = run('mine', ('--capture-give', 'C7Mines', '--capture-hold-button', 'reload', '10', '1'),
@@ -206,7 +221,7 @@ for weapon in ('C7M16', 'C7PlasmaRifle'):
              '--capture-hold-button', 'attack', '80', '60')
     if weapon != 'C7M16':
         extra = ('--capture-give', weapon, '--capture-select', weapon) + extra
-    text, rows = run('shoot-' + weapon, extra, 200)
+    text, rows = run('shoot-' + weapon, extra, 400)
     there = [r['minex'] for r in rows if r['tic'] >= 60]
     if weapon == 'C7M16':
         check('mine placed at 10,10' in text and there and there[-1] == 10,
@@ -214,6 +229,28 @@ for weapon in ('C7M16', 'C7PlasmaRifle'):
     else:
         check('mine placed at 10,10' in text and there and there[-1] == -1,
               'a plasma bolt sets the mine off', show(rows, 'energy', 'minex')[-3:])
+
+# --- #56: an alien walking onto a mine ----------------------------------------
+SOLRAC = 214
+fixture({14: SOLRAC})
+actors = work / 'mine-blast.actors'
+# The mine goes under the Solrac, which wakes to the shots and stands its
+# ground; the mine arms as soon as its owner is far enough off.
+text, rows = run('mine-blast', ('--capture-health', '100000', '--capture-mine-at', '14', '10', '1',
+                                '--capture-hold-button', 'attack', '20', '4',
+                                '--capture-actors', str(actors)), 400, skill='4')
+health = []
+for line in actors.read_text().splitlines()[1:]:
+    f = line.split()
+    if f[1] == 'C7Solrac' and (not health or health[-1][1] != int(f[7])):
+        health.append((int(f[0]), int(f[7])))
+# The M-16 burst that wakes it lands well before the mine can arm (tic 73).
+drops = [(b[0], a[1] - b[1]) for a, b in zip(health, health[1:]) if b[1] < a[1] and b[0] > 73]
+# Two tics apart: +0, +2 and +4.
+blast = [d for d in drops if drops and d[0] - drops[0][0] <= 4]
+check(len(blast) == 3 and sum(d for _, d in blast) >= 450,
+      'a mine an alien walks onto hits it three times, a frame apart, for at least 450',
+      health[:8])
 
 # --- #53: a doorless health chamber heals -------------------------------------
 fixture({}, {(40, 10): 35})

@@ -268,6 +268,21 @@ MENU_LISTENER(BeginEditSave);
 MENU_LISTENER(LoadSaveGame);
 MENU_LISTENER(PerformSaveGame);
 
+// CORR7CD.EXE says so in the play screen's message line when a game has been
+// saved or loaded: "Game %s saved." and "Game %s retrieved." beside "Sound
+// %s." in its string table. The port said nothing, which made F8 look like it
+// had done nothing (GitHub #54). Only for the menus and F8/F9: the capture
+// harness saves and loads through Save and Load too, and its screenshots must
+// not carry a message.
+static void C7SaveLoadNotice(bool saved, const FString &name)
+{
+	if(!IWad::CheckGameFilter("Corridor7") || !StatusBar)
+		return;
+	FString message;
+	message.Format(saved ? "Game %s saved." : "Game %s retrieved.", name.GetChars());
+	StatusBar->SetTopMessage(message);
+}
+
 static LoadSaveMenu loadGame(false), saveGame(true);
 static MenuItem *loadItem, *saveItem;
 
@@ -515,7 +530,8 @@ MENU_LISTENER(PerformSaveGame)
 		loadGame.getIndex(which-1)->setHighlighted(0);
 	}
 
-	Save(file.filename, file.name);
+	if(Save(file.filename, file.name))
+		C7SaveLoadNotice(true, file.name);
 
 	if(!quickSaveLoad)
 		Menu::closeMenus(true);
@@ -531,7 +547,8 @@ MENU_LISTENER(LoadSaveGame)
 		return false;
 
 	loadedgame = true;
-	Load(SaveFile::files[menuItem->slotIndex].filename);
+	if(Load(SaveFile::files[menuItem->slotIndex].filename))
+		C7SaveLoadNotice(false, SaveFile::files[menuItem->slotIndex].name);
 
 	if(!quickSaveLoad)
 		Menu::closeMenus(true);
@@ -619,7 +636,8 @@ static void Corridor7QuickLoadOrSave(bool load)
 		SaveFile::files[index] = file;
 
 	quickSaveLoad = true;
-	Save(file.filename, file.name);
+	if(Save(file.filename, file.name))
+		C7SaveLoadNotice(true, file.name);
 	quickSaveLoad = false;
 }
 

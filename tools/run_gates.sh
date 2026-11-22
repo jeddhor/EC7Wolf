@@ -125,6 +125,7 @@ corridor7_health_energy
 corridor7_sight_screens
 corridor7_ui_fixes
 corridor7_boss_sounds
+corridor7_saved_doors
 ui_buttons
 bot_footwork
 bot_budget

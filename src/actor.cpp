@@ -152,6 +152,7 @@ PointerIndexTable<AActor::DropList> AActor::dropItems;
 IMPLEMENT_POINTY_CLASS(Actor)
 	DECLARE_POINTER(inventory)
 	DECLARE_POINTER(target)
+	DECLARE_POINTER(c7MineTrigger)
 END_POINTERS
 
 void AActor::AddInventory(AInventory *item)
@@ -509,6 +510,12 @@ void AActor::Serialize(FArchive &arc)
 
 	if(GameSave::SaveProdVersion >= 0x001002FF && GameSave::SaveVersion > 1374914454)
 		arc << projectilepassheight;
+
+	// Corridor 7 mines remember what set them off (GitHub #56).
+	if(GameSave::SaveVersion >= 1795360000ULL)
+		arc << c7MineTrigger;
+	else if(arc.IsLoading())
+		c7MineTrigger = NULL;
 
 	if(arc.IsLoading() && !hasActorRef)
 		actors.Remove(this);

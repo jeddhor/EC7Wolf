@@ -166,8 +166,8 @@ finishing the floor rather than dying. Ammo capacity and mines are not in that
 set: a capacity pack found on a bonus floor is kept, and mines dropped there
 stay spent. Score is the point of the floor and is kept. The next floor's setup
 then puts the health maximum back to 100 and caps health at it, resets
-alien-weapon capacity to 100 and ends an invulnerability sphere, as on any
-floor; the port now does those on every floor change, where it used to carry
+alien-weapon capacity to 100 (keeping the charge itself, even above it) and
+ends an invulnerability sphere, as on any floor; the port now does those on every floor change, where it used to carry
 some of them over.
 
 The entry state is taken on arrival by whatever route -- elevator, warp, or a
@@ -451,7 +451,10 @@ Append an output directory and `--all` to load-check every map in the archive.
   menus' beep, sample 33), triggering by the player, an alien or a projectile
   such as a plasma bolt within 0x9c40 (sample 1; GitHub #37, #49) -- hitscan
   weapons pass a mine by, as in DOS, where mines are not objects -- and
-  self-damaging radial explosions, all weapon pickups,
+  the original's explosion (23720): three passes a frame apart, each rolling
+  100 to 610 and halving it for every tile away, out to three tiles; the alien
+  that set the mine off takes each roll in full on top, and the player who laid
+  it is not spared (GitHub #56). All weapon pickups,
   ammunition/charge/health/armor items, non-wasteful health and ammunition
   pickup rules, monster combat, projectile attacks, score, event sounds, and
   native first-person weapon scaling. The original W+A+X equipment cheat and
@@ -753,9 +756,17 @@ require one, and they did nothing (GitHub #53). A doorless chamber keeps its
 reservoir on the panel's cell, turns the player away from the panel and heals
 at once.
 
+A force-field door's state is its plane-1 marker, 106 while the barrier is up
+and 107 once the aperture is open, and shots and sight pass only 107. Saves now
+keep it. They used not to, so a reloaded open door came back drawn open and
+walkable but stopping every shot, and using it opened it again rather than
+closing it; older saves are repaired as they load (GitHub #58).
+
 F8 saves to a slot of its own, listed as "Quicksave" (`quicksav.ecs`), without
 asking, as DOS saves without asking; Options > Gameplay > Confirm Quick Save
-brings the question back. F9 loads the quicksave, asking first. Saves are
+brings the question back. F9 loads the quicksave, asking first. Saving and
+loading say so on the message line, in the original's words: "Game Quicksave
+saved." and "Game ... retrieved." (GitHub #54). Saves are
 listed in the order they were made, so savegam10 follows savegam9 (GitHub #43,
 #45). A weapon is always picked up, even a duplicate with its ammunition full,
 as GetBonus never refuses one (GitHub #48).
@@ -780,7 +791,11 @@ the boost.
 
 Alien weapons come with no charge. Picking one up, new or a duplicate, sets the
 energy capacity back to 100 (13ec1), and charge regenerates up to capacity two
-points a frame once any weapon above the M-16 is owned. An Alien Charge Pack
+points a frame once any weapon above the M-16 is owned. Lowering capacity never
+lowers the charge: regeneration only stops while charge is at or above it, so
+charge built up above 100 survives a new floor (216b4) and a new alien weapon.
+The port used to cut charge to capacity every tic, which emptied it at every
+elevator (GitHub #55). An Alien Charge Pack
 adds 100 capacity, up to 999, and is left lying at 999 (140f6) (GitHub #34).
 Each pack is used up as it is taken. Like every CustomInventory item without a
 Use state, it goes away once its Pickup state succeeds, as in ZDoom; ECWolf

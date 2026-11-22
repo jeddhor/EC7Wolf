@@ -68,6 +68,7 @@ actor Actor native
 	action native A_ChangeFlag(string flag, bool value);
 	action native A_ChangeVelocity(float x, float y, float z, int flags = 0);
 	action native A_C7MineThink();
+	action native A_C7MineBlast();
 	action native A_C7TebazileMorph();
 	action native A_C7VortexSound();
 	action native A_Chase(state melee="*", state ranged="*", int flags = 0);

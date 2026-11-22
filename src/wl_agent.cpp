@@ -16,6 +16,7 @@
 #include "thingdef/thingdef.h"
 #include "lnspec.h"
 #include "wl_agent.h"
+#include "g_bot.h"
 #include "a_inventory.h"
 #include "a_keys.h"
 #include "m_random.h"
@@ -1589,7 +1590,8 @@ void C7NativeFloorSetup(player_t &player)
 	// CORR7CD.EXE 216b4, run on every floor: health is lowered to 100 but not
 	// raised (wounds are not healed), the maximum-health boost (8106) and the
 	// alien weapons' energy capacity (80f0) go back to 100, and an
-	// invulnerability sphere still running (80e8) ends. ECWolf's travel kept
+	// invulnerability sphere still running (80e8) ends. The charge itself
+	// (80de) is left as it is, above the new capacity or not (GitHub #55). ECWolf's travel kept
 	// the last two, so a sphere picked up on a bonus floor -- or anywhere --
 	// went on protecting the player on the next floor.
 	APlayerPawn *pawn = player.mo;
@@ -2089,11 +2091,74 @@ ACTION_FUNCTION(A_C7MineThink)
 		if(MAX(abs(check->x - self->x), abs(check->y - self->y)) < triggerDistance)
 		{
 			SD_PlaySound("c7/mine/trigger");
+			self->c7MineTrigger = check;
 			DamageActor(self, self->target, self->health);
 			return true;
 		}
 	}
 	return false;
+}
+
+// The explosion (CORR7CD.EXE 23720, mine state 3). It rolls US_RndT()*2+100,
+// 100..610, and halves it for every tile between the mine and its victim,
+// counted along both axes. Aliens are hit in the tiles from three before the
+// mine's to two after it on each axis (the loop stops short of +3), the
+// player in -3..+3. Then the object that set the mine off takes the full roll
+// once more, unless it is the player -- an alien that walks onto a mine is hit
+// twice at full strength.
+//
+// It runs on every frame while the blast shows its fourth picture, which
+// lasts five tics: so how often depends on the frame rate. At the 35 frames a
+// second the port assumes everywhere else (two tics a frame), three times,
+// each with a new roll; see the mine's Death state. The port used to explode
+// once, for 102..500 with a straight fall-off to nothing at two tiles, and
+// never hit the trigger again (GitHub #56).
+static FRandom pr_c7mine("Corridor7Mine");
+ACTION_FUNCTION(A_C7MineBlast)
+{
+	madenoise = true;
+	const int damage = pr_c7mine() * 2 + 100;
+	const int mx = self->tilex, my = self->tiley;
+	AActor *owner = self->target;
+
+	for(AActor::Iterator iter = AActor::GetIterator(); iter.Next();)
+	{
+		AActor *const victim = iter;
+		if(victim == self || victim->player || !(victim->flags & FL_SHOOTABLE) ||
+			victim->health <= 0)
+			continue;
+		const int tx = victim->tilex, ty = victim->tiley;
+		if(tx < mx - 3 || tx >= mx + 3 || ty < my - 3 || ty >= my + 3)
+			continue;
+		const int shift = abs(tx - mx) + abs(ty - my);
+		if(damage >> shift)
+			DamageActor(victim, owner ? owner : self, damage >> shift);
+	}
+
+	AActor *trigger = self->c7MineTrigger;
+	if(trigger && !trigger->player && (trigger->flags & FL_SHOOTABLE) && trigger->health > 0)
+		DamageActor(trigger, owner ? owner : self, damage);
+
+	for(unsigned int i = 0; i < Session::ActiveSlotCount(); ++i)
+	{
+		if(!players[i].mo || players[i].mo->health <= 0)
+			continue;
+		AActor *const pawn = players[i].mo;
+		const int tx = pawn->tilex, ty = pawn->tiley;
+		if(tx < mx - 3 || tx > mx + 3 || ty < my - 3 || ty > my + 3)
+			continue;
+		const int shift = abs(tx - mx) + abs(ty - my);
+		if(!(damage >> shift))
+			continue;
+		// Your own mine is charged to the mine itself: DamageActor discards
+		// damage a player deals to themselves.
+		DamageActor(pawn, (owner && owner != pawn) ? owner : self, damage >> shift);
+		FString detail;
+		detail.Format("by=%s own=%d", self->GetClass()->GetName().GetChars(),
+			pawn == owner ? 1 : 0);
+		Bot::TraceEvent((Session::PlayerSlot)i, "blast", detail.GetChars());
+	}
+	return true;
 }
 
 ACTION_FUNCTION(A_C7TebazileMorph)

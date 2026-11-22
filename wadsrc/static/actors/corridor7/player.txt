@@ -17,7 +17,8 @@ actor C7Energy : Ammo
 // once any weapon above the M-16 is owned. Picking up an alien weapon -- new
 // or a duplicate -- sets capacity back to 100 and gives no charge at all
 // (CORR7CD.EXE 13ec1); an Alien Charge Pack adds 100 capacity, up to 999, and
-// no charge either (140f6). Every floor starts at 100 again. Until GitHub #34
+// no charge either (140f6). Every floor starts at 100 again. Lowering capacity
+// never lowers the charge: it only stops recharging (GitHub #55). Until GitHub #34
 // the port gave charge instead, which the capacity clamp took straight back.
 actor C7EnergyCapacity : Ammo
 {
@@ -555,10 +556,16 @@ actor C7ProximityMine
 			C067 A 1 A_C7MineThink
 			loop
 		Death:
-			C068 A 3 bright A_Explode(random(102, 500), 128, 1, true)
+			// 23720 at two tics a frame: the mine shows for one more frame,
+			// each picture lasts three tics, and the fourth (C071) does the
+			// damage on each of its three frames. See A_C7MineBlast.
+			C067 A 3
+			C068 A 3 bright
 			C069 A 3 bright
 			C070 A 3 bright
-			C071 A 3 bright
+			C071 A 1 bright A_C7MineBlast
+			C071 A 1 bright A_C7MineBlast
+			C071 A 1 bright A_C7MineBlast
 			C072 A 3 bright
 			C073 A 3 bright
 			C074 A 3 bright

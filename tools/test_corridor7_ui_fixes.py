@@ -1,4 +1,4 @@
-"""HUD, visor and quicksave fixes (GitHub #41, #44, #45, #46).
+"""HUD, visor and quicksave fixes (GitHub #41, #44, #45, #46, #54).
 
 Usage: test_corridor7_ui_fixes.py BUILD_DIR DATA_DIR WORK_DIR
 
@@ -18,6 +18,7 @@ loaded machine costs seconds, not a failure.
   #45  F8 writes the dedicated Quicksave slot (quicksav.ecs) without asking,
        and a second F8 rewrites it. With Confirm Quick Save on, a second F8
        asks first, so the file is left alone while the question is open.
+  #54  F8 says "Game Quicksave saved." on the message line, as DOS does.
 """
 from pathlib import Path
 import os, shutil, subprocess, sys, time
@@ -206,13 +207,35 @@ def press_until(game, key, path, before, timeout=20):
     return stamp(path)
 
 
+def banner_pixels(im):
+    """Yellow banner text in the top of the view (the message line)."""
+    if im is None:
+        return -1
+    top = im.crop((0, 0, im.width, im.height // 6))
+    data = top.tobytes()
+    return sum(1 for i in range(0, len(data), 3)
+               if data[i] > 180 and data[i + 1] > 180 and data[i + 2] < 90)
+
+
 for confirm in (0, 1):
     game = Game('quicksave-%d' % confirm, 'C7ConfirmQuickSave = %d;\n' % confirm)
     quick = game.dir / 'saves' / 'quicksav.ecs'
     first = second = None
+    quiet = said = -1
     if game.wait_for_log('MAP01 - '):
-        time.sleep(2)
+        # Past the floor's opening objective, which uses the same line and
+        # lasts five seconds of game time -- longer than that on a busy machine.
+        # Seen first, so the view is up and not still the loading screen.
+        end = time.time() + 40
+        seen = False
+        while time.time() < end:
+            quiet = banner_pixels(game.shot())
+            seen = seen or quiet > 40
+            if seen and quiet == 0:
+                break
+            time.sleep(0.5)
         first = press_until(game, 'F8', quick, None)
+        said = banner_pixels(game.shot())
         time.sleep(1.5)   # a different second, so the rewrite has a new stamp
         if confirm:
             game.key('F8')
@@ -226,6 +249,7 @@ for confirm in (0, 1):
               'with Confirm Quick Save on, a second F8 waits for an answer', (first, second))
     else:
         check(first is not None, 'F8 writes quicksav.ecs without asking', first)
+        check(quiet == 0 and said > 40, 'and says so on the message line (#54)', (quiet, said))
         check(first is not None and second not in (None, first),
               'and a second F8 rewrites it without asking', (first, second))
 

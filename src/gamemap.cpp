@@ -1091,6 +1091,26 @@ FArchive &operator<< (FArchive &arc, GameMap *&gm)
 			else if(!arc.IsStoring())
 				plane.map[i].corridor7ChamberPower = 100;
 
+			// A force-field door's marker is its state: 106 while the barrier
+			// is up, 107 once the aperture is open, and sight and shots pass
+			// only 107. It was not saved, so a load rebuilt it from the map: an
+			// open door came back as 106 -- drawn open and walkable, since the
+			// texture and solidity were saved, but stopping every shot, and
+			// opening again instead of closing when used (GitHub #58). Older
+			// saves are repaired: a 106 cell that is open on every side can
+			// only be an open door.
+			if(GameSave::SaveVersion >= 1795360000ULL)
+				arc << plane.map[i].corridor7WallMarker
+					<< plane.map[i].corridor7SightTransparent;
+			else if(!arc.IsStoring() && plane.map[i].corridor7WallMarker == 106 &&
+				plane.map[i].tile && !plane.map[i].sideSolid[0] &&
+				!plane.map[i].sideSolid[1] && !plane.map[i].sideSolid[2] &&
+				!plane.map[i].sideSolid[3])
+			{
+				plane.map[i].corridor7WallMarker = 107;
+				plane.map[i].corridor7SightTransparent = true;
+			}
+
 			if(!arc.IsStoring())
 				plane.map[i].plane = &plane;
 			if(repairVisor)

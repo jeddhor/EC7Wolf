@@ -491,7 +491,7 @@ if shotgun is None or "C814" in shotgun.group(1):
 require(r'actor\s+C7ProximityMine.*?Spawn:.*?C067\s+A\s+36.*?Armed:.*?C067\s+A\s+1\s+A_C7MineThink',
         PLAYER, "placed mines use the released floor-mine sprite, not the pickup crate")
 # The three properties the bot's own model of a mine is built on. It prices
-# blast risk at two tiles (128 map units / 64 per tile), keeps clear of a live
+# blast risk at three tiles (A_C7MineBlast, GitHub #56), keeps clear of a live
 # one because the owner is not spared once it arms, and knows that only a
 # body or a projectile sets one off -- hitscan passes it by, as in DOS, where
 # mines are not objects (GitHub #49). A DECORATE edit that changed any of these
@@ -502,8 +502,17 @@ if mine is None or 'SHOOTABLE' in mine.group(1) or not re.search(r'health\s+1\b'
                      "and is not shootable")
 require(r'ACTION_FUNCTION\(A_C7MineThink\).*?FL_MISSILE', WL_AGENT,
         "a projectile within range sets a mine off")
-require(r'actor\s+C7ProximityMine.*?Death:.*?A_Explode\(random\(102,\s*500\),\s*128,\s*1,\s*true\)',
-        PLAYER, "a mine's blast reaches two tiles and hurts whoever laid it")
+# CORR7CD.EXE 23720 (GitHub #56): three passes a frame apart on the fourth
+# picture, US_RndT()*2+100 halved per tile, the trigger hit again in full, and
+# the player within three tiles -- the one who laid it included.
+require(r'actor\s+C7ProximityMine.*?Death:.*?C071\s+A\s+1\s+bright\s+A_C7MineBlast\s*'
+        r'C071\s+A\s+1\s+bright\s+A_C7MineBlast\s*C071\s+A\s+1\s+bright\s+A_C7MineBlast',
+        PLAYER, "a mine's blast lands three times on its fourth picture")
+require(r'ACTION_FUNCTION\(A_C7MineBlast\).*?pr_c7mine\(\)\s*\*\s*2\s*\+\s*100.*?'
+        r'tx\s*>=\s*mx\s*\+\s*3.*?damage\s*>>\s*shift.*?c7MineTrigger.*?DamageActor\(trigger,.*?damage\).*?'
+        r'tx\s*>\s*mx\s*\+\s*3.*?owner\s*!=\s*pawn\)\s*\?\s*owner\s*:\s*self',
+        WL_AGENT, "a mine's blast rolls 100..610, halves per tile, hits its trigger again and spares no player")
+require(r'self->c7MineTrigger\s*=\s*check;', WL_AGENT, "a mine remembers what set it off")
 require(r'actor\s+C7PlasmaBolt.*?speed\s+30.*?deathsound\s+"c7/teleport"'
         r'.*?Spawn:.*?C706\s+A\s+2\s+bright\s+loop.*?Death:.*?'
         r'C707\s+A\s+4\s+bright\s+A_Explode.*?C708\s+A\s+4\s+bright.*?'

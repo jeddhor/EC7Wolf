@@ -8,8 +8,8 @@
 # costs one C7Mines and spawns a C7ProximityMine under the dropper (GitHub #42).
 # It spends 36 tics arming. It stays inert while its *owner* is within 0xc350
 # and goes live for everybody -- owner included -- once they step away.
-# Anything shootable within 0x9c40 sets it off (#37): 102 to 500 damage at a
-# radius of 128 units, which is two tiles.
+# A body or a projectile within 0x9c40 sets it off (#37, #49): three passes
+# of 100 to 610, halved for every tile away, out to three tiles (#56).
 #
 # Placement comes from the graph, not from anybody's movements: a cell with
 # three or fewer ways out is a corridor or a doorway, which is map knowledge a

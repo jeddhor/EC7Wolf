@@ -1755,7 +1755,7 @@ private:
 		if(bot.target != MAXPLAYERS)
 			return;
 
-		// Not on top of one of its own. The blast reaches two tiles, so two
+		// Not on top of one of its own. The blast reaches three tiles, so two
 		// mines inside that of each other is one wasted and a bigger hole to
 		// walk into later.
 		for(unsigned int i = 0;i < bot.mineCount;++i)
@@ -1805,7 +1805,7 @@ private:
 		//
 		// A mine goes live for its owner the moment the owner steps away, and
 		// the trigger is anything within 0x9c40 -- so the cell it sits in
-		// is the thing to avoid, and the two-tile blast is what makes doing so
+		// is the thing to avoid, and the three-tile blast is what makes doing so
 		// worth the detour. Reuses the per-bot blocked list the recovery
 		// ladder already prices routes with, at an expiry long enough to
 		// outlast a match: unlike a jammed doorway, a mine does not clear.
@@ -2175,7 +2175,7 @@ private:
 		// bot blew itself up the first match after personalities landed.
 		//
 		// Section 16.7 asks for blast risk to be priced by the game's actual
-		// radius, which is two tiles.
+		// radius, which is three tiles (A_C7MineBlast).
 		int mineDX = 0, mineDY = 0;
 		bool mineClose = false;
 		for(unsigned int i = 0;i < bot.mineCount;++i)
@@ -2293,8 +2293,8 @@ private:
 
 		// With a mine of its own within the blast radius, move away from it
 		// rather than around the fight. Crude on purpose: a step in the
-		// opposite direction is enough to leave a two-tile radius, and this is
-		// footwork rather than a plan.
+		// opposite direction takes it out of the worst of a blast that halves
+		// with every tile, and this is footwork rather than a plan.
 		if(mineClose)
 		{
 			// The mine's bearing relative to facing decides which way is out.
@@ -2700,10 +2700,12 @@ private:
 		// Charge to keep in reserve, and how often the zoom may be pressed.
 		// The cycle wraps 1-2-3, so a mistimed second press lands on the wrong
 		// mode and the next one has to go all the way round again.
-		// How often a mine is considered, and how far its blast reaches. The
-		// radius is 128 units in the DECORATE, which is two tiles.
+		// How often a mine is considered, and how far its blast reaches:
+		// A_C7MineBlast hits a player up to three tiles away on each axis,
+		// halving with every tile, so a quarter of the roll is still 25..152
+		// at two (GitHub #56).
 		MINE_THINK_INTERVAL = 105,
-		MINE_BLAST_TILES = 2,
+		MINE_BLAST_TILES = 3,
 		// Long enough to outlast a match. A mine does not go away.
 		MINE_MEMORY = 100000,
 		VISOR_CHARGE_FLOOR = 15,

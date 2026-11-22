@@ -592,10 +592,14 @@ void APlayerPawn::Tick()
 			AddInventory(energy);
 			energy->RemoveFromWorld();
 		}
+		// Charge is never lowered to capacity: 219a8 only stops adding once
+		// charge reaches it. A new floor (216b4) and an alien weapon (13ec1)
+		// set capacity to 100 and leave the charge alone, so a player with
+		// 600 charge keeps it and recharges again only below 100. The port
+		// cut it to capacity every tic, which emptied it at every elevator
+		// (GitHub #55).
 		if(energy && capacity)
 		{
-			if(energy->amount > capacity->amount)
-				energy->amount = capacity->amount;
 			if(recharges && energy->amount < capacity->amount &&
 				(gamestate.TimeCount & ((1u << C7_RAMP_CYCLE_SHIFT) - 1)) == 0)
 				energy->amount = MIN(energy->amount + 2, capacity->amount);

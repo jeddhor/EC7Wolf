@@ -202,6 +202,9 @@ class AActor : public Thinker,
 		fixed		killerx,killery; // For deathcam
 
 		TObjPtr<AActor> target;
+		// What set a Corridor 7 mine off (CORR7CD.EXE's mine table +0x0a):
+		// the blast hits it again at full strength (GitHub #56).
+		TObjPtr<AActor> c7MineTrigger;
 		player_t	*player;	// Only valid with APlayerPawn
 
 		TObjPtr<AInventory>	inventory;

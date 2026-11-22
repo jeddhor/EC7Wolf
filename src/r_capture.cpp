@@ -2505,7 +2505,10 @@ static void TraceVerbs()
 	static int lastPacks, lastPlans;
 	static int lastEnergy, lastEcap, lastMaxHealth, lastArmor;
 	static unsigned lastPickups;
-	if(first || visor != lastVisor || mines != lastMines || ammo != lastAmmo ||
+	// The mine's tile is compared too: a mine going off is a change of its
+	// own, and used to be reported only when something else moved with it.
+	static int lastMineX = -1, lastMineY = -1;
+	if(first || minex != lastMineX || miney != lastMineY || visor != lastVisor || mines != lastMines || ammo != lastAmmo ||
 		health != lastHealth || map != lastMap || angle != lastAngle ||
 		energy != lastEnergy || ecap != lastEcap || maxhealth != lastMaxHealth || armor != lastArmor ||
 		Items::PickupsBy(ConsolePlayer) != lastPickups ||
@@ -2517,6 +2520,7 @@ static void TraceVerbs()
 			energy, ecap, maxhealth, armor, Items::PickupsBy(ConsolePlayer), minex, miney);
 		lastEnergy = energy; lastEcap = ecap; lastMaxHealth = maxhealth; lastArmor = armor;
 		lastPickups = Items::PickupsBy(ConsolePlayer);
+		lastMineX = minex; lastMineY = miney;
 		first = false;
 		lastVisor = visor; lastMines = mines; lastAmmo = ammo; lastHealth = health;
 		lastMap = map; lastAngle = angle; lastX = x; lastY = y;

@@ -783,6 +783,10 @@ bool Load(const FString &filename)
 	char *capacityRule = M_GetPNGText(png, "EC7Wolf Alien Weapon Capacity");
 	gamestate.c7KeepAlienCapacity = capacityRule && strcmp(capacityRule, "keep") == 0 ? 1 : 0;
 	delete[] capacityRule;
+	// And the original map data (GitHub #51).
+	char *mapRule = M_GetPNGText(png, "EC7Wolf Map Fixes");
+	gamestate.c7MapFixes = mapRule && strcmp(mapRule, "fixed") == 0 ? 1 : 0;
+	delete[] mapRule;
 	M_GetPNGText(png, "Current Map", gamestate.mapname, 8);
 	SetupGameLevel();
 
@@ -958,6 +962,7 @@ bool Save(const FString &filename, const FString &title)
 		gamestate.c7IntruderAlert == 1 ? "mapwide" : "classic");
 	M_AppendPNGText(fileh, "EC7Wolf Alien Weapon Capacity",
 		gamestate.c7KeepAlienCapacity == 1 ? "keep" : "classic");
+	M_AppendPNGText(fileh, "EC7Wolf Map Fixes", gamestate.c7MapFixes == 1 ? "fixed" : "classic");
 
 	FString comment;
 	// Creation Time

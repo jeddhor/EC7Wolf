@@ -40,6 +40,9 @@ extern struct gametype
 	// above it, as in DOS), 1 keep (a capacity above 100 is left alone; GitHub
 	// #40). Fixed by the authority for this game.
 	BYTE c7KeepAlienCapacity;
+	// Original map errors: 0 classic (the DOS map data as shipped), 1 fixed
+	// (known errors in it corrected; GitHub #51). Fixed by the authority.
+	BYTE c7MapFixes;
 } gamestate;
 
 extern  char            demoname[13];

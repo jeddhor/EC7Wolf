@@ -945,6 +945,29 @@ void GameMap::ReadMacData()
  * int16 - Hieght
  * ... raw plane data ...
  */
+// Known errors in Corridor 7's shipped maps, corrected only under the optional
+// Original Map Errors rule (gamestate.c7MapFixes; GitHub #51). Each fix checks
+// the cells it touches still hold the shipped values, so a map pack that
+// replaces the floor is left alone.
+static void Corridor7FixMapErrors(WORD *tiles, unsigned int width, unsigned int height)
+{
+	if(!IWad::CheckGameFilter("Corridor7") || !gamestate.c7MapFixes ||
+		width != 64 || height != 64)
+		return;
+
+	// Floor 17: the secret pushwall at (13,2), pushed south from the corridor,
+	// slides one tile into (13,3) and stops against a lone wall block at
+	// (13,4) -- filling the only cell that leads on to (12,3) and (14,3), so
+	// the secret cannot be reached, in DOS too. The block becomes floor like
+	// its neighbors, and the wall slides its full two tiles.
+	if(stricmp(levelInfo->MapName, "MAP17") == 0 &&
+		tiles[4*64+13] == 34 && tiles[3*64+13] == 259 &&
+		tiles[4*64+12] == 259 && tiles[4*64+14] == 259)
+	{
+		tiles[4*64+13] = 259;
+	}
+}
+
 void GameMap::ReadPlanesData()
 {
 	static const unsigned short UNIT = 64;
@@ -1037,6 +1060,7 @@ void GameMap::ReadPlanesData()
 				xlat.GetZonePalette(zonePalette);
 				for(unsigned int i = 0;i < size;++i)
 					oldplane[i] = LittleShort(oldplane[i]);
+				Corridor7FixMapErrors(oldplane.Get(), header.width, header.height);
 
 				// Corridor 7-style maps encode a door's color but not its axis.
 				// Create stable per-axis palette entries before MapSpot pointers

@@ -1531,8 +1531,14 @@ void PlayFrame()
 	// there is told about but never painted.
 	Renderer->DrawViewOverlay(DrawScoreboardOverlay);
 
+	// Through the seam as well (GitHub #52). The full automap draws the play
+	// screen as if the view were size 20, status bar and all, but the view
+	// itself is still the size the player chose; at size 21 the status bar's
+	// black boxes then lie inside the 3D view, and a compositing backend that
+	// was not told they were painted keyed them out and showed the world
+	// through the LEVEL, SCORE and meter wells.
 	if(automap && !gamestate.victoryflag)
-		BasicOverhead();
+		Renderer->DrawViewOverlay(BasicOverhead);
 	// PAUSED also lands over the 3D view -- and in Corridor 7 it carries the same
 	// black drop shadow the top message does, which a key-based compositor cannot
 	// see. Same seam, drawn after the automap so the paint order is unchanged.

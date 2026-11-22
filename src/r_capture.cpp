@@ -387,6 +387,7 @@ namespace
 		crc = Fold(crc, &gamestate.shotgunMinimum, sizeof(gamestate.shotgunMinimum));
 		crc = Fold(crc, &gamestate.c7IntruderAlert, sizeof(gamestate.c7IntruderAlert));
 		crc = Fold(crc, &gamestate.c7KeepAlienCapacity, sizeof(gamestate.c7KeepAlienCapacity));
+		crc = Fold(crc, &gamestate.c7MapFixes, sizeof(gamestate.c7MapFixes));
 
 		const DWORD rng = FRandom::StaticSumSeeds();
 		crc = Fold(crc, &rng, sizeof(rng));
@@ -1929,7 +1930,10 @@ void PreTic()
 		loadedgame = false;
 		if(!ok)
 			I_Error("Capture: load failed");
-		Printf("Capture: loaded snapshot %s\n", g_loadPath.GetChars());
+		// The game clock comes back with the save, and every --capture press
+		// window is measured on it, so say where it now stands.
+		Printf("Capture: loaded snapshot %s at game tic %lu\n", g_loadPath.GetChars(),
+			(unsigned long)gamestate.TimeCount);
 	}
 
 	// Once, on the first tic the map exists: the answer is about the map's

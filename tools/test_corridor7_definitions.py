@@ -362,8 +362,8 @@ require(r'C7G0062.*?meterLeft\s*=\s*3.*?meterRight\s*=\s*3.*?'
 		"health chamber power fills C7G0062's 42x5 recessed well with the green ramp")
 require(r'storedPower.*?corridor7ChamberPower.*?0x80.*?corridor7ChamberPower\s*&=\s*0x7f.*?MIN<unsigned int>\(plane\.map\[i\]\.corridor7ChamberPower,\s*3\)\*100\)/3', GAMEMAP,
 		"health chamber reservoir saves are tagged while legacy three-use saves remain compatible")
-require(r'TryUseC7HealthChamber.*?MapSpot\s+panel.*?MapSpot\s+door.*?panel->corridor7WallID\s*!=\s*35.*?door->corridor7WallID\s*!=\s*53.*?door->corridor7WallMarker\s*!=\s*107',
-        PLAYERPAWN, "health chambers activate at the rear panel with the open door opposite")
+require(r'TryUseC7HealthChamber.*?MapSpot\s+panel.*?MapSpot\s+door.*?panel->corridor7WallID\s*!=\s*35.*?door->corridor7WallID\s*==\s*53.*?door->corridor7WallMarker\s*!=\s*107',
+        PLAYERPAWN, "health chambers activate at the rear panel, refusing only while their door is closed")
 require(r'actor\s+C7FloorPlan\s*:\s*MapRevealer', PLAYER,
         "the floor-plan pickup uses the native full-map inventory path")
 require(r'class\s+AMapRevealer.*?TryPickup.*?gamestate\.fullmap\s*=\s*true.*?CheckGameFilter\("Corridor7"\).*?Super::TryPickup',
@@ -1019,5 +1019,13 @@ require(r'static int CompareSaveFilenames.*?isdigit.*?CompareSaveFilenames\(Save
         LOADSAVE, "saves are listed in numeric order, savegam10 after savegam9")
 require(r'QUICKSAVE_FILE = "quicksav\.ecs".*?if\(index >= 0 && c7_confirm_quicksave\)',
         LOADSAVE, "F8 has its own quicksave slot and asks only when the option says so")
+
+GAMEMAP_PLANES_SRC = (ROOT / "src/gamemap_planes.cpp").read_text()
+require(r'static void Corridor7FixMapErrors.*?!gamestate\.c7MapFixes.*?"MAP17".*?tiles\[4\*64\+13\] == 34.*?tiles\[4\*64\+13\] = 259;',
+        GAMEMAP_PLANES_SRC, "floor 17's secret is opened only under the optional map-fix rule")
+require(r'TryUseC7HealthChamber.*?panel->corridor7WallID != 35\)\s*return false;.*?else\s*door = panel;',
+        PLAYERPAWN, "a health chamber without an aperture door still works")
+require(r'Renderer->DrawViewOverlay\(BasicOverhead\);', WL_PLAY,
+        "the automap is drawn through the overlay seam, so GL keeps its status bar opaque")
 
 print("Corridor 7 definition checks passed")

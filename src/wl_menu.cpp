@@ -367,11 +367,12 @@ MENU_LISTENER(EnterGameplayEnhancements)
 		if(!ingame)
 			rule = "New games; host decides in multiplayer";
 		else
-			rule.Format("Current mission: %s shotgun, %s alert, %s capacity",
+			rule.Format("Current mission: %s shotgun, %s alert, %s capacity, %s maps",
 				gamestate.shotgunMinimum == 100 ? "minimum 100" :
 				(gamestate.shotgunMinimum == 50 ? "minimum 50" : "classic"),
 				gamestate.c7IntruderAlert == 1 ? "map-wide" : "classic",
-				gamestate.c7KeepAlienCapacity == 1 ? "kept" : "classic");
+				gamestate.c7KeepAlienCapacity == 1 ? "kept" : "classic",
+				gamestate.c7MapFixes == 1 ? "fixed" : "classic");
 		shotgunCurrentRule->setText(rule);
 	}
 	return true;
@@ -392,6 +393,12 @@ MENU_LISTENER(SetC7IntruderAlert)
 MENU_LISTENER(SetC7AlienCapacity)
 {
 	c7_alien_capacity = which;
+	return true;
+}
+
+MENU_LISTENER(SetC7MapFixes)
+{
+	c7_map_fixes = which;
 	return true;
 }
 
@@ -1568,6 +1575,11 @@ void CreateMenus()
 		static const char *capacityOptions[] = { "Classic", "Keep Higher" };
 		AddLabeled(gameplayEnhancements, new MultipleChoiceMenuItem(SetC7AlienCapacity,
 			capacityOptions, 2, c7_alien_capacity), "Alien Weapon Capacity");
+		// GitHub #51. Classic plays the maps as shipped, errors and all;
+		// Fixed corrects the known ones (see Corridor7FixMapErrors).
+		static const char *mapFixOptions[] = { "Classic", "Fixed" };
+		AddLabeled(gameplayEnhancements, new MultipleChoiceMenuItem(SetC7MapFixes,
+			mapFixOptions, 2, c7_map_fixes), "Original Map Errors");
 		gameplayEnhancements.addItem(new LabelMenuItem("Applies to new games"));
 		shotgunCurrentRule = new LabelMenuItem("New games; host decides in multiplayer");
 		gameplayEnhancements.addItem(shotgunCurrentRule);

@@ -740,6 +740,19 @@ the same rules. Classic is DOS: picking up any alien weapon puts energy
 capacity back to 100, even from above it (GiveWeapon, 13ec1). Keep Higher only
 raises a capacity below 100 (GitHub #40).
 
+Options > Gameplay > Original Map Errors selects Classic or Fixed, under the
+same rules. Classic plays the shipped maps as they are. Fixed corrects known
+errors in them; so far one: on floor 17 a lone wall block stops the secret
+pushwall at (13,2) a tile short, where it plugs the way to the secret, in DOS
+too (GitHub #51).
+
+A health chamber needs only its use panel (wall 35): CORR7CD.EXE registers
+every such panel as a chamber when a floor loads, and closes an aperture door
+only if one is there. Floor 16's corridor panels have none; the port used to
+require one, and they did nothing (GitHub #53). A doorless chamber keeps its
+reservoir on the panel's cell, turns the player away from the panel and heals
+at once.
+
 F8 saves to a slot of its own, listed as "Quicksave" (`quicksav.ecs`), without
 asking, as DOS saves without asking; Options > Gameplay > Confirm Quick Save
 brings the question back. F9 loads the quicksave, asking first. Saves are

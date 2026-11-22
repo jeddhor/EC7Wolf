@@ -24,6 +24,13 @@ alien charge (energy) and its capacity (ecap) whenever one of them moves.
        100, as in DOS.
   #42  A dropped mine lands under the player (2f28:1a28 copies the dropper's
        x and y), not 40/64 of a tile ahead -- facing a wall, that was inside it.
+  #53  A health chamber with no aperture door still heals: DOS registers
+       every wall-35 panel as a chamber (9a35) and closes a door only if there
+       is one (2284e). Floor 16's corridor panels have none.
+  #51  Floor 17's secret pushwall (13,2) stops after one tile against a lone
+       block at (13,4) and plugs the way on; the optional Original Map Errors
+       rule makes that block floor, so the wall slides two tiles and the
+       player can step into (13,3). Played on the shipped floor 17.
   #49  Only a projectile sets a mine off from a distance: DOS tests every object
        against the mines (0xbfc2), and a plasma bolt is one while a hitscan
        shot is not. The M-16 leaves a mine alone; the Plasma Rifle does not.
@@ -47,8 +54,9 @@ source = list(read_archive(data / 'MAPTEMP.CO7').records)
 env = dict(os.environ, SDL_AUDIODRIVER='dummy', SDL_VIDEODRIVER='x11')
 
 
-def fixture(pickups):
-    """MAP01 and MAP02 become the same corridor; pickups go on MAP01 only."""
+def fixture(pickups, walls_at=None):
+    """MAP01 and MAP02 become the same corridor; pickups go on MAP01 only.
+    WALLS_AT maps (x, y) to a wall number on MAP01."""
     records = source.copy()
     for level in (0, 1):
         walls, things = [1] * 4096, [EMPTY] * 4096
@@ -59,6 +67,8 @@ def fixture(pickups):
         if level == 0:
             for x, thing in pickups.items():
                 things[10 * 64 + x] = thing
+            for (x, y), wall in (walls_at or {}).items():
+                walls[y * 64 + x] = wall
         records[level] = replace(records[level], planes=MapPlanes(
             64, 64, (tuple(walls), tuple(things), tuple([0] * 4096))))
     (lab / 'MAPTEMP.CO7').write_bytes(encode_archive(records))
@@ -71,17 +81,17 @@ def fixture(pickups):
             dst.writestr(info, b)
 
 
-def run(label, extra, tics, config='', place=('4.5', '10.5')):
+def run(label, extra, tics, config='', place=('4.5', '10.5'), level='MAP01', angle='0'):
     log = work / (label + '.log')
     # No mouse: under Xvfb the pointer can be warped as the window grabs it,
     # and that arrives as movement, which walks the player off the line.
     (work / (label + '.cfg')).write_text('MouseEnabled = 0;\n' + config)
     args = [str(build / 'ec7wolf'), '--data', 'CO7', '--nowait', '--no-upscale',
-            '--res', '320', '200', '--vid-renderer', 'software', '--tedlevel', 'MAP01',
+            '--res', '320', '200', '--vid-renderer', 'software', '--tedlevel', level,
             '--skill', '3', '--config', str(work / (label + '.cfg')),
             '--savedir', str(work / 'saves'), '--capture-rngseed', '1',
             '--capture-verbs', '--capture-maxtics', str(tics),
-            '--capture-place', '1', *place, '0', *extra]
+            '--capture-place', '1', *place, angle, *extra]
     with log.open('w') as f:
         subprocess.run(args, cwd=lab, env=env, stdout=f, stderr=subprocess.STDOUT,
                        check=True, timeout=60)
@@ -204,5 +214,25 @@ for weapon in ('C7M16', 'C7PlasmaRifle'):
     else:
         check('mine placed at 10,10' in text and there and there[-1] == -1,
               'a plasma bolt sets the mine off', show(rows, 'energy', 'minex')[-3:])
+
+# --- #53: a doorless health chamber heals -------------------------------------
+fixture({}, {(40, 10): 35})
+_, rows = run('chamber', ('--capture-health', '50', '--capture-use', '20', '2'), 160,
+              place=('39.5', '10.5'))
+check(rows[0]['health'] == 50 and rows[-1]['health'] == 100,
+      'a health chamber with no door heals the player', show(rows, 'health', 'angle')[-3:])
+
+# --- #51: floor 17's secret, classic and fixed ---------------------------------
+for fix in (0, 1):
+    text, rows = run('floor17-%d' % fix, ('--capture-use', '10', '2', '--capture-forward', '150', '200'),
+                     400, 'C7MapFixes = %d;\n' % fix, place=('13.5', '1.5'), level='MAP17', angle='270')
+    tile_y = rows[-1]['y'] // 64
+    if fix:
+        check('original map errors rule: fixed' in text and tile_y == 3,
+              'with the map fix the floor 17 pushwall slides clear and the player reaches (13,3)',
+              show(rows, 'x', 'y')[-2:])
+    else:
+        check('original map errors rule: classic' in text and tile_y == 2,
+              'by default the floor 17 pushwall stops a tile short, as in DOS', show(rows, 'x', 'y')[-2:])
 
 sys.exit(1 if failed else 0)

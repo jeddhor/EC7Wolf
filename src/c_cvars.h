@@ -103,6 +103,7 @@ extern bool c7_fullbright_sprites, c7_red_card_icon;
 extern int c7_minihud_style, c7_shotgun_preset;
 extern int c7_intruder_alert;
 extern int c7_alien_capacity;
+extern int c7_map_fixes;
 
 extern float	localDesiredFOV;
 //

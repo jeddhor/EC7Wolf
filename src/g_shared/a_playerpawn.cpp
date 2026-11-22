@@ -310,6 +310,12 @@ bool APlayerPawn::TryUseC7HealthChamber()
 	// panel is wall 35 at its rear and the four-page aperture (wall 53,
 	// marker 107 while open) is one cell behind the player. Decorative HEALTH
 	// CHAMBER signs use wall 2 and must never activate the unit.
+	//
+	// The aperture is optional. CORR7CD.EXE registers every wall-35 cell as a
+	// chamber when the floor loads (9a35), and its chamber closes a door only
+	// if one is there (2284e). Floor 16's corridor panels have none, and work
+	// in DOS; the port used to require one, and they did nothing (GitHub #53).
+	// A doorless chamber keeps its reservoir on the panel's cell.
 	int dx = 0, dy = 0;
 	if(angle < ANGLE_45 || angle > 7*ANGLE_45)
 		dx = 1;
@@ -322,10 +328,16 @@ bool APlayerPawn::TryUseC7HealthChamber()
 
 	MapSpot panel = map->GetSpot(tilex+dx, tiley+dy, 0);
 	MapSpot door = map->GetSpot(tilex-dx, tiley-dy, 0);
-	if(!panel || !panel->tile || panel->corridor7WallID != 35 ||
-		!door || !door->tile || door->corridor7WallID != 53 ||
-		door->corridor7WallMarker != 107)
+	if(!panel || !panel->tile || panel->corridor7WallID != 35)
 		return false;
+	if(door && door->tile && door->corridor7WallID == 53)
+	{
+		// A door that is already closed belongs to a chamber in use.
+		if(door->corridor7WallMarker != 107)
+			return false;
+	}
+	else
+		door = panel;
 	if(player->health >= maxhealth)
 	{
 		if(Session::IsLocalViewSlot(player->GetPlayerNum()))
@@ -387,9 +399,14 @@ static bool TickC7HealthChamber(APlayerPawn *pawn)
 		return false;
 	}
 
+	// A doorless chamber's reservoir lives on its panel (see
+	// TryUseC7HealthChamber): the player turns away from the panel rather than
+	// toward a door, and is healed as soon as the turn ends.
+	const bool doorless = door->corridor7WallID == 35;
+
 	if(player->c7ChamberState == 1)
 	{
-		const angle_t target = C7ChamberExitAngle(pawn);
+		const angle_t target = C7ChamberExitAngle(pawn) + (doorless ? ANGLE_180 : 0);
 		const angle_t clockwise = target-pawn->angle;
 		const angle_t step = ANGLE_1*2;
 		if(MIN(clockwise, static_cast<angle_t>(0-clockwise)) <= step)
@@ -406,24 +423,29 @@ static bool TickC7HealthChamber(APlayerPawn *pawn)
 	}
 
 	// Close the four-frame aperture in reverse, eight 70 Hz tics per page.
-	if(++player->c7ChamberTics % 8 == 0)
+	if(doorless || ++player->c7ChamberTics % 8 == 0)
 	{
-		const unsigned int phase = player->c7ChamberTics/8;
-		SetC7ChamberDoorFrame(door, 56-MIN(phase, 3U));
+		const unsigned int phase = doorless ? 3 : player->c7ChamberTics/8;
+		if(!doorless)
+			SetC7ChamberDoorFrame(door, 56-MIN(phase, 3U));
 		if(phase >= 3)
 		{
-			for(unsigned int side = 0;side < 4;++side)
+			for(unsigned int side = 0;side < 4 && !doorless;++side)
 				door->sideSolid[side] = true;
-			// The closed door remains movement-solid, but keyed glass pixels must
-			// still trace the room beyond instead of exposing an old framebuffer.
-			door->corridor7SightTransparent = true;
-			door->corridor7WallMarker = 106;
-			for(unsigned int trigger = 0;trigger < door->triggers.Size();++trigger)
+			if(!doorless)
 			{
-				if(door->triggers[trigger].action == Specials::Wall_AnimateRemove)
+				// The closed door remains movement-solid, but keyed glass pixels
+				// must still trace the room beyond instead of exposing an old
+				// framebuffer.
+				door->corridor7SightTransparent = true;
+				door->corridor7WallMarker = 106;
+				for(unsigned int trigger = 0;trigger < door->triggers.Size();++trigger)
 				{
-					door->triggers[trigger].active = true;
-					door->triggers[trigger].repeatable = true;
+					if(door->triggers[trigger].action == Specials::Wall_AnimateRemove)
+					{
+						door->triggers[trigger].active = true;
+						door->triggers[trigger].repeatable = true;
+					}
 				}
 			}
 

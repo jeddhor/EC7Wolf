@@ -13,6 +13,8 @@ loaded machine costs seconds, not a failure.
        the rotating ramps 208-239), so the icon area changes from frame to frame.
   #46  With Red Access Card Icon on, the red card's icon cycles red: no pixel of
        it is in the blue ramp any more.
+  #52  On the GL renderer with the full-screen view, the full automap's status
+       bar is opaque: nothing of the 3D world shows through its SCORE box.
   #45  F8 writes the dedicated Quicksave slot (quicksav.ecs) without asking,
        and a second F8 rewrites it. With Confirm Quick Save on, a second F8
        asks first, so the file is left alone while the question is open.
@@ -41,7 +43,7 @@ def check(ok, what, detail=''):
 
 
 class Game:
-    def __init__(self, label, config='', extra=()):
+    def __init__(self, label, config='', extra=(), renderer='software'):
         self.dir = work / label
         self.dir.mkdir()
         (self.dir / 'saves').mkdir()
@@ -51,7 +53,7 @@ class Game:
         self.proc = subprocess.Popen(
             # Line-buffered, so the log can be watched while the game runs.
             ['stdbuf', '-oL', '-eL', str(build / 'ec7wolf'), '--data', 'CO7', '--nowait', '--no-upscale',
-             '--res', '640', '400', '--vid-renderer', 'software', '--tedlevel', 'MAP01',
+             '--res', '640', '400', '--vid-renderer', renderer, '--tedlevel', 'MAP01',
              '--skill', '3', '--config', str(cfg), '--savedir', str(self.dir / 'saves'),
              *extra],
             cwd=lab, env=env, stdout=self.log.open('w'), stderr=subprocess.STDOUT)
@@ -167,6 +169,20 @@ frames = card_frames('red-card', 'C7RedCardIcon = 1;\n')
 check(frames and not any(blue_ramp_pixels(f, RED_ICON) for f in frames),
       'with Red Access Card Icon on, the red card icon has no blue ramp left',
       [blue_ramp_pixels(f, RED_ICON) for f in frames])
+
+# --- #52: the automap's status bar is opaque on GL ----------------------------
+SCORE_BOX = (60, 352, 172, 384)        # the SCORE digits, virtual (30,176)-(86,192)
+game = Game('automap', 'ViewSize = 21;\n', ('--capture-hold-button', 'automap', '100', '1'),
+            renderer='opengl')
+foreign = None
+if game.wait_for_log('Capture: ui action automap'):
+    time.sleep(2)
+    im = game.shot()
+    if im is not None:
+        foreign = sum(1 for r, g, b in im.crop(SCORE_BOX).getdata()
+                      if r + g + b > 60 and not (g > r + 20 and g > b + 20))
+game.close()
+check(foreign == 0, 'the GL automap shows no 3D world through the SCORE box', foreign)
 
 # --- #45: F8 quicksaves to its own slot without asking ------------------------
 def stamp(path):

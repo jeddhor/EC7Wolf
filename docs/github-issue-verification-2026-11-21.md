@@ -1,6 +1,6 @@
-# GitHub #40 to #49
+# GitHub #40 to #53
 
-Ten reports against 1.0-beta310, all from one tester. Baseline: EC7Wolf
+Thirteen reports against 1.0-beta310, all from one tester (there is no #50). Baseline: EC7Wolf
 1.0-beta310. Engine base: ECWolf 1.4.2-9-g1bff92d (18 February 2026), on the
 upstream 1.5.0pre line. Addresses follow
 [github-issue-verification-2026-11-17.md](github-issue-verification-2026-11-17.md):
@@ -19,6 +19,9 @@ addresses in the memory image.
 | 47 | DOS sprites are fullbright | Accepted | Optional, shaded by default |
 | 48 | Duplicate weapons refused at full ammo | Port bug | Fixed |
 | 49 | Every weapon sets mines off | Port bug | Fixed: only projectiles |
+| 51 | Floor 17 secret unreachable | DOS map error | Optional fix, Classic by default |
+| 52 | Automap shows a broken status bar | Port bug (GL) | Fixed |
+| 53 | Floor 16 health chambers inert | Port bug | Fixed |
 
 ## #40: alien weapons and capacity
 
@@ -101,12 +104,52 @@ and since an explosion is not an object either, mines do not chain. The port's
 mine was shootable, so every weapon hit it. It is no longer shootable, and its
 trigger test now also accepts projectiles (alien ones too, as in DOS).
 
+## #51: floor 17's secret
+
+The secret pushwall at (13,2) is pushed south from the corridor at (13,1). It
+slides into (13,3) and stops against a lone wall block (34) at (13,4), whose
+neighbours (12,4) and (14,4) are floor; (13,3) is the only cell leading on to
+(12,3) and (14,3), so the secret behind them cannot be reached. That is the
+shipped map data, so DOS has it too. Options > Gameplay > Original Map Errors
+**Fixed** makes (13,4) floor (259) at load, so the wall slides its two tiles;
+**Classic**, the default, plays the data as shipped. The rule travels like the
+others (new-game packet, save text, checksum), and the fix applies only while
+the three cells still hold their shipped values, so a replacement floor 17 in
+a map pack is left alone.
+
+## #52: the automap's status bar on GL
+
+The full automap draws the play screen as if the view were size 20, which
+puts up the full status bar, while the 3D view stays the size the player chose.
+At size 21 (the full-screen mini HUD) the bar therefore lies inside the 3D
+view. The GL backend composites 2D over the world and keys out black texels it
+was not told were painted, and the automap was the one overlay not drawn
+through the seam that tells it -- so the LEVEL, SCORE, item and meter boxes,
+which are black, showed the world behind them. The automap is now drawn
+through that seam like every other overlay. Software was never affected.
+
+## #53: floor 16's health chambers
+
+Floor 16 has two wall-35 chamber panels at the ends of an outer corridor, and
+no chamber door (wall 53) anywhere. The port required a door one cell behind
+the player, so they did nothing. CORR7CD.EXE registers every wall-35 cell as a
+chamber when the floor loads (9a35: `cmp [bp-0Ah],23h` then AddChamber, 226ad),
+and its chamber, once it has turned the player, closes a door two cells along
+its direction only if the door list has one there (2284e); otherwise it goes
+straight on to heal. The port now does the same: a chamber without a door
+keeps its reservoir on the panel's cell, turns the player away from the panel
+and heals. With the reporter's save, the panel heals 226 to 326.
+
 ## Tests
 
 - `corridor7_health_energy` (lab corridor): capacity under both #40 rules;
   a mine dropped facing the end wall lands in the player's cell (#42); an
   M-16 burst leaves a mine lying and a plasma bolt sets it off (#49).
-- `corridor7_ui_fixes` (new, Xvfb): the death page after a night-vision death
+- `corridor7_health_energy` also: a doorless chamber heals (#53); on the
+  shipped floor 17 the pushwall stops short by default and slides clear with
+  the map fix (#51).
+- `corridor7_ui_fixes` (new, Xvfb): on GL with the full-screen view, the
+  automap's SCORE box shows nothing of the world (#52); the death page after a night-vision death
   is not green (#41); the card icons change between frames (#44); with the
   option the red icon has no blue-ramp pixel left (#46); F8 writes and
   rewrites `quicksav.ecs` without asking, and with Confirm Quick Save on a

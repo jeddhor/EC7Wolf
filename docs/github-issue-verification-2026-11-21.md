@@ -1,7 +1,7 @@
 # GitHub #40 to #53
 
 Fourteen reports against 1.0-beta310, all from one tester. #50 was missed when
-the others were pulled and is fixed after beta313. Baseline: EC7Wolf
+the others were pulled and is fixed in beta315. Baseline: EC7Wolf
 1.0-beta310. Engine base: ECWolf 1.4.2-9-g1bff92d (18 February 2026), on the
 upstream 1.5.0pre line. Addresses follow
 [github-issue-verification-2026-11-17.md](github-issue-verification-2026-11-17.md):
@@ -20,7 +20,7 @@ addresses in the memory image.
 | 47 | DOS sprites are fullbright | Accepted | Optional, shaded by default |
 | 48 | Duplicate weapons refused at full ammo | Port bug | Fixed |
 | 49 | Every weapon sets mines off | Port bug | Fixed: only projectiles |
-| 50 | Tymok and Solrac heard floor-wide | Port bug | Fixed after beta313 |
+| 50 | Tymok and Solrac heard floor-wide | Port bug | Fixed (beta315) |
 | 51 | Floor 17 secret unreachable | DOS map error | Optional fix, Classic by default |
 | 52 | Automap shows a broken status bar | Port bug (GL) | Fixed |
 | 53 | Floor 16 health chambers inert | Port bug | Fixed |

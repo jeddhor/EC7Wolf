@@ -92,7 +92,11 @@
 // (GitHub #37) and armor capped at 999 (#38).
 // Protocol 16 requires CustomInventory items used up on pickup (GitHub #39):
 // under 15 a second charge pack ran every tic without being taken.
-#define NET_PROTOCOL_VERSION 16
+// Protocol 17 adds the alien weapon capacity (#40) and original map error (#51)
+// rules to the new-game packet, and requires mines that only projectiles set
+// off, dropped underfoot (#42, #49), duplicate weapons always taken (#48) and
+// doorless health chambers (#53).
+#define NET_PROTOCOL_VERSION 17
 // Present in the first datagram of every connection. A request used to be one
 // lone zero byte, so any stray packet arriving on the port was a new player.
 static const BYTE NetMagic[3] = { 'E', '7', 'N' };

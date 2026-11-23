@@ -21,8 +21,8 @@ set -eu
 # phone can be reproduced on a workstation instead of being blamed on a version
 # difference nobody wrote down.
 SDL_TAG=release-2.32.10
-SDL_MIXER_TAG=release-2.8.1
-SDL_NET_TAG=release-2.2.0
+SDL_MIXER_TAG=release-2.8.2
+SDL_NET_TAG=release-2.4.0
 
 # The Vorbis encoder, for turning a disc image's audio tracks into the
 # soundtrack files the engine plays (docs/android.md M6.5). Only the encoder is
@@ -45,8 +45,21 @@ fetch() {  # fetch NAME TAG REPO
 			rm -rf "$_dest"
 		else
 			_have=$(cd "$_dest" && git describe --tags 2>/dev/null || echo unknown)
-			printf '%-12s already present (%s)\n' "$_name" "$_have"
-			return 0
+			if [ "$_have" = "$_tag" ]; then
+				printf '%-12s already present (%s)\n' "$_name" "$_have"
+				return 0
+			fi
+			# A pin was bumped since this checkout was made. Keeping it would
+			# build the old version while every file here names the new one.
+			# These are gitignored clones of upstream tags, so nothing of
+			# anyone's is lost by replacing one -- unless it has been edited.
+			if [ -n "$(cd "$_dest" && git status --porcelain 2>/dev/null)" ]; then
+				printf '%s is %s with local changes, but %s is pinned; rerun with --force to replace it\n' \
+					"$_dest" "$_have" "$_tag" >&2
+				exit 1
+			fi
+			printf '%-12s replacing %s with %s\n' "$_name" "$_have" "$_tag"
+			rm -rf "$_dest"
 		fi
 	fi
 

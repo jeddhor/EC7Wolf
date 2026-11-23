@@ -111,7 +111,7 @@ it claims, exports `SDL_main`, and links nothing the device will not have.
 Three dependencies rather than one. `LocateSDL2.cmake` wants `deps/SDL`,
 `deps/SDL_mixer` and `deps/SDL_net`, so `tools/fetch_android_deps.sh` fetches
 all three, pinned to exactly the versions the desktop build links -- 2.32.10,
-2.8.1 and 2.2.0 -- so that a bug found on a phone can be reproduced on a
+2.8.2 and 2.4.0 -- so that a bug found on a phone can be reproduced on a
 workstation rather than blamed on a version nobody wrote down. They are
 gitignored: 136MB is not worth committing for one platform.
 

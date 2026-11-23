@@ -37,13 +37,13 @@ PACKAGES = {
         "https://github.com/libsdl-org/SDL/releases/download/"
         "release-2.32.10/SDL2-devel-2.32.10-VC.zip"),
     "SDL2_mixer": (
-        "2.8.1", "sdl2_mixer-config.cmake",
+        "2.8.2", "sdl2_mixer-config.cmake",
         "https://github.com/libsdl-org/SDL_mixer/releases/download/"
-        "release-2.8.1/SDL2_mixer-devel-2.8.1-VC.zip"),
+        "release-2.8.2/SDL2_mixer-devel-2.8.2-VC.zip"),
     "SDL2_net": (
-        "2.2.0", "sdl2_net-config.cmake",
+        "2.4.0", "sdl2_net-config.cmake",
         "https://github.com/libsdl-org/SDL_net/releases/download/"
-        "release-2.2.0/SDL2_net-devel-2.2.0-VC.zip"),
+        "release-2.4.0/SDL2_net-devel-2.4.0-VC.zip"),
 }
 
 
@@ -52,9 +52,23 @@ SOURCES = {
     "SDL2": ("https://github.com/libsdl-org/SDL/releases/download/"
              "release-2.32.10/SDL2-2.32.10.tar.gz", "SDL_TEST"),
     "SDL2_mixer": ("https://github.com/libsdl-org/SDL_mixer/releases/download/"
-                   "release-2.8.1/SDL2_mixer-2.8.1.tar.gz", "SDL2MIXER_SAMPLES"),
+                   "release-2.8.2/SDL2_mixer-2.8.2.tar.gz", "SDL2MIXER_SAMPLES"),
     "SDL2_net": ("https://github.com/libsdl-org/SDL_net/releases/download/"
-                 "release-2.2.0/SDL2_net-2.2.0.tar.gz", "SDL2NET_SAMPLES"),
+                 "release-2.4.0/SDL2_net-2.4.0.tar.gz", "SDL2NET_SAMPLES"),
+}
+
+# Extra configure options per package, for the source build only. SDL_mixer
+# turns on codecs that link libraries outside it -- FluidSynth, opusfile,
+# WavPack, libxmp, libgme -- and stops configuring when one is missing, which
+# on a machine with no SDL packages they all will be. Corridor 7 uses none of
+# them: its sound and music are decoded by the engine and its CD soundtrack is
+# Ogg Vorbis, which SDL_mixer's built-in stb_vorbis plays. This is the same set
+# tools/build_android.sh turns off.
+SOURCE_OPTIONS = {
+    "SDL2_mixer": ["-DSDL2MIXER_FLAC=OFF", "-DSDL2MIXER_OPUS=OFF",
+                   "-DSDL2MIXER_MOD=OFF", "-DSDL2MIXER_WAVPACK=OFF",
+                   "-DSDL2MIXER_GME=OFF", "-DSDL2MIXER_MIDI=OFF",
+                   "-DSDL2MIXER_CMD=OFF"],
 }
 
 SDLError = thirdparty.BuildFailed
@@ -69,15 +83,28 @@ def system_available() -> bool:
                ("SDL2/SDL.h", "SDL2/SDL_mixer.h", "SDL2/SDL_net.h"))
 
 
-def _config_directory(root: Path, config: str) -> Path | None:
-    """The directory holding a package's -config.cmake, wherever it landed."""
+def _config_names(name: str) -> tuple[str, str]:
+    """The two file names a package's CMake config goes by.
+
+    Upstream's VC packages ship sdl2_mixer-config.cmake; a CMake build and
+    install of the same source writes SDL2_mixerConfig.cmake. find_package
+    accepts either, so both must be looked for: looking only for the first
+    made every source build fail after it had succeeded.
+    """
+    return PACKAGES[name][1], f"{name}Config.cmake"
+
+
+def _config_directory(root: Path, name: str) -> Path | None:
+    """The directory holding a package's CMake config, wherever it landed."""
     if not root.is_dir():
         return None
-    direct = root / "cmake" / config
-    if direct.is_file():
-        return direct.parent
-    for found in root.rglob(config):
-        return found.parent
+    for config in _config_names(name):
+        direct = root / "cmake" / config
+        if direct.is_file():
+            return direct.parent
+    for config in _config_names(name):
+        for found in root.rglob(config):
+            return found.parent
     return None
 
 
@@ -87,13 +114,14 @@ def locate(cache: Path) -> dict[str, Path]:
     for name, (version, config, _url) in PACKAGES.items():
         # Someone else's choice beats ours.
         override = os.environ.get(f"{name}_DIR")
-        if override and (Path(override) / config).is_file():
+        if override and any((Path(override) / config).is_file()
+                            for config in _config_names(name)):
             found[name] = Path(override)
             continue
         # Either route leaves something to find: a downloaded package under
         # its own directory, or a source build under the shared prefix.
         for root in (cache / f"{name}-{version}", cache / "sdl-prefix"):
-            directory = _config_directory(root, config)
+            directory = _config_directory(root, name)
             if directory is not None:
                 found[name] = directory
                 break
@@ -131,7 +159,7 @@ def _fetch_prebuilt(cache: Path, reporter: Reporter, found: dict,
         target = cache / f"{name}-{version}"
         thirdparty.unpack(archive, target, reporter, f"cmake/{config}")
 
-        directory = _config_directory(target, config)
+        directory = _config_directory(target, name)
         if directory is None:
             raise SDLError(
                 f"{name} was downloaded but {config} is not in it, so the "
@@ -164,10 +192,11 @@ def _build_from_source(cache: Path, reporter: Reporter, found: dict,
         thirdparty.cmake_build(
             source, cache / f"{name}-build-{version}", prefix, reporter,
             arguments=[f"-D{tests_option}=OFF", "-DBUILD_SHARED_LIBS=ON",
-                       f"-DCMAKE_PREFIX_PATH={prefix}"],
+                       f"-DCMAKE_PREFIX_PATH={prefix}",
+                       *SOURCE_OPTIONS.get(name, [])],
             environment=environment, jobs=jobs)
 
-        directory = _config_directory(prefix, config)
+        directory = _config_directory(prefix, name)
         if directory is None:
             raise SDLError(
                 f"{name} was built but {config} is not in {prefix}, so the "

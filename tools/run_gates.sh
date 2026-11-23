@@ -126,6 +126,7 @@ corridor7_sight_screens
 corridor7_ui_fixes
 corridor7_boss_sounds
 corridor7_saved_doors
+corridor7_original_lighting
 ui_buttons
 bot_footwork
 bot_budget

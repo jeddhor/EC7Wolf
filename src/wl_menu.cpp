@@ -402,6 +402,18 @@ MENU_LISTENER(SetC7MapFixes)
 	return true;
 }
 
+MENU_LISTENER(SetC7Lighting)
+{
+	c7_lighting = which;
+	return true;
+}
+
+MENU_LISTENER(SetC7Brightness)
+{
+	c7_brightness = which;
+	return true;
+}
+
 MENU_LISTENER(SetC7MiniHUDStyle)
 {
 	c7_minihud_style = which;
@@ -1722,6 +1734,16 @@ void CreateMenus()
 		// fullbright; shading them with distance is the port's default.
 		displayMenu.addItem(new BooleanMenuItem("Red Access Card Icon", c7_red_card_icon));
 		displayMenu.addItem(new BooleanMenuItem("Fullbright Sprites", c7_fullbright_sprites));
+		// GitHub #57: Original is the original's own shading -- whole palette
+		// steps by distance for walls and sprites, its screen-space floor and
+		// ceiling. Enhanced is ECWolf's light model as the port had it. Light
+		// Level is the original's = and - brightness, which only Original uses.
+		static const char *lightingOptions[] = { "Enhanced", "Original" };
+		AddLabeled(displayMenu, new MultipleChoiceMenuItem(SetC7Lighting,
+			lightingOptions, 2, c7_lighting), "Lighting");
+		static const char *lightLevelOptions[] = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10" };
+		AddLabeled(displayMenu, new MultipleChoiceMenuItem(SetC7Brightness,
+			lightLevelOptions, 11, c7_brightness), "Light Level");
 		displayMenu.addItem(new MenuSwitcherMenuItem("Advanced Graphics", advancedGraphics));
 
 		static const char *xbrzOptions[] = { "Off", "Auto", "2x", "3x", "4x", "5x", "6x" };

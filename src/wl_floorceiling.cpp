@@ -9,6 +9,7 @@
 #include "wl_iwad.h"
 #include "r_data/colormaps.h"
 #include "v_palette.h"
+#include "c7_shade.h"
 
 #include <climits>
 
@@ -68,6 +69,11 @@ static void R_DrawPlane(byte *vbuf, unsigned vbufPitch, int min_wallheight, int 
 	const byte* curshades = NormalLight.Maps;
 	byte c7PlaneShades[256];
 	byte c7NextPlaneShades[256];
+	// Original lighting: the original's own screen-space pattern for texels of
+	// the level's flat color (C7Shade::PlanePattern).
+	int c7PatternFlat = -1;
+	const BYTE (*const c7Pattern)[2] = corridor7 ?
+		C7Shade::PlanePattern(!floor, c7PatternFlat) : NULL;
 	// draw horizontal lines
 	for(int y = y0;floor ? y+halfheight < viewheight : y < halfheight; ++y, tex_offset += tex_offsetPitch)
 	{
@@ -200,7 +206,9 @@ static void R_DrawPlane(byte *vbuf, unsigned vbufPitch, int min_wallheight, int 
 						texoffs = (u * texheight) + v;
 					}
 
-					if(isMasked)
+					if(c7Pattern && tex[texoffs] == c7PatternFlat)
+						*tex_offset = c7Pattern[virtualEdgeRow][(virtualX>>2)&1];
+					else if(isMasked)
 					{
 						if(const byte c = tex[texoffs])
 							*tex_offset = c7UseNextShade ? c7NextPlaneShades[c] : curshades[c];

@@ -175,6 +175,12 @@ public:
 
 	FTextureID		BorderTexture;
 	FTextureID		DefaultTexture[2];
+	// Corridor 7's floor and ceiling (GitHub #57): ceiling start and limit,
+	// floor start and limit, as palette indices, and the flats they were given
+	// for. The original keeps these four bytes per floor in its executable
+	// (DS:8df7..8dfa). -1 when not set.
+	int				C7Planes[4];
+	FTextureID		C7PlanesFlats[2];
 	int				DefaultLighting;
 	fixed			DefaultVisibility;
 	fixed			DefaultMaxLightVis;

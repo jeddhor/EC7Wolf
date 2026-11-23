@@ -105,8 +105,13 @@ if command -v magick >/dev/null 2>&1 || command -v convert >/dev/null 2>&1; then
 		slots="rectangle $((glw * 256 / 320 - 2)),$((glh * 176 / 200 - 2)) $((glw * 280 / 320 + 2)),$((glh * 192 / 200 + 2))"
 		$conv_tool "$out_dir/software.ppm" -fill black -draw "$slots" "$out_dir/software.masked.ppm"
 		$conv_tool "$out_dir/gllive.ppm" -fill black -draw "$slots" "$out_dir/gllive.masked.ppm"
-		band_h=100
-		band_y=$((glh - band_h))
+		# The band is exactly the 40-line status bar (virtual rows 160..199).
+		# It used to be a fixed 100 rows, which reached 4 rows into the view;
+		# that passed only because the view stopped a row short of the bar and
+		# both frames were black there. The view now meets the bar (GitHub #57),
+		# and the reference run's world is not drawn, so those rows must stay out.
+		band_y=$((glh * 160 / 200))
+		band_h=$((glh - band_y))
 		diffpx=$($cmp_tool -metric AE -crop "${glw}x${band_h}+0+${band_y}" \
 			"$out_dir/software.masked.ppm" "$out_dir/gllive.masked.ppm" null: 2>&1 |
 			sed -n 's/^\([0-9]*\).*/\1/p')

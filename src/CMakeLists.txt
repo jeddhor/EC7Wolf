@@ -89,6 +89,7 @@ initial_sources(
 	c7_cdaudio.cpp
 	c7_flic.cpp
 	c7_menu.cpp
+	c7_shade.cpp
 	c7_upscale.cpp
 	v_ttf.cpp
 	colormatcher.cpp

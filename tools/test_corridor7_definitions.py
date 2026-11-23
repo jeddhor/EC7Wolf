@@ -871,7 +871,9 @@ for name in ("C7LaserDissolveLit", "laserColor", "laserBarrier"):
 if "c7LaserLit" in (ROOT / "src/render/opengl/r_glworld.cpp").read_text():
 	raise SystemExit(
 		"Corridor 7 definition check failed: the GL shader must not special-case the laser barrier")
-require(r'luminous\s*=\s*color == GPalette\.Remap\[15\].*?GPalette\.Remap\[208\].*?GPalette\.Remap\[239\].*?C7CycleSpriteColor',
+# Under Original lighting the original's own rows leave 208..255 unshaded, so
+# the expression is skipped there rather than duplicated (GitHub #57).
+require(r'luminous\s*=\s*(?:!C7Shade::Active\(\)\s*&&\s*\(\s*)?color == GPalette\.Remap\[15\].*?GPalette\.Remap\[208\].*?GPalette\.Remap\[239\].*?C7CycleSpriteColor',
 		R_SPRITES, "world sprites cycle and full-bright the four rotating ramps, which is what animates the barrier")
 for cls in ("C7Static005", "C7Static061"):
 	if re.search(r'actor\s+%s\s*\{[^}]*?\+SOLID' % cls, STATICS, re.S):
@@ -1036,5 +1038,32 @@ require(r'TryUseC7HealthChamber.*?panel->corridor7WallID != 35\)\s*return false;
         PLAYERPAWN, "a health chamber without an aperture door still works")
 require(r'Renderer->DrawViewOverlay\(BasicOverhead\);', WL_PLAY,
         "the automap is drawn through the overlay seam, so GL keeps its status bar opaque")
+
+# GitHub #57: the original's shading (src/c7_shade.cpp). The scaler's
+# subroutine, its tables and the shade lookup are measured, not tuned; the
+# plane bytes are CORR7CD.EXE 18b8:1177..11a3, per floor.
+C7_SHADE = (ROOT / "src/c7_shade.cpp").read_text()
+require(r'NATIVE_HEIGHTNUMERATOR\s*=\s*223232', C7_SHADE,
+        "original shading uses the 320-wide projection's heightnumerator")
+require(r'i >= 16 && i <= 207 \? 255 : 0.*?i >= 16 && i <= 207 \? 16 \+ \(i-16\)/24\*24 : 0', C7_SHADE,
+        "the shade mask and ramp floors are the original's DS:2a1e/2b1e tables")
+require(r'NativeFloor\(texel\) - lowered >= 0 \? 0 : lowered', C7_SHADE,
+        "a texel at or below its ramp's first entry goes black, as the scaler does")
+require(r'return MAX_SHADE;.*?MAX\(0, 15 - \(index-1\)/5\)', C7_SHADE,
+        "the shade table is c0a2: 16, then one less every five entries")
+require(r'NativeHeight\(portHeight\)>>3\) \+ frameBonus.*?NativeHeight\(portHeight\)>>1\) \+ frameBonus', C7_SHADE,
+        "walls index by height>>3 and sprites by height>>1")
+require(r'c7_brightness \+\s*\(viewer && viewer->c7MuzzleFlashTics \? 8 : 0\)', WL_DRAW,
+        "the brightness level and the muzzle flash's eight join the shade index")
+require(r'defaultmap.*?C7Planes = 38, 18, 184, 200', MAPINFO,
+        "gray-over-purple planes are the original's 38/18 and 184/200")
+for level, planes in (("MAP20", "76, 66, 66, 76"), ("MAP21", "76, 66, 66, 76"),
+                      ("MAP22", "122, 114, 114, 122"), ("MAP23", "122, 114, 114, 122"),
+                      ("MAP24", "76, 66, 66, 76"), ("MAP25", "122, 114, 114, 122"),
+                      ("MAP26", "76, 66, 66, 76"), ("MAP29", "76, 66, 66, 76")):
+    require(r'map "%s".*?\{[^}]*?C7Planes = %s' % (level, planes), MAPINFO,
+            "%s has the original's plane colors" % level)
+require(r'STATUSLINES \+ \(!mac && !IWad::CheckGameFilter\("Corridor7"\)\)', WOLF_SBAR,
+        "Corridor 7's view is the original's 160 lines, with no spare line above the bar")
 
 print("Corridor 7 definition checks passed")

@@ -55,6 +55,7 @@
 #include "a_inventory.h"
 #include "id_us.h"
 #include "id_vh.h"
+#include "c7_shade.h"
 
 #define TEX_DWNAME(tex) MAKE_ID(tex->Name[0], tex->Name[1], tex->Name[2], tex->Name[3])
 
@@ -484,7 +485,7 @@ static inline bool SpriteIsFullbright(const AActor *actor, const Frame *frame)
 // unshaded palette row is selected by the shared viewmodel placement below.
 static BYTE C7ShadePlayerSpriteColor(BYTE color, const BYTE *colormap)
 {
-	const bool luminous = IWad::CheckGameFilter("Corridor7") &&
+	const bool luminous = IWad::CheckGameFilter("Corridor7") && !C7Shade::Active() &&
 		color >= 208 && color <= 239;
 	color = C7CycleSpriteColor(color);
 	return luminous ? NormalLight.Maps[color] : colormap[color];
@@ -501,8 +502,10 @@ static BYTE C7ShadeWorldSpriteColor(BYTE color, const BYTE *colormap)
 {
 	if(!IWad::CheckGameFilter("Corridor7"))
 		return colormap[color];
-	const bool luminous = color == GPalette.Remap[15] || color == GPalette.Remap[254] ||
-		(color >= GPalette.Remap[208] && color <= GPalette.Remap[239]);
+	// The original's own rows leave the lamp ranges alone by themselves.
+	const bool luminous = !C7Shade::Active() &&
+		(color == GPalette.Remap[15] || color == GPalette.Remap[254] ||
+		(color >= GPalette.Remap[208] && color <= GPalette.Remap[239]));
 	color = C7CycleSpriteColor(color);
 	return luminous ? NormalLight.Maps[color] : colormap[color];
 }
@@ -556,7 +559,9 @@ void ScaleSprite(AActor *actor, int xcenter, const Frame *frame, unsigned height
 	const fixed yRun = MIN<fixed>(tex->GetHeight()<<FRACBITS, (yStep*((viewheight<<3)-upperedge))>>3);
 
 	const BYTE *colormap;
-	if(SpriteIsFullbright(actor, frame))
+	if(C7Shade::Active())
+		colormap = C7Shade::Row(SpriteIsFullbright(actor, frame) ? 0 : C7Shade::SpriteShade(height));
+	else if(SpriteIsFullbright(actor, frame))
 		colormap = NormalLight.Maps;
 	else
 	{
@@ -647,7 +652,9 @@ void Scale3DSpriter(AActor *actor, int x1, int x2, FTexture *tex, bool flip, con
 
 	// [XA] TODO: shade the sprite per-column?
 	const BYTE *colormap;
-	if(SpriteIsFullbright(actor, frame))
+	if(C7Shade::Active())
+		colormap = C7Shade::Row(SpriteIsFullbright(actor, frame) ? 0 : C7Shade::SpriteShade(height));
+	else if(SpriteIsFullbright(actor, frame))
 		colormap = NormalLight.Maps;
 	else
 	{
@@ -862,7 +869,10 @@ void R_DrawPlayerSprite(AActor *actor, const Frame *frame, fixed offsetX, fixed 
 		return;
 
 	FTexture *const tex = info.tex;
-	const BYTE *const colormap = &NormalLight.Maps[info.shadeRow<<8];
+	// The original's weapon scaler runs at shade 0, which still takes each
+	// ramp's first entry to black.
+	const BYTE *const colormap = C7Shade::Active() ? C7Shade::Row(0) :
+		&NormalLight.Maps[info.shadeRow<<8];
 
 	// startX and startY indicate where the sprite becomes visible, we only
 	// need to calculate the start since the end will be determined when we hit

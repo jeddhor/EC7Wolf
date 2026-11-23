@@ -771,11 +771,45 @@ listed in the order they were made, so savegam10 follows savegam9 (GitHub #43,
 #45). A weapon is always picked up, even a duplicate with its ammunition full,
 as GetBonus never refuses one (GitHub #48).
 
-Graphics has two display options. **Fullbright Sprites** draws aliens and props
-fullbright, as DOS does; the default shades them with distance like the walls,
-which is what makes night vision worth using in a dark room (GitHub #47). **Red
-Access Card Icon** cycles the red card's status-bar icon in the red ramp: in
-DOS it cycles blue, though the card lying in the world cycles red (GitHub #46).
+Graphics > **Lighting** chooses how the world is shaded (GitHub #57).
+**Original**, the default, is the original's own model, read out of
+CORR7CD.EXE rather than tuned to look like it:
+
+- Walls and sprites are darkened by whole palette steps, 0 to 16 of them,
+  chosen from the projected height (`heightnumerator / (nx >> 8)` with the
+  320-wide projection, 223232): the table at DS:c0a2 is 16 at height index 0
+  and one less every five entries to 0 at 76. Walls index it with
+  `height >> 3`, sprites with `height >> 1`, so a wall is unshaded inside
+  about 1.4 tiles and at shade 11 by five, while sprites stay unshaded out to
+  about five tiles -- which is why the original's aliens look fullbright at
+  fighting range. A texel stepped to or past the first entry of its 24-entry
+  ramp becomes black; indices 0-15 and 208-255 (the EGA block and every lamp)
+  are never shaded. The weapon is drawn at shade 0.
+- The muzzle flash adds 8 to the height index, and **Light Level** adds the
+  original's 0-10 brightness (its `=` and `-` keys, kept in CONFIG.DAT; 0 in a
+  fresh game). The visors change only the palette, as the original's do, so
+  infrared shows what the shading leaves in a ramp's upper two thirds.
+- The floor and ceiling are the original's screen-space pattern: two adjacent
+  palette entries alternating in four-pixel groups, swapping every row and
+  stepping one entry every three rows -- the ceiling darkening from the top of
+  the view, the floor holding its darkest pair for 48 rows below the horizon
+  before brightening toward you. The four colors per floor are MAPINFO's
+  `C7Planes` (ceiling start and limit, floor start and limit): 38/18 and
+  184/200 on most floors, red 76/66 and 66/76 or green 122/114 and 114/122 on
+  MAP20-MAP26 and MAP29, as the executable sets them. A map pack that changes
+  its flats without giving `C7Planes` after them keeps the Enhanced plane
+  shading for those flats.
+
+**Enhanced** is the light model the port used before: ECWolf's distance fade
+tuned so MAP01 looked right, with the plane gradient reconstructed from
+captures. Both renderers draw both models identically. The 3D view is the
+original's 160 lines in either: the line ECWolf leaves above Wolfenstein's
+status bar is not left black above Corridor 7's.
+
+**Fullbright Sprites** draws aliens and props unshaded at any distance (GitHub
+#47). **Red Access Card Icon** cycles the red card's status-bar icon in the red
+ramp: in DOS it cycles blue, though the card lying in the world cycles red
+(GitHub #46).
 The status bar's card and floor-plan icons colour-cycle as in DOS (GitHub #44),
 and dying with the visor on no longer tints the death page and menus (#41).
 

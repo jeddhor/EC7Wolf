@@ -228,6 +228,11 @@ defaultmap
 	// color-matched flat can land in the wrong ramp and fade out the wrong way.
 	defaultfloor = "@199"
 	defaultceiling = "@39"
+	// With Original lighting, the floor and ceiling are painted as the original
+	// paints them (GitHub #57): ceiling start and limit, floor start and limit,
+	// the four bytes CORR7CD.EXE sets per floor (18b8:1177..11a3). They apply
+	// to texels of the flats above, so they come after them.
+	C7Planes = 38, 18, 184, 200
 	// Corridor 7 uses a full-range depth ramp:
 	// MAP01's nearby surfaces stay bright while its distant fence line and
 	// floor/ceiling fade toward the dark palette ramps.
@@ -391,6 +396,7 @@ map "MAP20" "Corridor 7 Level 20"
 	// rows are mottled (75 mixed with 70 and 73) and never settle.
 	defaultceiling = "@76"
 	defaultfloor = "@75"
+	C7Planes = 76, 66, 66, 76
 	next = "MAP21"
 	secretnext = "MAP45"
 	floornumber = 20
@@ -405,6 +411,7 @@ map "MAP21" "Corridor 7 Level 21"
 	// rows are mottled (75 mixed with 70 and 73) and never settle.
 	defaultceiling = "@76"
 	defaultfloor = "@75"
+	C7Planes = 76, 66, 66, 76
 	next = "MAP22"
 	floornumber = 21
 	cluster = 1
@@ -418,6 +425,7 @@ map "MAP22" "Corridor 7 Level 22"
 	// directly these ARE the bases: band 0 paints the base itself.
 	defaultceiling = "@122"
 	defaultfloor = "@123"
+	C7Planes = 122, 114, 114, 122
 	next = "MAP23"
 	floornumber = 22
 	cluster = 1
@@ -431,6 +439,7 @@ map "MAP23" "Corridor 7 Level 23"
 	// directly these ARE the bases: band 0 paints the base itself.
 	defaultceiling = "@122"
 	defaultfloor = "@123"
+	C7Planes = 122, 114, 114, 122
 	next = "MAP24"
 	floornumber = 23
 	cluster = 1
@@ -444,6 +453,7 @@ map "MAP24" "Corridor 7 Level 24"
 	// rows are mottled (75 mixed with 70 and 73) and never settle.
 	defaultceiling = "@76"
 	defaultfloor = "@75"
+	C7Planes = 76, 66, 66, 76
 	next = "MAP25"
 	floornumber = 24
 	cluster = 1
@@ -457,6 +467,7 @@ map "MAP25" "Corridor 7 Level 25"
 	// directly these ARE the bases: band 0 paints the base itself.
 	defaultceiling = "@122"
 	defaultfloor = "@123"
+	C7Planes = 122, 114, 114, 122
 	next = "MAP26"
 	secretnext = "MAP46"
 	floornumber = 25
@@ -471,6 +482,7 @@ map "MAP26" "Corridor 7 Level 26"
 	// rows are mottled (75 mixed with 70 and 73) and never settle.
 	defaultceiling = "@76"
 	defaultfloor = "@75"
+	C7Planes = 76, 66, 66, 76
 	next = "MAP27"
 	floornumber = 26
 	cluster = 1
@@ -498,6 +510,7 @@ map "MAP29" "Corridor 7 Level 29"
 	// rows are mottled (75 mixed with 70 and 73) and never settle.
 	defaultceiling = "@76"
 	defaultfloor = "@75"
+	C7Planes = 76, 66, 66, 76
 	next = "MAP30"
 	floornumber = 29
 	cluster = 1

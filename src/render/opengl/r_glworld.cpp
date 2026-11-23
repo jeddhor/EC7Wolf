@@ -55,6 +55,7 @@
 #include "c_cvars.h"
 #include "r_data/colormaps.h"
 #include "render/opengl/r_glxbrz.h"
+#include "c7_shade.h"
 
 #include <SDL.h>
 
@@ -277,7 +278,8 @@ namespace
 		"in vec2 vUV; in vec3 vViewPos;\n"
 		"out vec4 fragColor;\n"
 		"uniform usampler2D uIndexTex;\n"    // per-surface WxH, R8UI physical indices
-		"uniform usampler2D uC7RampFloor;\n" // 256x1 R8UI: color -> its ramp floor
+		"uniform usampler2D uC7RampFloor;\n" // 256x18 R8UI: row 0 color -> its ramp floor;
+		                                     // rows 1..17 the original's shade rows (C7Shade)
 		"uniform usampler2D uOpacityTex;\n"  // per-surface WxH, R8UI (0 = transparent)
 		"uniform sampler2D  uPaletteTex;\n"  // 256x1 RGB8
 		"uniform usampler2D uColormapTex;\n" // 256xNUMCOLORMAPS R8UI
@@ -308,6 +310,11 @@ namespace
 		"uniform int   uDebug;\n"           // 0 normal, 1 shade-row visualization
 		"uniform int   uFilter;\n"          // 0 nearest, 1 bilinear, 2 supersampled
 		"uniform int   uFixedShade;\n"      // >=0 pins the colormap row (view model)
+		"uniform int   uC7Native;\n"        // 1 = Corridor 7's own wall/sprite shading
+		"uniform int   uC7Bonus;\n"         // its brightness level + muzzle flash
+		"uniform int   uC7PlaneOn[2];\n"    // 1 = the original's plane pattern (floor, ceiling)
+		"uniform int   uC7PlaneFlat[2];\n"  // the flat color it replaces
+		"uniform int   uC7PlanePat[320];\n" // [plane][edge row 0..79][group parity]
 		"const float FRACUNIT = 65536.0;\n"
 		"const float MINZ = 8192.0;\n"      // 2048*4
 		"float bayer4(ivec2 p){\n"
@@ -352,8 +359,13 @@ namespace
 		"    bool fullbright = uCorridor7 == 1 && isWall &&\n"
 		"        (idx == uRemap15 ||\n"
 		"        (idx >= uRemap208 && idx <= uRemap254));\n"
-		"    if(fullbright) row = 0;\n"
 		"    if(uSprite == 1 && uSpriteFullbright == 1) row = 0;\n"
+		// The original's rows leave the lamp ranges alone by themselves.
+		"    if(uC7Native == 1){\n"
+		"        int nshaded = int(texelFetch(uC7RampFloor, ivec2(idx, 1 + clamp(row, 0, 16)), 0).r);\n"
+		"        return texelFetch(uPaletteTex, ivec2(nshaded, 0), 0).rgb;\n"
+		"    }\n"
+		"    if(fullbright) row = 0;\n"
 		"    row = clamp(row, 0, uNumColormaps - 1);\n"
 		"    int shaded = int(texelFetch(uColormapTex, ivec2(idx, row), 0).r);\n"
 		"    return texelFetch(uPaletteTex, ivec2(shaded, 0), 0).rgb;\n"
@@ -371,12 +383,18 @@ namespace
 		"    if(uSprite == 1) return clamp(texel, ivec2(0), isz - 1);\n"
 		"    return ((texel % isz) + isz) % isz;\n"
 		"}\n"
+		// Set by main for a Corridor 7 plane under Original lighting: the entry
+		// of uC7PlanePat this fragment takes, or -1.
+		"int gPlanePat = -1;\n"
 		"void tapAt(ivec2 texel, ivec2 isz, int shadeRow, int litBand, float w,\n"
 		"           inout vec3 acc, inout float cov){\n"
 		"    ivec2 t = tapWrap(texel, isz);\n"
 		"    int idx = int(texelFetch(uIndexTex, t, 0).r);\n"
 		"    if(!tapOpaque(t, idx)) return;\n"
-		"    vec3 c = (uSurfKind == 2) ? tapWall(idx, shadeRow)\n"
+		"    vec3 c;\n"
+		"    if(uSurfKind != 2 && gPlanePat >= 0 && idx == uC7PlaneFlat[uSurfKind])\n"
+		"        c = texelFetch(uPaletteTex, ivec2(uC7PlanePat[gPlanePat], 0), 0).rgb;\n"
+		"    else c = (uSurfKind == 2) ? tapWall(idx, shadeRow)\n"
 		"                              : ((uCorridor7 == 1) ? tapPlane(idx, litBand)\n"
 		"                                                   : tapWall(idx, shadeRow));\n"
 		"    acc += w * c; cov += w;\n"
@@ -417,7 +435,15 @@ namespace
 		"    // --- per-fragment shade selection (independent of which texel) ---\n"
 		"    int shadeRow = 0;\n"
 		"    int litBand = 0;\n"
-		"    if(uSurfKind == 2){\n"
+		"    if(uSurfKind == 2 && uC7Native == 1){\n"
+		// C7Shade: the original's projected height (heightnumerator 223232 at
+		// MINDIST 0x5800 and up) indexes its shade table, the wall's height>>3
+		// and a sprite's height>>1.
+		"        float d = max(-vViewPos.z, 0.34375);\n"
+		"        int h = 223232 / max(1, int(d * 256.0));\n"
+		"        int index = clamp(((uSprite == 1) ? (h >> 1) : (h >> 3)) + uC7Bonus, 0, 255);\n"
+		"        shadeRow = (index == 0) ? 16 : max(0, 15 - (index - 1) / 5);\n"
+		"    } else if(uSurfKind == 2){\n"
 		"        // Wall: perpendicular forward distance -> raycaster wallheight rule.\n"
 		"        float d = max(-vViewPos.z, 0.0001);\n"
 		"        float tz = (uDepthVis * uHeightNum) / (d * FRACUNIT);\n"
@@ -429,9 +455,14 @@ namespace
 		"    } else if(uCorridor7 == 1){\n"
 		"        // Corridor 7 planes use a screen-space VGA band pattern, not the\n"
 		"        // distance formula (reconstruction of c7PlaneShades / R_DrawPlane).\n"
-		"        float rowFromHorizon = abs(gl_FragCoord.y - uHorizon);\n"
-		"        float edge = max(0.0, uHorizon - 1.0 - rowFromHorizon);\n"
-		"        int ver = int(min(79.0, edge * 80.0 / max(1.0, uHorizon)));\n"
+		// The software row y counts from the horizon, 0 for the row beside
+		// it on either side; a fragment center sits half a pixel further out.
+		// Without the half, the ceiling (whose rows run the other way in GL's
+		// bottom-up coordinates) landed a row off the software pattern.
+		"        int halfH = int(uHorizon);\n"
+		"        int rowFromHorizon = int(abs(gl_FragCoord.y - uHorizon) - 0.5 + 0.25);\n"
+		"        int edge = max(0, halfH - 1 - rowFromHorizon);\n"
+		"        int ver = min(79, edge * 80 / max(1, halfH));\n"
 		"        int band = ver / 3;\n"
 		"        litBand = band > uExtraLight / 8 ? band - uExtraLight / 8 : 0;\n"
 		"        int virtualX = int(min(319.0, gl_FragCoord.x * 320.0 / float(uViewW)));\n"
@@ -441,6 +472,7 @@ namespace
 		// Four-pixel alternation: the software picks c7NextPlaneShades, i.e. the
 		// NEXT band -- one more palette step.
 		"        if((a ^ b ^ c) == 0) litBand += 1;\n"
+		"        if(uC7PlaneOn[uSurfKind] == 1) gPlanePat = uSurfKind*160 + ver*2 + a;\n"
 		"    } else {\n"
 		"        // Generic (non-C7) plane distance formula.\n"
 		"        float rowFromHorizon = abs(gl_FragCoord.y - uHorizon);\n"
@@ -591,13 +623,18 @@ namespace
 		return tex;
 	}
 
-	// 256x1 R8UI: for each palette index, the bottom of its ramp. The C7 plane
-	// shader steps one index darker per band and stops there; the ramps are not
-	// uniform, so this is derived from the palette (V_GetC7RampFloors) and shared
-	// with the software renderer rather than assumed.
+	// 256x18 R8UI. Row 0: for each palette index, the bottom of its ramp. The
+	// C7 plane shader steps one index darker per band and stops there; the ramps
+	// are not uniform, so this is derived from the palette (V_GetC7RampFloors)
+	// and shared with the software renderer rather than assumed.
+	// Rows 1..17: the original's wall and sprite shade rows 0..16 (C7Shade), the
+	// same table the software renderer uses, so both draw identical texels.
 	GLuint CreateC7RampFloorTexture()
 	{
-		const BYTE *floors = V_GetC7RampFloors();
+		BYTE floors[256*(1+C7Shade::ROWS)];
+		memcpy(floors, V_GetC7RampFloors(), 256);
+		for(int s = 0;s < C7Shade::ROWS;++s)
+			memcpy(floors + 256*(1+s), C7Shade::Row(s), 256);
 		GLuint tex = 0;
 		glGenTextures(1, &tex);
 		glBindTexture(GL_TEXTURE_2D, tex);
@@ -606,7 +643,7 @@ namespace
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, 256, 1, 0,
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, 256, 1+C7Shade::ROWS, 0,
 			GL_RED_INTEGER, GL_UNSIGNED_BYTE, floors);
 		return tex;
 	}
@@ -1300,6 +1337,29 @@ namespace
 		glUniform1i(glGetUniformLocation(w.prog, "uViewW"), W);
 		glUniform1i(glGetUniformLocation(w.prog, "uDither"), 1);
 		glUniform1i(glGetUniformLocation(w.prog, "uFixedShade"), -1);
+		glUniform1i(glGetUniformLocation(w.prog, "uC7Native"), C7Shade::Active() ? 1 : 0);
+		glUniform1i(glGetUniformLocation(w.prog, "uC7Bonus"), C7Shade::FrameBonus());
+		{
+			// C7Shade::PlanePattern, flattened: floor then ceiling.
+			GLint on[2] = {0, 0}, flat[2] = {-1, -1}, pat[320] = {0};
+			for(int plane = 0;plane < 2;++plane)
+			{
+				int flatColor = -1;
+				const BYTE (*rows)[2] = C7Shade::PlanePattern(plane == 1, flatColor);
+				if(rows == NULL)
+					continue;
+				on[plane] = 1;
+				flat[plane] = flatColor;
+				for(int row = 0;row < C7Shade::PLANE_ROWS;++row)
+				{
+					pat[plane*160 + row*2] = rows[row][0];
+					pat[plane*160 + row*2 + 1] = rows[row][1];
+				}
+			}
+			glUniform1iv(glGetUniformLocation(w.prog, "uC7PlaneOn"), 2, on);
+			glUniform1iv(glGetUniformLocation(w.prog, "uC7PlaneFlat"), 2, flat);
+			glUniform1iv(glGetUniformLocation(w.prog, "uC7PlanePat"), 320, pat);
+		}
 		glUniform1i(glGetUniformLocation(w.prog, "uViewModel"), 0);
 		glUniform1f(glGetUniformLocation(w.prog, "uHorizon"), (float)H * 0.5f);
 		w.su.uIndexTex    = glGetUniformLocation(w.prog, "uIndexTex");

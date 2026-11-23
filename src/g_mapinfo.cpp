@@ -281,6 +281,9 @@ LevelInfo::LevelInfo() : ResetHealth(false), ResetInventory(false), BonusLevel(f
 	BorderTexture.SetInvalid();
 	DefaultTexture[0].SetInvalid();
 	DefaultTexture[1].SetInvalid();
+	C7Planes[0] = C7Planes[1] = C7Planes[2] = C7Planes[3] = -1;
+	C7PlanesFlats[0].SetInvalid();
+	C7PlanesFlats[1].SetInvalid();
 	DefaultLighting = LIGHTLEVEL_DEFAULT;
 	DefaultVisibility = VISIBILITY_DEFAULT;
 	DefaultMaxLightVis = MAXLIGHTVIS_DEFAULT;
@@ -445,6 +448,20 @@ protected:
 			FString textureName;
 			ParseStringAssignment(textureName);
 			mapInfo.DefaultTexture[MapSector::Ceiling] = TexMan.GetTexture(textureName, FTexture::TEX_Flat);
+		}
+		else if(key.CompareNoCase("C7Planes") == 0)
+		{
+			// Recorded against the flats in force when it is read, so a map
+			// that changes its flats later and says nothing about these keeps
+			// the port's own palette walk rather than the wrong colors.
+			TArray<int> planes;
+			ParseIntArrayAssignment(planes);
+			if(planes.Size() != 4)
+				sc.ScriptMessage(Scanner::ERROR, "C7Planes takes four palette indices.");
+			for(unsigned int i = 0;i < 4;++i)
+				mapInfo.C7Planes[i] = clamp(planes[i], 0, 255);
+			mapInfo.C7PlanesFlats[0] = mapInfo.DefaultTexture[0];
+			mapInfo.C7PlanesFlats[1] = mapInfo.DefaultTexture[1];
 		}
 		else if(key.CompareNoCase("DefaultLighting") == 0)
 			ParseIntAssignment(mapInfo.DefaultLighting);

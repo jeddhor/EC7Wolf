@@ -33,6 +33,7 @@
 #include "wl_state.h"
 #include "a_inventory.h"
 #include "thingdef/thingdef.h"
+#include "c7_shade.h"
 
 /*
 =============================================================================
@@ -285,7 +286,8 @@ static inline BYTE Corridor7CycleColor(BYTE color)
 static inline BYTE ShadeWallColor(BYTE color, const BYTE *shades)
 {
 	color = Corridor7CycleColor(color);
-	if(IWad::CheckGameFilter("Corridor7"))
+	// The original's own rows leave the lamp ranges alone by themselves.
+	if(IWad::CheckGameFilter("Corridor7") && !C7Shade::Active())
 	{
 		// Corridor 7 reserves indices 15 and 254 for lamps embedded in wall
 		// graphics. Index 39 is the ordinary white used throughout structural
@@ -332,9 +334,15 @@ void ScalePost()
 	int ywcount, yoffs, yw, yd, yendoffs;
 	byte col;
 
-	const int shade = LIGHT2SHADE(gLevelLight + r_extralight);
-	const int tz = FixedMul(r_depthvisibility<<8, wallheight[postx]);
-	BYTE *curshades = &NormalLight.Maps[GETPALOOKUP(MAX(tz, MINZ), shade)<<8];
+	const BYTE *curshades;
+	if(C7Shade::Active())
+		curshades = C7Shade::Row(C7Shade::WallShade(wallheight[postx]));
+	else
+	{
+		const int shade = LIGHT2SHADE(gLevelLight + r_extralight);
+		const int tz = FixedMul(r_depthvisibility<<8, wallheight[postx]);
+		curshades = &NormalLight.Maps[GETPALOOKUP(MAX(tz, MINZ), shade)<<8];
+	}
 
 	ywcount = yd = wallheight[postx];
 	if(yd <= 0)
@@ -993,9 +1001,15 @@ static void ScaleMaskedWallPost(const BYTE *source, const BYTE *opacity,
 	if(yw < 0)
 		yw += textureSpan;
 
-	const int shade = LIGHT2SHADE(gLevelLight+r_extralight);
-	const int tz = FixedMul(r_depthvisibility<<8, height);
-	BYTE *curshades = &NormalLight.Maps[GETPALOOKUP(MAX(tz, MINZ), shade)<<8];
+	const BYTE *curshades;
+	if(C7Shade::Active())
+		curshades = C7Shade::Row(C7Shade::WallShade(height));
+	else
+	{
+		const int shade = LIGHT2SHADE(gLevelLight+r_extralight);
+		const int tz = FixedMul(r_depthvisibility<<8, height);
+		curshades = &NormalLight.Maps[GETPALOOKUP(MAX(tz, MINZ), shade)<<8];
+	}
 	const BYTE maskColor = GPalette.Remap[255];
 	int yendoffs = yend*vbufPitch+screenx;
 	while(yoffs <= yendoffs)
@@ -1869,6 +1883,13 @@ void CalcViewVariables()
 		r_extralight = players[ConsolePlayer].camera->player->extralight << 3;
 	else
 		r_extralight = 0;
+
+	// The original's shade index adds its brightness level and, while the
+	// muzzle flash is lit, eight (c1ac bit 2 doubled). The night-vision visor
+	// is a palette in the original and changes neither.
+	const player_t *const viewer = players[ConsolePlayer].camera->player;
+	C7Shade::SetFrameBonus(c7_brightness +
+		(viewer && viewer->c7MuzzleFlashTics ? 8 : 0));
 }
 
 static TUniquePtr<FFader> fizzlein;

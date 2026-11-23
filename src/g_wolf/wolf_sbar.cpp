@@ -159,7 +159,13 @@ public:
 	void DrawC7ClassicHud();
 	void SetTopMessage(const char *message, unsigned int duration);
 	void SetC7HealthChamberPower(unsigned int power, unsigned int duration);
-	unsigned int GetHeight(bool top) { return top ? 0 : STATUSLINES+!mac; }
+	// Wolf keeps a spare line above its bar. Corridor 7's bar is exactly 40
+	// lines and its view the 160 above it: with the spare line the bottom row
+	// of the view was left black and everything in it sat a row high.
+	unsigned int GetHeight(bool top)
+	{
+		return top ? 0 : STATUSLINES + (!mac && !IWad::CheckGameFilter("Corridor7"));
+	}
 	void NewGame() { facecount = 0; topMessage = ""; topMessageUntil = 0; c7ChamberPowerUntil = 0; }
 	void RefreshBackground(bool noborder);
 	void UpdateFace(int damage=0);

@@ -32,6 +32,7 @@
 **
 */
 
+#include <cstdio>
 #include <cstdlib>
 
 #ifndef NO_GTK
@@ -45,6 +46,12 @@ int main(int argc, char *argv[])
 	// clear the setlocale call at least this will be correct.
 	// Note that the LANG environment variable is overridden by LC_*
 	setenv("LC_NUMERIC", "C", 1);
+
+#ifdef MISTER_HYBRID
+	// The output is the log file the launcher keeps: have it complete if the
+	// game is killed
+	setvbuf(stdout, NULL, _IOLBF, 0);
+#endif
 
 #ifndef NO_GTK
 	GtkAvailable = gtk_init_check(&argc, &argv);

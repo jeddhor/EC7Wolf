@@ -250,6 +250,11 @@ void I_InitGraphics ()
 	if(Video)
 		return;
 
+#ifdef MISTER_HYBRID
+	// the window surface the hybrid driver gives is the paletted picture the core scans out
+	SDL_SetHint ("SDL_MISTER_VIDEO_FORMAT", "INDEX8");
+#endif
+
 	if (SDL_InitSubSystem (SDL_INIT_VIDEO) < 0)
 	{
 		I_FatalError ("Could not initialize SDL video:\n%s\n", SDL_GetError());
@@ -412,7 +417,12 @@ CUSTOM_CVAR (Float, bgamma, 1.f, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 #define rgamma 1.f
 #define ggamma 1.f
 #define bgamma 1.f
+#ifdef MISTER_HYBRID
+// The window surface is the paletted picture the FPGA core scans out
+#define vid_forcesurface 1
+#else
 #define vid_forcesurface 0
+#endif
 #endif
 
 // PRIVATE DATA DEFINITIONS ------------------------------------------------
@@ -421,6 +431,12 @@ CUSTOM_CVAR (Float, bgamma, 1.f, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 static MiniModeInfo WinModes[] =
 {
 	{ 320, 200 },
+#ifdef MISTER_HYBRID
+	// the video modes of the core
+	{ 640, 200 },
+	{ 320, 240 },
+	{ 640, 240 }
+#else
 	{ 320, 240 },
 	{ 400, 225 },	// 16:9
 	{ 400, 300 },
@@ -494,6 +510,7 @@ static MiniModeInfo WinModes[] =
 	{ 4480, 2520 }, // 16:9
 	{ 5120, 1440 }, // 32:9
 	{ 5120, 2880 }
+#endif
 };
 
 //static cycle_t BlitCycles;
@@ -717,6 +734,12 @@ SDLFB::SDLFB (int width, int height, bool fullscreen)
 	UpdatePending = false;
 	NotPaletted = false;
 	FlashAmount = 0;
+
+#ifdef MISTER_HYBRID
+	// The size of the window picks the core's video mode: never the size of
+	// the desktop
+	fullscreen = false;
+#endif
 	// Only ever assigned in ResetSDLRenderer, which the GL path skips entirely,
 	// so without this it stays uninitialized for the whole life of a GL
 	// framebuffer.
@@ -1234,6 +1257,9 @@ void SDLFB::GetFlashedPalette (PalEntry pal[256])
 
 void SDLFB::SetFullscreen (bool fullscreen)
 {
+#ifdef MISTER_HYBRID
+	fullscreen = false;
+#endif
 #ifdef __ANDROID__
 	fullscreen = true;
 #endif
@@ -1333,7 +1359,7 @@ void SDLFB::ResetSDLRenderer ()
 	// window divided down so the two are the same shape by construction. Running
 	// it through ScaleWithAspect instead would letterbox -- 640x400 is classed as
 	// a 4:3 mode -- and the picture would move when the render scale changed.
-	if (IsFullscreen ())
+	if (IsFullscreen () && Renderer)
 	{
 		int w, h;
 		SDL_GetWindowSize (Screen, &w, &h);

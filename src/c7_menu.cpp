@@ -61,6 +61,30 @@ namespace
 		return px < 1 ? 1 : px;
 	}
 
+	// MiSTer: a text size on a screen of 240 lines or less (the core's modes) scales
+	// against 600 lines instead of the 800 of the design, at least 6 pixels: the items
+	// are 9 pixels tall on 200 lines (7 before). The layout keeps Scaled().
+	int TextPx(double designPx)
+	{
+#ifdef MISTER_HYBRID
+		if(SCREENHEIGHT <= 240)
+		{
+			const int px = (int)(designPx * SCREENHEIGHT / 600.0 + 0.5);
+			return px < 6 ? 6 : px;
+		}
+#endif
+		return Scaled(designPx);
+	}
+
+	// MiSTer: the glyph columns are doubled when a pixel of the screen is at least
+	// twice as tall as wide (640x200, 640x240 shown 4:3)
+	void SetTextStretch()
+	{
+#ifdef MISTER_HYBRID
+		g_ttXStretch = (SCREENWIDTH * 3 >= SCREENHEIGHT * 4 * 2) ? 2 : 1;
+#endif
+	}
+
 	bool LoadFonts()
 	{
 		if(!g_fontsTried)
@@ -212,6 +236,7 @@ bool C7Menu_Draw(const Menu *menu)
 {
 	if(menu == NULL || !LoadFonts() || screen == NULL)
 		return false;
+	SetTextStretch();
 
 	const int labelX = (int)(kLabelX * SCREENWIDTH);
 	const int valueX = (int)(kValueX * SCREENWIDTH);
@@ -224,14 +249,14 @@ bool C7Menu_Draw(const Menu *menu)
 	if(isMain)
 	{
 		// The splash art ships without the logo, so the menu side carries it.
-		const int titleSize = Scaled(54);
+		const int titleSize = TextPx(54);
 		const int ty = Scaled(96);
 		const int wordW = V_TTTextWidth(g_bold, titleSize, "CORRIDOR ");
 		V_TTDrawText(g_bold, titleSize, labelX, ty, "CORRIDOR",
 			kWhiteR, kWhiteG, kWhiteB);
 		V_TTDrawText(g_bold, titleSize, labelX + wordW, ty, "7",
 			kAmberR, kAmberG, kAmberB);
-		V_TTDrawText(g_regular, Scaled(13), labelX + Scaled(3), ty + Scaled(62),
+		V_TTDrawText(g_regular, TextPx(13), labelX + Scaled(3), ty + Scaled(62),
 			"A L I E N   I N V A S I O N", kDimR, kDimG, kDimB);
 		DrawRule(labelX, ty + Scaled(88), ruleW, Scaled(2));
 		y = Scaled(244);
@@ -241,7 +266,7 @@ bool C7Menu_Draw(const Menu *menu)
 		const int hy = Scaled(96);
 		FString head = menu->getHeadText();
 		head.ToUpper();
-		V_TTDrawText(g_bold, Scaled(30), labelX, hy, head,
+		V_TTDrawText(g_bold, TextPx(30), labelX, hy, head,
 			kWhiteR, kWhiteG, kWhiteB);
 		DrawRule(labelX, hy + Scaled(42), ruleW, Scaled(2));
 		y = Scaled(196);
@@ -250,8 +275,8 @@ bool C7Menu_Draw(const Menu *menu)
 	// Rows. Item heights are authored for the 320x200 skin and mean nothing
 	// here, so the shell paces them itself.
 	const int rowStep = isMain ? Scaled(52) : Scaled(42);
-	const int textSize = isMain ? Scaled(26) : Scaled(23);
-	const int valueSize = isMain ? Scaled(24) : Scaled(21);
+	const int textSize = isMain ? TextPx(26) : TextPx(23);
+	const int valueSize = isMain ? TextPx(24) : TextPx(21);
 	const int count = menu->getNumItems();
 	const int cur = menu->getCurrentPosition();
 
@@ -293,9 +318,9 @@ bool C7Menu_Draw(const Menu *menu)
 			FString head = item->getLabel();
 			head.ToUpper();
 			const int sy = y + Scaled(12);
-			V_TTDrawText(g_bold, Scaled(13), labelX, sy, head,
+			V_TTDrawText(g_bold, TextPx(13), labelX, sy, head,
 				kAmberDimR, kAmberDimG, kAmberDimB);
-			const int hw = V_TTTextWidth(g_bold, Scaled(13), head);
+			const int hw = V_TTTextWidth(g_bold, TextPx(13), head);
 			screen->Clear(labelX + hw + Scaled(10), sy + Scaled(7),
 				labelX + ruleW, sy + Scaled(7) + 1,
 				ColorMatcher.Pick(52, 44, 30), 0);

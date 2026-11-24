@@ -44,6 +44,9 @@
 #include "w_wad.h"
 #include "wl_iwad.h"
 #include "zstring.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister.h"
+#endif
 
 bool queryiwad = true;
 static bool showpreviewgames = false;
@@ -783,6 +786,17 @@ void SelectGame(TArray<FString> &wadfiles, const char* iwad, const char* datawad
 			basefiles.Delete(i);
 	}
 
+#ifdef MISTER_HYBRID
+	// The game of the core's menu entry, or the one the player picks from a
+	// list through the core; a message when it is not there
+	TArray<const char*> autonames;
+	for(unsigned int i = 0;i < basefiles.Size();++i)
+		autonames.Push(iwadTypes[basefiles[i].Type].Autoname.GetChars());
+	int pick = MiSTer_PickIWad(basefiles.Size() ? &basefiles[0] : NULL,
+		basefiles.Size() ? &autonames[0] : NULL, basefiles.Size());
+	if(pick < 0)
+		Quit();
+#else
 	if(basefiles.Size() == 0)
 	{
 		I_Error("Can not find base game data. (*.wl6, *.wl1, *.sdm, *.sod, *.n3d)");
@@ -818,6 +832,7 @@ void SelectGame(TArray<FString> &wadfiles, const char* iwad, const char* datawad
 	}
 	if(pick < 0)
 		Quit();
+#endif
 
 	config.GetSetting("DefaultIWad")->SetValue(pick);
 

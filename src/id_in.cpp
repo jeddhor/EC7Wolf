@@ -228,6 +228,17 @@ int IN_GetJoyAxis(int axis)
 ===================
 */
 
+#ifdef MISTER_HYBRID
+// The core's Menu button, pressed since the last call (IN_JoyButtons sets it)
+static bool g_misterMenuEdge = false;
+bool IN_MiSTerMenuPressed()
+{
+	const bool r = g_misterMenuEdge;
+	g_misterMenuEdge = false;
+	return r;
+}
+#endif
+
 int IN_JoyButtons()
 {
 #if SDL_VERSION_ATLEAST(2,0,0)
@@ -260,6 +271,32 @@ int IN_JoyButtons()
 	int i;
 	for(i = 0; i < JoyNumButtons && i < 32; i++)
 		res |= SDL_JoystickGetButton(Joystick, i) << i;
+#ifdef MISTER_HYBRID
+	// The core's Menu button (Start, joystick button 7 on the hybrid driver) opens the
+	// menu the way SDL_CONTROLLER_BUTTON_START does above: through bt_esc of the local
+	// sample (a bt_esc bound in the cfg is dropped by the input finalization), and it is
+	// not a bindable button
+	// On the press only, kept for PollJoystickButtons (wl_play.cpp): the raw buttons are
+	// polled once before the tic clears its command, so a bt_esc set here was read as
+	// held and the menu never opened
+	{
+		static int menuWas = 0;
+		const int menuNow = (res >> 7) & 1;
+		if(menuNow && !menuWas)
+		{
+			g_misterMenuEdge = true;
+			if(getenv("EC7_PADLOG")) fprintf(stderr, "ec7 pad: menu press edge\n");
+		}
+		menuWas = menuNow;
+		res &= ~(1 << 7);
+	}
+	{
+		// EC7_PADLOG=1: the raw joystick buttons to the log when they change (the pad test)
+		static int logOn = -1, last = -1;
+		if(logOn < 0) logOn = getenv("EC7_PADLOG") ? 1 : 0;
+		if(logOn && res != last) { fprintf(stderr, "ec7 pad: joystick buttons %x\n", res); last = res; }
+	}
+#endif
 
 	// Need four buttons for hat
 	if(i < 28 && param_joystickhat != -1)
@@ -594,9 +631,15 @@ void IN_ClearTyped()
 	TypedHead = TypedTail = 0;
 }
 
+#ifdef MISTER_HYBRID
+void MisterRumbleTick(void);
+#endif
 void IN_ProcessEvents()
 {
 	SDL_Event event;
+#ifdef MISTER_HYBRID
+	MisterRumbleTick();
+#endif
 
 #ifdef __ANDROID__
 	if(ShadowingEnabled)

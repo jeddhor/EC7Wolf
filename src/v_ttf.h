@@ -28,6 +28,9 @@ FTTFont *V_GetTTFont(const char *lumpname);
 // advance and kerning the renderer will apply, so it can be used for right
 // alignment without drifting.
 int V_TTTextWidth(FTTFont *font, int pixelHeight, const char *text);
+// MiSTer: every glyph column drawn this many times (2 on the 640x200 and 640x240
+// screens, whose pixels are at least twice as tall as wide); widths follow
+extern int g_ttXStretch;
 
 // Ascent above the baseline, in real pixels, at this size. Callers position by
 // the text's top edge, so this is what converts a top to a baseline.

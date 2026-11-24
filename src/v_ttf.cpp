@@ -213,6 +213,8 @@ int V_TTAscent(FTTFont *font, int pixelHeight)
 	return font->GetSize(pixelHeight)->ascent;
 }
 
+int g_ttXStretch = 1;
+
 int V_TTTextWidth(FTTFont *font, int pixelHeight, const char *text)
 {
 	if(font == NULL || !font->IsOk() || text == NULL)
@@ -225,9 +227,9 @@ int V_TTTextWidth(FTTFont *font, int pixelHeight, const char *text)
 		Glyph *g = font->GetGlyph(sf, (unsigned char)*p);
 		if(g == NULL)
 			continue;
-		width += g->advance;
+		width += g->advance * g_ttXStretch;
 		if(p[1])
-			width += font->Kern((unsigned char)p[0], (unsigned char)p[1], sf->scale);
+			width += font->Kern((unsigned char)p[0], (unsigned char)p[1], sf->scale) * g_ttXStretch;
 	}
 	return width;
 }
@@ -258,9 +260,10 @@ void V_TTDrawText(FTTFont *font, int pixelHeight, int x, int y,
 		if(gl == NULL)
 			continue;
 
+		const int xs = g_ttXStretch > 1 ? g_ttXStretch : 1;
 		if(gl->w > 0 && gl->h > 0)
 		{
-			const int gx = pen + gl->xoff;
+			const int gx = pen + gl->xoff * xs;
 			const int gy = baseline + gl->yoff;
 			for(int row = 0;row < gl->h;++row)
 			{
@@ -274,18 +277,21 @@ void V_TTDrawText(FTTFont *font, int pixelHeight, int x, int y,
 					const int a = src[col];
 					if(a == 0)
 						continue;
-					const int dx = gx + col;
-					if(dx < 0 || dx >= cw)
-						continue;
 					const int bucket = (a * (kBuckets - 1) + 127) / 255;
-					dst[dx] = blend->map[bucket][dst[dx]];
+					for(int k = 0;k < xs;++k)
+					{
+						const int dx = gx + col * xs + k;
+						if(dx < 0 || dx >= cw)
+							continue;
+						dst[dx] = blend->map[bucket][dst[dx]];
+					}
 				}
 			}
 		}
 
-		pen += gl->advance;
+		pen += gl->advance * xs;
 		if(p[1])
-			pen += font->Kern((unsigned char)p[0], (unsigned char)p[1], sf->scale);
+			pen += font->Kern((unsigned char)p[0], (unsigned char)p[1], sf->scale) * xs;
 	}
 }
 

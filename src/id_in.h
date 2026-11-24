@@ -232,6 +232,9 @@ void IN_AdjustMouse();
 bool IN_JoyPresent();
 void IN_SetJoyCurrent(int joyIndex);
 int IN_JoyButtons (void);
+#ifdef MISTER_HYBRID
+bool IN_MiSTerMenuPressed();   // the core's Menu button, pressed since the last call
+#endif
 int IN_JoyAxes (void);
 void IN_GetJoyDelta(int *dx,int *dy);
 int IN_GetJoyAxis(int axis);

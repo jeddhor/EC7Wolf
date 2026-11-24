@@ -1098,8 +1098,17 @@ void CheckKeys (void)
 	// which is why the full-viewport automap sits there.
 	// bt_esc from the local sample, not from control[]: a pad's Start button
 	// sets it, and finalization removes it from control[] before this runs.
+#ifdef MISTER_HYBRID
+	// The core's Menu button (Start) opens the menu like Esc. The press is taken here,
+	// not through the command sample: the sample is rebuilt every tic and this check
+	// runs once a frame, so a one-tic pulse in it was overwritten before it was read.
+	const bool escAsked = (Command::LocalUi().buttonstate[bt_esc] &&
+		!Command::LocalUi().buttonheld[bt_esc]) || IN_MiSTerMenuPressed();
+	if(getenv("EC7_PADLOG") && escAsked) fprintf(stderr, "ec7 pad: menu asked\n");
+#else
 	const bool escAsked = Command::LocalUi().buttonstate[bt_esc] &&
 		!Command::LocalUi().buttonheld[bt_esc];
+#endif
 	if ((scan >= sc_F1 && scan <= sc_F9 && !IsAutomapKeyboardScan(scan)) ||
 		scan == sc_Escape || escAsked)
 	{
